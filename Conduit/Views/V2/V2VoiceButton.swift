@@ -17,12 +17,16 @@ enum V2VoiceContext: Equatable {
     case home
     /// A project's page: a new chat in that project's folder, in voice.
     case project(ProjectSummary)
+    /// The open conversation: voice in it (a Bot Chat calls its bot).
+    case conversation
 }
 
 struct V2VoiceButton: View {
     let context: V2VoiceContext
     /// Picks of iOS 26's voice tab slot under this button, which act as a tap.
     var slotPicks = 0
+    /// Faded out (the expanded composer): its bars stop redrawing unseen.
+    var isHidden = false
     @EnvironmentObject private var appState: AppState
     /// A start in flight: a second tap doesn't make a second chat or call.
     @State private var isStarting = false
@@ -35,7 +39,13 @@ struct V2VoiceButton: View {
     private var needsSetup: Bool { !appState.showsComposerVoiceButton }
 
     private var canAct: Bool {
-        returnsToCall || needsSetup || (!isStarting && appState.canStartPhoneVoiceConversation && !appState.isVoiceInUse)
+        if returnsToCall || needsSetup { return true }
+        guard !isStarting, appState.canStartPhoneVoiceConversation, !appState.isVoiceInUse else { return false }
+        // In a chat, like the composer's voice button: not mid-sync or busy.
+        if context == .conversation {
+            return appState.composerIsEnabled && !appState.isBusy
+        }
+        return true
     }
 
     /// The three most recently active conversations of this profile.
@@ -55,7 +65,15 @@ struct V2VoiceButton: View {
         if needsSetup { return AppLocalization.string("Set up voice") }
         switch context {
         case .home: return AppLocalization.string("New voice call")
-        case .project: return AppLocalization.string("Talk in this project")
+        case .project(let project):
+            return Self.folder(of: project) == nil
+                ? AppLocalization.string("New voice call")
+                : AppLocalization.string("Talk in this project")
+        case .conversation:
+            if let bot = appState.activeBotChatProfile {
+                return AppLocalization.string("Call \(appState.profileDisplayName(bot))")
+            }
+            return AppLocalization.string("Talk in this conversation")
         }
     }
 
@@ -111,26 +129,35 @@ struct V2VoiceButton: View {
     private var face: some View {
         // Only a minimised call moves them: any other call's screen covers
         // the button, so it doesn't redraw unseen.
-        V2VoiceBars(isLive: returnsToCall)
+        V2VoiceBars(isLive: returnsToCall && !isHidden)
             .frame(width: Self.diameter, height: Self.diameter)
             .background(Color.conduitAccent, in: Circle())
             .opacity(canAct ? 1 : 0.55)
             .contentShape(Circle())
     }
 
+    /// The project's folder for a new chat, as its page reads it.
+    static func folder(of project: ProjectSummary) -> String? {
+        guard let path = project.primaryPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !path.isEmpty else { return nil }
+        return path
+    }
+
     // MARK: - Actions
 
     private func tap() {
-        Haptics.medium()
         if returnsToCall {
+            Haptics.medium()
             appState.restoreMinimisedLiveVoice()
             return
         }
         if needsSetup {
+            Haptics.medium()
             appState.settingsLinkRequest = .voice
             return
         }
         guard !isStarting else { return }
+        Haptics.medium()
         isStarting = true
         switch context {
         case .home:
@@ -142,13 +169,35 @@ struct V2VoiceButton: View {
                     PendingVoiceIntent(profile: appState.activeProfile, startsFreshConversation: true, source: .newCall)
                 )
             }
+        case .conversation:
+            // Voice in the open chat, as the composer's voice button does.
+            Task { @MainActor in
+                defer { isStarting = false }
+                await startVoice(
+                    PendingVoiceIntent(profile: appState.activeProfile, startsFreshConversation: false, source: .composer)
+                )
+            }
         case .project(let project):
-            // A new chat in the project's folder, then voice in it.
+            // A new chat in the project's folder, then voice in it. Without a
+            // folder (the page offers no New conversation either) it's a call
+            // of its own rather than a chat outside the project.
+            guard let path = Self.folder(of: project) else {
+                Task { @MainActor in
+                    defer { isStarting = false }
+                    await startVoice(
+                        PendingVoiceIntent(profile: appState.activeProfile, startsFreshConversation: true, source: .newCall)
+                    )
+                }
+                return
+            }
             let previous = appState.activeSessionId
             Task { @MainActor in
                 defer { isStarting = false }
-                await appState.createNewSession(cwd: project.primaryPath)
-                guard appState.activeSessionId != previous else { return }
+                await appState.createNewSession(cwd: path)
+                guard appState.activeSessionId != previous else {
+                    reportCouldNotOpen()
+                    return
+                }
                 await startVoice(
                     PendingVoiceIntent(profile: appState.activeProfile, startsFreshConversation: false, source: .composer)
                 )
@@ -165,6 +214,14 @@ struct V2VoiceButton: View {
         }
     }
 
+    /// A chat couldn't be made or opened: say so, unless something already did.
+    private func reportCouldNotOpen() {
+        guard appState.errorMessage == nil else { return }
+        appState.errorMessage = appState.isConnected
+            ? AppLocalization.string("Couldn't open that chat for voice.")
+            : AppLocalization.string("Reconnect to Hermes to start voice.")
+    }
+
     /// Opens a recent conversation and talks in it.
     private func talk(in sessionID: String) {
         guard !isStarting else { return }
@@ -172,7 +229,14 @@ struct V2VoiceButton: View {
         isStarting = true
         Task { @MainActor in
             defer { isStarting = false }
-            guard await appState.openSession(sessionID) else { return }
+            switch await appState.openSessionOutcome(sessionID) {
+            case .opened: break
+            // A newer navigation took over: not a failure, and not this chat.
+            case .superseded: return
+            case .failed:
+                reportCouldNotOpen()
+                return
+            }
             await startVoice(
                 PendingVoiceIntent(profile: appState.activeProfile, startsFreshConversation: false, source: .composer)
             )
