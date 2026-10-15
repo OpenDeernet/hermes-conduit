@@ -513,7 +513,10 @@ final class AppState: ObservableObject {
 
     @Published var connection: HermesConnection? {
         didSet {
-            if oldValue?.baseUrl != connection?.baseUrl { agentSettings.leave(scope: agentSettingsScope) }
+            if oldValue?.baseUrl != connection?.baseUrl {
+                agentSettings.leave(scope: agentSettingsScope)
+                presentedScreens.leave()
+            }
         }
     }
     @Published var client: HermesClient?
@@ -568,6 +571,7 @@ final class AppState: ObservableObject {
             if oldValue != activeProfile {
                 dismissChatTakeover()
                 agentSettings.leave(scope: agentSettingsScope)
+                presentedScreens.leave()
             }
         }
     }
@@ -637,6 +641,10 @@ final class AppState: ObservableObject {
     /// chat, which would fail a new chat or take over the screen it opened.
     var widgetForegroundReady: Bool { isSceneActive && sceneHasBeenActive && scenePhaseAttemptID == nil }
     var widgetSessionMutationRequestOverride: ((String, String, [String: Any]?) async throws -> [String: Any])?
+    /// "host|profile" whose Hermes answered 404 for the mutation snapshot
+    /// (older than the route): its writes skip the read until a write is
+    /// refused for missing identity, which clears the mark.
+    private var hostsWithoutMutationSnapshot: Set<String> = []
     var widgetSessionCreatorOverride: (@MainActor (HermesClient, String?) async throws -> (sessionId: String, storedSessionId: String?, profile: String?))?
     @Published var cronSessions: [SessionSummary] = [] {
         didSet {
@@ -692,6 +700,10 @@ final class AppState: ObservableObject {
         willSet { objectWillChange.send() }
     }
     @Published private(set) var projectsLoading = false
+    /// The last projects load failed for a reason other than the host not
+    /// having projects (a dropped or timed-out request), so an empty list
+    /// isn't "no projects".
+    @Published private(set) var projectsLoadFailed = false
     @Published private(set) var archivedSessions: [SessionSummary] = []
     @Published private(set) var pinnedSessionIDs: [String] = []
     /// What the user has and hasn't seen, per conversation (#454).
@@ -4187,11 +4199,7 @@ final class AppState: ObservableObject {
 
     /// Writes Hermes' pin flag, which Desktop shows and changes too.
     private func sendHostPin(_ hostID: String, pinned: Bool, profile: String, using bridge: DashboardTicketBridge) async throws {
-        _ = try await bridge.requestJSON(
-            path: dashboardPath("/api/sessions/\(encodedSessionID(hostID))", profile: profile),
-            method: "PATCH",
-            body: DashboardPath.bodyWithProfile(["pinned": pinned], profile: profile)
-        )
+        try await sendSessionMutation(hostID, body: ["pinned": pinned], profile: profile, bridge: bridge)
     }
 
     /// Whether a chat was started as a Voice background job (session-list
@@ -6273,13 +6281,14 @@ final class AppState: ObservableObject {
         var generation: UInt64 = 0
         updateChatReadState { generation = $0.recordServerWrite(session, profile: profile, unread: unread) }
         let writtenGeneration = generation
-        let path = dashboardPath("/api/sessions/\(encodedSessionID(session.id))", profile: profile)
         return { [weak self] in
             do {
-                _ = try await dashboardTicketBridge.requestJSON(
-                    path: path,
-                    method: "PATCH",
-                    body: DashboardPath.bodyWithProfile(["unread": unread], profile: profile)
+                guard let self else { return }
+                try await self.sendSessionMutation(
+                    session.id,
+                    body: ["unread": unread],
+                    profile: profile,
+                    bridge: dashboardTicketBridge
                 )
             } catch {
                 self?.updateChatReadState {
@@ -7281,6 +7290,7 @@ final class AppState: ObservableObject {
         projects = []
         supportsProjects = false
         projectsLoading = false
+        projectsLoadFailed = false
         profiles = []
         clearPendingDecisionRestorationGuard()
         activeSessionId = nil
@@ -10286,6 +10296,7 @@ final class AppState: ObservableObject {
         projects = []
         supportsProjects = false
         projectsLoading = false
+        projectsLoadFailed = false
         // Off the phone screen, a renewal is refused on thinner evidence: no
         // page retries, and a locked phone can't re-sign in with the saved
         // password. The saved session and copy stay for the retry on screen
@@ -13350,6 +13361,7 @@ final class AppState: ObservableObject {
             activateLocationSharing()
             LocationSharingController.shared.appBecameActive()
             Task { await runPhoneSync(reason: .foreground) }
+            Task { await syncPresentedScreens() }
             scheduleWakeRefresh()
             // Voice gates. The capture gate additionally requires a Voice
             // surface (the phone sheet, or CarPlay), so it can be false here
@@ -15046,12 +15058,11 @@ final class AppState: ObservableObject {
         sessionMutationID = session.id
         defer { sessionMutationID = nil }
         do {
-            let path = dashboardPath("/api/sessions/\(encodedSessionID(session.id))", profile: profile)
-            let body = DashboardPath.bodyWithProfile(["archived": archived], profile: profile)
+            let body: [String: Any] = ["archived": archived]
             if let widgetSessionMutationRequestOverride {
-                _ = try await widgetSessionMutationRequestOverride(path, "PATCH", body)
+                try await sendSessionMutation(session.id, body: body, profile: profile, using: widgetSessionMutationRequestOverride)
             } else if let dashboardTicketBridge {
-                _ = try await dashboardTicketBridge.requestJSON(path: path, method: "PATCH", body: body)
+                try await sendSessionMutation(session.id, body: body, profile: profile, bridge: dashboardTicketBridge)
             } else {
                 return false
             }
@@ -15145,13 +15156,11 @@ final class AppState: ObservableObject {
                           !runtimeRenameExpected || self.client === activeClient else {
                         throw SessionRenameOperation.ContextChanged()
                     }
-                    _ = try await dashboardTicketBridge.requestJSON(
-                        path: self.dashboardPath(
-                            "/api/sessions/\(self.encodedSessionID(sessionID))",
-                            profile: profile
-                        ),
-                        method: "PATCH",
-                        body: DashboardPath.bodyWithProfile(["title": title], profile: profile)
+                    try await self.sendSessionMutation(
+                        sessionID,
+                        body: ["title": title],
+                        profile: profile,
+                        bridge: dashboardTicketBridge
                     )
                 }
             )
@@ -15188,10 +15197,7 @@ final class AppState: ObservableObject {
         sessionMutationID = session.id
         defer { sessionMutationID = nil }
         do {
-            _ = try await dashboardTicketBridge.requestJSON(
-                path: dashboardPath("/api/sessions/\(encodedSessionID(session.id))", profile: profile),
-                method: "DELETE"
-            )
+            try await sendSessionMutation(session.id, body: nil, profile: profile, bridge: dashboardTicketBridge)
             guard profile == activeProfile else { return false }
             let deletedSessionIDs = Set([session.id] + session.alternateIds)
             sessionYoloStore.clearOverride(
@@ -15237,6 +15243,61 @@ final class AppState: ObservableObject {
 
     private func encodedSessionID(_ sessionID: String) -> String {
         sessionID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sessionID
+    }
+
+    /// A session PATCH (with `body`) or DELETE (`body` nil) carrying Hermes'
+    /// mutation identity when the host has one (SessionMutationIdentity).
+    /// A write that lost a race with another change gets one retry.
+    @discardableResult
+    func sendSessionMutation(
+        _ sessionID: String,
+        body: [String: Any]?,
+        profile: String,
+        host: String? = nil,
+        using request: @escaping (String, String, [String: Any]?) async throws -> [String: Any]
+    ) async throws -> [String: Any] {
+        let path = dashboardPath("/api/sessions/\(encodedSessionID(sessionID))", profile: profile)
+        let snapshotPath = dashboardPath("/api/sessions/\(encodedSessionID(sessionID))/mutation-snapshot", profile: profile)
+        let routeKey = "\(host ?? dashboardTicketBridge?.baseURL ?? "")|\(profile)"
+        let attempt: () async throws -> [String: Any] = {
+            var snapshot: [String: Any] = [:]
+            if !self.hostsWithoutMutationSnapshot.contains(routeKey) {
+                do {
+                    snapshot = try await request(snapshotPath, "GET", nil)
+                } catch DashboardTicketBridgeError.http(status: 404, detail: let detail)
+                            where SessionMutationIdentity.isMissingRoute(detail) {
+                    self.hostsWithoutMutationSnapshot.insert(routeKey)
+                } catch {
+                    // A failed read sends the bare write; a refusal retries.
+                }
+            }
+            let identity = SessionMutationIdentity.fields(snapshot: snapshot)
+            if var body {
+                if let identity { body.merge(identity) { _, new in new } }
+                return try await request(path, "PATCH", DashboardPath.bodyWithProfile(body, profile: profile))
+            }
+            let deletePath = identity.map { SessionMutationIdentity.path(path, adding: $0) } ?? path
+            return try await request(deletePath, "DELETE", nil)
+        }
+        do {
+            return try await attempt()
+        } catch let error where SessionMutationIdentity.warrantsRetry(error) {
+            hostsWithoutMutationSnapshot.remove(routeKey)
+            return try await attempt()
+        }
+    }
+
+    /// `sendSessionMutation` over the dashboard bridge.
+    @discardableResult
+    func sendSessionMutation(
+        _ sessionID: String,
+        body: [String: Any]?,
+        profile: String,
+        bridge: DashboardTicketBridge
+    ) async throws -> [String: Any] {
+        try await sendSessionMutation(sessionID, body: body, profile: profile, host: bridge.baseURL) { path, method, body in
+            try await bridge.requestJSON(path: path, method: method, body: body)
+        }
     }
 
     private func sessionMatches(_ lhs: SessionSummary, _ rhs: SessionSummary) -> Bool {
@@ -16414,6 +16475,11 @@ final class AppState: ObservableObject {
         invalidateBotOwnershipCache()
     }
     #endif
+
+    /// The bot whose chat is open, if the open conversation is a Bot Chat.
+    var activeBotChatProfile: String? {
+        activeSessionId.flatMap(botConversationProfile(for:))
+    }
 
     /// The bot profile an in-flight or active conversation belongs to, when
     /// that conversation is a canonical Bot Chat. Nil for ordinary sessions —
@@ -18206,6 +18272,8 @@ final class AppState: ObservableObject {
     /// The settings Hermes may change, and the changes it asked for
     /// (AgentSettings.swift).
     lazy var agentSettings = AgentSettingsSync(defaults: defaults)
+    /// Confirmations Hermes asks this iPhone to present (PresentedScreens.swift).
+    lazy var presentedScreens = PresentedScreensSync(defaults: defaults)
 
     /// Asks the plugin what it serves. Cheap, so it runs on every connect.
     func refreshNotifierPluginStatus() async {
@@ -18235,6 +18303,8 @@ final class AppState: ObservableObject {
         Task { await refreshWatchCallVoices() }
         // Settings Hermes may change: share them, take its requests.
         Task { await syncAgentSettings() }
+        // Confirmations Hermes is waiting on.
+        Task { await syncPresentedScreens() }
         await provisionNotificationEncryption(bridge: bridge)
         // Notifications from this dashboard's profile, without a pairing
         // code, after the rest so connecting doesn't wait on it.
@@ -22164,6 +22234,7 @@ final class AppState: ObservableObject {
             projects = []
             supportsProjects = false
             projectsLoading = false
+            projectsLoadFailed = false
             slashCommands = Self.builtInSlashCommands
             restoreActiveSessionState(for: target)
             restorePinnedSessions(for: target)
@@ -22412,6 +22483,7 @@ final class AppState: ObservableObject {
         projects = []
         supportsProjects = false
         projectsLoading = false
+        projectsLoadFailed = false
         slashCommands = Self.builtInSlashCommands
         messages = []
         persistedTranscriptWindow = nil
@@ -22591,13 +22663,20 @@ final class AppState: ObservableObject {
                 return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
             }
             supportsProjects = true
+            projectsLoadFailed = false
         } catch {
             guard generation == projectsRequestGeneration,
                   profile == activeProfile,
                   self.client === client else { return }
-            guard isProjectsUnavailable(error) else { return }
+            // A view's load cancelled by leaving it didn't fail.
+            if error is CancellationError || Task.isCancelled { return }
+            guard isProjectsUnavailable(error) else {
+                projectsLoadFailed = projects.isEmpty
+                return
+            }
             projects = []
             supportsProjects = false
+            projectsLoadFailed = false
         }
     }
 
@@ -24110,6 +24189,13 @@ final class AppState: ObservableObject {
             break
 
         case .toolStart(_, let name, let input, let eventToolID):
+            if name.lowercased() == "conduit_present" {
+                // The tool may wait for the answer: show it once stored.
+                Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    await syncPresentedScreens()
+                }
+            }
             if name.lowercased() == "clarify" { break }
             let toolID = eventToolID?.trimmingCharacters(in: .whitespacesAndNewlines)
             let stableToolID = toolID?.isEmpty == false ? toolID : nil
@@ -24153,6 +24239,8 @@ final class AppState: ObservableObject {
             if name.lowercased() == "clarify" { break }
             // Hermes just read or asked to change Conduit's settings.
             if name.lowercased() == "conduit_settings" { Task { await syncAgentSettings() } }
+            // A confirmation Hermes just asked for shows without waiting on the push.
+            if name.lowercased() == "conduit_present" { Task { await syncPresentedScreens() } }
             settleReasoningSegmentIntoTranscript()
             resetReasoningSegment()
             let toolID = eventToolID?.trimmingCharacters(in: .whitespacesAndNewlines)
