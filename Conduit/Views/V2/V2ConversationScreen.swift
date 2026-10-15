@@ -195,7 +195,9 @@ private struct V2ConnectionLine: View {
 /// actions, with the gateway's state as a dot on the button and its
 /// diagnostics one item away.
 private struct V2ConversationMenu: View {
+    @ObservedObject var appLanguage = AppLanguageStore.shared
     @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onRename: (SessionSummary) -> Void
     let onDelete: (SessionSummary) -> Void
 
@@ -238,16 +240,21 @@ private struct V2ConversationMenu: View {
                 }
             }
         } label: {
-            Group {
+            // The two glyphs crossfade in one fixed frame, so the dot stays put.
+            ZStack {
+                // Mounted only while refreshing, so a hidden spinner never runs.
                 if appState.isChatRefreshing {
                     ProgressView()
                         .controlSize(.small)
-                } else {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.primary)
+                        .transition(.opacity)
                 }
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.primary)
+                    .opacity(appState.isChatRefreshing ? 0 : 1)
             }
+            .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: appState.isChatRefreshing)
+            .accessibilityHidden(true)
             .frame(width: 40, height: 40)
             .overlay(alignment: .topTrailing) {
                 Circle()

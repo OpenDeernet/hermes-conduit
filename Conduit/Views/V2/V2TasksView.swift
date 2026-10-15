@@ -145,17 +145,26 @@ struct V2ScheduledList: View {
                             sectionHeader(AppLocalization.string("Pinned"))
                         }
                     }
-                    Section {
-                        ForEach(others) { row($0, pinned: false) }
-                    } header: {
-                        if !pinned.isEmpty {
-                            sectionHeader(AppLocalization.string("Jobs"))
+                    // A "Jobs" header only when it separates the jobs from
+                    // pins; otherwise the section starts without a gap.
+                    // Both shapes share one identity, so a first pin or last
+                    // unpin doesn't rebuild the rows.
+                    if pinned.isEmpty || others.isEmpty {
+                        Section {
+                            ForEach(others) { row($0, pinned: false) }
+                        } footer: {
+                            listFooter
                         }
-                    } footer: {
-                        Text(AppLocalization.string("Each run lands in Chats as its own conversation. Ask Hermes to add or change a schedule."))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 6)
+                        .id("jobs")
+                    } else {
+                        Section {
+                            ForEach(others) { row($0, pinned: false) }
+                        } header: {
+                            sectionHeader(AppLocalization.string("Jobs"))
+                        } footer: {
+                            listFooter
+                        }
+                        .id("jobs")
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -170,6 +179,13 @@ struct V2ScheduledList: View {
             CronJobDetailSheet(job: $0)
                 .environmentObject(appState)
         }
+    }
+
+    private var listFooter: some View {
+        Text(AppLocalization.string("Each run lands in Chats as its own conversation. Ask Hermes to add or change a schedule."))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(.top, 6)
     }
 
     private func sectionHeader(_ title: String) -> some View {
