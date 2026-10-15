@@ -2025,8 +2025,8 @@ struct CronList: View {
         .listStyle(.plain)
         .task(id: "\(appState.activeDashboardID?.uuidString ?? "")|\(appState.activeProfile)") { await appState.refreshCronContent() }
         // The plugin's capability report can land after the tab opened.
-        .onChange(of: appState.supportsCronNotifications) { _, supported in
-            if supported { Task { await appState.refreshCronNotifications() } }
+        .task(id: appState.supportsCronNotifications) {
+            if appState.supportsCronNotifications { await appState.refreshCronNotifications() }
         }
         .refreshable { await appState.refreshCronContent() }
         .sheet(item: $selectedJob) {

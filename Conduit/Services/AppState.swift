@@ -3049,6 +3049,8 @@ final class AppState: ObservableObject {
     @Published var cronMutedJobIDs: Set<String> = []
     @Published var cronMutedJobsKey: String?
     @Published var cronNotificationsChangingJobID: String?
+    /// Moves with every save, so a refresh that started before one drops its answer.
+    var cronNotificationsGeneration = 0
     lazy var cronNotificationsClient = CronNotificationsClient(request: { [weak self] path, method, body in
         guard let bridge = self?.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
         return try await bridge.requestJSON(path: path, method: method, body: body)

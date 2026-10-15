@@ -33,9 +33,12 @@ extension AppState {
         guard supportsCronNotifications, cronNotificationsChangingJobID == nil else { return }
         let profile = activeProfile
         let key = cronNotificationsKey(profile: profile)
+        let generation = cronNotificationsGeneration
         do {
             let muted = try await cronNotificationsClient.muted(profile: profile)
-            guard key == cronNotificationsKey(profile: activeProfile), cronNotificationsChangingJobID == nil else { return }
+            guard key == cronNotificationsKey(profile: activeProfile),
+                  cronNotificationsChangingJobID == nil,
+                  generation == cronNotificationsGeneration else { return }
             cronMutedJobIDs = muted
             cronMutedJobsKey = key
         } catch is CancellationError {
@@ -54,10 +57,15 @@ extension AppState {
         let profile = activeProfile
         let key = cronNotificationsKey(profile: profile)
         cronNotificationsChangingJobID = job.id
-        defer { cronNotificationsChangingJobID = nil }
+        cronNotificationsGeneration += 1
+        defer {
+            cronNotificationsChangingJobID = nil
+            cronNotificationsGeneration += 1
+        }
         // The switch moves at once; the host's answer settles it. Not read
         // yet: start from nothing muted, as the switch showed.
-        if cronMutedJobsKey != key {
+        let seeded = cronMutedJobsKey != key
+        if seeded {
             cronMutedJobIDs = []
             cronMutedJobsKey = key
         }
@@ -65,19 +73,42 @@ extension AppState {
         if notify { cronMutedJobIDs.remove(job.id) } else { cronMutedJobIDs.insert(job.id) }
         do {
             let muted = try await cronNotificationsClient.setNotify(notify, jobID: job.id, profile: profile)
-            guard key == cronNotificationsKey(profile: activeProfile) else { return false }
+            guard key == cronNotificationsKey(profile: activeProfile) else {
+                // The workspace changed meanwhile: its own list was left to this save.
+                refreshCronNotificationsAfterSave()
+                return false
+            }
             cronMutedJobIDs = muted
             cronMutedJobsKey = key
             return true
         } catch {
-            // Only this job goes back: a refresh may have replaced the rest.
+            let stillHere = key == cronNotificationsKey(profile: activeProfile)
             if cronMutedJobsKey == key {
-                if wasMuted { cronMutedJobIDs.insert(job.id) } else { cronMutedJobIDs.remove(job.id) }
+                if seeded {
+                    // Never read: back to unknown, which reads as on.
+                    cronMutedJobsKey = nil
+                    cronMutedJobIDs = []
+                } else if wasMuted {
+                    cronMutedJobIDs.insert(job.id)
+                } else {
+                    cronMutedJobIDs.remove(job.id)
+                }
             }
+            if !stillHere || seeded { refreshCronNotificationsAfterSave() }
             if error is CancellationError { return false }
             cronNotificationsLogger.notice("Cron notifications not saved: \(error.localizedDescription, privacy: .public)")
-            errorMessage = AppLocalization.string("Could not change this job's notifications: \(UserFacingError.message(for: error))")
+            if stillHere {
+                errorMessage = AppLocalization.string("Could not change this job's notifications: \(UserFacingError.message(for: error))")
+            }
             return false
+        }
+    }
+
+    /// A refresh skipped while the save ran, once it has ended.
+    private func refreshCronNotificationsAfterSave() {
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            await self?.refreshCronNotifications()
         }
     }
 }
