@@ -132,14 +132,17 @@ extension GatewayRestartTests {
         XCTAssertEqual(host.signInsAgain, 1)
     }
 
-    func testARefusedSignInIsTriedOnlyAFewTimes() async {
+    func testARefusedSignInEndsTheUpdateWithTheSignInError() async {
         let host = PluginHost()
         host.restartSignsOut = true
         host.signInAgainWorks = false
         host.capabilities = [Self.capabilities(loaded: "0.24.0", disk: "0.25.0", boot: "old")]
+        let start = host.clock
         let outcome = await host.updater().run { _ in }
-        XCTAssertNotEqual(outcome, .updated(version: "0.25.0"))
-        XCTAssertEqual(host.signInsAgain, NotifierPluginUpdater.signInRenewalLimit)
+        XCTAssertEqual(outcome, NotifierPluginUpdater.outcome(forRequestError: DashboardTicketBridgeError.signInRequired))
+        XCTAssertEqual(host.signInsAgain, 1)
+        // Says so at once instead of waiting out the comeback limit.
+        XCTAssertLessThan(host.clock.timeIntervalSince(start), NotifierPluginUpdater.comeBackLimit)
     }
 
     func testRunningChatsAreWaitedOn() async {

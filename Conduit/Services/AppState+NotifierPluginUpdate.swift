@@ -91,7 +91,7 @@ extension AppState {
         return true
     }
 
-    static func sameDashboardAddress(_ a: String, _ b: String) -> Bool {
+    private static func sameDashboardAddress(_ a: String, _ b: String) -> Bool {
         let slash = CharacterSet(charactersIn: "/")
         return a.trimmingCharacters(in: slash) == b.trimmingCharacters(in: slash)
     }

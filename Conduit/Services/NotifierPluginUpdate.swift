@@ -198,10 +198,13 @@ struct NotifierPluginUpdater {
         // Right after the gateway restart a read can fail once; ask again.
         var fetched: [String: Any]?
         for attempt in 0..<3 {
-            if let json = try? await request(NotifierPluginStatus.path, "GET", nil) {
-                fetched = json
+            do {
+                fetched = try await request(NotifierPluginStatus.path, "GET", nil)
                 break
-            }
+            } catch DashboardTicketBridgeError.signInRequired {
+                // Signing in again didn't work: asking again won't either.
+                return Self.outcome(forRequestError: DashboardTicketBridgeError.signInRequired)
+            } catch {}
             if Task.isCancelled { return .idle }
             if attempt < 2 { do { try await sleep(pollInterval) } catch { return .idle } }
         }
@@ -242,9 +245,17 @@ struct NotifierPluginUpdater {
         while now().timeIntervalSince(restartStarted) < Self.comeBackLimit {
             do { try await sleep(pollInterval) } catch { return .idle }
             if Task.isCancelled { return .idle }
-            // Requests fail while the dashboard is down; the next poll asks again.
-            guard let json = try? await request(NotifierPluginStatus.path, "GET", nil),
-                  let after = NotifierPluginStatus.runtime(from: json),
+            // Requests fail while the dashboard is down; the next poll asks
+            // again. A refused sign-in means it is back.
+            let json: [String: Any]
+            do {
+                json = try await request(NotifierPluginStatus.path, "GET", nil)
+            } catch DashboardTicketBridgeError.signInRequired {
+                return Self.outcome(forRequestError: DashboardTicketBridgeError.signInRequired)
+            } catch {
+                continue
+            }
+            guard let after = NotifierPluginStatus.runtime(from: json),
                   after.bootID != runtime.bootID else { continue }
             return after.restartNeeded ? .needsDashboardRestart(detail: nil) : .updated(version: after.loadedVersion)
         }
