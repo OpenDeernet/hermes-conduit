@@ -45,7 +45,8 @@ extension AppState {
     }
 
     /// Turns a job's notifications on or off. False when the host didn't
-    /// take it; the switch then shows the host's value again.
+    /// take it (the switch then shows the host's value again) or another
+    /// change is still in flight (the switch is disabled meanwhile).
     @discardableResult
     func setCronJobNotifies(_ notify: Bool, for job: CronJob) async -> Bool {
         guard supportsCronNotifications, cronNotificationsChangingJobID == nil else { return false }
@@ -53,11 +54,14 @@ extension AppState {
         let key = cronNotificationsKey(profile: profile)
         cronNotificationsChangingJobID = job.id
         defer { cronNotificationsChangingJobID = nil }
-        // The switch moves at once; the host's answer settles it.
-        let before = cronMutedJobsKey == key ? cronMutedJobIDs : nil
-        if before != nil {
-            if notify { cronMutedJobIDs.remove(job.id) } else { cronMutedJobIDs.insert(job.id) }
+        // The switch moves at once; the host's answer settles it. Not read
+        // yet: start from nothing muted, as the switch showed.
+        if cronMutedJobsKey != key {
+            cronMutedJobIDs = []
+            cronMutedJobsKey = key
         }
+        let wasMuted = cronMutedJobIDs.contains(job.id)
+        if notify { cronMutedJobIDs.remove(job.id) } else { cronMutedJobIDs.insert(job.id) }
         do {
             let muted = try await cronNotificationsClient.setNotify(notify, jobID: job.id, profile: profile)
             guard key == cronNotificationsKey(profile: activeProfile) else { return false }
@@ -65,7 +69,11 @@ extension AppState {
             cronMutedJobsKey = key
             return true
         } catch {
-            if let before, cronMutedJobsKey == key { cronMutedJobIDs = before }
+            // Only this job goes back: a refresh may have replaced the rest.
+            if cronMutedJobsKey == key {
+                if wasMuted { cronMutedJobIDs.insert(job.id) } else { cronMutedJobIDs.remove(job.id) }
+            }
+            if error is CancellationError { return false }
             cronNotificationsLogger.notice("Cron notifications not saved: \(error.localizedDescription, privacy: .public)")
             errorMessage = AppLocalization.string("Could not change this job's notifications: \(UserFacingError.message(for: error))")
             return false
