@@ -323,4 +323,109 @@ extension ChatReadStateTests {
         XCTAssertFalse(SessionMutationIdentity.isMissingRoute("not_found"))
         XCTAssertFalse(SessionMutationIdentity.isMissingRoute("Session not found"))
     }
+
+    func testPinsHermesRefusedStayOnThePhone() {
+        var sync = pinSync(adopted: true)
+        let write = sync.recordWrite(pinID: "old", profile: "default", pinned: true, at: Self.pinT0)
+        XCTAssertTrue(sync.keepOnPhone(pinID: "old", profile: "default", generation: write))
+        XCTAssertTrue(sync.isPhoneOnly(pinID: "old", profile: "default"))
+        XCTAssertFalse(sync.isPhoneOnly(pinID: "old", profile: "work"))
+        let outcome = sync.reconcile(
+            pins: ["old"],
+            listed: [pinRow("old", pinned: false), pinRow("b", pinned: true)],
+            profile: "default",
+            now: Self.pinT0
+        )
+        XCTAssertEqual(outcome.pins, ["old", "b"], "The host's unpinned flag can't drop a pin it refused")
+        XCTAssertEqual(outcome.uploads, [])
+    }
+
+    func testPinsHermesRefusedNeverGoUpAndDontHoldOffAdoption() {
+        var sync = pinSync()
+        let oldDefaultWrite = sync.recordWrite(pinID: "old", profile: "default", pinned: true)
+        sync.keepOnPhone(pinID: "old", profile: "default", generation: oldDefaultWrite)
+        let unlistedDefaultWrite = sync.recordWrite(pinID: "unlisted", profile: "default", pinned: true)
+        sync.keepOnPhone(pinID: "unlisted", profile: "default", generation: unlistedDefaultWrite)
+        let outcome = sync.reconcile(
+            pins: ["old", "unlisted"],
+            listed: [pinRow("old", pinned: false)],
+            profile: "default",
+            now: Self.pinT0
+        )
+        XCTAssertEqual(outcome, SessionPinSync.Reconciliation(pins: ["old", "unlisted"], uploads: []))
+        XCTAssertTrue(sync.isAdopted(profile: "default"))
+    }
+
+    func testPinsHermesRefusedAreKeptPerHostAndProfile() {
+        var sync = pinSync()
+        let oldDefaultWrite = sync.recordWrite(pinID: "old", profile: "default", pinned: true)
+        sync.keepOnPhone(pinID: "old", profile: "default", generation: oldDefaultWrite)
+        let oldWorkWrite = sync.recordWrite(pinID: "old", profile: "work", pinned: true)
+        sync.keepOnPhone(pinID: "old", profile: "work", generation: oldWorkWrite)
+        var restored = SessionPinSync(phoneOnly: sync.phoneOnly)
+        restored.setHost(Self.pinHost)
+        XCTAssertTrue(restored.isPhoneOnly(pinID: "old", profile: "default"), "Survives a relaunch")
+        restored.forget(profile: "default")
+        XCTAssertFalse(restored.isPhoneOnly(pinID: "old", profile: "default"))
+        XCTAssertTrue(restored.isPhoneOnly(pinID: "old", profile: "work"))
+        restored.setHost("https://other.example")
+        XCTAssertFalse(restored.isPhoneOnly(pinID: "old", profile: "work"))
+        restored.reset()
+        XCTAssertTrue(restored.phoneOnly.isEmpty)
+    }
+
+    func testHermesRefusalIsNotAnExpiredSignIn() {
+        XCTAssertTrue(SessionMutationIdentity.isRefusal(DashboardTicketBridgeError.http(status: 403, detail: "permission_denied")))
+        XCTAssertTrue(SessionMutationIdentity.isRefusal(DashboardTicketBridgeError.http(status: 403, detail: " profile_mismatch\n")))
+        XCTAssertTrue(SessionMutationIdentity.isRefusal(DashboardTicketBridgeError.http(status: 403, detail: "permission_denied: history claim required")))
+        XCTAssertFalse(SessionMutationIdentity.isRefusal(DashboardTicketBridgeError.http(status: 403, detail: "Forbidden")))
+        XCTAssertFalse(SessionMutationIdentity.isRefusal(DashboardTicketBridgeError.http(status: 409, detail: "permission_denied")))
+        XCTAssertFalse(SessionMutationIdentity.isRefusal(DashboardTicketBridgeError.signInRequired))
+        XCTAssertEqual(
+            DashboardTicketBridgeError.describe(status: 403, detail: "permission_denied"),
+            AppLocalization.string("Hermes only lets the computer it runs on change this older chat. Change it there instead.")
+        )
+        XCTAssertEqual(
+            DashboardTicketBridgeError.describe(status: 403, detail: "profile_mismatch"),
+            AppLocalization.string("Hermes says this chat belongs to another profile. Switch to that profile, then try again.")
+        )
+        XCTAssertEqual(
+            DashboardTicketBridgeError.describe(status: 403, detail: "Forbidden"),
+            AppLocalization.string("Hermes turned this down because the dashboard sign-in expired or doesn't allow it. Sign in again, then try once more.")
+        )
+    }
+
+    func testPinsAStaleRefusalLeavesANewerWriteAlone() {
+        var sync = pinSync(adopted: true)
+        let pin = sync.recordWrite(pinID: "old", profile: "default", pinned: true, at: Self.pinT0)
+        sync.recordWrite(pinID: "old", profile: "default", pinned: false, at: Self.pinT0)
+        XCTAssertFalse(sync.keepOnPhone(pinID: "old", profile: "default", generation: pin))
+        XCTAssertFalse(sync.isPhoneOnly(pinID: "old", profile: "default"))
+        XCTAssertEqual(sync.pendingWrites["default\u{1F}old"]?.pinned, false, "The newer write still stands")
+    }
+
+    func testPinsClearingThePhoneOnlyMarkLetsListingsFollowHermes() {
+        var sync = pinSync(adopted: true)
+        let oldDefaultWrite = sync.recordWrite(pinID: "old", profile: "default", pinned: true)
+        sync.keepOnPhone(pinID: "old", profile: "default", generation: oldDefaultWrite)
+        XCTAssertTrue(sync.clearPhoneOnly(pinID: "old", profile: "default"))
+        XCTAssertFalse(sync.isPhoneOnly(pinID: "old", profile: "default"))
+        XCTAssertFalse(sync.clearPhoneOnly(pinID: "old", profile: "default"))
+        let outcome = sync.reconcile(pins: [], listed: [pinRow("old", pinned: true)], profile: "default", now: Self.pinT0)
+        XCTAssertEqual(outcome.pins, ["old"], "Listings follow Hermes for the chat again")
+    }
+
+    func testPinsARefusalAfterThePendingWriteLapsedStillMarks() {
+        var sync = pinSync(adopted: true)
+        let write = sync.recordWrite(pinID: "old", profile: "default", pinned: true, at: Self.pinT0)
+        _ = sync.reconcile(
+            pins: ["old"],
+            listed: [pinRow("b", pinned: false)],
+            profile: "default",
+            now: Self.pinT0.addingTimeInterval(SessionPinSync.pendingWriteLifetime + 1)
+        )
+        XCTAssertNil(sync.pendingWrites["default\u{1F}old"], "The pending entry lapsed")
+        XCTAssertTrue(sync.keepOnPhone(pinID: "old", profile: "default", generation: write))
+        XCTAssertTrue(sync.isPhoneOnly(pinID: "old", profile: "default"))
+    }
 }
