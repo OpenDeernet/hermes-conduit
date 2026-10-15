@@ -1961,15 +1961,15 @@ private struct KanbanCardView: View {
                             }
                         }
                         // The CURRENT lane stays visible but inert, matching
-                        // desktop StatusMenu (name === status || !locked): a
-                        // non-control child renders as a disabled Menu row.
-                        HStack {
+                        // desktop StatusMenu (name === status || !locked): an
+                        // on toggle draws the menu's own checkmark in its row
+                        // (an HStack split into a row per child).
+                        Toggle(isOn: .constant(true)) {
                             Label(presentation.displayName, systemImage: presentation.systemImage)
-                            Spacer()
-                            Image(systemName: "checkmark")
                         }
-                        .foregroundStyle(.secondary)
-                        .accessibilityHint("Current lane")
+                        .disabled(true)
+                        .accessibilityLabel(Text(presentation.displayName))
+                        .accessibilityHint(AppLocalization.string("Current lane"))
                     }
                     Section {
                         Button {
