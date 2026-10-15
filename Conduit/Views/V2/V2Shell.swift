@@ -13,12 +13,18 @@
 
 import SwiftUI
 
-/// The shell's four destinations.
-enum V2Tab: String, CaseIterable, Identifiable, Hashable {
+/// The shell's four destinations, plus the voice button's slot.
+enum V2Tab: String, Identifiable, Hashable {
     case chats
     case tasks
     case bots
     case settings
+    /// Not a destination: iOS 26's trailing tab slot the gold voice button
+    /// sits over. Selecting it starts voice and keeps the tab that was open.
+    case voice
+
+    /// The tabs the bars list.
+    static let destinations: [V2Tab] = [.chats, .tasks, .bots, .settings]
 
     var id: String { rawValue }
 
@@ -28,6 +34,7 @@ enum V2Tab: String, CaseIterable, Identifiable, Hashable {
         case .tasks: return AppLocalization.string("Tasks")
         case .bots: return AppLocalization.string("Bots")
         case .settings: return AppLocalization.string("Settings")
+        case .voice: return AppLocalization.string("Voice")
         }
     }
 
@@ -37,6 +44,7 @@ enum V2Tab: String, CaseIterable, Identifiable, Hashable {
         case .tasks: return "checklist"
         case .bots: return "person.2"
         case .settings: return "slider.horizontal.3"
+        case .voice: return "waveform"
         }
     }
 }
@@ -92,6 +100,9 @@ struct V2Shell: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab: V2Tab = .chats
+    /// The app opens on the Chats list. Nothing is pushed during the
+    /// launch's first layout: a push then, even without animation, left the
+    /// app never idle.
     @State private var chatsPath: [V2Route] = []
     @State private var botsPath: [V2Route] = []
     /// iOS 17's custom bar keeps a tab alive once it has been opened, so its
@@ -103,23 +114,26 @@ struct V2Shell: View {
     @State private var programmaticTab: V2Tab?
     /// A settings link waiting for the Settings tab to open its page.
     @State private var settingsLink: ConduitAppLink.SettingsLink?
-
-    /// The return setting picks the first screen: the last chat, or the
-    /// sessions list (a notification or widget about to open a chat opens it
-    /// itself). The chat starts in the Chats path rather than being pushed
-    /// once the shell is up: a push during the launch's first layout, even
-    /// without animation, left the app never idle.
-    init(opensConversation: Bool = false) {
-        _chatsPath = State(initialValue: opensConversation ? [.conversation] : [])
-    }
+    /// Bumped when the voice tab slot itself is picked (VoiceOver, iPad's
+    /// top bar), so the voice button acts as if tapped.
+    @State private var voiceSlotPicks = 0
 
     /// Whether the visible tab shows the conversation.
     private var conversationVisible: Bool {
         switch selectedTab {
         case .chats: return chatsPath.last == .conversation
         case .bots: return botsPath.last == .conversation
-        case .tasks, .settings: return false
+        case .tasks, .settings, .voice: return false
         }
+    }
+
+    /// What the voice button starts: on a project's page, a chat in its
+    /// folder; anywhere else in the tabs, a new call.
+    private var voiceContext: V2VoiceContext {
+        if selectedTab == .chats, case .project(let project)? = chatsPath.last {
+            return .project(project)
+        }
+        return .home
     }
 
     var body: some View {
@@ -157,7 +171,15 @@ struct V2Shell: View {
                     openConversation()
                 }
             }
-            .onChange(of: selectedTab) { _, tab in
+            .onChange(of: selectedTab) { old, tab in
+                if tab == .voice {
+                    // The slot never shows a page: the tab stays put and
+                    // voice starts.
+                    programmaticTab = old
+                    selectedTab = old
+                    voiceSlotPicks &+= 1
+                    return
+                }
                 visitedTabs.insert(tab)
                 // Only a tab the user picked clicks; a chat or link that
                 // switches tabs for them doesn't.
@@ -214,15 +236,38 @@ struct V2Shell: View {
                 tabRoot(.settings)
                     .transformEnvironment(\.v2Shell) { $0.isTabActive = selectedTab == .settings }
             }
+            // The trailing slot (the search role's place) holds the voice
+            // button, drawn over it below.
+            Tab(V2Tab.voice.title, systemImage: V2Tab.voice.symbol, value: V2Tab.voice, role: .search) {
+                Color.clear
+            }
         }
         .tint(.conduitAccent)
         .tabBarMinimizeBehavior(.onScrollDown)
+        .overlay(alignment: .bottomTrailing) {
+            if !conversationVisible {
+                GeometryReader { proxy in
+                    // Centered on the slot: the bar's glass sits a little
+                    // lower on phones with a home indicator.
+                    let lift: CGFloat = proxy.safeAreaInsets.bottom > 0 ? -6 : 14
+                    voiceButton
+                        .padding(.trailing, 16)
+                        .padding(.bottom, lift)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                }
+                .ignoresSafeArea(.keyboard)
+            }
+        }
+    }
+
+    private var voiceButton: some View {
+        V2VoiceButton(context: voiceContext, slotPicks: voiceSlotPicks)
     }
 
     /// iOS 17 and 18: the same four tabs over a custom glass capsule.
     private var capsuleTabs: some View {
         ZStack {
-            ForEach(V2Tab.allCases) { tab in
+            ForEach(V2Tab.destinations) { tab in
                 if visitedTabs.contains(tab) {
                     let isSelected = selectedTab == tab
                     tabRoot(tab)
@@ -235,8 +280,13 @@ struct V2Shell: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !conversationVisible {
-                V2CapsuleTabBar(selection: $selectedTab)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                HStack(spacing: 10) {
+                    V2CapsuleTabBar(selection: $selectedTab)
+                    voiceButton
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: conversationVisible)
@@ -261,6 +311,8 @@ struct V2Shell: View {
             }
         case .settings:
             V2SettingsTab(link: $settingsLink)
+        case .voice:
+            EmptyView()
         }
     }
 
@@ -305,7 +357,7 @@ struct V2Shell: View {
             if chatsPath.last == .conversation { chatsPath.removeLast() }
         case .bots:
             if botsPath.last == .conversation { botsPath.removeLast() }
-        case .tasks, .settings:
+        case .tasks, .settings, .voice:
             break
         }
     }
@@ -346,7 +398,7 @@ private struct V2CapsuleTabBar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(V2Tab.allCases) { tab in
+            ForEach(V2Tab.destinations) { tab in
                 let isSelected = selection == tab
                 Button {
                     withAnimation(ConduitMotion.overshoot(reduceMotion: reduceMotion)) {
@@ -383,8 +435,6 @@ private struct V2CapsuleTabBar: View {
         .padding(4)
         .conduitGlassControl(cornerRadius: 28, interactive: false)
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 6)
     }
 }
 
