@@ -162,7 +162,12 @@ struct V2ChatsView: View {
                 .presentationDragIndicator(.visible)
                 .environmentObject(appState)
         }
-        .task(id: appState.activeProfile) {
+        // V2 opens on this list, often before the gateway connects: a load
+        // then has no client, so Projects loads once it connects, and again
+        // each time Projects is shown. The session catalog's own load keeps
+        // the project list fresh behind Sessions.
+        .task(id: "\(appState.activeProfile)|\(appState.isConnected)|\(showingProjects)|\(shell.isTabActive)") {
+            guard appState.isConnected, showingProjects, shell.isTabActive else { return }
             await appState.refreshProjects()
         }
         // Running and Needs approval follow the gateway's live registry
@@ -831,11 +836,25 @@ struct V2ChatsView: View {
                 }
             }
 
-            if appState.projectsLoading && displayedProjects.isEmpty {
-                ProgressView("Loading projects…")
+            // Before the gateway connects the list hasn't loaded yet, which
+            // isn't "no projects".
+            if (appState.projectsLoading || !appState.isConnected) && displayedProjects.isEmpty && !isSearching {
+                ProgressView(AppLocalization.string("Loading projects…"))
                     .frame(maxWidth: .infinity, minHeight: 140)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+            } else if displayedProjects.isEmpty && !isSearching && appState.projectsLoadFailed {
+                ContentUnavailableView {
+                    Label(AppLocalization.string("Couldn’t Load Projects"), systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(AppLocalization.string("Hermes didn’t answer. Pull down or try again."))
+                } actions: {
+                    Button(AppLocalization.string("Try Again")) {
+                        Task { await appState.refreshProjects() }
+                    }
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             } else if displayedProjects.isEmpty && !(isSearching && !pinned.isEmpty) {
                 ContentUnavailableView(
                     isSearching ? AppLocalization.string("No Matching Projects") : AppLocalization.string("No Projects"),
