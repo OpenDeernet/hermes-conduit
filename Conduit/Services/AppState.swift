@@ -513,7 +513,10 @@ final class AppState: ObservableObject {
 
     @Published var connection: HermesConnection? {
         didSet {
-            if oldValue?.baseUrl != connection?.baseUrl { agentSettings.leave(scope: agentSettingsScope) }
+            if oldValue?.baseUrl != connection?.baseUrl {
+                agentSettings.leave(scope: agentSettingsScope)
+                presentedScreens.leave()
+            }
         }
     }
     @Published var client: HermesClient?
@@ -568,6 +571,7 @@ final class AppState: ObservableObject {
             if oldValue != activeProfile {
                 dismissChatTakeover()
                 agentSettings.leave(scope: agentSettingsScope)
+                presentedScreens.leave()
             }
         }
     }
@@ -13350,6 +13354,7 @@ final class AppState: ObservableObject {
             activateLocationSharing()
             LocationSharingController.shared.appBecameActive()
             Task { await runPhoneSync(reason: .foreground) }
+            Task { await syncPresentedScreens() }
             scheduleWakeRefresh()
             // Voice gates. The capture gate additionally requires a Voice
             // surface (the phone sheet, or CarPlay), so it can be false here
@@ -16415,6 +16420,11 @@ final class AppState: ObservableObject {
     }
     #endif
 
+    /// The bot whose chat is open, if the open conversation is a Bot Chat.
+    var activeBotChatProfile: String? {
+        activeSessionId.flatMap(botConversationProfile(for:))
+    }
+
     /// The bot profile an in-flight or active conversation belongs to, when
     /// that conversation is a canonical Bot Chat. Nil for ordinary sessions —
     /// the ordinary dashboard scope applies.
@@ -18206,6 +18216,8 @@ final class AppState: ObservableObject {
     /// The settings Hermes may change, and the changes it asked for
     /// (AgentSettings.swift).
     lazy var agentSettings = AgentSettingsSync(defaults: defaults)
+    /// Confirmations Hermes asks this iPhone to present (PresentedScreens.swift).
+    lazy var presentedScreens = PresentedScreensSync(defaults: defaults)
 
     /// Asks the plugin what it serves. Cheap, so it runs on every connect.
     func refreshNotifierPluginStatus() async {
@@ -18235,6 +18247,8 @@ final class AppState: ObservableObject {
         Task { await refreshWatchCallVoices() }
         // Settings Hermes may change: share them, take its requests.
         Task { await syncAgentSettings() }
+        // Confirmations Hermes is waiting on.
+        Task { await syncPresentedScreens() }
         await provisionNotificationEncryption(bridge: bridge)
         // Notifications from this dashboard's profile, without a pairing
         // code, after the rest so connecting doesn't wait on it.
@@ -24110,6 +24124,13 @@ final class AppState: ObservableObject {
             break
 
         case .toolStart(_, let name, let input, let eventToolID):
+            if name.lowercased() == "conduit_present" {
+                // The tool may wait for the answer: show it once stored.
+                Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    await syncPresentedScreens()
+                }
+            }
             if name.lowercased() == "clarify" { break }
             let toolID = eventToolID?.trimmingCharacters(in: .whitespacesAndNewlines)
             let stableToolID = toolID?.isEmpty == false ? toolID : nil
@@ -24153,6 +24174,8 @@ final class AppState: ObservableObject {
             if name.lowercased() == "clarify" { break }
             // Hermes just read or asked to change Conduit's settings.
             if name.lowercased() == "conduit_settings" { Task { await syncAgentSettings() } }
+            // A confirmation Hermes just asked for shows without waiting on the push.
+            if name.lowercased() == "conduit_present" { Task { await syncPresentedScreens() } }
             settleReasoningSegmentIntoTranscript()
             resetReasoningSegment()
             let toolID = eventToolID?.trimmingCharacters(in: .whitespacesAndNewlines)
