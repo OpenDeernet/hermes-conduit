@@ -3047,7 +3047,7 @@ final class AppState: ObservableObject {
     /// Cron jobs whose runs don't notify (AppState+CronNotifications), for
     /// the dashboard and profile in `cronMutedJobsKey`.
     @Published var cronMutedJobIDs: Set<String> = []
-    var cronMutedJobsKey: String?
+    @Published var cronMutedJobsKey: String?
     @Published var cronNotificationsChangingJobID: String?
     lazy var cronNotificationsClient = CronNotificationsClient(request: { [weak self] path, method, body in
         guard let bridge = self?.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }

@@ -2023,7 +2023,7 @@ struct CronList: View {
         .searchable(text: $searchText, prompt: AppLocalization.string("Search scheduled jobs"))
         .scrollContentBackground(.hidden)
         .listStyle(.plain)
-        .task(id: appState.activeProfile) { await appState.refreshCronContent() }
+        .task(id: "\(appState.activeDashboardID?.uuidString ?? "")|\(appState.activeProfile)") { await appState.refreshCronContent() }
         .refreshable { await appState.refreshCronContent() }
         .sheet(item: $selectedJob) {
             CronJobDetailSheet(job: $0)
@@ -2202,8 +2202,8 @@ private struct CronJobDetailSheet: View {
                                     set: { notify in Task { await appState.setCronJobNotifies(notify, for: job) } }
                                 )) {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("Notify me when it runs").font(.subheadline.weight(.medium))
-                                        Text("Runs that answer [SILENT] never notify.").font(.caption).foregroundStyle(.secondary)
+                                        Text(AppLocalization.string("Notify me when it runs")).font(.subheadline.weight(.medium))
+                                        Text(AppLocalization.string("Runs that answer [SILENT] never notify.")).font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
                                 .tint(.conduitAccent)

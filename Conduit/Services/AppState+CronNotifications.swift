@@ -37,6 +37,8 @@ extension AppState {
             guard key == cronNotificationsKey(profile: activeProfile) else { return }
             cronMutedJobIDs = muted
             cronMutedJobsKey = key
+        } catch is CancellationError {
+            return
         } catch {
             cronNotificationsLogger.notice("Cron notifications not read: \(error.localizedDescription, privacy: .public)")
         }
