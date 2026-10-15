@@ -29,12 +29,13 @@ extension AppState {
     }
 
     func refreshCronNotifications() async {
-        guard supportsCronNotifications else { return }
+        // A save in flight owns the list until the host answers it.
+        guard supportsCronNotifications, cronNotificationsChangingJobID == nil else { return }
         let profile = activeProfile
         let key = cronNotificationsKey(profile: profile)
         do {
             let muted = try await cronNotificationsClient.muted(profile: profile)
-            guard key == cronNotificationsKey(profile: activeProfile) else { return }
+            guard key == cronNotificationsKey(profile: activeProfile), cronNotificationsChangingJobID == nil else { return }
             cronMutedJobIDs = muted
             cronMutedJobsKey = key
         } catch is CancellationError {
