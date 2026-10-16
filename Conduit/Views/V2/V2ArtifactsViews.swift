@@ -181,7 +181,7 @@ private struct ArtifactsList: View {
                             .contentShape(Capsule())
                     }
                     .buttonStyle(PressableButtonStyle())
-                    .accessibilityAddTraits(isOn ? [.isSelected, .isButton] : .isButton)
+                    .accessibilityAddTraits(isOn ? .isSelected : [])
                 }
             }
             .padding(.vertical, 4)
@@ -476,9 +476,11 @@ private struct ArtifactsList: View {
             return
         } catch {
             guard ticket == generation else { return }
+            failure = UserFacingError.message(for: error)
+            // A failed refresh keeps the list it was refreshing.
+            guard loadedKey != key else { return }
             items = []
             nextBefore = nil
-            failure = UserFacingError.message(for: error)
             loadedKey = key
         }
     }
@@ -594,6 +596,7 @@ private struct ArtifactThumbnail: View {
             image = cached
             return
         }
+        image = nil
         guard let dataURL = await resolver.dataURL(for: path), !Task.isCancelled else { return }
         let thumbnail = await Task.detached(priority: .utility) { () -> UIImage? in
             guard let data = DataURLLimits.decodeBase64DataURL(dataURL),

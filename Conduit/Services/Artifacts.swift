@@ -47,7 +47,8 @@ struct ArtifactItem: Identifiable, Equatable, Hashable {
         guard let kindValue = raw["kind"] as? String, let kind = Kind(rawValue: kindValue),
               let sourceValue = raw["source"] as? String, let source = Source(rawValue: sourceValue),
               let sessionID = raw["session_id"] as? String, !sessionID.isEmpty,
-              let messageID = raw["message_id"] as? Int else { return nil }
+              let messageID = raw["message_id"] as? Int,
+              let timestamp = (raw["timestamp"] as? NSNumber)?.doubleValue else { return nil }
         let path = (raw["path"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let url = (raw["url"] as? String).flatMap(URL.init(string:)).flatMap { url -> URL? in
             guard let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http" else { return nil }
@@ -71,7 +72,7 @@ struct ArtifactItem: Identifiable, Equatable, Hashable {
         self.sessionID = sessionID
         self.sessionTitle = (raw["session_title"] as? String) ?? ""
         self.messageID = messageID
-        self.date = Date(timeIntervalSince1970: (raw["timestamp"] as? NSNumber)?.doubleValue ?? 0)
+        self.date = Date(timeIntervalSince1970: timestamp)
     }
 }
 

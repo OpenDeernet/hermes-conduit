@@ -42,6 +42,7 @@ extension GatewayRestartTests {
                 artifactRow(["kind": "link", "source": "link", "path": NSNull(), "url": "javascript:alert(1)"]),
                 artifactRow(["kind": "sticker"]),
                 artifactRow(["path": NSNull()]),
+                artifactRow(["timestamp": NSNull(), "path": "/root/undated.png"]),
                 artifactRow(["exists": false, "path": "/root/gone.pdf", "kind": "document", "name": "gone.pdf"]),
             ],
             "next_before": 9,
