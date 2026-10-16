@@ -101,7 +101,7 @@ struct CarPlaySettingsSection: View {
                     .lineLimit(2)
             }
             Spacer()
-            SettingsRowMenu(onEdit: {
+            SettingsRowMenu(itemName: shortcut.title, onEdit: {
                 editingID = shortcut.id
                 draftTitle = shortcut.title
                 draftPrompt = shortcut.prompt

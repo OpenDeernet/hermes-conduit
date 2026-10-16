@@ -50,11 +50,16 @@ struct DictationSettingsSection: View {
                     Text(verbatim: word)
                         .font(.subheadline)
                     Spacer()
-                    SettingsRowMenu(onEdit: {
+                    SettingsRowMenu(itemName: word, onEdit: {
                         draft = word
                         editingWord = word
                     }, onDelete: {
-                        if editingWord == word { editingWord = nil }
+                        // Deleting the word in the field ends that edit, so Add
+                        // can't put it straight back.
+                        if editingWord == word {
+                            editingWord = nil
+                            draft = ""
+                        }
                         save(words.filter { $0 != word })
                     })
                 }
@@ -90,10 +95,14 @@ struct DictationSettingsSection: View {
     private func add() {
         let word = DictationCustomWords.canonicalized(draft)
         guard !word.isEmpty else { return }
-        if let editingWord, let index = words.firstIndex(of: editingWord) {
-            var updated = words
-            updated[index] = word
-            save(updated)
+        if let editingWord {
+            // Save while editing only ever replaces; a word that has gone
+            // meanwhile ends the edit without adding one.
+            if let index = words.firstIndex(of: editingWord) {
+                var updated = words
+                updated[index] = word
+                save(updated)
+            }
         } else {
             guard words.count < DictationCustomWords.maximumCount else { return }
             save(words + [word])

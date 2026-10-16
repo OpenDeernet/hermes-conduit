@@ -1592,7 +1592,7 @@ private struct SpokenPhraseListEditor: View {
             Text(phrase)
                 .font(.subheadline)
             Spacer()
-            SettingsRowMenu(onEdit: {
+            SettingsRowMenu(itemName: phrase, onEdit: {
                 draft = phrase
                 editingIndex = phrases.firstIndex(of: phrase)
             }, onDelete: {

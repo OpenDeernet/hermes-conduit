@@ -3232,7 +3232,9 @@ private struct SettingsButtonLabel: View {
                     Capsule().strokeBorder(Color.conduitAccent.opacity(0.4), lineWidth: 0.5)
                 }
             }
-            .contentShape(Capsule())
+            // A 44 pt touch target around the smaller capsule.
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
             .opacity(isEnabled ? 1 : 0.45)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.95 : 1)
             .opacity(configuration.isPressed && reduceMotion ? 0.7 : 1)
@@ -3244,6 +3246,8 @@ private struct SettingsButtonLabel: View {
 /// and a red minus on every row.
 struct SettingsRowMenu: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
+    /// The row's name, so VoiceOver says which row the menu acts on.
+    let itemName: String
     var onEdit: (() -> Void)?
     let onDelete: () -> Void
 
@@ -3261,10 +3265,11 @@ struct SettingsRowMenu: View {
             Image(systemName: "ellipsis")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .frame(minWidth: 44, minHeight: 32)
+                .frame(minWidth: 44, minHeight: 44)
                 .contentShape(Rectangle())
         }
         .accessibilityLabel(Text(AppLocalization.string("More")))
+        .accessibilityValue(Text(verbatim: itemName))
     }
 }
 
