@@ -288,7 +288,7 @@ struct V2ChatsView: View {
             if !PTRProbe.has("-PTR_NO_BACKDROP") { V2Backdrop(isTabRoot: true) }
             if PTRProbe.has("-PTR_BARE") {
                 List {
-                    ForEach(0..<30, id: \.self) { Text("Row \($0)") }
+                    ForEach(0..<30, id: \.self) { Text(verbatim: "Row \($0)") }
                 }
                 .refreshable { await appState.refreshSessionCatalog() }
             } else {
@@ -304,7 +304,7 @@ struct V2ChatsView: View {
         })
         .overlay(alignment: .topLeading) {
             if appState.isRefreshingSessionCatalog {
-                Text("refreshing").font(.system(size: 2)).opacity(0.01)
+                Text(verbatim: "refreshing").font(.system(size: 2)).opacity(0.01)
                     .accessibilityIdentifier("ptr.refreshing")
             }
         }
