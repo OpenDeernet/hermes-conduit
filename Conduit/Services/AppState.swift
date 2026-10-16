@@ -3820,6 +3820,7 @@ final class AppState: ObservableObject {
         // named by a hash, so they cannot be told apart by server.
         Task.detached(priority: .utility) { TranscriptImageCache.removeAll() }
         inlineImageRowsUnavailable.removeAll()
+        inlineImageRowFetches.values.forEach { $0.cancel() }
         inlineImageRowFetches.removeAll()
         if offlineChatPresentation.map({ dashboardID == nil || $0.dashboardID == dashboardID }) == true {
             offlineChatPresentation = nil
@@ -25768,7 +25769,9 @@ final class AppState: ObservableObject {
     func transcriptInlineImageDataURL(_ ref: InlineImageRef) async -> String? {
         let dashboard = activeDashboardID?.uuidString ?? ""
         let key = "\(dashboard)|\(ref.profile)|\(ref.sessionId)|\(ref.rowId)"
-        guard !inlineImageRowsUnavailable.contains(key) else { return nil }
+        let pictureKey = "\(key)|\(ref.index)"
+        guard !inlineImageRowsUnavailable.contains(key),
+              !inlineImageRowsUnavailable.contains(pictureKey) else { return nil }
         let fetch: Task<InlineImageRowFetch, Never>
         if let running = inlineImageRowFetches[key] {
             fetch = running
@@ -25782,8 +25785,14 @@ final class AppState: ObservableObject {
             }
             inlineImageRowFetches[key] = fetch
         }
-        guard case .found(let urls) = await fetch.value, ref.index < urls.count else { return nil }
-        return urls[ref.index]
+        guard case .found(let urls) = await fetch.value else { return nil }
+        guard ref.index < urls.count, let url = urls[ref.index] else {
+            // The row holds no copy of this picture (a web link, or fewer
+            // pictures than stand-ins), so it is not asked for again.
+            inlineImageRowsUnavailable.insert(pictureKey)
+            return nil
+        }
+        return url
     }
 
     enum InlineImageRowFetch {
