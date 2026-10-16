@@ -1125,8 +1125,14 @@ private struct UserImageAttachmentPreview: View {
     /// Cache-only lookup (no decode) so a hit renders on the first frame.
     /// Misses are filled asynchronously — see the `.task` in `body`.
     private var cachedLocalImage: UIImage? {
-        guard let url = localFileURL else { return nil }
-        return Self.localImageCache.object(forKey: url.path as NSString)
+        guard let key = memoryCacheKey else { return nil }
+        return Self.localImageCache.object(forKey: key as NSString)
+    }
+
+    /// The photo's own path when it is on this device, else where a picture
+    /// from Hermes is kept on the phone.
+    private var memoryCacheKey: String? {
+        localFileURL?.path ?? gatewayResolver?.imageCacheKey(for: attachment)
     }
 
     /// The decoded preview, gated on the path it was decoded for so a stale
@@ -1177,6 +1183,8 @@ private struct UserImageAttachmentPreview: View {
     }
 
     private var localFileURL: URL? {
+        // A picture known only by its place inside its message has no path.
+        guard !attachment.uri.isEmpty else { return nil }
         if let url = URL(string: attachment.uri), url.isFileURL { return url }
         let url = URL(fileURLWithPath: attachment.uri)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
@@ -1186,7 +1194,7 @@ private struct UserImageAttachmentPreview: View {
         Group {
             if let image = cachedLocalImage ?? currentLocalPreview ?? gatewayImage {
                 imagePreview(image)
-            } else if isGatewayImage && localFileURL == nil && !gatewayLoadFailed {
+            } else if loadsFromHermes && localFileURL == nil && !gatewayLoadFailed {
                 loadingPlaceholder
             } else if localFileURL != nil && !localPreviewFailed {
                 // Local file decoding off-main on a cache miss.
@@ -1220,24 +1228,64 @@ private struct UserImageAttachmentPreview: View {
                 Self.localImageCache.setObject(image, forKey: url.path as NSString, cost: Self.bitmapCost(of: image))
                 localPreview = image
                 localPreviewPath = url.path
-                // Gateway image, fetched through Hermes. The local-file branch
-                // returns above, so a local URI never reaches here — which also
-                // removes the old `localImage == nil` check that decoded local
-                // files on the MainActor before short-circuiting.
-            } else if isGatewayImage, let gatewayResolver {
+                // A picture from Hermes. The local-file branch returns above,
+                // so a local URI never reaches here — which also removes the
+                // old `localImage == nil` check that decoded local files on
+                // the MainActor before short-circuiting.
+            } else if loadsFromHermes, let gatewayResolver,
+                      let cacheKey = gatewayResolver.imageCacheKey(for: attachment) {
+                guard cachedLocalImage == nil else { return }
                 gatewayImage = nil
                 gatewayLoadFailed = false
-                guard let dataURL = await gatewayResolver.dataURL(for: attachment.uri),
-                !Task.isCancelled,
-                let data = DataURLLimits.decodeBase64DataURL(dataURL, prefix: "data:image/"),
-                let image = UIImage(data: data) else {
-                    guard !Task.isCancelled else { return }
+                // Kept on the phone from an earlier load (#652).
+                if let image = await Self.keptPreview(for: cacheKey) {
+                    remember(image, as: cacheKey)
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                // The server file, else the copy Hermes stored inside the
+                // message: Hermes clears the files that came in through chat
+                // platforms after a day.
+                var dataURL: String?
+                if isGatewayImage {
+                    dataURL = await gatewayResolver.dataURL(for: attachment.uri)
+                }
+                if dataURL == nil, !Task.isCancelled, let ref = attachment.inlineImage {
+                    dataURL = await gatewayResolver.inlineImageDataURL(ref)
+                }
+                guard !Task.isCancelled else { return }
+                guard let dataURL, let image = await Self.keep(dataURL, as: cacheKey) else {
                     gatewayLoadFailed = true
                     return
                 }
-                gatewayImage = image
+                guard !Task.isCancelled else { return }
+                remember(image, as: cacheKey)
             }
         }
+    }
+
+    private func remember(_ image: UIImage, as key: String) {
+        Self.localImageCache.setObject(image, forKey: key as NSString, cost: Self.bitmapCost(of: image))
+        gatewayImage = image
+    }
+
+    /// The picture kept on the phone under `key`, decoded off the
+    /// MainActor at preview size.
+    private static func keptPreview(for key: String) async -> UIImage? {
+        await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            TranscriptImageCache.cachedFile(for: key).flatMap { Self.downsampledPreview(url: $0) }
+        }.value
+    }
+
+    /// Keeps the picture in `dataURL` on the phone and decodes it at
+    /// preview size, both off the MainActor. A failed write still shows it.
+    private static func keep(_ dataURL: String, as key: String) async -> UIImage? {
+        await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            if let file = TranscriptImageCache.store(dataURL: dataURL, for: key) {
+                return Self.downsampledPreview(url: file)
+            }
+            return DataURLLimits.decodeBase64DataURL(dataURL, prefix: "data:image/").flatMap { UIImage(data: $0) }
+        }.value
     }
 
     private var loadingPlaceholder: some View {
@@ -1255,6 +1303,12 @@ private struct UserImageAttachmentPreview: View {
 
     private var isGatewayImage: Bool {
         attachment.uri.hasPrefix("/")
+    }
+
+    /// Fetched through Hermes: by its server file, or as the copy stored
+    /// inside its message.
+    private var loadsFromHermes: Bool {
+        isGatewayImage || attachment.inlineImage != nil
     }
 
     private func imagePreview(_ image: UIImage) -> some View {
@@ -1285,13 +1339,30 @@ private struct UserImageAttachmentPreview: View {
         if let localFileURL, MediaPreviewPresenter.shared.present(fileURL: localFileURL, title: attachment.name) {
             return
         }
-        guard !opening, isGatewayImage, let gatewayResolver else { return }
+        // The original kept on the phone (#652).
+        if let key = gatewayResolver?.imageCacheKey(for: attachment),
+           let kept = TranscriptImageCache.cachedFile(for: key),
+           MediaPreviewPresenter.shared.present(fileURL: kept, title: attachment.name) {
+            return
+        }
+        guard !opening, loadsFromHermes, let gatewayResolver else { return }
         let uri = attachment.uri
+        let inlineImage = attachment.inlineImage
+        let hasServerFile = isGatewayImage
         let filename = AttachmentPreviewFilename.make(name: attachment.name, uri: uri)
         opening = true
         openTask = Task {
-            if let dataURL = await gatewayResolver.dataURL(for: uri), !Task.isCancelled {
-                await MediaPreviewPresenter.shared.present(dataURL: dataURL, filename: filename)
+            var dataURL = hasServerFile ? await gatewayResolver.dataURL(for: uri) : nil
+            if dataURL == nil, !Task.isCancelled, let inlineImage {
+                dataURL = await gatewayResolver.inlineImageDataURL(inlineImage)
+            }
+            if let dataURL, !Task.isCancelled {
+                // A picture known only from its message has no file name to
+                // borrow an extension from; Quick Look needs one.
+                let named = (filename as NSString).pathExtension.isEmpty
+                    ? "\(filename).\(TranscriptImageCache.fileExtension(forDataURL: dataURL))"
+                    : filename
+                await MediaPreviewPresenter.shared.present(dataURL: dataURL, filename: named)
             }
             guard !Task.isCancelled else { return }
             opening = false
