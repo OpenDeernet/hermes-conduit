@@ -24558,7 +24558,10 @@ final class AppState: ObservableObject {
                     name: name,
                     input: existing?.input,
                     output: output,
-                    status: .complete
+                    status: .complete,
+                    // The card was stamped when the call started.
+                    duration: existing?.duration
+                        ?? ChatStepTiming.elapsed(from: messages[index].timestamp, to: Date())
                 )
             } else {
                 messages.append(ChatMessage(
@@ -25338,13 +25341,15 @@ final class AppState: ObservableObject {
             // reflects the profile at settle time (indistinguishable unless
             // the profile switches mid-stream).
             TranscriptPerf.note(.reasoningTranscriptMutation)
-            messages.append(ChatMessage(
+            var settled = ChatMessage(
                 id: id,
                 role: .reasoning,
                 content: content,
                 timestamp: timestamp,
                 author: activeProfile
-            ))
+            )
+            settled.stepDuration = ChatStepTiming.elapsed(from: timestamp, to: Date())
+            messages.append(settled)
             reasoningBuffer = ""
             activeReasoningMessageId = nil
             liveReasoningSegment = nil
