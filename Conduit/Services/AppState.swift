@@ -1267,31 +1267,44 @@ final class AppState: ObservableObject {
             )
     }
 
-    /// A push from a Bot Chat is refused: its decisions are answered in
-    /// Bots. A call from Hermes is the exception. Answering it opens voice
-    /// in the call's own chat, so that Bot Chat opens the way Bots opens it,
-    /// under the bot's own profile with the workspace left as it is. Only a
-    /// bot positively named as the chat's owner opens: `rowIDs` are the
-    /// catalog row's ids, and `canonicalProfile` is a profile the gateway
-    /// confirmed this is the canonical chat of. A chat that only carries
-    /// the reserved title proves no owner and stays refused. Call pushes
-    /// never carry a decision payload (the notifier sends none with
-    /// `call.requested`), so no card is recorded here.
+    /// A push from a Bot Chat opens that Bot Chat the way Bots opens it:
+    /// under the bot's own profile, with the workspace left as it is. A
+    /// reply opens where it was written, a decision opens where it is
+    /// answered (the resume reads the bot's pending approvals and clarify
+    /// cards from the gateway), and an answered call opens voice there.
+    /// Only a bot positively named as the chat's owner opens: `rowIDs` are
+    /// the catalog row's ids, and `canonicalProfile` is a profile the
+    /// gateway confirmed this is the canonical chat of. A chat that only
+    /// carries the reserved title proves no owner and stays refused, and so
+    /// does a push whose profile names the owner only with case folded: on
+    /// a case-sensitive host that is a different profile. No decision
+    /// payload is recorded here; the bot's open reads its cards live.
     private func routeBotOwnedNotification(
         _ target: ConduitNotificationTarget,
         notifiedProfile: String,
         rowIDs: Set<String> = [],
         canonicalProfile: String? = nil
     ) async -> Bool {
-        guard target.call != nil,
-              let bot = botOwningNotificationTarget(target, rowIDs: rowIDs, canonicalProfile: canonicalProfile) else {
+        guard let bot = botOwningNotificationTarget(target, rowIDs: rowIDs, canonicalProfile: canonicalProfile),
+              !Self.namesProfileOnlyWithCaseFolded(notifiedProfile, bot: bot) else {
             refuseBotOwnedRouting(for: notifiedProfile)
             return false
         }
-        HermesCallTrace.shared.note("Call from a Bot Chat: opening it in Bots")
+        if target.call != nil {
+            HermesCallTrace.shared.note("Call from a Bot Chat: opening it in Bots")
+        }
         guard await openBotChat(for: bot) else { return false }
         showSidebar = false
         return true
+    }
+
+    /// Whether a push's profile stamp differs from the owning bot's name
+    /// only by case. An empty stamp names no profile.
+    private static func namesProfileOnlyWithCaseFolded(_ profile: String, bot: BotProfile) -> Bool {
+        let stamped = profile.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = bot.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !stamped.isEmpty, stamped != name else { return false }
+        return stamped.lowercased() == name.lowercased()
     }
 
     /// The roster's bot that owns the chat a push names: the bot whose
@@ -16989,9 +17002,9 @@ final class AppState: ObservableObject {
                 transitionGeneration: transitionGeneration
             ) else { return false }
             if notificationTargetIsBotChat(target) {
-                // Routing a push INTO the Bots surface is out of scope; making
-                // the bot's profile this dashboard's workspace would turn its
-                // Bot Chat into the workspace's own context.
+                // Opened in Bots, never by switching: making the bot's
+                // profile this dashboard's workspace would turn its Bot Chat
+                // into the workspace's own context.
                 traceStage = "bot chat"
                 return await routeBotOwnedNotification(target, notifiedProfile: notified)
             }
@@ -17127,10 +17140,11 @@ final class AppState: ObservableObject {
         )
         // Last look at Bot Chat ownership, with the fresh catalog of the
         // (now active) profile: a Bot Chat linked to its canonical id only
-        // through the row's lineage root or aliases is refused before its
-        // conversation opens. The same row-level rules the sessions list and
-        // resume selection use decide it. A cross-profile Bot Chat was
-        // already refused before the switch by the target's canonical lookup.
+        // through the row's lineage root or aliases goes to Bots before it
+        // opens as this workspace's conversation. The same row-level rules
+        // the sessions list and resume selection use decide it. A
+        // cross-profile Bot Chat already went to Bots before the switch, by
+        // the target's canonical lookup.
         let routedIDs = Set([requestedID, route.resumeTargetID, route.durableSessionID].compactMap {
             ChatScrollIdentityNormalization.sessionID($0)
         })
