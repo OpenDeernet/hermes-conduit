@@ -22,7 +22,8 @@ extension ProfileModelDefaultsTests {
     func testMainColorIsTheOneCoveringMostOfThePhoto() throws {
         let image = try makeGlowImage(bands: [(red, 0.7), (blue, 0.3)])
         let colors = ProfileGlowPalette.colors(from: image)
-        XCTAssertEqual(colors.count, 2)
+        // `guard` so a short palette fails cleanly instead of trapping.
+        guard colors.count == 2 else { return XCTFail("Expected 2 colors, got \(colors)") }
         XCTAssertTrue(colors[0].looksLike(red))
         XCTAssertTrue(colors[1].looksLike(blue))
     }
@@ -37,7 +38,7 @@ extension ProfileModelDefaultsTests {
     func testStrayPixelsNeverBecomeAColor() throws {
         let image = try makeGlowImage(bands: [(red, 0.98), (blue, 0.02)])
         let colors = ProfileGlowPalette.colors(from: image)
-        XCTAssertEqual(colors.count, 1)
+        guard colors.count == 1 else { return XCTFail("Expected 1 color, got \(colors)") }
         XCTAssertTrue(colors[0].looksLike(red))
     }
 
