@@ -24,6 +24,7 @@ private let lifecycleLog = Logger(subsystem: "com.milim.conduit", category: "Tur
 /// when the outgoing server's ownership was revoked. Ids and booleans only —
 /// never prompt text, credentials, or speech content.
 private let speechOwnershipLog = Logger(subsystem: "com.milim.conduit", category: "SpeechOwnership")
+private let voiceSetupLog = Logger(subsystem: "com.milim.conduit", category: "VoiceSetup")
 
 typealias ChatResumeReconnectCancellation = @MainActor () -> Void
 typealias ChatResumeReconnectExecutor = @MainActor (ChatResumeSyncPurpose) async -> Void
@@ -26110,9 +26111,9 @@ final class AppState: ObservableObject {
     var canStartPhoneVoiceConversation: Bool { phoneVoiceUnavailableReason == nil }
 
     /// Whether the composer offers its voice button (in the trailing slot it
-    /// shares with send). Voice the user never enabled for this profile is
-    /// not offered, so an empty composer shows the action button instead
-    /// (#194). Once enabled, the button stays and shows its
+    /// shares with send). Voice the user turned off for this profile is not
+    /// offered, so an empty composer shows the action button instead
+    /// (#194); a switch never touched reads as on. While enabled, the button stays and shows its
     /// disabled state for transient or provider problems. This reads the
     /// persisted per-profile preference rather than `isVoiceEnabled`, which
     /// is reset while a connection re-establishes (the button must not blink
@@ -26206,7 +26207,7 @@ final class AppState: ObservableObject {
         guard profile == activeProfile, bridge === dashboardTicketBridge else { return }
         if isFirstVoiceSetup, defaults.object(forKey: enabledKey) == nil {
             defaults.set(true, forKey: enabledKey)
-            await applyFirstVoiceSetupDefaults(service: service)
+            await applyFirstVoiceSetupDefaults(profile: profile, service: service)
             guard profile == activeProfile, bridge === dashboardTicketBridge else { return }
         }
         voiceCapabilitySnapshot = service.snapshot.capability
@@ -26236,20 +26237,28 @@ final class AppState: ObservableObject {
     /// this iPhone unless a choice was saved, and Edge TTS only when the
     /// profile's assistant voice isn't ready and Edge is. A live mode
     /// brings its own speech, so Hermes' speech config is left alone then.
-    private func applyFirstVoiceSetupDefaults(service: HermesVoiceConfigurationService) async {
-        guard configuredLiveVoiceEngine(profile: activeProfile) == nil else { return }
+    /// Everything is written for `profile`, the one `service` reads, even
+    /// if the active profile changes while Hermes answers.
+    private func applyFirstVoiceSetupDefaults(profile: String, service: HermesVoiceConfigurationService) async {
+        guard configuredLiveVoiceEngine(profile: profile) == nil else { return }
+        var preferences = loadVoiceProfilePreferences(profile: profile)
         let plan = VoiceSetupDefaults.plan(
-            transcriptionModeChosen: loadVoiceProfilePreferences(profile: activeProfile).transcriptionMode != nil,
+            transcriptionModeChosen: preferences.transcriptionMode != nil,
             appleSpeechAvailability: appleSpeechAvailability,
             snapshot: service.snapshot
         )
         if plan.usesOnDeviceTranscription {
-            // Speech Recognition is asked for on the first utterance.
-            updateActiveProfileVoicePreferences { $0.transcriptionMode = .appleOnDevice }
+            // Speech Recognition is asked for on the first utterance. The
+            // caller loads these preferences into the controller next.
+            preferences.transcriptionMode = .appleOnDevice
+            saveVoiceProfilePreferences(preferences, profile: profile)
         }
-        if plan.switchesSpeechToEdge,
-           await service.saveProvider(VoiceSetupDefaults.edgeTTSProviderID, kind: .tts) {
+        guard plan.switchesSpeechToEdge else { return }
+        if await service.saveProvider(VoiceSetupDefaults.edgeTTSProviderID, kind: .tts) {
             await service.reload()
+        } else {
+            // Settings' Set up voice offers "Use Edge TTS" for this.
+            voiceSetupLog.notice("First voice setup could not switch the assistant voice to Edge TTS")
         }
     }
 
