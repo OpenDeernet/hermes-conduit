@@ -1221,6 +1221,42 @@ final class AppState: ObservableObject {
             )
     }
 
+    /// A push from a Bot Chat is refused: its decisions are answered in
+    /// Bots. A call from Hermes is the exception. Answering it opens voice
+    /// in the call's own chat, so that Bot Chat opens the way Bots opens it,
+    /// under the bot's own profile with the workspace left as it is.
+    private func routeBotOwnedNotification(
+        _ target: ConduitNotificationTarget,
+        notifiedProfile: String
+    ) async -> Bool {
+        guard target.call != nil,
+              let bot = botOwningNotificationTarget(target, notifiedProfile: notifiedProfile) else {
+            refuseBotOwnedRouting(for: notifiedProfile)
+            return false
+        }
+        HermesCallTrace.shared.note("Call from a Bot Chat: opening it in Bots")
+        showSidebar = false
+        return await openBotChat(for: bot)
+    }
+
+    /// The roster's bot whose Bot Chat a push names: the bot owning one of
+    /// the push's ids, else the bot this process registered for one of
+    /// them, else the bot of the profile the push carried.
+    private func botOwningNotificationTarget(
+        _ target: ConduitNotificationTarget,
+        notifiedProfile: String
+    ) -> BotProfile? {
+        let ids = [target.sessionId, target.durableSessionID].compactMap {
+            ChatScrollIdentityNormalization.sessionID($0)
+        }
+        if let bot = botOwnership.bot(owningAny: Set(ids)) { return bot }
+        if let registered = ids.lazy.compactMap({ self.botConversationProfile(for: $0) }).first,
+           let bot = Self.linkedBot(named: registered, in: botRoster) {
+            return bot
+        }
+        return Self.linkedBot(named: notifiedProfile, in: botRoster)
+    }
+
     /// Whether a push's conversation is a bot's canonical chat, by any id the
     /// push carried (the runtime id and the durable row). This is the only
     /// thing that separates a Bot Chat decision from a workspace one: bots are
@@ -16808,8 +16844,8 @@ final class AppState: ObservableObject {
         // refusal copy still reads the name the PUSH carried, so a case-only
         // match keeps its own diagnostic.
         if notificationTargetIsBotChat(target) {
-            refuseBotOwnedRouting(for: target.profile ?? "")
-            return false
+            traceStage = "bot chat"
+            return await routeBotOwnedNotification(target, notifiedProfile: target.profile ?? "")
         }
         let targetProfile = notificationProfileID(target.profile)
         if let notified = target.profile, let targetProfile,
@@ -16839,8 +16875,8 @@ final class AppState: ObservableObject {
                 // Routing a push INTO the Bots surface is out of scope; making
                 // the bot's profile this dashboard's workspace would turn its
                 // Bot Chat into the workspace's own context.
-                refuseBotOwnedRouting(for: notified)
-                return false
+                traceStage = "bot chat"
+                return await routeBotOwnedNotification(target, notifiedProfile: notified)
             }
             guard botEvidenceIsAvailable else {
                 // No usable Bot Mode evidence (the roster could not be
@@ -16879,8 +16915,8 @@ final class AppState: ObservableObject {
                 transitionGeneration: transitionGeneration
             ) else { return false }
             if pushesCanonicalChat {
-                refuseBotOwnedRouting(for: notified)
-                return false
+                traceStage = "bot chat"
+                return await routeBotOwnedNotification(target, notifiedProfile: notified)
             }
         }
         if let notified = target.profile, let targetProfile,
@@ -16901,8 +16937,8 @@ final class AppState: ObservableObject {
                 transitionGeneration: transitionGeneration
             ) else { return false }
             if pushesCanonicalChat {
-                refuseBotOwnedRouting(for: notified)
-                return false
+                traceStage = "bot chat"
+                return await routeBotOwnedNotification(target, notifiedProfile: notified)
             }
         }
         if let targetProfile, targetProfile != activeProfile {
@@ -16981,8 +17017,8 @@ final class AppState: ObservableObject {
                     || BotChatHygiene.isBotOwnedRow(row, botOwnedSessionIDs: botOwned)
                     || BotChatHygiene.isReservedCanonicalTitleRow(row))
         }) {
-            refuseBotOwnedRouting(for: target.profile ?? activeProfile)
-            return false
+            traceStage = "bot chat"
+            return await routeBotOwnedNotification(target, notifiedProfile: target.profile ?? activeProfile)
         }
         // A decision raised while the app was backgrounded is delivered as a
         // structured payload on the notification (the one-shot gateway stream
