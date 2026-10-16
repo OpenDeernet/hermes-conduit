@@ -18,8 +18,12 @@ final class ReplySourcesClient {
 
     typealias Request = @MainActor (_ path: String, _ method: String, _ body: [String: Any]?) async throws -> [String: Any]
 
-    enum Failure: Error {
+    enum Failure: LocalizedError {
         case malformed
+
+        var errorDescription: String? {
+            AppLocalization.string("The host's answer couldn't be read. Update the Conduit plugin and try again.")
+        }
     }
 
     private let request: Request

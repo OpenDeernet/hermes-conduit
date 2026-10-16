@@ -251277,6 +251277,88 @@
           }
         }
       }
+    },
+    "The host's answer couldn't be read. Update the Conduit plugin and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Antwort des Hosts konnte nicht gelesen werden. Aktualisiere das Conduit-Plugin und versuche es erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo leer la respuesta del host. Actualiza el plugin de Conduit y vuelve a intentarlo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La réponse de l'hôte est illisible. Mets à jour le plugin Conduit et réessaie."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jawaban host tidak dapat dibaca. Perbarui plugin Conduit lalu coba lagi."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile leggere la risposta dell'host. Aggiorna il plugin Conduit e riprova."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ホストの応答を読み取れませんでした。Conduit プラグインを更新してもう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "호스트의 응답을 읽을 수 없어요. Conduit 플러그인을 업데이트한 후 다시 시도하세요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nie udało się odczytać odpowiedzi hosta. Zaktualizuj wtyczkę Conduit i spróbuj ponownie."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível ler a resposta do host. Atualize o plugin do Conduit e tente novamente."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось прочитать ответ хоста. Обновите плагин Conduit и попробуйте ещё раз."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ana makinenin yanıtı okunamadı. Conduit eklentisini güncelleyip tekrar dene."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取主机的响应。请更新 Conduit 插件后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法讀取主機的回應。請更新 Conduit 外掛程式後再試一次。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
