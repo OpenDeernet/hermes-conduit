@@ -629,7 +629,7 @@ struct ConnectionStatusIndicator: View {
     private var color: Color {
         if appState.isConnected {
             return .green
-        } else if appState.isConnecting {
+        } else if appState.isRecoveringConnection {
             return .orange
         } else {
             return .red

@@ -531,6 +531,15 @@ final class AppState: ObservableObject {
         }
     }
     @Published var isConnecting = false
+    /// For status words and dots only: connecting now, or between the first
+    /// few retries after a dropped connection. A drop waits 1-5 s before
+    /// each retry with `isConnecting` false, which would otherwise read as
+    /// "Disconnected" on every short network blip. After three failed
+    /// retries the gateway is likely down, and the words say so.
+    var isRecoveringConnection: Bool {
+        isConnecting
+            || (!isConnected && connection != nil && turnState == .reconnecting && reconnectAttempts < 3)
+    }
     @Published var profiles: [String] = []
     @Published private(set) var sessionFilterOrder: [SessionSource] = AppState.defaultSessionFilterOrder
     static let defaultSessionFilterOrder: [SessionSource] = [.chat, .voice, .voiceJob, .discord, .telegram, .api, .webhook, .cron, .other]

@@ -28,6 +28,7 @@
 
 import Foundation
 import Combine
+import Network
 import os
 import UniformTypeIdentifiers
 
@@ -741,6 +742,18 @@ final class HermesClient: ObservableObject {
     private var socketHasOpened = false
     private var openContinuation: CheckedContinuation<Void, Error>?
     private var openTimeoutTask: Task<Void, Never>?
+    /// Keepalive: a `ping` after `keepaliveInterval` without any frame from
+    /// the gateway. Tailscale relays, carrier NATs and proxies drop idle
+    /// connections without a close, so a quiet socket can be dead for
+    /// minutes before the next send finds out. The ping keeps the path warm
+    /// and finds a dead one while nobody is waiting on it.
+    private var keepaliveTask: Task<Void, Never>?
+    private var lastInboundAt = Date()
+    private var isProbing = false
+    private var pathMonitor: NWPathMonitor?
+    private var pathMonitorSawInitialPath = false
+    private let keepaliveInterval: TimeInterval?
+    private let keepalivePingTimeout: TimeInterval
 
     let connection: HermesConnection
     let profile: String?
@@ -767,6 +780,12 @@ final class HermesClient: ObservableObject {
     static let livenessProbeTimeout: TimeInterval = 8
     /// Budget for the foreground `ping` (`healthCheck`). See there.
     static let pingTimeout: TimeInterval = 5
+    /// Quiet time before a keepalive `ping`. Well under the 30-60 s idle
+    /// limits NATs and relays commonly use.
+    static let defaultKeepaliveInterval: TimeInterval = 15
+    /// A keepalive ping waits longer than the foreground one: nobody is
+    /// waiting on it, and a relayed path can be slow without being dead.
+    static let keepalivePingTimeout: TimeInterval = 10
     /// Dedicated budget for `session.compress`. Manual compression is
     /// LLM-bound and routinely outlives the generic request timeout on large
     /// sessions, while the gateway keeps compressing after the client gives
@@ -803,8 +822,12 @@ final class HermesClient: ObservableObject {
         connection: HermesConnection,
         profile: String? = nil,
         cloudflareAccess: CloudflareAccessCredentials? = nil,
-        transportFactory: @escaping @MainActor () -> any HermesWebSocketTransport = { URLSessionWebSocketTransport() }
+        transportFactory: @escaping @MainActor () -> any HermesWebSocketTransport = { URLSessionWebSocketTransport() },
+        keepaliveInterval: TimeInterval? = HermesClient.defaultKeepaliveInterval,
+        keepalivePingTimeout: TimeInterval = HermesClient.keepalivePingTimeout
     ) {
+        self.keepaliveInterval = keepaliveInterval
+        self.keepalivePingTimeout = keepalivePingTimeout
         self.connection = connection
         self.profile = profile
         self.cloudflareAccess = cloudflareAccess
@@ -829,6 +852,7 @@ final class HermesClient: ObservableObject {
         // intra-instance reconnect — which no caller does today.)
         receiveTask?.cancel()
         receiveTask = nil
+        stopKeepalive()
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         transport?.invalidate()
@@ -882,6 +906,76 @@ final class HermesClient: ObservableObject {
         receiveTask = Task { [weak self] in
             await self?.receiveLoop()
         }
+        startKeepalive(for: socket)
+    }
+
+    // MARK: - Keepalive
+
+    private func startKeepalive(for socket: any HermesWebSocket) {
+        stopKeepalive()
+        guard let interval = keepaliveInterval else { return }
+        lastInboundAt = Date()
+        keepaliveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(interval / 3))
+                guard !Task.isCancelled, let self else { return }
+                guard self.socket === socket else { return }
+                if Date().timeIntervalSince(self.lastInboundAt) >= interval {
+                    await self.probe(socket)
+                }
+            }
+        }
+        // A network change (Wi-Fi to cellular, the VPN tunnel coming back)
+        // usually leaves the old TCP connection dead: check it at once
+        // instead of at the next quiet interval. The monitor reports the
+        // current path first; only later changes matter.
+        let monitor = NWPathMonitor()
+        pathMonitorSawInitialPath = false
+        monitor.pathUpdateHandler = { [weak self] path in
+            let satisfied = path.status == .satisfied
+            Task { @MainActor in
+                guard let self, self.socket === socket else { return }
+                guard self.pathMonitorSawInitialPath else {
+                    self.pathMonitorSawInitialPath = true
+                    return
+                }
+                guard satisfied else { return }
+                await self.probe(socket)
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "com.milim.conduit.hermes-path"))
+        pathMonitor = monitor
+    }
+
+    private func stopKeepalive() {
+        keepaliveTask?.cancel()
+        keepaliveTask = nil
+        pathMonitor?.cancel()
+        pathMonitor = nil
+    }
+
+    /// Pings the gateway, once more if the first goes unanswered, and closes
+    /// the socket when neither does. Closing fails the receive loop, which
+    /// reports the disconnect so AppState reconnects as for any other drop.
+    private func probe(_ socket: any HermesWebSocket) async {
+        guard !isProbing, self.socket === socket, !closedIntentionally else { return }
+        isProbing = true
+        defer { isProbing = false }
+        for _ in 0..<2 {
+            do {
+                try await ping(timeout: keepalivePingTimeout)
+                return
+            } catch HermesError.connectionClosed, HermesError.notConnected {
+                return
+            } catch {
+                guard self.socket === socket, !closedIntentionally else { return }
+                // Any frame during the wait proves the socket alive.
+                if Date().timeIntervalSince(lastInboundAt) < keepalivePingTimeout { return }
+            }
+        }
+        guard self.socket === socket, !closedIntentionally else { return }
+        logger.error("Keepalive ping unanswered twice; closing the socket")
+        socket.cancel(with: .goingAway, reason: nil)
     }
 
     private func waitForSocketOpen(_ socket: any HermesWebSocket) async throws {
@@ -931,6 +1025,7 @@ final class HermesClient: ObservableObject {
         while !Task.isCancelled {
             do {
                 let message = try await socket.receive()
+                lastInboundAt = Date()
                 // A reconnect replaces `self.socket`; if this loop has been
                 // superseded, drop the frame rather than dispatch it —
                 // `handleMessage` has no identity check of its own and could
@@ -955,6 +1050,7 @@ final class HermesClient: ObservableObject {
                 // RPCs. didOpen/didClose/failSocketOpen guard the same way.
                 guard self.socket === socket else { break }
                 isConnected = false
+                stopKeepalive()
                 // No response can ever arrive on a dead socket; failing the
                 // in-flight requests here keeps awaiting UI from hanging for
                 // the remainder of each request's timeout.
@@ -1284,6 +1380,7 @@ final class HermesClient: ObservableObject {
 
     func disconnect() {
         closedIntentionally = true
+        stopKeepalive()
         receiveTask?.cancel()
         receiveTask = nil
         openTimeoutTask?.cancel()
@@ -1594,8 +1691,12 @@ final class HermesClient: ObservableObject {
     /// travelled over this socket, so it proves the socket alive exactly as a
     /// pong would; Hermes Desktop reads it the same way.
     func healthCheck() async throws {
+        try await ping(timeout: Self.pingTimeout)
+    }
+
+    private func ping(timeout: TimeInterval) async throws {
         do {
-            _ = try await rpc("ping", params: nil, timeout: Self.pingTimeout, scoped: false)
+            _ = try await rpc("ping", params: nil, timeout: timeout, scoped: false)
         } catch let error where Self.isMissingRPCMethod(error) {
             return
         }
