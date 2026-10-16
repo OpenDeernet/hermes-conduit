@@ -82,7 +82,8 @@ extension AppState {
         }
         var hint: CLLocation?
         if location.settings.talking || location.settings.background, !location.isPaused() {
-            hint = await location.fixes.currentFix(accuracy: kCLLocationAccuracyKilometer, maxAge: 600, timeout: .seconds(2))
+            hint = await location.fixes.currentFix(accuracy: LocationFixProvider.desiredAccuracy(for: .area),
+                                                   maxAge: 300, timeout: .seconds(2))
         }
         let outcome = await MapsNavigator.open(place, mode: target.mode, places: places, near: hint?.coordinate)
         if case .failed = outcome {

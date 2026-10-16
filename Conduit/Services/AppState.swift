@@ -24492,7 +24492,11 @@ final class AppState: ObservableObject {
             // A confirmation Hermes just asked for shows without waiting on the push.
             if name.lowercased() == "conduit_present" { Task { await syncPresentedScreens() } }
             // Hermes asked to open Apple Maps from the chat on screen.
-            if name.lowercased() == "conduit_maps", let promptID = Self.mapsNavigatePromptID(output) {
+            // Only a result seen for the first time: a replay after a
+            // reconnect finds its card already complete.
+            if name.lowercased() == "conduit_maps", let promptID = Self.mapsNavigatePromptID(output),
+               !messages.contains(where: { $0.role == .tool && $0.tool?.id != nil && $0.tool?.id == eventToolID
+                   && $0.tool?.status == .complete }) {
                 noteMapsNavigateExpected(promptID)
             }
             settleReasoningSegmentIntoTranscript()

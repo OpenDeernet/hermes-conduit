@@ -146,6 +146,12 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
             completionHandler([])
             return
         }
+        // Directions to tap: posted from the background, kept if Conduit
+        // came to the front before it showed.
+        if notification.request.identifier == MapsNavigator.notificationIdentifier {
+            completionHandler([.banner, .list, .sound])
+            return
+        }
         if notification.request.content.categoryIdentifier == HermesCallNotifications.categoryIdentifier {
             completionHandler([.banner, .list, .sound])
             return

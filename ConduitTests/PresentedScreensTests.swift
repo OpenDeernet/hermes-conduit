@@ -121,7 +121,7 @@ extension AppStateVoiceCapabilityTests {
         XCTAssertNil(AppState.mapsNavigatePromptID(nil))
     }
 
-        func testAnExpiredConfirmIsntShown() {
+    func testAnExpiredConfirmIsntShown() {
         let prompt = PresentedConfirm(id: "p1", title: "Buy it?", preview: "", actionLabel: "Buy",
                                       expiresAt: Date().addingTimeInterval(-1))
         XCTAssertTrue(prompt.isExpired())

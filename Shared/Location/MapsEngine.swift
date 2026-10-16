@@ -142,7 +142,7 @@ struct MapsRequest {
         }
         if let limit = (json["limit"] as? NSNumber)?.intValue { request.limit = limit }
         if let modeName = json["mode"] as? String {
-            guard let mode = Mode(rawValue: modeName) else { return .failure(.failed("mode is driving, walking, transit or cycling.")) }
+            guard let mode = Mode(rawValue: modeName.lowercased()) else { return .failure(.failed("mode is driving, walking, transit or cycling.")) }
             request.mode = mode
         }
         request.departAt = (json["depart_at"] as? String).flatMap(MapsDates.parse)
@@ -484,7 +484,7 @@ private final class MapsRun {
     }
 
     private static func coordinateName(_ coordinate: CLLocationCoordinate2D) -> String {
-        String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)
+        String(format: "%.5f, %.5f", locale: Locale(identifier: "en_US_POSIX"), coordinate.latitude, coordinate.longitude)
     }
 
     /// The name a destination that failed is listed by.

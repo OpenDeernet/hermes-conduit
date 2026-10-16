@@ -27,7 +27,7 @@ enum MapsNavigator {
     }
 
     static let lookupDeadline: TimeInterval = 7
-    static let notificationIdentifier = "conduit.maps.navigate"
+    nonisolated static let notificationIdentifier = "conduit.maps.navigate"
     nonisolated static let urlKey = "conduit_maps_url"
 
     /// Resolves `ref` and opens Apple Maps with `mode` directions there.
@@ -51,7 +51,7 @@ enum MapsNavigator {
             return opened ? .opened(name) : .failed(.failed("Apple Maps couldn't be opened."))
         }
         guard await notify(name: name, url: url) else {
-            return .failed(.failed("The phone is locked and Conduit can't post notifications, so Maps couldn't be opened."))
+            return .failed(.failed("Conduit isn't in front and can't post notifications, so Maps couldn't be opened."))
         }
         return .notified(name)
     }
