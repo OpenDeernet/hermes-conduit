@@ -526,7 +526,8 @@ final class AppStateVoiceSuspensionTests: XCTestCase {
                 supportsSpeech: false,
                 unavailableReason: nil
             ),
-            isVoiceEnabled: true
+            isVoiceEnabled: true,
+            speechOutput: .hermes
         )
         harness.foregroundForRestoration()
 

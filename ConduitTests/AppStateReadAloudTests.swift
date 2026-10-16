@@ -159,7 +159,8 @@ final class AppStateReadAloudTests: XCTestCase {
         harness.appState.installVoiceCapabilityStateForTesting(
             bridge: harness.bridge,
             snapshot: sttOnly,
-            isVoiceEnabled: true
+            isVoiceEnabled: true,
+            speechOutput: .hermes
         )
         XCTAssertEqual(
             harness.appState.readAloudUnavailableReason,
