@@ -1298,9 +1298,9 @@ final class AppState: ObservableObject {
         // (a relay clarify exists nowhere else), so its card is recorded in
         // the bot's namespace under the id the push named, and the open
         // promotes it into the chat, as the workspace route does.
+        let requestedID = target.sessionId
         var migrationIDs: Set<String> = []
         if let decision = target.decision {
-            let requestedID = target.sessionId
             recordNotificationDecision(
                 decision,
                 sessionIDs: [requestedID] + [target.durableSessionID].compactMap { $0 },
@@ -1309,7 +1309,19 @@ final class AppState: ObservableObject {
             )
             migrationIDs = [requestedID]
         }
-        guard await openBotChat(for: bot, presentationMigrationSessionIDs: migrationIDs) else { return false }
+        guard await openBotChat(for: bot, presentationMigrationSessionIDs: migrationIDs) else {
+            // A failed open evicts the pre-open card, as the workspace route
+            // does, so no later open promotes it from the push-named id.
+            if let decision = target.decision,
+               let evictionKey = Self.pendingDecisionEvictionKey(for: decision) {
+                sessionPresentationCache.removePendingDecision(
+                    key: evictionKey,
+                    profile: bot.name,
+                    sessionIDs: [requestedID]
+                )
+            }
+            return false
+        }
         showSidebar = false
         return true
     }

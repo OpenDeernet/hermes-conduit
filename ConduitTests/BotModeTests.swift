@@ -3480,18 +3480,12 @@ final class BotModeTests: XCTestCase {
     /// of a workspace row.
     func testSameProfilePushForCompactedBotChatOpensInBots() async {
         var resumedIDs: [String] = []
+        var resumeProfiles: [String?] = []
         let harness = makeBotHarness(lifecycleOperations: ChatResumeLifecycleOperations(
             loadCatalog: { _, _ in [self.makeSessionSummary(id: "ordinary-1", title: "Design review")] },
-            openSession: { _, id, _ in
+            openSessionWithProfile: { _, id, _, profile in
                 resumedIDs.append(id)
-                return SessionResumeResult(
-                    sessionId: id,
-                    messages: [],
-                    snapshot: SessionRuntimeSnapshot(object: ["running": .bool(false)])
-                )
-            },
-            openSessionWithProfile: { _, id, _, _ in
-                resumedIDs.append(id)
+                resumeProfiles.append(profile)
                 return SessionResumeResult(
                     sessionId: id,
                     messages: [],
@@ -3524,6 +3518,7 @@ final class BotModeTests: XCTestCase {
 
         XCTAssertTrue(routed)
         XCTAssertEqual(resumedIDs, ["default-tip"], "the Bot Chat's tip opens, not a workspace row")
+        XCTAssertEqual(resumeProfiles, ["default"], "under the bot's own profile")
         XCTAssertEqual(harness.appState.activeBotChatProfile, "default")
     }
 
