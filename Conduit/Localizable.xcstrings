@@ -268361,6 +268361,88 @@
           }
         }
       }
+    },
+    "The new version adds what the installed one doesn't have. Apply it only if you trust it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die neue Version bringt Dinge mit, die die installierte nicht hat. Wende sie nur an, wenn du ihr vertraust."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La nueva versión añade lo que la instalada no tiene. Aplícala solo si confías en ella."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La nouvelle version ajoute ce que la version installée n'a pas. Ne l'appliquez que si vous lui faites confiance."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versi baru menambahkan hal yang tidak ada di versi terpasang. Terapkan hanya jika Anda memercayainya."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La nuova versione aggiunge ciò che quella installata non ha. Applicala solo se ti fidi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいバージョンには、インストール済みのものにはない内容が追加されています。信頼できる場合のみ適用してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 버전에는 설치된 버전에 없는 항목이 추가됩니다. 신뢰할 때만 적용하세요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nowa wersja dodaje to, czego nie ma zainstalowana. Zastosuj ją tylko, jeśli jej ufasz."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A nova versão adiciona o que a instalada não tem. Aplique-a só se confiar nela."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Новая версия добавляет то, чего нет в установленной. Применяйте её, только если доверяете ей."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeni sürüm, yüklü sürümde olmayanları ekliyor. Yalnızca güveniyorsanız uygulayın."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新版本加入了已安装版本没有的内容。仅在你信任它时才应用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新版本加入了已安裝版本沒有的內容。僅在你信任它時才套用。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

@@ -225,7 +225,7 @@ struct CapabilityRefreshBanner: View {
     let message: String
 
     var body: some View {
-        Text("Refresh failed: \(message)")
+        Text(verbatim: AppLocalization.string("Refresh failed: \(message)"))
             .font(.caption)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
