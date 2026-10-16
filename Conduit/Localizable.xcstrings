@@ -268198,84 +268198,84 @@
         }
       }
     },
-    "For a more natural voice, download an Enhanced or Premium voice in iPhone Settings > Accessibility > Spoken Content > Voices. Conduit uses the best one installed for the reply's language." : {
+    "For a more natural voice, download an Enhanced or Premium voice in iPhone Settings > Accessibility: search Settings for “Voices” to find them. Conduit uses the best one installed for the reply's language." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Für eine natürlichere Stimme lade in den iPhone-Einstellungen unter Bedienungshilfen > Gesprochene Inhalte > Stimmen eine erweiterte oder Premium-Stimme. Conduit nutzt die beste installierte Stimme für die Sprache der Antwort."
+            "value" : "Für eine natürlichere Stimme lade in den iPhone-Einstellungen unter Bedienungshilfen eine erweiterte oder Premium-Stimme. Suche in den Einstellungen nach „Stimmen“, um sie zu finden. Conduit nutzt die beste installierte Stimme für die Sprache der Antwort."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Para una voz más natural, descarga una voz mejorada o premium en Ajustes del iPhone > Accesibilidad > Contenido leído > Voces. Conduit usa la mejor instalada para el idioma de la respuesta."
+            "value" : "Para una voz más natural, descarga una voz mejorada o premium en Ajustes del iPhone > Accesibilidad: busca «Voces» en Ajustes para encontrarlas. Conduit usa la mejor instalada para el idioma de la respuesta."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pour une voix plus naturelle, télécharge une voix améliorée ou premium dans Réglages de l’iPhone > Accessibilité > Contenu énoncé > Voix. Conduit utilise la meilleure voix installée pour la langue de la réponse."
+            "value" : "Pour une voix plus naturelle, télécharge une voix améliorée ou premium dans Réglages de l’iPhone > Accessibilité : cherche « Voix » dans Réglages pour les trouver. Conduit utilise la meilleure voix installée pour la langue de la réponse."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Untuk suara yang lebih alami, unduh suara Ditingkatkan atau Premium di Pengaturan iPhone > Aksesibilitas > Konten Lisan > Suara. Conduit memakai suara terbaik yang terpasang untuk bahasa balasan."
+            "value" : "Untuk suara yang lebih alami, unduh suara Ditingkatkan atau Premium di Pengaturan iPhone > Aksesibilitas: cari “Suara” di Pengaturan untuk menemukannya. Conduit memakai suara terbaik yang terpasang untuk bahasa balasan."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Per una voce più naturale, scarica una voce migliorata o premium in Impostazioni dell’iPhone > Accessibilità > Contenuto letto ad alta voce > Voci. Conduit usa la migliore installata per la lingua della risposta."
+            "value" : "Per una voce più naturale, scarica una voce migliorata o premium in Impostazioni dell’iPhone > Accessibilità: cerca “Voci” in Impostazioni per trovarle. Conduit usa la migliore installata per la lingua della risposta."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "より自然な声にするには、iPhoneの「設定」>「アクセシビリティ」>「読み上げコンテンツ」>「声」で拡張またはプレミアムの声をダウンロードしてください。Conduitは返答の言語に合う、インストール済みの最も良い声を使います。"
+            "value" : "より自然な声にするには、iPhoneの「設定」>「アクセシビリティ」で拡張またはプレミアムの声をダウンロードしてください。「設定」で「声」を検索すると見つかります。Conduitは返答の言語に合う、インストール済みの最も良い声を使います。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "더 자연스러운 음성을 원하면 iPhone 설정 > 손쉬운 사용 > 음성 콘텐츠 > 음성에서 향상된 음성 또는 프리미엄 음성을 다운로드하세요. Conduit는 답변 언어에 맞게 설치된 가장 좋은 음성을 사용합니다."
+            "value" : "더 자연스러운 음성을 원하면 iPhone 설정 > 손쉬운 사용에서 향상된 음성 또는 프리미엄 음성을 다운로드하세요. 설정에서 '음성'을 검색하면 찾을 수 있습니다. Conduit는 답변 언어에 맞게 설치된 가장 좋은 음성을 사용합니다."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aby głos brzmiał naturalniej, pobierz głos rozszerzony lub premium w Ustawieniach iPhone’a > Dostępność > Mówiona zawartość > Głosy. Conduit używa najlepszego zainstalowanego głosu dla języka odpowiedzi."
+            "value" : "Aby głos brzmiał naturalniej, pobierz głos rozszerzony lub premium w Ustawieniach iPhone’a > Dostępność: wyszukaj „Głosy” w Ustawieniach, aby je znaleźć. Conduit używa najlepszego zainstalowanego głosu dla języka odpowiedzi."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Para uma voz mais natural, baixe uma voz aprimorada ou premium em Ajustes do iPhone > Acessibilidade > Conteúdo Falado > Vozes. O Conduit usa a melhor voz instalada para o idioma da resposta."
+            "value" : "Para uma voz mais natural, baixe uma voz aprimorada ou premium em Ajustes do iPhone > Acessibilidade: busque “Vozes” nos Ajustes para encontrá-las. O Conduit usa a melhor voz instalada para o idioma da resposta."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Для более естественного голоса скачайте улучшенный голос или голос премиум в «Настройки» iPhone > «Универсальный доступ» > «Устный контент» > «Голоса». Conduit использует лучший установленный голос для языка ответа."
+            "value" : "Для более естественного голоса скачайте улучшенный голос или голос премиум в «Настройки» iPhone > «Универсальный доступ»: найдите «Голоса» через поиск в Настройках. Conduit использует лучший установленный голос для языка ответа."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Daha doğal bir ses için iPhone Ayarlar > Erişilebilirlik > Seslendirilen İçerik > Sesler bölümünden Geliştirilmiş veya Premium bir ses indirin. Conduit, yanıtın dili için yüklü en iyi sesi kullanır."
+            "value" : "Daha doğal bir ses için iPhone Ayarlar > Erişilebilirlik bölümünden Geliştirilmiş veya Premium bir ses indirin: bulmak için Ayarlar'da “Sesler” diye arayın. Conduit, yanıtın dili için yüklü en iyi sesi kullanır."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "想要更自然的声音，请在 iPhone 的“设置”>“辅助功能”>“朗读内容”>“声音”中下载增强版或高级版声音。Conduit 会为回复的语言使用已安装的最佳声音。"
+            "value" : "想要更自然的声音，请在 iPhone 的“设置”>“辅助功能”中下载增强版或高级版声音：在“设置”中搜索“声音”即可找到。Conduit 会为回复的语言使用已安装的最佳声音。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "想要更自然的聲音，請在 iPhone 的「設定」>「輔助使用」>「語音內容」>「聲音」中下載加強版或高級版聲音。Conduit 會為回覆的語言使用已安裝的最佳聲音。"
+            "value" : "想要更自然的聲音，請在 iPhone 的「設定」>「輔助使用」中下載加強版或高級版聲音：在「設定」中搜尋「聲音」即可找到。Conduit 會為回覆的語言使用已安裝的最佳聲音。"
           }
         }
       }

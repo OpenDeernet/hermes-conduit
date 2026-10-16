@@ -1045,7 +1045,7 @@ struct VoiceSettingsView: View {
             Label(AppLocalization.string("Replies are spoken with the voices built into iOS, on this iPhone. Nothing to set up or pay for on Hermes."), systemImage: "iphone")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            Text(AppLocalization.string("For a more natural voice, download an Enhanced or Premium voice in iPhone Settings > Accessibility > Spoken Content > Voices. Conduit uses the best one installed for the reply's language."))
+            Text(AppLocalization.string("For a more natural voice, download an Enhanced or Premium voice in iPhone Settings > Accessibility: search Settings for “Voices” to find them. Conduit uses the best one installed for the reply's language."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

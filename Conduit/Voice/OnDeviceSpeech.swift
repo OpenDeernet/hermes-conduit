@@ -341,7 +341,8 @@ final class SystemSpeechSynthesizer: NSObject, OnDeviceSpeechSynthesizing, AVSpe
             let source = float[0]
             var samples = [Int16](repeating: 0, count: frames)
             for index in 0..<frames {
-                samples[index] = Int16(max(-1, min(1, source[index])) * Float(Int16.max))
+                let value = source[index]
+                samples[index] = value.isFinite ? Int16(max(-1, min(1, value)) * Float(Int16.max)) : 0
             }
             return samples.withUnsafeBufferPointer { Data(buffer: $0) }
         }
