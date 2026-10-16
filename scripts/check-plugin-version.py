@@ -17,6 +17,7 @@ block every PR.
 """
 
 import argparse
+import http.client
 import os
 import re
 import sys
@@ -26,6 +27,8 @@ import urllib.request
 PLUGIN_YAML_URL = (
     "https://raw.githubusercontent.com/kaishi00/hermes-conduit-notifier/main/plugin.yaml")
 SWIFT_FILE = os.path.join("Conduit", "Services", "NotifierPluginStatus.swift")
+# A failed or truncated download, as opposed to a plugin.yaml that says the wrong thing.
+FETCH_ERRORS = (OSError, http.client.HTTPException, UnicodeDecodeError)
 
 RECOMMENDED_RE = re.compile(r'static\s+let\s+recommendedVersion\s*=\s*"([^"]+)"')
 YAML_VERSION_RE = re.compile(r'^version:\s*["\']?([^"\'\s#]+)', re.MULTILINE)
@@ -74,7 +77,7 @@ def fetch(url, attempts=3):
         try:
             with urllib.request.urlopen(url, timeout=15) as response:
                 return response.read().decode("utf-8")
-        except OSError as error:
+        except FETCH_ERRORS as error:
             if attempt == attempts - 1:
                 raise
             print(f"fetch failed ({error}), retrying", file=sys.stderr)
@@ -91,7 +94,7 @@ def main(argv=None):
     with open(os.path.join(args.repo_root, SWIFT_FILE), encoding="utf-8") as fh:
         recommended = recommended_version(fh.read())
     if not recommended:
-        print(f"error: no recommendedVersion found in {SWIFT_FILE}", file=sys.stderr)
+        print(f"::error file={SWIFT_FILE}::No recommendedVersion found in {SWIFT_FILE}.")
         return 1
 
     if args.plugin_yaml:
@@ -100,14 +103,14 @@ def main(argv=None):
     else:
         try:
             yaml_text = fetch(PLUGIN_YAML_URL)
-        except (OSError, UnicodeDecodeError) as error:
+        except FETCH_ERRORS as error:
             print(f"::warning::Couldn't read the plugin version from GitHub ({error}); "
                   "recommendedVersion not checked.")
             return 0
 
     latest = plugin_version(yaml_text)
     if not latest:
-        print("error: no version: line in the plugin's plugin.yaml", file=sys.stderr)
+        print("::error::No version: line in hermes-conduit-notifier's plugin.yaml.")
         return 1
 
     problem = compare(recommended, latest)
