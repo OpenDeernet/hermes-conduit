@@ -156,8 +156,8 @@ final class OnDeviceSpeechStream: VoiceSpeechStream {
     }
 
     /// Moves every finished sentence out of `text`, leaving the unfinished
-    /// tail. A sentence ends at . ! ? … or a line break followed by
-    /// whitespace (so "3.5" isn't split), or right after a CJK full stop.
+    /// tail. A sentence ends at . ! ? … followed by whitespace (so "3.5"
+    /// isn't split), or right after a line break or a CJK full stop.
     static func takeCompleteSentences(from text: inout String) -> String? {
         var boundary: String.Index?
         var index = text.startIndex
@@ -210,8 +210,9 @@ final class SystemSpeechSynthesizer: NSObject, OnDeviceSpeechSynthesizing, AVSpe
     private var watchdog: Task<Void, Never>?
     /// When the current utterance last produced audio (or started).
     private var lastAudio = ContinuousClock.now
-    /// Best voice per language; a cached nil means none is installed.
-    private var voices: [String: AVSpeechSynthesisVoice?] = [:]
+    /// Best voice per language, shared by every reply; a cached nil means
+    /// none is installed.
+    private static var voices: [String: AVSpeechSynthesisVoice?] = [:]
 
     override init() {
         super.init()
@@ -262,6 +263,8 @@ final class SystemSpeechSynthesizer: NSObject, OnDeviceSpeechSynthesizing, AVSpe
 
     private func finish(_ id: Int) {
         guard utterance == id, let onDone else { return }
+        // Late buffers of a finished utterance are dropped.
+        utterance += 1
         self.onDone = nil
         request = nil
         watchdog?.cancel()
@@ -304,7 +307,7 @@ final class SystemSpeechSynthesizer: NSObject, OnDeviceSpeechSynthesizing, AVSpe
     /// and Personal Voices are never picked.
     private func voice(for language: String?) -> AVSpeechSynthesisVoice? {
         let key = language ?? ""
-        if let cached = voices[key] { return cached }
+        if let cached = Self.voices[key] { return cached }
         let wanted = language ?? AVSpeechSynthesisVoice.currentLanguageCode()
         let base = wanted.split(separator: "-").first.map(String.init) ?? wanted
         let region = Locale.current.region?.identifier
@@ -320,7 +323,7 @@ final class SystemSpeechSynthesizer: NSObject, OnDeviceSpeechSynthesizing, AVSpe
         }
         let chosen = candidates.max { rank($0) < rank($1) } ?? AVSpeechSynthesisVoice(language: wanted)
         if chosen == nil { onDeviceSpeechLog.notice("No iPhone voice for \(wanted, privacy: .public)") }
-        voices[key] = .some(chosen)
+        Self.voices[key] = .some(chosen)
         return chosen
     }
 
@@ -433,7 +436,9 @@ final class FallbackSpeechStream: VoiceSpeechStream {
             try hermesFailed(error)
             try await switchToOnDevice()
             guard let fallback = self.current else { throw CancellationError() }
-            return try await fallback.finish()
+            let streamedPCM = try await fallback.finish()
+            text = ""
+            return streamedPCM
         }
     }
 
