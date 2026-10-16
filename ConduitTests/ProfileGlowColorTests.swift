@@ -93,6 +93,16 @@ extension ProfileModelDefaultsTests {
         XCTAssertNil(colors["b"])
     }
 
+    func testPickForAnUnlistedProfileIsDroppedAndNotClaimed() {
+        let colors = ProfileGlowAssignment.assign(
+            order: ["a"],
+            palettes: ["a": [red, blue]],
+            picked: ["gone": red]
+        )
+        XCTAssertNil(colors["gone"])
+        XCTAssertEqual(colors["a"], red)
+    }
+
     func testHexRoundTrip() throws {
         let color = try XCTUnwrap(ProfileGlowRGB(hex: "#3366cc"))
         XCTAssertEqual(color.hex, "#3366cc")
@@ -128,13 +138,14 @@ extension ProfileModelDefaultsTests {
 
     /// Horizontal bands of solid color, each covering its share of the image.
     private func makeGlowImage(bands: [(ProfileGlowRGB, Double)], side: Int = 64) throws -> CGImage {
+        let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
         let context = try XCTUnwrap(CGContext(
             data: nil,
             width: side,
             height: side,
             bitsPerComponent: 8,
             bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            space: space,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ))
         var y = 0.0

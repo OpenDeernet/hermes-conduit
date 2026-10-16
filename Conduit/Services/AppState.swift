@@ -603,6 +603,9 @@ final class AppState: ObservableObject {
     @Published private(set) var profileGlowPicks: [String: String] = [:]
     private var profileAvatarRevision = 0
     private var profileGlowCache: (key: ProfileGlowCacheKey, colors: [String: ProfileGlowRGB])?
+    /// Each photo's colors, kept while the photos stay the same, so a pick
+    /// (a color drag sets one per tick) never samples the photos again.
+    private var profileGlowPalettes: (avatarRevision: Int, byURL: [URL: [ProfileGlowRGB]]) = (0, [:])
     @Published private(set) var isProfileSwitching = false
     @Published private(set) var appIconChoice: AppIconChoice
     @Published private(set) var dashboardTicketBridge: DashboardTicketBridge?
@@ -8559,15 +8562,24 @@ final class AppState: ObservableObject {
         if !order.contains(activeProfile) { order.append(activeProfile) }
         let key = ProfileGlowCacheKey(order: order, avatarRevision: profileAvatarRevision, picks: profileGlowPicks)
         if let profileGlowCache, profileGlowCache.key == key { return profileGlowCache.colors }
+        if profileGlowPalettes.avatarRevision != profileAvatarRevision {
+            profileGlowPalettes = (profileAvatarRevision, [:])
+        }
         var palettes: [String: [ProfileGlowRGB]] = [:]
         var unreadable = false
         for profile in order {
             guard let url = profileAvatarURLs[profile] else { continue }
+            if let known = profileGlowPalettes.byURL[url] {
+                palettes[profile] = known
+                continue
+            }
             guard let image = ProfileAvatarImageCache.image(at: url)?.cgImage else {
                 unreadable = true
                 continue
             }
-            palettes[profile] = ProfileGlowPalette.colors(from: image)
+            let colors = ProfileGlowPalette.colors(from: image)
+            profileGlowPalettes.byURL[url] = colors
+            palettes[profile] = colors
         }
         let picked = profileGlowPicks.compactMapValues(ProfileGlowRGB.init(hex:))
         let colors = ProfileGlowAssignment.assign(order: order, palettes: palettes, picked: picked)

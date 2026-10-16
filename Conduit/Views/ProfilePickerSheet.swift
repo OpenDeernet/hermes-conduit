@@ -254,6 +254,7 @@ private struct ProfilePickerRow: View {
             .labelsHidden()
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(Rectangle())
+            .accessibilityLabel("Background glow for \(appState.profileDisplayName(profile))")
             .accessibilityIdentifier("profile-glow-color-\(profile)")
         }
         // Lines up with the name, past the 48 pt avatar.
@@ -263,7 +264,10 @@ private struct ProfilePickerRow: View {
     private var glowColor: Binding<Color> {
         Binding(
             get: { appState.profileGlowTint(profile) ?? Color.conduitAccent },
-            set: { appState.setProfileGlowColor(ProfileGlowRGB(UIColor($0)), for: profile) }
+            set: { color in
+                guard let picked = ProfileGlowRGB(UIColor(color)) else { return }
+                appState.setProfileGlowColor(picked, for: profile)
+            }
         )
     }
 

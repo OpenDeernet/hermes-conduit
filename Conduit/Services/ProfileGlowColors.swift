@@ -31,15 +31,14 @@ struct ProfileGlowRGB: Equatable, Hashable {
         self.init(red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 
-    /// A color from the system color picker, flattened to sRGB.
-    init(_ color: UIColor) {
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        if !color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
-            var white: CGFloat = 0
-            color.getWhite(&white, alpha: &alpha)
-            (red, green, blue) = (white, white, white)
-        }
-        self.init(red: Double(red), green: Double(green), blue: Double(blue))
+    /// A color from the system color picker, converted to sRGB (the picker
+    /// can hand back Display P3). Nil when it has no RGB form.
+    init?(_ color: UIColor) {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let converted = color.cgColor.converted(to: space, intent: .defaultIntent, options: nil),
+              let components = converted.components, components.count >= 3
+        else { return nil }
+        self.init(red: Double(components[0]), green: Double(components[1]), blue: Double(components[2]))
     }
 
     var hex: String {
@@ -84,7 +83,7 @@ struct ProfileGlowRGB: Equatable, Hashable {
         self.init(red: rgb.0 + m, green: rgb.1 + m, blue: rgb.2 + m)
     }
 
-    /// Whether two glows would read as the same color: hues within 30°, or
+    /// Whether two glows would read as the same color: hues closer than 30°, or
     /// two greys of about the same lightness.
     func looksLike(_ other: ProfileGlowRGB) -> Bool {
         let a = hsb, b = other.hsb
@@ -188,15 +187,17 @@ enum ProfileGlowAssignment {
     /// profile order, each photo's main color unless an earlier profile
     /// already glows like it, then its second and third. When all of them
     /// are taken the main color is used anyway. Profiles with neither a pick
-    /// nor a photo color are left out.
+    /// nor a photo color are left out, as are picks for unlisted profiles.
     static func assign(
         order: [String],
         palettes: [String: [ProfileGlowRGB]],
         picked: [String: ProfileGlowRGB]
     ) -> [String: ProfileGlowRGB] {
-        var result = picked
-        var taken = order.compactMap { picked[$0] }
-        for profile in order where picked[profile] == nil {
+        // A pick for a profile no longer listed (deleted or renamed) is
+        // neither returned nor claimed.
+        var result = picked.filter { order.contains($0.key) }
+        var taken = order.compactMap { result[$0] }
+        for profile in order where result[profile] == nil {
             guard let palette = palettes[profile], let main = palette.first else { continue }
             let choice = palette.first { candidate in !taken.contains { $0.looksLike(candidate) } } ?? main
             result[profile] = choice
