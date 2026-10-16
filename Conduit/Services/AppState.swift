@@ -26121,9 +26121,17 @@ final class AppState: ObservableObject {
     /// reconnects to the same gateway (with no connection the key falls back
     /// to a "disconnected" bucket, but no composer is shown then). Re-renders
     /// ride `activeProfile` and the `isVoiceEnabled` publish in
-    /// `setVoiceEnabled`, the only writer of the persisted key.
+    /// `setVoiceEnabled` and the first setup in `refreshVoiceCapabilities`,
+    /// the only writers of the persisted key.
     var showsComposerVoiceButton: Bool {
-        defaults.bool(forKey: voiceEnabledPreferenceKey(profile: activeProfile)) || isGeminiLiveEnabled || isGPTLiveEnabled || isGrokLiveEnabled
+        persistedVoiceEnabled(profile: activeProfile) || isGeminiLiveEnabled || isGPTLiveEnabled || isGrokLiveEnabled
+    }
+
+    /// The profile's saved Voice switch. Voice is on out of the box, so a
+    /// switch never touched reads as on; only the user turns it off.
+    private func persistedVoiceEnabled(profile: String) -> Bool {
+        let key = voiceEnabledPreferenceKey(profile: profile)
+        return defaults.object(forKey: key) == nil || defaults.bool(forKey: key)
     }
 
     /// TTS-only availability for read aloud: a connected gateway with voice
@@ -26183,7 +26191,12 @@ final class AppState: ObservableObject {
             return
         }
         installVoiceAssistantObserverIfNeeded()
-        isVoiceEnabled = defaults.bool(forKey: voiceEnabledPreferenceKey(profile: profile))
+        let enabledKey = voiceEnabledPreferenceKey(profile: profile)
+        // Voice is on out of the box: a profile whose switch was never
+        // touched starts with it on, and with defaults that need nothing
+        // installed (below). A switch the user turned off stays off.
+        let isFirstVoiceSetup = defaults.object(forKey: enabledKey) == nil
+        isVoiceEnabled = persistedVoiceEnabled(profile: profile)
         appleSpeechAvailability = AppleOnDeviceSpeechTranscriber.currentAvailability()
         let service = HermesVoiceConfigurationService(
             requester: voiceCapabilityRequesterForTesting ?? bridge,
@@ -26191,6 +26204,11 @@ final class AppState: ObservableObject {
         )
         await service.reload()
         guard profile == activeProfile, bridge === dashboardTicketBridge else { return }
+        if isFirstVoiceSetup, defaults.object(forKey: enabledKey) == nil {
+            defaults.set(true, forKey: enabledKey)
+            await applyFirstVoiceSetupDefaults(service: service)
+            guard profile == activeProfile, bridge === dashboardTicketBridge else { return }
+        }
         voiceCapabilitySnapshot = service.snapshot.capability
         var preferences = loadVoiceProfilePreferences(profile: profile)
         // PR #159 authority, enforced centrally: while the controller owns a
@@ -26210,6 +26228,29 @@ final class AppState: ObservableObject {
         publishVoiceCallSaveStatus()
         refreshVoiceControllerGateway()
         refreshReadAloudGateway()
+    }
+
+    /// Voice settings' one-switch defaults (VoiceSetupDefaults), applied
+    /// once to a profile whose Voice was never set up, so classic Voice
+    /// (and CarPlay) work without a visit to Settings: speech to text on
+    /// this iPhone unless a choice was saved, and Edge TTS only when the
+    /// profile's assistant voice isn't ready and Edge is. A live mode
+    /// brings its own speech, so Hermes' speech config is left alone then.
+    private func applyFirstVoiceSetupDefaults(service: HermesVoiceConfigurationService) async {
+        guard configuredLiveVoiceEngine(profile: activeProfile) == nil else { return }
+        let plan = VoiceSetupDefaults.plan(
+            transcriptionModeChosen: loadVoiceProfilePreferences(profile: activeProfile).transcriptionMode != nil,
+            appleSpeechAvailability: appleSpeechAvailability,
+            snapshot: service.snapshot
+        )
+        if plan.usesOnDeviceTranscription {
+            // Speech Recognition is asked for on the first utterance.
+            updateActiveProfileVoicePreferences { $0.transcriptionMode = .appleOnDevice }
+        }
+        if plan.switchesSpeechToEdge,
+           await service.saveProvider(VoiceSetupDefaults.edgeTTSProviderID, kind: .tts) {
+            await service.reload()
+        }
     }
 
     @discardableResult
