@@ -103,6 +103,11 @@ private struct ArtifactsList: View {
     @State private var openingID: String?
     @State private var page: OpenPage?
     @State private var missing: ArtifactItem?
+    /// The open alert is for a file too big for the phone, not a gone one.
+    @State private var missingIsTooLarge = false
+    /// Cancelled when the list goes, so a slow fetch can't present a viewer
+    /// over whatever screen the user moved on to.
+    @State private var openTask: Task<Void, Never>?
 
     private struct LoadKey: Equatable {
         let profile: String
@@ -145,8 +150,9 @@ private struct ArtifactsList: View {
         .sheet(item: $page) { page in
             HTMLPreviewSheet(name: page.name, html: page.html)
         }
+        .onDisappear { openTask?.cancel() }
         .alert(
-            Text("This file is no longer on your Hermes host."),
+            missingIsTooLarge ? Text("Too large to open on this phone") : Text("This file is no longer on your Hermes host."),
             isPresented: Binding(get: { missing != nil }, set: { if !$0 { missing = nil } })
         ) {
             Button("OK", role: .cancel) { missing = nil }
@@ -426,17 +432,18 @@ private struct ArtifactsList: View {
         }
         guard let path = item.path, openingID == nil else { return }
         guard item.exists else {
+            missingIsTooLarge = false
             missing = item
             return
         }
         Haptics.light()
         openingID = item.id
         let resolver = appState.gatewayMediaResolver
-        Task { @MainActor in
+        openTask = Task { @MainActor in
             defer { openingID = nil }
             if item.kind == .page {
-                guard let dataURL = await resolver.dataURL(for: path),
-                      let html = HTMLPreviewPage.decodedDocument(fromDataURL: dataURL) else {
+                guard let dataURL = await resolver.dataURL(for: path), !Task.isCancelled else { return }
+                guard let html = HTMLPreviewPage.decodedDocument(fromDataURL: dataURL) else {
                     openFailed(item)
                     return
                 }
@@ -445,23 +452,32 @@ private struct ArtifactsList: View {
             }
             switch await resolver.file(for: path) {
             case .downloaded(let download):
+                guard !Task.isCancelled else {
+                    MediaPreviewPresenter.removeDirectory(download.directory)
+                    return
+                }
                 if MediaPreviewPresenter.shared.present(downloaded: download) { return }
             case .tooLarge:
-                openFailed(item)
+                openFailed(item, tooLarge: true)
                 return
             case .unavailable:
                 break
             }
-            guard let dataURL = await resolver.dataURL(for: path),
-                  await MediaPreviewPresenter.shared.present(dataURL: dataURL, filename: item.name) else {
+            // A cancelled download reads as unavailable; no fallback for a
+            // list that has gone.
+            guard !Task.isCancelled else { return }
+            guard let dataURL = await resolver.dataURL(for: path), !Task.isCancelled else { return }
+            guard await MediaPreviewPresenter.shared.present(dataURL: dataURL, filename: item.name) else {
                 openFailed(item)
                 return
             }
         }
     }
 
-    private func openFailed(_ item: ArtifactItem) {
+    private func openFailed(_ item: ArtifactItem, tooLarge: Bool = false) {
+        guard !Task.isCancelled else { return }
         Haptics.error()
+        missingIsTooLarge = tooLarge
         missing = item
     }
 
@@ -486,10 +502,10 @@ private struct ArtifactsList: View {
         } catch is CancellationError {
             return
         } catch {
-            guard ticket == generation else { return }
+            // A failed refresh keeps the list it was refreshing (and the end
+            // of it keeps paging).
+            guard ticket == generation, loadedKey != key else { return }
             failure = UserFacingError.message(for: error)
-            // A failed refresh keeps the list it was refreshing.
-            guard loadedKey != key else { return }
             items = []
             nextBefore = nil
             loadedKey = key
