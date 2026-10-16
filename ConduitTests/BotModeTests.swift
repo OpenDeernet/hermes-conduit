@@ -2485,7 +2485,8 @@ final class BotModeTests: XCTestCase {
 
     /// A decision pushed from a Bot Chat names the BOT's profile. Adopting it
     /// as this dashboard's workspace would turn a bot conversation into the
-    /// workspace's own context, so routing fails closed instead of switching.
+    /// workspace's own context, so the decision opens in that Bot Chat
+    /// instead, with the workspace left as it is.
     func testDecisionFromBotChatOpensItsBotChatInsteadOfSwitchingWorkspace() async {
         var resumedIDs: [String] = []
         var resumeProfiles: [String?] = []
@@ -3399,7 +3400,8 @@ final class BotModeTests: XCTestCase {
 
     /// The same compaction gap on the profile already on screen: the Bot
     /// Chat's tip is hidden from the session catalog, so only the canonical
-    /// lookup can name it, and the push is refused instead of opened.
+    /// lookup can name it, and the push opens that Bot Chat in Bots instead
+    /// of a workspace row.
     func testSameProfilePushForCompactedBotChatOpensInBots() async {
         var resumedIDs: [String] = []
         let harness = makeBotHarness(lifecycleOperations: ChatResumeLifecycleOperations(
@@ -3451,8 +3453,9 @@ final class BotModeTests: XCTestCase {
 
     /// A Bot Chat that compacted after the roster was read is known to the
     /// roster only by its old canonical id. The target profile's canonical
-    /// lookup reports the lineage tip, so the push is refused BEFORE the
-    /// dashboard adopts the bot's profile; a failed lookup fails closed.
+    /// lookup reports the lineage tip, so the push opens the Bot Chat in Bots
+    /// BEFORE the dashboard could adopt the bot's profile; a failed lookup
+    /// fails closed.
     func testCrossProfilePushForCompactedBotChatOpensInBotsBeforeTheSwitch() async {
         var lookupFails = false
         let harness = makeBotHarness(lifecycleOperations: ChatResumeLifecycleOperations(
@@ -4186,7 +4189,8 @@ final class BotModeTests: XCTestCase {
     /// A push carries the profile NAME. When that name is a bot's, it must not
     /// ride in under a workspace whose name differs only by case — least of all
     /// when the case-insensitive resolution lands on the ACTIVE workspace, which
-    /// skips the cross-profile refusal entirely.
+    /// skips the cross-profile check entirely. It opens in Bots, under the
+    /// bot's own profile.
     func testPushNamingBotProfileOpensInBotsEvenWhenItResolvesToTheActiveWorkspace() async {
         let harness = makeBotHarness(
             configureDefaults: { defaults in
