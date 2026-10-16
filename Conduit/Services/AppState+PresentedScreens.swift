@@ -50,17 +50,16 @@ extension AppState {
         return promptID
     }
 
-    /// A Go confirmation for the chat the user is in, with Conduit in front,
-    /// opens Apple Maps at once; anywhere else it waits for a tap or a
-    /// spoken go.
+    /// The Go confirmation Hermes was just seen sending in the chat on
+    /// screen opens Apple Maps at once, with Conduit in front; any other
+    /// waits for a tap or a spoken go.
     private func openExpectedPresentedMaps() async {
-        guard UIApplication.shared.applicationState == .active else { return }
-        let expected = mapsNavigateExpected.flatMap { $0.until > Date() ? $0.promptID : nil }
-        guard let prompt = presentedScreens.prompts.last(where: { prompt in
-            prompt.maps != nil && !prompt.isExpired()
-                && (prompt.id == expected || (prompt.sessionID != nil && prompt.sessionID == activeSessionId))
-        }) else { return }
-        if prompt.id == expected { mapsNavigateExpected = nil }
+        guard UIApplication.shared.applicationState == .active,
+              let expected = mapsNavigateExpected, expected.until > Date(),
+              let prompt = presentedScreens.prompts.first(where: {
+                  $0.id == expected.promptID && $0.maps != nil && !$0.isExpired()
+              }) else { return }
+        mapsNavigateExpected = nil
         presentedScreens.answer(prompt, outcome: .confirmed, via: .auto)
         // Answered once: never opened again by the sync below.
         guard !presentedScreens.prompts.contains(where: { $0.id == prompt.id }) else { return }
@@ -73,11 +72,18 @@ extension AppState {
     func openPresentedMaps(_ prompt: PresentedConfirm) async {
         guard let target = prompt.maps else { return }
         let location = LocationSharingController.shared
-        // On this phone only: saved places and where the user is help MapKit
-        // find "the nearest Boots", as in Apple Maps itself.
+        // On this phone only (nothing goes back to Hermes): the user's own
+        // saved places, and where they are to find "the nearest Boots" while
+        // they share their location with Conduit and haven't paused it.
         let places = location.places
-        guard let place = MapsVoiceTool.ref(target.to, places: places), place != .me else { return }
-        let hint = await location.fixes.currentFix(accuracy: kCLLocationAccuracyKilometer, maxAge: 600, timeout: .seconds(2))
+        guard let place = MapsVoiceTool.ref(target.to, places: places), place != .me else {
+            errorMessage = AppLocalization.string("Couldn't find that place in Apple Maps.")
+            return
+        }
+        var hint: CLLocation?
+        if location.settings.talking || location.settings.background, !location.isPaused() {
+            hint = await location.fixes.currentFix(accuracy: kCLLocationAccuracyKilometer, maxAge: 600, timeout: .seconds(2))
+        }
         let outcome = await MapsNavigator.open(place, mode: target.mode, places: places, near: hint?.coordinate)
         if case .failed = outcome {
             errorMessage = AppLocalization.string("Couldn't find that place in Apple Maps.")
