@@ -211,13 +211,20 @@ struct V2Shell: View {
             // and opens again on its next tap. Moving the screen between
             // tabs keeps it pushed in one of them. Waits out the pop so the
             // outgoing screen doesn't redraw as a chat while it slides away.
+            // A row tap in that wait reopens the same room id, which the
+            // room id change below can't see: the epoch moved, so the room
+            // stays and its screen is pushed again.
             .onChange(of: conversationPushed) { _, pushed in
-                guard !pushed, let roomID = appState.activeRoomSurface?.room.roomID else { return }
+                guard !pushed, appState.activeRoomSurface != nil else { return }
+                let epoch = appState.groupRoomEpoch
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(400))
-                    guard !conversationPushed,
-                          appState.activeRoomSurface?.room.roomID == roomID else { return }
-                    appState.closeGroupRoom()
+                    guard !conversationPushed, appState.activeRoomSurface != nil else { return }
+                    if appState.groupRoomEpoch == epoch {
+                        appState.closeGroupRoom()
+                    } else if !appState.isVoiceCallScreenPresented {
+                        openConversation()
+                    }
                 }
             }
             // Leaving a group room another way (disband, server change)
