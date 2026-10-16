@@ -33,13 +33,21 @@ extension AppState {
     }
 
     /// Hermes was seen asking to open Apple Maps (`conduit_maps` navigate)
-    /// in the chat on screen: its Go confirmation opens Maps without a tap.
-    func noteMapsNavigateExpected() {
-        mapsNavigateExpectedUntil = Date().addingTimeInterval(120)
-        Task {
-            try? await Task.sleep(for: .seconds(1))
-            await syncPresentedScreens()
-        }
+    /// in the chat on screen: that Go confirmation opens Maps without a tap.
+    func noteMapsNavigateExpected(_ promptID: String) {
+        mapsNavigateExpected = (promptID, Date().addingTimeInterval(120))
+        // Stored before the tool returned: fetch it now.
+        Task { [weak self] in await self?.syncPresentedScreens() }
+    }
+
+    /// The Go confirmation a `conduit_maps` result sent, read from the
+    /// tool's JSON answer: only a navigate that was sent.
+    nonisolated static func mapsNavigatePromptID(_ output: String?) -> String? {
+        guard let data = output?.data(using: .utf8),
+              let answer = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              answer["action"] as? String == "navigate", answer["status"] as? String == "sent",
+              let promptID = answer["prompt_id"] as? String, !promptID.isEmpty else { return nil }
+        return promptID
     }
 
     /// A Go confirmation for the chat the user is in, with Conduit in front,
@@ -47,12 +55,12 @@ extension AppState {
     /// spoken go.
     private func openExpectedPresentedMaps() async {
         guard UIApplication.shared.applicationState == .active else { return }
-        let expected = mapsNavigateExpectedUntil.map { $0 > Date() } ?? false
+        let expected = mapsNavigateExpected.flatMap { $0.until > Date() ? $0.promptID : nil }
         guard let prompt = presentedScreens.prompts.last(where: { prompt in
             prompt.maps != nil && !prompt.isExpired()
-                && (expected || (prompt.sessionID != nil && prompt.sessionID == activeSessionId))
+                && (prompt.id == expected || (prompt.sessionID != nil && prompt.sessionID == activeSessionId))
         }) else { return }
-        mapsNavigateExpectedUntil = nil
+        if prompt.id == expected { mapsNavigateExpected = nil }
         presentedScreens.answer(prompt, outcome: .confirmed, via: .auto)
         // Answered once: never opened again by the sync below.
         guard !presentedScreens.prompts.contains(where: { $0.id == prompt.id }) else { return }

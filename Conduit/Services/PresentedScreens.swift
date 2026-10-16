@@ -31,7 +31,7 @@ struct PresentedMapsTarget: Equatable {
         else { return nil }
         var mode = MapsRequest.Mode.driving
         if let name = entry["mode"] as? String {
-            guard let chosen = MapsRequest.Mode(rawValue: name) else { return nil }
+            guard let chosen = MapsRequest.Mode(rawValue: name.lowercased()) else { return nil }
             mode = chosen
         }
         self.init(to: to, mode: mode)

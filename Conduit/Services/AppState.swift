@@ -18497,9 +18497,9 @@ final class AppState: ObservableObject {
     lazy var agentSettings = AgentSettingsSync(defaults: defaults)
     /// Confirmations Hermes asks this iPhone to present (PresentedScreens.swift).
     lazy var presentedScreens = PresentedScreensSync(defaults: defaults)
-    /// Until when a Go confirmation for Apple Maps opens without a tap:
-    /// Hermes was just seen asking for one in the chat on screen.
-    var mapsNavigateExpectedUntil: Date?
+    /// The Go confirmation for Apple Maps that opens without a tap, and
+    /// until when: Hermes was just seen asking for it in the chat on screen.
+    var mapsNavigateExpected: (promptID: String, until: Date)?
 
     /// Asks the plugin what it serves. Cheap, so it runs on every connect.
     func refreshNotifierPluginStatus() async {
@@ -24439,7 +24439,6 @@ final class AppState: ObservableObject {
             break
 
         case .toolStart(_, let name, let input, let eventToolID):
-            if name.lowercased() == "conduit_maps", input?.contains("navigate") == true { noteMapsNavigateExpected() }
             if name.lowercased() == "conduit_present" {
                 // The tool may wait for the answer: show it once stored.
                 Task {
@@ -24493,7 +24492,9 @@ final class AppState: ObservableObject {
             // A confirmation Hermes just asked for shows without waiting on the push.
             if name.lowercased() == "conduit_present" { Task { await syncPresentedScreens() } }
             // Hermes asked to open Apple Maps from the chat on screen.
-            if name.lowercased() == "conduit_maps", output?.contains("\"navigate\"") == true { noteMapsNavigateExpected() }
+            if name.lowercased() == "conduit_maps", let promptID = Self.mapsNavigatePromptID(output) {
+                noteMapsNavigateExpected(promptID)
+            }
             settleReasoningSegmentIntoTranscript()
             resetReasoningSegment()
             let toolID = eventToolID?.trimmingCharacters(in: .whitespacesAndNewlines)

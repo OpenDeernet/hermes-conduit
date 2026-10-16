@@ -105,13 +105,18 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let request = response.notification.request
+        if let maps = MapsNavigator.url(fromNotification: request.content.userInfo) {
+            // Directions Conduit couldn't open from the background: done once Maps opened.
+            Task { @MainActor in
+                _ = await UIApplication.shared.open(maps)
+                completionHandler()
+            }
+            return
+        }
         Task { @MainActor in
             if AppState.isPhoneChangesPush(request.content.userInfo) {
                 // A calendar change Hermes asked for: its card shows once fetched.
                 await AppStateRuntimeRegistry.shared.appState.handlePhoneChangesPush(request.content.userInfo)
-            } else if let maps = MapsNavigator.url(fromNotification: request.content.userInfo) {
-                // Directions Conduit couldn't open from the background.
-                await UIApplication.shared.open(maps)
             } else if request.trigger is UNPushNotificationTrigger {
                 PushNotificationService.shared.receiveNotificationPayload(request.content.userInfo)
             } else {
