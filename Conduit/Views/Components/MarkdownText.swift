@@ -1015,9 +1015,9 @@ private struct MarkdownList: View {
         VStack(alignment: .leading, spacing: 7) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 let task = MarkdownParser.taskItem(item)
-                // Top-aligned with the marker in a box one text line tall:
-                // the item is a UIKit text view, which reports no text
-                // baseline to SwiftUI, so a first-baseline row put the
+                // Top-aligned with the marker in a box at least one text
+                // line tall: the item is a UIKit text view, which reports no
+                // text baseline to SwiftUI, so a first-baseline row put the
                 // marker a line above its text.
                 HStack(alignment: .top, spacing: 9) {
                     if let task {
@@ -1026,12 +1026,14 @@ private struct MarkdownList: View {
                             .foregroundStyle(task.complete
                                              ? (usesAccentSurface ? Color.white : Color.conduitAccent)
                                              : (usesAccentSurface ? Color.white.opacity(0.82) : Color.secondary))
-                            .frame(width: ChatTypography.dimension(16, chatSize: chatTextSize), height: markerFont.lineHeight, alignment: .trailing)
+                            .frame(width: ChatTypography.dimension(16, chatSize: chatTextSize), alignment: .trailing)
+                            .frame(minHeight: markerFont.lineHeight)
                     } else {
                         Text(ordered ? "\(index + 1)." : "•")
                             .font(.system(size: markerFont.pointSize, weight: .semibold))
                             .foregroundStyle(usesAccentSurface ? Color.white.opacity(0.92) : Color.conduitAccent)
-                            .frame(width: ChatTypography.dimension(ordered ? 24 : 12, chatSize: chatTextSize), height: markerFont.lineHeight, alignment: .trailing)
+                            .frame(width: ChatTypography.dimension(ordered ? 24 : 12, chatSize: chatTextSize), alignment: .trailing)
+                            .frame(minHeight: markerFont.lineHeight)
                     }
                     InlineMarkdown(
                         source: task?.text ?? item,
