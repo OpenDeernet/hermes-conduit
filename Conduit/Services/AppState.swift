@@ -1323,33 +1323,29 @@ final class AppState: ObservableObject {
             }
             return false
         }
-        // A newer notification tap that replaced this attempt owns the
-        // screen: publish nothing over it. (The chat open began its own
-        // viewport transition, which already fences out any other open.)
-        guard activeNotificationOpenAttemptID == attemptID else { return false }
         // The resume restores cards only from the chat's tip ids, and the
         // card may sit under the durable id the push named. Once the chat is
         // on screen, a relay clarify still missing is recorded under the open
         // chat's own ids and merged into its transcript. Approvals are left
         // to the gateway's pending list, which the open already read.
+        // A newer notification tap that replaced this attempt owns the
+        // screen: the cache is still settled, but nothing is published over
+        // it. (The chat open began its own viewport transition, which already
+        // fences out any other open.)
+        let attemptIsCurrent = activeNotificationOpenAttemptID == attemptID
         if let decision = target.decision,
            let evictionKey = Self.pendingDecisionEvictionKey(for: decision),
            let openID = activeSessionId,
            activeBotChatProfile == bot.name {
             let openIDs = presentationCacheSessionIDs(for: openID)
-            if evictionKey.hasPrefix("clarify:"),
-               !messages.contains(where: { SessionPresentationCache.decisionKey(for: $0) == evictionKey }) {
+            let restoresClarify = evictionKey.hasPrefix("clarify:")
+                && !messages.contains(where: { SessionPresentationCache.decisionKey(for: $0) == evictionKey })
+            if restoresClarify {
                 recordNotificationDecision(
                     decision,
                     sessionIDs: [requestedID] + [target.durableSessionID].compactMap { $0 } + openIDs,
                     cacheSessionIDs: openIDs,
                     profile: bot.name
-                )
-                messages = sessionPresentationCache.merge(
-                    messages,
-                    profile: bot.name,
-                    sessionIDs: openIDs,
-                    includePendingClarifications: true
                 )
             }
             // A pre-open copy the open did not promote (a joined flight
@@ -1365,7 +1361,16 @@ final class AppState: ObservableObject {
                     sessionIDs: [requestedID]
                 )
             }
+            if restoresClarify, attemptIsCurrent {
+                messages = sessionPresentationCache.merge(
+                    messages,
+                    profile: bot.name,
+                    sessionIDs: openIDs,
+                    includePendingClarifications: true
+                )
+            }
         }
+        guard attemptIsCurrent else { return false }
         showSidebar = false
         return true
     }
