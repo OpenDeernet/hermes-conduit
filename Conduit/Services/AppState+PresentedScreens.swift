@@ -65,7 +65,8 @@ extension AppState {
         // Answered once: never opened again by the sync below.
         guard !presentedScreens.prompts.contains(where: { $0.id == prompt.id }) else { return }
         await openPresentedMaps(prompt)
-        await syncPresentedScreens()
+        // Reported on its own round, not nested in this one.
+        Task { [weak self] in await self?.syncPresentedScreens() }
     }
 
     /// Opens Apple Maps for a confirmed Go confirmation.
