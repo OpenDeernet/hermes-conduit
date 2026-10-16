@@ -101,9 +101,9 @@ struct ReplySourcesSettingsSection: View {
             loadedKey = key
         } catch is CancellationError {
             return
-        } catch {
-            replySourcesLogger.notice("Reply sources not read: \(error.localizedDescription, privacy: .public)")
-            if key == self.key { self.error = AppLocalization.string("Could not read this setting from the host: \(UserFacingError.message(for: error))") }
+        } catch let readError {
+            replySourcesLogger.notice("Reply sources not read: \(readError.localizedDescription, privacy: .public)")
+            if key == self.key { error = AppLocalization.string("Could not read this setting from the host: \(UserFacingError.message(for: readError))") }
         }
     }
 
@@ -118,19 +118,22 @@ struct ReplySourcesSettingsSection: View {
         do {
             let kept = try await appState.replySourcesClient.setNotify(notify, source: source, profile: appState.activeProfile)
             if key == self.key, loadedKey == key { settings = kept }
-        } catch {
+        } catch let saveError {
             guard key == self.key, loadedKey == key else { return }
-            if !(error is CancellationError) {
+            let cancelled = saveError is CancellationError
+            if !cancelled {
                 Haptics.error()
-                replySourcesLogger.notice("Reply sources not saved: \(error.localizedDescription, privacy: .public)")
+                replySourcesLogger.notice("Reply sources not saved: \(saveError.localizedDescription, privacy: .public)")
             }
             // Read back what the host kept rather than guess at it.
             saving = nil
             settings = nil
             loadedKey = nil
             await load(key)
-            if !(error is CancellationError), loadedKey == key {
-                self.error = AppLocalization.string("Could not change this setting: \(UserFacingError.message(for: error))")
+            // The change's failure is what the user needs to know, whether
+            // or not the read-back worked (Try again shows if it didn't).
+            if !cancelled, key == self.key {
+                error = AppLocalization.string("Could not change this setting: \(UserFacingError.message(for: saveError))")
             }
         }
     }

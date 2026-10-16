@@ -19,8 +19,10 @@ extension GatewayRestartTests {
 
     func testReplySourcesSendTheSourceAndChoice() async throws {
         var sent: [String: Any]?
-        let client = ReplySourcesClient { _, method, body in
+        var path: String?
+        let client = ReplySourcesClient { requestPath, method, body in
             XCTAssertEqual(method, "PUT")
+            path = requestPath
             sent = body
             return ["ok": true, "sources": ["conduit": true, "desktop": false, "messaging": true, "terminal": true]]
         }
@@ -28,6 +30,8 @@ extension GatewayRestartTests {
         XCTAssertEqual(settings[.desktop], false)
         XCTAssertEqual(sent?["source"] as? String, "desktop")
         XCTAssertEqual(sent?["notify"] as? Bool, false)
+        // The default profile uses the bare path.
+        XCTAssertEqual(path, ReplySourcesClient.path)
     }
 
     func testAMalformedReplySourcesAnswerThrows() {
