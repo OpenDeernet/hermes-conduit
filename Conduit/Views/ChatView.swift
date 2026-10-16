@@ -984,10 +984,19 @@ struct SteerMessageContent: View, Equatable {
 
     var body: some View {
         let reply = ReplyQuoteEnvelope.parse(message.content)
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        // Markdown draws in UIKit text views, which give SwiftUI no text
+        // baseline: top-align the icon in a box one body line tall.
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: BusyInputMode.steer.symbol)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.conduitAura)
+                .frame(height: ChatTypography.font(
+                    for: .body,
+                    chatSize: chatTextSize,
+                    compatibleWith: UITraitCollection(
+                        preferredContentSizeCategory: UIContentSizeCategory(sizeCategory)
+                    )
+                ).lineHeight)
                 .accessibilityHidden(true)
             if let reply {
                 VStack(alignment: .leading, spacing: 8) {
