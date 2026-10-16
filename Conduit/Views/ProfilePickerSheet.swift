@@ -247,6 +247,7 @@ private struct ProfilePickerRow: View {
                 .buttonStyle(.plain)
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
+                .accessibilityLabel("Automatic background glow for \(appState.profileDisplayName(profile))")
             }
             ColorPicker(selection: glowColor, supportsOpacity: false) {
                 Text(AppLocalization.string("Background glow"))

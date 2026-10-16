@@ -22489,6 +22489,13 @@ final class AppState: ObservableObject {
             if !names.isEmpty, let dashboardID {
                 retainWidgetProfiles(Set(nextProfiles), dashboardID: dashboardID)
             }
+            // A deleted profile's glow pick goes with it, so a new profile
+            // given the same name later starts from its photo's color.
+            if !names.isEmpty {
+                for profile in profileGlowPicks.keys where !nextProfiles.contains(profile) {
+                    setProfileGlowColor(nil, for: profile)
+                }
+            }
             // A non-empty response is authoritative: if the server no longer
             // knows the active profile (deleted externally), re-home onto a
             // valid fallback instead of leaving `activeProfile ∉ profiles` —
