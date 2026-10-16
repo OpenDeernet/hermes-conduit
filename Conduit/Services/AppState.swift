@@ -15333,6 +15333,11 @@ final class AppState: ObservableObject {
         guard !isRefreshingSessionCatalog else { return }
         isRefreshingSessionCatalog = true
         defer { isRefreshingSessionCatalog = false }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-CONDUIT_UI_TEST_SLOW_REFRESH") {
+            try? await Task.sleep(for: .seconds(4))
+        }
+        #endif
 
         let sessionKey = "\(activeProfile):exclude"
         let cronKey = "\(activeProfile):cron"

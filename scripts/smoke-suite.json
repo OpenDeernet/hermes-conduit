@@ -38,6 +38,7 @@
   ],
   "ui": [
     "ConnectionSetupUITests",
-    "ProfilePickerUITests"
+    "ProfilePickerUITests",
+    "ChatsPullToRefreshUITests"
   ]
 }
