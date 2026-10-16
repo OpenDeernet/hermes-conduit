@@ -206,11 +206,17 @@ struct V2Shell: View {
                     closeConversation()
                 }
             }
-            // Back or the edge swipe popped the room's screen: leave the
-            // room, so it stops polling and opens again on its next tap.
-            // Moving the screen between tabs keeps it pushed in one of them.
+            // The room's screen was popped (Back, the edge swipe, or the
+            // return-to-list setting): leave the room, so it stops polling
+            // and opens again on its next tap. Moving the screen between
+            // tabs keeps it pushed in one of them. Waits out the pop so the
+            // outgoing screen doesn't redraw as a chat while it slides away.
             .onChange(of: conversationPushed) { _, pushed in
-                if !pushed, appState.activeRoomSurface != nil {
+                guard !pushed, let roomID = appState.activeRoomSurface?.room.roomID else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(400))
+                    guard !conversationPushed,
+                          appState.activeRoomSurface?.room.roomID == roomID else { return }
                     appState.closeGroupRoom()
                 }
             }
