@@ -282,6 +282,9 @@ final class WatchVoiceCall: ObservableObject {
     func requestCall(source: String) {
         WatchCallLog.shared.note("callRequested", ["source": source, "screen": scenePhase.map { "\($0)" } ?? "launching"])
         guard scenePhase == .active else {
+            if let older = pendingRequest {
+                WatchCallLog.shared.note("callRequestReplaced", ["source": older.source, "by": source])
+            }
             pendingRequest = (source, Date())
             return
         }
@@ -291,7 +294,7 @@ final class WatchVoiceCall: ObservableObject {
     private func startRequested(source: String) {
         // A call from Hermes ringing or answered is the call.
         guard !isActive, !HermesWatchCalls.shared.holdsCall else {
-            WatchCallLog.shared.note("callRequestDropped", ["source": source, "reason": isActive ? "callOn" : "hermesCall"])
+            WatchCallLog.shared.note("callRequestDropped", ["source": source, "callOn": isActive, "hermesCall": HermesWatchCalls.shared.holdsCall])
             return
         }
         WatchCallLog.shared.note("callStartedOnRequest", ["source": source, "engine": engine.rawValue])
