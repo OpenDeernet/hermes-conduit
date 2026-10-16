@@ -36,13 +36,18 @@ enum TranscriptImageCache {
         "row|\(dashboard)|\(ref.profile)|\(ref.sessionId)|\(ref.rowId)|\(ref.index)"
     }
 
-    /// The kept file for `key`, if there is one.
-    static func cachedFile(for key: String, in directory: URL = defaultDirectory) -> URL? {
+    /// The kept file for `key`, if there is one. `touch` marks it as just
+    /// used, so `trim` drops the pictures nobody has looked at in longest.
+    static func cachedFile(for key: String, in directory: URL = defaultDirectory, touch: Bool = false) -> URL? {
         let stem = fileStem(for: key)
-        return fileExtensions
+        let file = fileExtensions
             .lazy
             .map { directory.appendingPathComponent("\(stem).\($0)") }
             .first { FileManager.default.fileExists(atPath: $0.path) }
+        if touch, let file {
+            try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
+        }
+        return file
     }
 
     /// Keeps the picture in `dataURL` under `key` and returns its file, or
@@ -69,7 +74,9 @@ enum TranscriptImageCache {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    /// Drops the oldest pictures once the cache outgrows `budget`.
+    /// Drops the least recently used pictures once the cache outgrows
+    /// `budget`. Unserialized on purpose: a picture removed between a
+    /// lookup and its read is fetched again, nothing worse.
     static func trim(_ directory: URL, budget: Int = budgetBytes, target: Int = trimTargetBytes) {
         let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey]
         guard let files = try? FileManager.default.contentsOfDirectory(

@@ -1103,6 +1103,9 @@ private struct UserImageAttachmentPreview: View {
     let attachment: Attachment
     let gatewayResolver: GatewayMediaDataURLResolver?
     @State private var gatewayImage: UIImage?
+    /// The cache key `gatewayImage` was loaded for, so a reused view never
+    /// shows the picture it held before.
+    @State private var gatewayImageKey: String?
     @State private var opening = false
     @State private var openTask: Task<Void, Never>?
     @State private var gatewayLoadFailed = false
@@ -1192,7 +1195,7 @@ private struct UserImageAttachmentPreview: View {
 
     var body: some View {
         Group {
-            if let image = cachedLocalImage ?? currentLocalPreview ?? gatewayImage {
+            if let image = cachedLocalImage ?? currentLocalPreview ?? currentGatewayImage {
                 imagePreview(image)
             } else if loadsFromHermes && localFileURL == nil && !gatewayLoadFailed {
                 loadingPlaceholder
@@ -1211,7 +1214,7 @@ private struct UserImageAttachmentPreview: View {
                 .background(Color.white.opacity(0.13), in: Capsule())
             }
         }
-        .task(id: "\(attachment.uri)|\(gatewayResolver?.profile ?? "")") {
+        .task(id: "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.profile ?? "")") {
             // Local file: cache hits are already shown by `body` on the first
             // frame via `cachedLocalImage`, so only misses reach here. Decode
             // off the MainActor so a large photo can't hitch scrolling.
@@ -1239,6 +1242,7 @@ private struct UserImageAttachmentPreview: View {
                 gatewayLoadFailed = false
                 // Kept on the phone from an earlier load (#652).
                 if let image = await Self.keptPreview(for: cacheKey) {
+                    guard !Task.isCancelled else { return }
                     remember(image, as: cacheKey)
                     return
                 }
@@ -1267,13 +1271,25 @@ private struct UserImageAttachmentPreview: View {
     private func remember(_ image: UIImage, as key: String) {
         Self.localImageCache.setObject(image, forKey: key as NSString, cost: Self.bitmapCost(of: image))
         gatewayImage = image
+        gatewayImageKey = key
+    }
+
+    private var currentGatewayImage: UIImage? {
+        guard let gatewayImageKey, gatewayImageKey == memoryCacheKey else { return nil }
+        return gatewayImage
+    }
+
+    /// Which picture inside its message this is, so a message that later
+    /// gains the way back to its pictures loads them again.
+    private var inlineImageIdentity: String {
+        attachment.inlineImage.map { "\($0.sessionId)/\($0.rowId)/\($0.index)" } ?? ""
     }
 
     /// The picture kept on the phone under `key`, decoded off the
     /// MainActor at preview size.
     private static func keptPreview(for key: String) async -> UIImage? {
         await Task.detached(priority: .userInitiated) { () -> UIImage? in
-            TranscriptImageCache.cachedFile(for: key).flatMap { Self.downsampledPreview(url: $0) }
+            TranscriptImageCache.cachedFile(for: key, touch: true).flatMap { Self.downsampledPreview(url: $0) }
         }.value
     }
 

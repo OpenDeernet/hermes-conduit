@@ -3819,6 +3819,7 @@ final class AppState: ObservableObject {
         // Chat pictures kept on the phone go with the chats. Their files are
         // named by a hash, so they cannot be told apart by server.
         Task.detached(priority: .utility) { TranscriptImageCache.removeAll() }
+        inlineImageRowsUnavailable.removeAll()
         if offlineChatPresentation.map({ dashboardID == nil || $0.dashboardID == dashboardID }) == true {
             offlineChatPresentation = nil
         }
@@ -25764,13 +25765,14 @@ final class AppState: ObservableObject {
     /// Hermes without the route, a message that is not a prompt) is not
     /// asked for again until the app restarts; a network failure is.
     func transcriptInlineImageDataURL(_ ref: InlineImageRef) async -> String? {
-        let key = "\(ref.profile)|\(ref.sessionId)|\(ref.rowId)"
+        let dashboard = activeDashboardID?.uuidString ?? ""
+        let key = "\(dashboard)|\(ref.profile)|\(ref.sessionId)|\(ref.rowId)"
         guard !inlineImageRowsUnavailable.contains(key) else { return nil }
         let fetch: Task<InlineImageRowFetch, Never>
         if let running = inlineImageRowFetches[key] {
             fetch = running
         } else {
-            fetch = Task { [weak self] in
+            fetch = Task { @MainActor [weak self] in
                 guard let self else { return .failed }
                 let result = await self.fetchInlineImageRow(ref)
                 self.inlineImageRowFetches[key] = nil
