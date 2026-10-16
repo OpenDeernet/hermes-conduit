@@ -2536,6 +2536,68 @@ final class BotModeTests: XCTestCase {
         XCTAssertNil(harness.appState.errorMessage)
     }
 
+    /// A relay clarify pushed from a Bot Chat exists only on the push: its
+    /// card is recorded for the bot's chat and is answerable once it opens.
+    func testClarifyPushedFromBotChatRendersInItsBotChat() async {
+        let cacheSuite = "BotModeTests.clarify-\(UUID().uuidString)"
+        guard let cacheDefaults = UserDefaults(suiteName: cacheSuite) else {
+            XCTFail("Could not create isolated UserDefaults suite")
+            return
+        }
+        let cache = SessionPresentationCache(defaults: cacheDefaults)
+        defer {
+            cache.clear()
+            cacheDefaults.removePersistentDomain(forName: cacheSuite)
+        }
+        let harness = makeBotHarness(
+            sessionPresentationCache: cache,
+            lifecycleOperations: ChatResumeLifecycleOperations(
+                loadCatalog: { _, _ in [self.makeSessionSummary(id: "ordinary-1", title: "Design review")] },
+                openSessionWithProfile: { _, id, _, _ in
+                    SessionResumeResult(
+                        sessionId: id,
+                        storedSessionId: "stored-1",
+                        messages: [],
+                        snapshot: SessionRuntimeSnapshot(object: ["running": .bool(false)])
+                    )
+                },
+                refreshContext: { _, _ in },
+                botRoster: { _ in
+                    BotRosterSnapshot(
+                        bots: [self.makeBot(name: "atlas", canonicalID: "stored-1")],
+                        supportsBotProtocol: false
+                    )
+                },
+                findBotChat: { _, _ in
+                    [BotChatLookupRow(id: "stored-1", resolvedID: "runtime-1", title: "Bot Chat")]
+                }
+            )
+        )
+        let connection = HermesConnection(baseUrl: "https://one.example", ticket: "ticket")
+        harness.appState.client = HermesClient(connection: connection, profile: "default")
+        harness.appState.connection = connection
+        await harness.appState.refreshBotRoster()
+
+        let routed = await harness.appState.openNotificationTarget(
+            ConduitNotificationTarget(
+                profile: "atlas",
+                sessionId: "stored-1",
+                type: "input.needed",
+                decision: .clarify(
+                    requestId: "conduit-push-bot1",
+                    question: "Which color?",
+                    choices: ["Red", "Blue"]
+                )
+            )
+        )
+
+        XCTAssertTrue(routed)
+        XCTAssertEqual(harness.appState.activeBotChatProfile, "atlas")
+        let card = harness.appState.messages.first { $0.role == .clarify }
+        XCTAssertEqual(card?.clarify?.requestId, "conduit-push-bot1")
+        XCTAssertEqual(card?.clarify?.status, .pending)
+    }
+
     /// The plain reply push from a Bot Chat (#650): tapping it opens that
     /// bot's chat in Bots, not the workspace chat that was open before.
     func testReplyFromBotChatOpensItsBotChat() async {
@@ -4382,6 +4444,7 @@ final class BotModeTests: XCTestCase {
         configureDefaults: (UserDefaults) -> Void = { _ in },
         sessionCatalogLoader: ((Bool) async throws -> [SessionSummary])? = nil,
         reusing reusedDefaults: UserDefaults? = nil,
+        sessionPresentationCache: SessionPresentationCache = .shared,
         lifecycleOperations: ChatResumeLifecycleOperations
     ) -> (appState: AppState, store: ChatResumeStore) {
         let defaults: UserDefaults
@@ -4408,7 +4471,8 @@ final class BotModeTests: XCTestCase {
             loadSavedConnection: false,
             clearSessionPresentationCache: {},
             sessionCatalogLoader: sessionCatalogLoader,
-            chatResumeLifecycleOperations: lifecycleOperations
+            chatResumeLifecycleOperations: lifecycleOperations,
+            sessionPresentationCache: sessionPresentationCache
         )
         appState.isConnected = true
         return (appState, store)

@@ -1278,8 +1278,8 @@ final class AppState: ObservableObject {
     /// carries the reserved title proves no owner and stays refused, and so
     /// does a reply or decision whose profile names the owner only with case
     /// folded: on a case-sensitive host that is a different profile. A call
-    /// keeps opening as it did before, by the chat's ids alone. No decision
-    /// payload is recorded here; the bot's open reads its cards live.
+    /// keeps opening as it did before, by the chat's ids alone. A decision
+    /// the push carries is recorded for the bot's chat before it opens.
     private func routeBotOwnedNotification(
         _ target: ConduitNotificationTarget,
         notifiedProfile: String,
@@ -1294,7 +1294,22 @@ final class AppState: ObservableObject {
         if target.call != nil {
             HermesCallTrace.shared.note("Call from a Bot Chat: opening it in Bots")
         }
-        guard await openBotChat(for: bot) else { return false }
+        // A decision raised while the app was backgrounded rides the push
+        // (a relay clarify exists nowhere else), so its card is recorded in
+        // the bot's namespace under the id the push named, and the open
+        // promotes it into the chat, as the workspace route does.
+        var migrationIDs: Set<String> = []
+        if let decision = target.decision {
+            let requestedID = target.sessionId
+            recordNotificationDecision(
+                decision,
+                sessionIDs: [requestedID] + [target.durableSessionID].compactMap { $0 },
+                cacheSessionIDs: [requestedID],
+                profile: bot.name
+            )
+            migrationIDs = [requestedID]
+        }
+        guard await openBotChat(for: bot, presentationMigrationSessionIDs: migrationIDs) else { return false }
         showSidebar = false
         return true
     }
@@ -16380,9 +16395,15 @@ final class AppState: ObservableObject {
     /// CONFIRMED — create the one hidden "Bot Chat". Fail-closed throughout:
     /// a failed or unconfirmable lookup NEVER mints a chat, because that is
     /// the one remaining way to fork a bot's forever chat. Concurrent opens
-    /// of the same bot share one flight.
+    /// of the same bot share one flight. `presentationMigrationSessionIDs`
+    /// are the ids a notification recorded its decision card under; an
+    /// existing chat's open promotes that card into the chat (a flight
+    /// already running for the bot keeps its own).
     @discardableResult
-    func openBotChat(for bot: BotProfile) async -> Bool {
+    func openBotChat(
+        for bot: BotProfile,
+        presentationMigrationSessionIDs: Set<String> = []
+    ) async -> Bool {
         guard let client, isConnected else {
             errorMessage = AppLocalization.string("Connect to Hermes to chat with bots.")
             return false
@@ -16407,7 +16428,11 @@ final class AppState: ObservableObject {
                     self.botChatOpenFlights.removeValue(forKey: flightKey)
                 }
             }
-            return await self.resolveAndOpenBotChat(bot, client: client)
+            return await self.resolveAndOpenBotChat(
+                bot,
+                client: client,
+                presentationMigrationSessionIDs: presentationMigrationSessionIDs
+            )
         }
         flight.task = task
         botChatOpenFlights[flightKey] = flight
@@ -16422,7 +16447,11 @@ final class AppState: ObservableObject {
         epoch == botRosterEpoch && client === self.client
     }
 
-    private func resolveAndOpenBotChat(_ bot: BotProfile, client: HermesClient) async -> Bool {
+    private func resolveAndOpenBotChat(
+        _ bot: BotProfile,
+        client: HermesClient,
+        presentationMigrationSessionIDs: Set<String> = []
+    ) async -> Bool {
         let epoch = botRosterEpoch
         // THE identity lookup, on the bot's own profile. A failed RPC is not
         // "no Bot Chat exists" — it is "unknown", and unknown means retry.
@@ -16448,7 +16477,8 @@ final class AppState: ObservableObject {
                 registryID: registryID,
                 resumeID: resumeID,
                 epoch: epoch,
-                client: client
+                client: client,
+                presentationMigrationSessionIDs: presentationMigrationSessionIDs
             )
         case .success(.create):
             return await createAndOpenBotChat(bot, client: client, epoch: epoch)
@@ -16464,13 +16494,15 @@ final class AppState: ObservableObject {
         registryID: String,
         resumeID: String,
         epoch: Int,
-        client: HermesClient
+        client: HermesClient,
+        presentationMigrationSessionIDs: Set<String> = []
     ) async -> Bool {
         noteBotChatSession(resumeID, profile: bot.name, label: bot.displayLabel)
         noteBotChatSession(registryID, profile: bot.name, label: bot.displayLabel)
         let outcome = await performSessionOpen(
             resumeID,
             reusing: nil,
+            presentationMigrationSessionIDs: presentationMigrationSessionIDs,
             conversationProfile: bot.name,
             preferredTitle: bot.displayLabel
         )
@@ -17264,14 +17296,16 @@ final class AppState: ObservableObject {
     private func recordNotificationDecision(
         _ decision: PendingDecisionPayload,
         sessionIDs: [String],
-        cacheSessionIDs: [String]? = nil
+        cacheSessionIDs: [String]? = nil,
+        profile: String? = nil
     ) {
         let persistedIDs = cacheSessionIDs ?? sessionIDs
         // The notified conversation's own namespace: the live session on
         // screen is not necessarily the conversation the push named, and
         // the later open/eviction of the named conversation must find the
         // card under the same key it was recorded under.
-        let recordProfile = presentationProfile(for: persistedIDs.first ?? activeSessionId)
+        // A Bot Chat's card names its bot's namespace outright.
+        let recordProfile = profile ?? presentationProfile(for: persistedIDs.first ?? activeSessionId)
         switch decision {
         case let .approval(sessionKey, description, choices):
             // Compare trimmed on both sides: the payload parser trims the
