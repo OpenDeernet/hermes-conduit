@@ -4163,7 +4163,7 @@ final class AppState: ObservableObject {
     private func storedChatID(for thread: VoiceThreadTarget, profile: String) -> String? {
         let runtimeID = thread.runtimeSessionID
         // The catalog lists the active profile's chats: a Bot Chat isn't one.
-        let listed = thread.profile == nil || thread.profile == activeProfile
+        let listed = (thread.profile ?? profile) == activeProfile
         return thread.storedSessionID.flatMap { $0.isEmpty ? nil : $0 }
             ?? (listed ? sessions.first(where: { $0.id == runtimeID || $0.alternateIds.contains(runtimeID) })?.storedSessionId.flatMap { $0.isEmpty ? nil : $0 } : nil)
             ?? conversationIdentityIndex.durableID(forRuntime: runtimeID, profile: thread.profile ?? profile)
@@ -6108,7 +6108,7 @@ final class AppState: ObservableObject {
     /// Continues a saved call with a new live call on the selected engine.
     /// It is seeded with the row (a summary when it's long) and appends to
     /// the same row. False when no call started (one is already being
-    /// prepared, or the profile changed meanwhile).
+    /// prepared, or the chat, dashboard or profile changed meanwhile).
     @discardableResult
     func resumeVoiceCall(sessionID: String) async -> Bool {
         guard canResumeVoiceCall, !isPreparingVoiceResume else { return false }

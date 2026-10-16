@@ -39,7 +39,8 @@ struct V2VoiceButton: View {
 
     private var canAct: Bool {
         if returnsToCall || needsSetup { return true }
-        guard !isStarting, appState.canStartPhoneVoiceConversation, !appState.isVoiceInUse else { return false }
+        guard !isStarting, !appState.isPreparingVoiceResume,
+              appState.canStartPhoneVoiceConversation, !appState.isVoiceInUse else { return false }
         // In a chat, like the composer's voice button: not mid-sync or busy.
         if context == .conversation {
             return appState.composerIsEnabled && !appState.isBusy
