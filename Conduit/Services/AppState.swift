@@ -22492,7 +22492,8 @@ final class AppState: ObservableObject {
             // A deleted profile's glow pick goes with it, so a new profile
             // given the same name later starts from its photo's color.
             if !names.isEmpty {
-                for profile in profileGlowPicks.keys where !nextProfiles.contains(profile) {
+                let stale = profileGlowPicks.keys.filter { !nextProfiles.contains($0) }
+                for profile in stale {
                     setProfileGlowColor(nil, for: profile)
                 }
             }
