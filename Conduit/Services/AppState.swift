@@ -4162,8 +4162,10 @@ final class AppState: ObservableObject {
     /// its stored id later.
     private func storedChatID(for thread: VoiceThreadTarget, profile: String) -> String? {
         let runtimeID = thread.runtimeSessionID
+        // The catalog lists the active profile's chats: a Bot Chat isn't one.
+        let listed = thread.profile == nil || thread.profile == activeProfile
         return thread.storedSessionID.flatMap { $0.isEmpty ? nil : $0 }
-            ?? sessions.first(where: { $0.id == runtimeID || $0.alternateIds.contains(runtimeID) })?.storedSessionId.flatMap { $0.isEmpty ? nil : $0 }
+            ?? (listed ? sessions.first(where: { $0.id == runtimeID || $0.alternateIds.contains(runtimeID) })?.storedSessionId.flatMap { $0.isEmpty ? nil : $0 } : nil)
             ?? conversationIdentityIndex.durableID(forRuntime: runtimeID, profile: thread.profile ?? profile)
     }
 
@@ -6114,8 +6116,12 @@ final class AppState: ObservableObject {
         isPreparingVoiceResume = true
         defer { isPreparingVoiceResume = false }
         let profile = activeProfile
+        let dashboard = activeDashboardID
+        let openChat = activeSessionId
         let context = await voiceResumeContext(sessionID: sessionID, profile: profile)
-        guard profile == activeProfile, canResumeVoiceCall else { return false }
+        // Another chat or server opened meanwhile: that isn't this call's.
+        guard profile == activeProfile, dashboard == activeDashboardID, openChat == activeSessionId,
+              canResumeVoiceCall else { return false }
         // Without the saved turns the call still continues the row.
         pendingVoiceResume = (sessionID, context ?? VoiceResumeContext(summary: nil, recent: []))
         // A call started from a chat goes back to that chat.
