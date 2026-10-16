@@ -26254,9 +26254,9 @@ final class AppState: ObservableObject {
             saveVoiceProfilePreferences(preferences, profile: profile)
         }
         guard plan.switchesSpeechToEdge else { return }
-        if await service.saveProvider(VoiceSetupDefaults.edgeTTSProviderID, kind: .tts) {
-            await service.reload()
-        } else {
+        // saveProvider reloads the snapshot itself on success.
+        let switchedToEdge = await service.saveProvider(VoiceSetupDefaults.edgeTTSProviderID, kind: .tts)
+        if !switchedToEdge {
             // Settings' Set up voice offers "Use Edge TTS" for this.
             voiceSetupLog.notice("First voice setup could not switch the assistant voice to Edge TTS")
         }
