@@ -1237,7 +1237,12 @@ private struct UserImageAttachmentPreview: View {
                 // the MainActor before short-circuiting.
             } else if loadsFromHermes, let gatewayResolver,
                       let cacheKey = gatewayResolver.imageCacheKey(for: attachment) {
-                guard cachedLocalImage == nil else { return }
+                // Held by the view too, so the picture stays when the
+                // shared cache evicts it while this row is on screen.
+                if let cached = cachedLocalImage {
+                    remember(cached, as: cacheKey)
+                    return
+                }
                 gatewayImage = nil
                 gatewayLoadFailed = false
                 // Kept on the phone from an earlier load (#652).

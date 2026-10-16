@@ -58,11 +58,6 @@ enum TranscriptImageCache {
         let stem = fileStem(for: key)
         let type = fileExtension(forDataURL: dataURL)
         let file = directory.appendingPathComponent("\(stem).\(type)")
-        // The same picture kept earlier under another type would shadow
-        // this one in `cachedFile`.
-        for other in fileExtensions where other != type {
-            try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(stem).\(other)"))
-        }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             var directoryURL = directory
@@ -72,6 +67,11 @@ enum TranscriptImageCache {
             try data.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         } catch {
             return nil
+        }
+        // The same picture kept earlier under another type would shadow
+        // this one in `cachedFile`.
+        for other in fileExtensions where other != type {
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(stem).\(other)"))
         }
         trim(directory)
         return file
