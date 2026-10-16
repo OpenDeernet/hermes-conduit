@@ -1329,23 +1329,37 @@ final class AppState: ObservableObject {
         // to the gateway's pending list, which the open already read.
         if let decision = target.decision,
            let evictionKey = Self.pendingDecisionEvictionKey(for: decision),
-           evictionKey.hasPrefix("clarify:"),
            let openID = activeSessionId,
-           activeBotChatProfile == bot.name,
-           !messages.contains(where: { SessionPresentationCache.decisionKey(for: $0) == evictionKey }) {
+           activeBotChatProfile == bot.name {
             let openIDs = presentationCacheSessionIDs(for: openID)
-            recordNotificationDecision(
-                decision,
-                sessionIDs: [requestedID] + [target.durableSessionID].compactMap { $0 } + openIDs,
-                cacheSessionIDs: openIDs,
-                profile: bot.name
-            )
-            messages = sessionPresentationCache.merge(
-                messages,
-                profile: bot.name,
-                sessionIDs: openIDs,
-                includePendingClarifications: true
-            )
+            if evictionKey.hasPrefix("clarify:"),
+               !messages.contains(where: { SessionPresentationCache.decisionKey(for: $0) == evictionKey }) {
+                recordNotificationDecision(
+                    decision,
+                    sessionIDs: [requestedID] + [target.durableSessionID].compactMap { $0 } + openIDs,
+                    cacheSessionIDs: openIDs,
+                    profile: bot.name
+                )
+                messages = sessionPresentationCache.merge(
+                    messages,
+                    profile: bot.name,
+                    sessionIDs: openIDs,
+                    includePendingClarifications: true
+                )
+            }
+            // A pre-open copy the open did not promote (a joined flight
+            // carries the first caller's ids only) is dropped rather than
+            // left to linger under the push-named id.
+            let trimmedRequestedID = requestedID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !openIDs.contains(where: {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedRequestedID
+            }) {
+                sessionPresentationCache.removePendingDecision(
+                    key: evictionKey,
+                    profile: bot.name,
+                    sessionIDs: [requestedID]
+                )
+            }
         }
         showSidebar = false
         return true
