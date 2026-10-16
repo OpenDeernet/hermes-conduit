@@ -1284,7 +1284,8 @@ final class AppState: ObservableObject {
         _ target: ConduitNotificationTarget,
         notifiedProfile: String,
         rowIDs: Set<String> = [],
-        canonicalProfile: String? = nil
+        canonicalProfile: String? = nil,
+        attemptID: UUID
     ) async -> Bool {
         guard let bot = botOwningNotificationTarget(target, rowIDs: rowIDs, canonicalProfile: canonicalProfile),
               target.call != nil || !Self.namesProfileOnlyWithCaseFolded(notifiedProfile, bot: bot) else {
@@ -1322,6 +1323,10 @@ final class AppState: ObservableObject {
             }
             return false
         }
+        // A newer notification tap that replaced this attempt owns the
+        // screen: publish nothing over it. (The chat open began its own
+        // viewport transition, which already fences out any other open.)
+        guard activeNotificationOpenAttemptID == attemptID else { return false }
         // The resume restores cards only from the chat's tip ids, and the
         // card may sit under the durable id the push named. Once the chat is
         // on screen, a relay clarify still missing is recorded under the open
@@ -17086,7 +17091,7 @@ final class AppState: ObservableObject {
         // match keeps its own diagnostic.
         if notificationTargetIsBotChat(target) {
             traceStage = "bot chat"
-            return await routeBotOwnedNotification(target, notifiedProfile: target.profile ?? "")
+            return await routeBotOwnedNotification(target, notifiedProfile: target.profile ?? "", attemptID: notificationAttemptID)
         }
         let targetProfile = notificationProfileID(target.profile)
         if let notified = target.profile, let targetProfile,
@@ -17117,7 +17122,7 @@ final class AppState: ObservableObject {
                 // profile this dashboard's workspace would turn its Bot Chat
                 // into the workspace's own context.
                 traceStage = "bot chat"
-                return await routeBotOwnedNotification(target, notifiedProfile: notified)
+                return await routeBotOwnedNotification(target, notifiedProfile: notified, attemptID: notificationAttemptID)
             }
             guard botEvidenceIsAvailable else {
                 // No usable Bot Mode evidence (the roster could not be
@@ -17160,7 +17165,8 @@ final class AppState: ObservableObject {
                 return await routeBotOwnedNotification(
                     target,
                     notifiedProfile: notified,
-                    canonicalProfile: targetProfile
+                    canonicalProfile: targetProfile,
+                    attemptID: notificationAttemptID
                 )
             }
         }
@@ -17186,7 +17192,8 @@ final class AppState: ObservableObject {
                 return await routeBotOwnedNotification(
                     target,
                     notifiedProfile: notified,
-                    canonicalProfile: targetProfile
+                    canonicalProfile: targetProfile,
+                    attemptID: notificationAttemptID
                 )
             }
         }
@@ -17271,7 +17278,8 @@ final class AppState: ObservableObject {
             return await routeBotOwnedNotification(
                 target,
                 notifiedProfile: target.profile ?? activeProfile,
-                rowIDs: Set([botRow.id, botRow.storedSessionId, botRow.lineageRootId].compactMap { $0 } + botRow.alternateIds)
+                rowIDs: Set([botRow.id, botRow.storedSessionId, botRow.lineageRootId].compactMap { $0 } + botRow.alternateIds),
+                attemptID: notificationAttemptID
             )
         }
         // A decision raised while the app was backgrounded is delivered as a
