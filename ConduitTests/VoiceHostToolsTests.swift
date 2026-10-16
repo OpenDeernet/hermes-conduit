@@ -99,7 +99,6 @@ extension HermesVoiceGatewayTimeoutTests {
         let trailing = try XCTUnwrap(VoiceHostTool.marked(in: #"Health: {"action": "sleep"} then say {hi}"#, tools: [tool]))
         XCTAssertEqual(trailing.arguments["action"] as? String, "sleep", "Words after the object, braces included, are left out")
         let rules = VoiceHostTool.gptLiveRules([tool])
-        XCTAssertTrue(rules.contains("Health:"))
         XCTAssertTrue(rules.hasPrefix("\n\n[Conduit's own tools: \"Health:\"."), "The tools lead with a use-them-first line")
         XCTAssertTrue(rules.contains("Use them first"))
         XCTAssertEqual(VoiceHostTool.gptLiveRules([]), "", "No tools, no line")
