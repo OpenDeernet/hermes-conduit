@@ -4167,12 +4167,18 @@ final class AppState: ObservableObject {
             ?? conversationIdentityIndex.durableID(forRuntime: runtimeID, profile: thread.profile ?? profile)
     }
 
-    /// The chat a call on `profile` is kept with (#556): its stored id, when
-    /// the chat is on that profile. A Bot Chat lives in the bot's profile,
-    /// so its calls keep rows of their own.
+    /// The chat a call on `profile` is kept with (#556): its stored id. A
+    /// Bot Chat's is in the bot's profile, where its calls are kept too
+    /// (`voiceCallChatProfile`).
     private func voiceCallChatID(for thread: VoiceThreadTarget, profile: String) -> String? {
-        guard thread.profile == nil || thread.profile == profile else { return nil }
-        return storedChatID(for: thread, profile: profile)
+        storedChatID(for: thread, profile: thread.profile ?? profile)
+    }
+
+    /// The profile a call on `profile` kept with `thread` is saved to, when
+    /// it isn't `profile`: a Bot Chat's bot.
+    static func voiceCallChatProfile(for thread: VoiceThreadTarget, profile: String) -> String? {
+        guard let bot = thread.profile, !bot.isEmpty, bot != profile else { return nil }
+        return bot
     }
 
     /// Whether a call starting now goes on as the last call kept with a
@@ -4959,7 +4965,7 @@ final class AppState: ObservableObject {
         let profile = activeProfile
         let thread = voiceBackgroundJobSupervisor.liveThread
         // A call attached to a chat is kept with it, not as a row of its own
-        // (#556). A Bot Chat lives in the bot's profile: its calls keep rows.
+        // (#556); a Bot Chat's in the bot's profile, where the chat lives.
         let chatID = resume == nil ? thread.flatMap { voiceCallChatID(for: $0, profile: profile) } : nil
         let previous = lastChatCall.flatMap { last in
             Self.continuesChatCall(
@@ -4990,7 +4996,10 @@ final class AppState: ObservableObject {
         // starts, which can be after the first capture below: they aren't
         // this call's.
         recorder.ignore(liveVoiceTranscript(engine))
-        if previous == nil { recorder.chatID = chatID }
+        if previous == nil {
+            recorder.chatID = chatID
+            recorder.chatProfile = thread.flatMap { Self.voiceCallChatProfile(for: $0, profile: profile) }
+        }
         if resume != nil || previous != nil { recorder.note(AppLocalization.string("Voice call resumed")) }
         // A reconnect picks up where the call left off; a Hermes call
         // opens with its own news instead.
@@ -5087,6 +5096,7 @@ final class AppState: ObservableObject {
         if recorder.chatID == nil, !recorder.savedWithChat, recorder.sessionID == nil,
            let attachment, !attachment.resumed {
             recorder.chatID = voiceCallChatID(for: attachment.thread, profile: recorder.profile)
+            recorder.chatProfile = Self.voiceCallChatProfile(for: attachment.thread, profile: recorder.profile)
         }
         if let chatID = recorder.chatID, let attachment {
             lastChatCall = (recorder, chatID, attachment.startedAt, attachment.endedAt ?? Date())
@@ -5294,6 +5304,7 @@ final class AppState: ObservableObject {
                     continue
                 }
                 request.chatID = nil
+                request.chatProfile = nil
                 request.callID = UUID().uuidString
                 request.title = request.title ?? Self.fallbackVoiceCallTitle(at: entry.queuedAt)
                 settled.append((entry, .init(dashboard: entry.dashboard, profile: entry.profile, request: request, queuedAt: entry.queuedAt, jobSessionIDs: entry.jobSessionIDs, chatAttachment: nil)))
@@ -5584,7 +5595,8 @@ final class AppState: ObservableObject {
             guard let self else { return }
             let calls: [VoiceChatCall]
             do {
-                calls = try await self.voiceHistoryClient.chatCalls(chatID: chatID, callID: link.callID, profile: link.profile)
+                // A Bot Chat's calls are kept in its bot's profile.
+                calls = try await self.voiceHistoryClient.chatCalls(chatID: chatID, callID: link.callID, profile: link.chatProfile ?? link.profile)
             } catch VoiceHistoryError.pluginMissing, VoiceHistoryError.rowUnavailable, VoiceHistoryError.unsupported {
                 guard self.chatCallTranscriptRequest == request else { return }
                 self.errorMessage = unavailable
