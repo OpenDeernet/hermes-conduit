@@ -7,6 +7,7 @@ private let replySourcesLogger = Logger(subsystem: "com.milim.relay", category: 
 /// (#115). Someone who also talks to Hermes in Desktop, a messaging app or
 /// the terminal sees those replies there. Kept per profile by the host's
 /// notifier plugin, so it shows only when the plugin offers it.
+@MainActor
 struct ReplySourcesSettingsSection: View {
     @EnvironmentObject private var appState: AppState
     /// What the host answered for `loadedKey` (the dashboard and profile);
@@ -37,6 +38,12 @@ struct ReplySourcesSettingsSection: View {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote)
                     .foregroundStyle(.red)
+                if loadedKey != key {
+                    Button(AppLocalization.string("Try again")) {
+                        Task { await load(key) }
+                    }
+                    .font(.footnote)
+                }
             }
         }
         .task(id: key) { await load(key) }
