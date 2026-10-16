@@ -194,6 +194,17 @@ struct ChatWorkingLine: View {
         return isThinking ? AppLocalization.string("Thinking") : AppLocalization.string("Working…")
     }
 
+    /// Counts on its own; this view doesn't re-render each second.
+    @ViewBuilder
+    private var timer: some View {
+        if let startedAt {
+            Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+    }
+
     var body: some View {
         let name = appState.profileDisplayName(appState.activeProfile)
         // Large text: the words wrap and stack instead of truncating.
@@ -219,18 +230,14 @@ struct ChatWorkingLine: View {
                     .lineLimit(lineLimit)
                     .contentTransition(.opacity)
                     .animation(ConduitMotion.settle, value: phrase)
+
+                // Large text: under the words, not squeezed beside them.
+                if dynamicTypeSize.isAccessibilitySize { timer }
             }
 
             Spacer(minLength: 8)
 
-            if let startedAt {
-                // Counts on its own; this view doesn't re-render each second.
-                Text(timerInterval: startedAt...Date.distantFuture, countsDown: false)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .fixedSize()
-            }
+            if !dynamicTypeSize.isAccessibilitySize { timer.fixedSize() }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(AppLocalization.string("\(name) is working"))
@@ -265,7 +272,9 @@ struct ChatStepGroupMember: Equatable {
 /// the turn is done, one row per step when opened.
 struct ChatStepGroup: Equatable {
     let members: [ChatStepGroupMember]
-    /// Nothing follows the run yet, so a running turn may still add to it.
+    /// Nothing loaded follows the run. Only with a running turn does that
+    /// mean the turn may still add to it; a history window can end on a
+    /// finished run too.
     let isTrailing: Bool
 
     /// The run's first row; it keeps the run's open or closed choice.
