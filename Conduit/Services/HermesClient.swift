@@ -755,6 +755,7 @@ final class HermesClient: ObservableObject {
     private var pathMonitorSawInitialPath = false
     private let keepaliveInterval: TimeInterval?
     private let keepalivePingTimeout: TimeInterval
+    private let monitorsPath: Bool
 
     let connection: HermesConnection
     let profile: String?
@@ -825,8 +826,10 @@ final class HermesClient: ObservableObject {
         cloudflareAccess: CloudflareAccessCredentials? = nil,
         transportFactory: @escaping @MainActor () -> any HermesWebSocketTransport = { URLSessionWebSocketTransport() },
         keepaliveInterval: TimeInterval? = HermesClient.defaultKeepaliveInterval,
-        keepalivePingTimeout: TimeInterval = HermesClient.keepalivePingTimeout
+        keepalivePingTimeout: TimeInterval = HermesClient.keepalivePingTimeout,
+        monitorsPath: Bool = true
     ) {
+        self.monitorsPath = monitorsPath
         self.keepaliveInterval = keepaliveInterval
         self.keepalivePingTimeout = keepalivePingTimeout
         self.connection = connection
@@ -921,7 +924,9 @@ final class HermesClient: ObservableObject {
         stopKeepalive()
         guard let interval = keepaliveInterval, interval > 0 else { return }
         lastInboundAt = Date()
-        keepaliveTask = Task { [weak self] in
+        // Spelled out though Task inherits it here: the loop reads socket
+        // state, which lives on the main actor.
+        keepaliveTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(interval / 3))
                 guard !Task.isCancelled, let self else { return }
@@ -931,6 +936,7 @@ final class HermesClient: ObservableObject {
                 }
             }
         }
+        guard monitorsPath else { return }
         // A network change (Wi-Fi to cellular, the VPN tunnel coming back)
         // usually leaves the old TCP connection dead: check it at once
         // instead of at the next quiet interval. The monitor reports the
@@ -940,7 +946,7 @@ final class HermesClient: ObservableObject {
         let socketID = ObjectIdentifier(socket)
         monitor.pathUpdateHandler = { [weak self] path in
             let satisfied = path.status == .satisfied
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self, let current = self.socket,
                       ObjectIdentifier(current) == socketID else { return }
                 guard self.pathMonitorSawInitialPath else {

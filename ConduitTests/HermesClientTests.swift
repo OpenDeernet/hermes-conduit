@@ -2827,7 +2827,8 @@ extension HermesClientTests {
             connection: HermesConnection(baseUrl: "https://test.example", ticket: "ticket"),
             transportFactory: { transport },
             keepaliveInterval: 0.3,
-            keepalivePingTimeout: 0.3
+            keepalivePingTimeout: 0.3,
+            monitorsPath: false
         )
         let connectTask = Task { try? await client.connect() }
         transport.open(socket)
