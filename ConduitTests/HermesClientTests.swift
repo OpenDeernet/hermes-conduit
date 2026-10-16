@@ -2860,6 +2860,7 @@ extension HermesClientTests {
             socket.sentTexts.filter { $0.contains("\"ping\"") }.count, 2,
             "One retry before giving up"
         )
+        client.disconnect()
     }
 
     func testPingBudgetIsShorterThanTheOldProbe() {

@@ -3380,7 +3380,8 @@ final class AppState: ObservableObject {
     /// `/api/profiles` fetch inside `loadProfiles()` so success, failure, and
     /// late-response ordering can be modeled without a live WebKit bridge.
     private let profileDiscoveryLoaderOverride: (@MainActor () async throws -> [String: Any])?
-    private var reconnectAttempts = 0
+    /// Published because `isRecoveringConnection` reads it.
+    @Published private var reconnectAttempts = 0
     /// Whether the UI scene is active. Backgrounded scene updates must
     /// complete within ~10s of wall clock before the watchdog kills the app
     /// (0x8BADF00D), so reconnect work is deferred while this is false.

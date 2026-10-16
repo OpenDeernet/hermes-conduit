@@ -913,7 +913,7 @@ final class HermesClient: ObservableObject {
 
     private func startKeepalive(for socket: any HermesWebSocket) {
         stopKeepalive()
-        guard let interval = keepaliveInterval else { return }
+        guard let interval = keepaliveInterval, interval > 0 else { return }
         lastInboundAt = Date()
         keepaliveTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -931,16 +931,18 @@ final class HermesClient: ObservableObject {
         // current path first; only later changes matter.
         let monitor = NWPathMonitor()
         pathMonitorSawInitialPath = false
+        let socketID = ObjectIdentifier(socket)
         monitor.pathUpdateHandler = { [weak self] path in
             let satisfied = path.status == .satisfied
             Task { @MainActor in
-                guard let self, self.socket === socket else { return }
+                guard let self, let current = self.socket,
+                      ObjectIdentifier(current) == socketID else { return }
                 guard self.pathMonitorSawInitialPath else {
                     self.pathMonitorSawInitialPath = true
                     return
                 }
                 guard satisfied else { return }
-                await self.probe(socket)
+                await self.probe(current)
             }
         }
         monitor.start(queue: DispatchQueue(label: "com.milim.conduit.hermes-path"))
