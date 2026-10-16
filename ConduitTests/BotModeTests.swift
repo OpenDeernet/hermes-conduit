@@ -2584,9 +2584,9 @@ final class BotModeTests: XCTestCase {
         XCTAssertNil(harness.appState.errorMessage)
     }
 
-    /// A push whose profile names the owning bot only with case folded may
+    /// A reply whose profile names the owning bot only with case folded may
     /// come from a different profile on a case-sensitive host, so it is not
-    /// opened as that bot's chat.
+    /// opened as that bot's chat. A call keeps opening by the chat's ids.
     func testBotChatPushFromCaseOnlyProfileMatchIsNotOpened() async {
         var resumedIDs: [String] = []
         let harness = makeBotHarness(lifecycleOperations: ChatResumeLifecycleOperations(
@@ -2625,6 +2625,20 @@ final class BotModeTests: XCTestCase {
             harness.appState.errorMessage,
             "Could not tell this notification's workspace apart from a Bot Chat. Open Bots or the workspace list to continue."
         )
+
+        // A call from the same chat still opens by the chat's ids, as before.
+        harness.appState.errorMessage = nil
+        let call = await harness.appState.openNotificationTarget(
+            ConduitNotificationTarget(
+                profile: "atlas",
+                sessionId: "stored-atlas",
+                type: HermesCallRequest.type,
+                call: HermesCallRequest(id: "call-1", kind: .done, title: nil, sessionIDs: ["stored-atlas"])
+            )
+        )
+        XCTAssertTrue(call)
+        XCTAssertEqual(resumedIDs, ["atlas-tip"])
+        XCTAssertEqual(harness.appState.activeProfile, "default")
     }
 
     // MARK: - calls from a Bot Chat

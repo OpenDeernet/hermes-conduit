@@ -1254,8 +1254,8 @@ final class AppState: ObservableObject {
     /// Refuses a push whose target is bot-owned, with copy that matches how
     /// confident the match is: ownership folds case, so an exact spelling IS that
     /// bot's profile while a case-only match may be an unrelated workspace that
-    /// merely shares the name. Both refusal sites use this, so the copy cannot
-    /// depend on which check happened to fire first.
+    /// merely shares the name. Every bot-owned refusal goes through here, so
+    /// the copy reflects how confident the match was, not which check fired.
     private func refuseBotOwnedRouting(for profile: String) {
         let exact = botOwnership.botProfileMatch(for: profile)?.isExact ?? true
         errorMessage = exact
@@ -1276,8 +1276,9 @@ final class AppState: ObservableObject {
     /// the catalog row's ids, and `canonicalProfile` is a profile the
     /// gateway confirmed this is the canonical chat of. A chat that only
     /// carries the reserved title proves no owner and stays refused, and so
-    /// does a push whose profile names the owner only with case folded: on
-    /// a case-sensitive host that is a different profile. No decision
+    /// does a reply or decision whose profile names the owner only with case
+    /// folded: on a case-sensitive host that is a different profile. A call
+    /// keeps opening as it did before, by the chat's ids alone. No decision
     /// payload is recorded here; the bot's open reads its cards live.
     private func routeBotOwnedNotification(
         _ target: ConduitNotificationTarget,
@@ -1286,7 +1287,7 @@ final class AppState: ObservableObject {
         canonicalProfile: String? = nil
     ) async -> Bool {
         guard let bot = botOwningNotificationTarget(target, rowIDs: rowIDs, canonicalProfile: canonicalProfile),
-              !Self.namesProfileOnlyWithCaseFolded(notifiedProfile, bot: bot) else {
+              target.call != nil || !Self.namesProfileOnlyWithCaseFolded(notifiedProfile, bot: bot) else {
             refuseBotOwnedRouting(for: notifiedProfile)
             return false
         }
@@ -1304,7 +1305,7 @@ final class AppState: ObservableObject {
         let stamped = profile.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = bot.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !stamped.isEmpty, stamped != name else { return false }
-        return stamped.lowercased() == name.lowercased()
+        return stamped.caseInsensitiveCompare(name) == .orderedSame
     }
 
     /// The roster's bot that owns the chat a push names: the bot whose
