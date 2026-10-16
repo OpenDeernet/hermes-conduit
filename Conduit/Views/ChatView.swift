@@ -1214,7 +1214,7 @@ private struct UserImageAttachmentPreview: View {
                 .background(Color.white.opacity(0.13), in: Capsule())
             }
         }
-        .task(id: "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.profile ?? "")") {
+        .task(id: "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.imageCacheKey(for: attachment) ?? "")") {
             // Local file: cache hits are already shown by `body` on the first
             // frame via `cachedLocalImage`, so only misses reach here. Decode
             // off the MainActor so a large photo can't hitch scrolling.
@@ -1282,7 +1282,7 @@ private struct UserImageAttachmentPreview: View {
     /// Which picture inside its message this is, so a message that later
     /// gains the way back to its pictures loads them again.
     private var inlineImageIdentity: String {
-        attachment.inlineImage.map { "\($0.sessionId)/\($0.rowId)/\($0.index)" } ?? ""
+        attachment.inlineImage.map { "\($0.profile)/\($0.sessionId)/\($0.rowId)/\($0.index)" } ?? ""
     }
 
     /// The picture kept on the phone under `key`, decoded off the
@@ -1352,6 +1352,7 @@ private struct UserImageAttachmentPreview: View {
     /// The row keeps only the downsampled/decoded image, never the original
     /// bytes, so an image-heavy transcript doesn't pin them all in memory.
     private func openPreview() {
+        guard !opening else { return }
         if let localFileURL, MediaPreviewPresenter.shared.present(fileURL: localFileURL, title: attachment.name) {
             return
         }
@@ -1361,7 +1362,7 @@ private struct UserImageAttachmentPreview: View {
            MediaPreviewPresenter.shared.present(fileURL: kept, title: attachment.name) {
             return
         }
-        guard !opening, loadsFromHermes, let gatewayResolver else { return }
+        guard loadsFromHermes, let gatewayResolver else { return }
         let uri = attachment.uri
         let inlineImage = attachment.inlineImage
         let hasServerFile = isGatewayImage

@@ -55,7 +55,14 @@ enum TranscriptImageCache {
     @discardableResult
     static func store(dataURL: String, for key: String, in directory: URL = defaultDirectory) -> URL? {
         guard let data = DataURLLimits.decodeBase64DataURL(dataURL, prefix: "data:image/") else { return nil }
-        let file = directory.appendingPathComponent("\(fileStem(for: key)).\(fileExtension(forDataURL: dataURL))")
+        let stem = fileStem(for: key)
+        let type = fileExtension(forDataURL: dataURL)
+        let file = directory.appendingPathComponent("\(stem).\(type)")
+        // The same picture kept earlier under another type would shadow
+        // this one in `cachedFile`.
+        for other in fileExtensions where other != type {
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(stem).\(other)"))
+        }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             var directoryURL = directory

@@ -3820,6 +3820,7 @@ final class AppState: ObservableObject {
         // named by a hash, so they cannot be told apart by server.
         Task.detached(priority: .utility) { TranscriptImageCache.removeAll() }
         inlineImageRowsUnavailable.removeAll()
+        inlineImageRowFetches.removeAll()
         if offlineChatPresentation.map({ dashboardID == nil || $0.dashboardID == dashboardID }) == true {
             offlineChatPresentation = nil
         }

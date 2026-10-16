@@ -3909,7 +3909,8 @@ enum MessageNormalizer {
         )
         guard files.content != images.content else { return images }
         let attachments = files.attachments + (images.attachments ?? [])
-        return (files.content, source, attachments.isEmpty ? nil : attachments)
+        // Without Hermes' picture stand-ins, which a branch must not replay.
+        return (files.content, images.rawContent ?? source, attachments.isEmpty ? nil : attachments)
     }
 
     /// Hermes appends what it expanded for `@file:`/`@url:` references below

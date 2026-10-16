@@ -65,6 +65,28 @@ extension MessageNormalizerTests {
         XCTAssertEqual(attachment.inlineImage?.rowId, 7)
     }
 
+    func testPromptWithAFileKeepsPictureStandInsOutOfItsRawText() {
+        let messages = MessageNormalizer.normalizeMessages([
+            .object([
+                "id": .number(14),
+                "role": .string("user"),
+                "content": .string("@file:/root/.hermes/attachments/report.pdf\n\nCompare these\n@image:/root/.hermes/images/a.png\n[image]")
+            ])
+        ], imageScope: imageScope)
+
+        XCTAssertEqual(messages[0].content, "Compare these")
+        // Branching replays the raw text as the new prompt.
+        XCTAssertEqual(
+            messages[0].rawContent,
+            "@file:/root/.hermes/attachments/report.pdf\n\nCompare these\n@image:/root/.hermes/images/a.png"
+        )
+        XCTAssertEqual(messages[0].attachments?.map(\.uri), [
+            "/root/.hermes/attachments/report.pdf",
+            "/root/.hermes/images/a.png"
+        ])
+        XCTAssertEqual(messages[0].attachments?.last?.inlineImage?.rowId, 14)
+    }
+
     func testCaptionedPlatformPictureKeepsItsCaption() {
         let messages = MessageNormalizer.normalizeMessages([
             .object([
@@ -226,6 +248,17 @@ extension MessageNormalizerTests {
         XCTAssertEqual(TranscriptImageCache.cachedFile(for: key, in: directory), stored)
         XCTAssertEqual(try Data(contentsOf: stored), Data(base64Encoded: "iVBORw0KGgo="))
         XCTAssertNil(TranscriptImageCache.store(dataURL: "data:text/plain;base64,aGk=", for: key, in: directory))
+
+        // Kept again under another type, the newer copy is the one found.
+        let jpeg = try XCTUnwrap(TranscriptImageCache.store(
+            dataURL: "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+            for: key,
+            in: directory
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stored.path))
+        XCTAssertEqual(TranscriptImageCache.store(dataURL: "data:image/png;base64,iVBORw0KGgo=", for: key, in: directory), stored)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: jpeg.path))
+        XCTAssertEqual(TranscriptImageCache.cachedFile(for: key, in: directory), stored)
 
         // Another server's same-named file is kept apart.
         XCTAssertNotEqual(
