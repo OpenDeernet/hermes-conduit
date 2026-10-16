@@ -38,7 +38,8 @@ struct ArtifactItem: Identifiable, Equatable, Hashable {
     let messageID: Int
     let date: Date
 
-    /// One path or URL is one artifact.
+    /// One path or URL is one artifact, listed at its newest mention, even
+    /// when several chats sent it (the host lists it the same way).
     var id: String { path ?? url?.absoluteString ?? "\(messageID)|\(name)" }
 
     var isVisual: Bool { kind == .image || kind == .video }

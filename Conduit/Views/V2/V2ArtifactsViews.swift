@@ -221,10 +221,18 @@ private struct ArtifactsList: View {
                 section(day.day, items: day.items)
             }
             if nextBefore != nil {
-                // Reaching the end reads the next page.
-                ProgressView()
+                if failure != nil {
+                    Button("Try Again") {
+                        failure = nil
+                        Task { await loadMore() }
+                    }
                     .frame(maxWidth: .infinity, minHeight: 60)
-                    .task(id: nextBefore) { await loadMore() }
+                } else {
+                    // Reaching the end reads the next page.
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: 60)
+                        .task(id: nextBefore) { await loadMore() }
+                }
             }
         }
     }
@@ -283,7 +291,7 @@ private struct ArtifactsList: View {
         Button {
             open(item)
         } label: {
-            ArtifactThumbnail(item: item, resolver: appState.gatewayMediaResolver)
+            ArtifactThumbnail(item: item, resolver: appState.gatewayMediaResolver, profile: appState.activeProfile)
                 .aspectRatio(1, contentMode: .fit)
                 .overlay {
                     if openingID == item.id {
@@ -421,7 +429,7 @@ private struct ArtifactsList: View {
         Haptics.light()
         openingID = item.id
         let resolver = appState.gatewayMediaResolver
-        Task {
+        Task { @MainActor in
             defer { openingID = nil }
             if item.kind == .page {
                 guard let dataURL = await resolver.dataURL(for: path),
@@ -498,8 +506,10 @@ private struct ArtifactsList: View {
             guard ticket == generation else { return }
             items = ArtifactsClient.merged(items, with: result.items)
             nextBefore = result.nextBefore
+        } catch is CancellationError {
+            return
         } catch {
-            // The spinner stays; scrolling back to it tries again.
+            // The end of the list offers Try Again.
             guard ticket == generation else { return }
             failure = UserFacingError.message(for: error)
         }
@@ -547,7 +557,11 @@ private struct ArtifactIcon: View {
 private struct ArtifactThumbnail: View {
     let item: ArtifactItem
     let resolver: GatewayMediaDataURLResolver
+    let profile: String
     @State private var image: UIImage?
+
+    /// One host path can be another file in another profile.
+    private var cacheKey: NSString { NSString(string: "\(profile)\u{0}\(item.path ?? "")") }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -592,7 +606,7 @@ private struct ArtifactThumbnail: View {
 
     private func loadThumbnail() async {
         guard item.kind == .image, item.exists, let path = item.path else { return }
-        if let cached = ArtifactThumbnailCache.shared.object(forKey: path as NSString) {
+        if let cached = ArtifactThumbnailCache.shared.object(forKey: cacheKey) {
             image = cached
             return
         }
@@ -610,7 +624,7 @@ private struct ArtifactThumbnail: View {
             return UIImage(cgImage: cgImage)
         }.value
         guard let thumbnail, !Task.isCancelled else { return }
-        ArtifactThumbnailCache.shared.setObject(thumbnail, forKey: path as NSString)
+        ArtifactThumbnailCache.shared.setObject(thumbnail, forKey: cacheKey)
         image = thumbnail
     }
 }

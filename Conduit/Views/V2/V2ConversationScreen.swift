@@ -254,7 +254,7 @@ private struct V2ConversationMenu: View {
                     Label(AppLocalization.string("Artifacts"), systemImage: "square.grid.2x2")
                 }
                 // A saved copy has no host to ask.
-                .disabled(appState.offlineChatPresentation != nil)
+                .disabled(appState.activeChatArtifactSessionIDs.isEmpty)
                 if let session = appState.activeChatSessionSummary {
                     Section {
                         SessionActionMenuItems(
