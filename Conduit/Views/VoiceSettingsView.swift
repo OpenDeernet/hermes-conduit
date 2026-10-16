@@ -175,6 +175,9 @@ struct VoiceSettingsView: View {
     @State private var transcriptionMode: VoiceTranscriptionMode
     /// Who speaks replies as saved; nil is automatic.
     @State private var speechOutputChoice: VoiceSpeechOutput?
+    /// The saved choice as the host last rendered it, so a profile switch
+    /// or a choice made elsewhere shows here too.
+    let savedSpeechOutput: VoiceSpeechOutput?
     @State private var appleSpeechAvailability: AppleSpeechRecognitionAvailability
     @State private var continuousConversation: Bool
     /// Whether the profile has a saved speech-to-text choice. Turning voice
@@ -282,6 +285,7 @@ struct VoiceSettingsView: View {
         _transcriptionMode = State(initialValue: transcriptionMode)
         _transcriptionModeChosen = State(initialValue: transcriptionModeChosen)
         _speechOutputChoice = State(initialValue: speechOutput)
+        self.savedSpeechOutput = speechOutput
         self.savedTranscriptionModeChosen = transcriptionModeChosen
         _microphonePermission = State(initialValue: AVAudioApplication.shared.recordPermission)
         _voiceMode = State(initialValue: Self.mode(
@@ -355,6 +359,9 @@ struct VoiceSettingsView: View {
         }
         .onChange(of: savedTranscriptionModeChosen) { _, chosen in
             if chosen { transcriptionModeChosen = true }
+        }
+        .onChange(of: savedSpeechOutput) { _, saved in
+            speechOutputChoice = saved
         }
         // Back from iPhone Settings: the permission steps show what was allowed.
         .onChange(of: scenePhase) { _, phase in

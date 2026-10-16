@@ -30,9 +30,10 @@ enum VoiceSpeechOutput: String, Codable, Equatable {
     /// breaks whenever Microsoft changes its handshake.
     static func resolved(chosen: VoiceSpeechOutput?, snapshot: VoiceCapabilitySnapshot) -> VoiceSpeechOutput {
         if let chosen { return chosen }
+        let provider = snapshot.selectedTTSProvider.trimmingCharacters(in: .whitespaces).lowercased()
         let hermesVoiceIsOwn = snapshot.supportsSpeech
-            && !snapshot.selectedTTSProvider.isEmpty
-            && snapshot.selectedTTSProvider != VoiceSetupDefaults.edgeTTSProviderID
+            && !provider.isEmpty
+            && provider != VoiceSetupDefaults.edgeTTSProviderID
         return hermesVoiceIsOwn ? .hermes : .onDevice
     }
 }
@@ -78,11 +79,6 @@ final class OnDeviceSpeechStream: VoiceSpeechStream {
         self.fallbackLanguage = fallbackLanguage
         self.onStart = onStart
         self.onPCM16 = onPCM16
-    }
-
-    deinit {
-        let synthesizer = synthesizer
-        Task { @MainActor in synthesizer.stop() }
     }
 
     func append(_ text: String) async throws {
@@ -212,7 +208,10 @@ final class SystemSpeechSynthesizer: NSObject, OnDeviceSpeechSynthesizing, AVSpe
     private var onDone: (@MainActor () -> Void)?
     private var request: AVSpeechUtterance?
     private var watchdog: Task<Void, Never>?
-    private var voices: [String: AVSpeechSynthesisVoice] = [:]
+    /// When the current utterance last produced audio (or started).
+    private var lastAudio = ContinuousClock.now
+    /// Best voice per language; a cached nil means none is installed.
+    private var voices: [String: AVSpeechSynthesisVoice?] = [:]
 
     override init() {
         super.init()
@@ -244,7 +243,7 @@ final class SystemSpeechSynthesizer: NSObject, OnDeviceSpeechSynthesizing, AVSpe
                     if isEnd {
                         self.finish(id)
                     } else {
-                        self.armWatchdog(id)
+                        self.lastAudio = .now
                         if !data.isEmpty { onAudio(data, rate) }
                     }
                 }
@@ -274,10 +273,16 @@ final class SystemSpeechSynthesizer: NSObject, OnDeviceSpeechSynthesizing, AVSpe
     /// that has gone quiet this long is done.
     private func armWatchdog(_ id: Int) {
         watchdog?.cancel()
-        watchdog = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(8))
-            guard !Task.isCancelled else { return }
-            self?.finish(id)
+        lastAudio = .now
+        let quiet = Duration.seconds(8)
+        watchdog = Task { @MainActor [weak self] in
+            while let self, self.utterance == id {
+                do { try await Task.sleep(until: self.lastAudio + quiet, clock: .continuous) } catch { return }
+                if ContinuousClock.now - self.lastAudio >= quiet {
+                    self.finish(id)
+                    return
+                }
+            }
         }
     }
 
@@ -315,7 +320,7 @@ final class SystemSpeechSynthesizer: NSObject, OnDeviceSpeechSynthesizing, AVSpe
         }
         let chosen = candidates.max { rank($0) < rank($1) } ?? AVSpeechSynthesisVoice(language: wanted)
         if chosen == nil { onDeviceSpeechLog.notice("No iPhone voice for \(wanted, privacy: .public)") }
-        voices[key] = chosen
+        voices[key] = .some(chosen)
         return chosen
     }
 
@@ -420,7 +425,9 @@ final class FallbackSpeechStream: VoiceSpeechStream {
         if !usingFallback, hermesError != nil { try await switchToOnDevice() }
         guard let current else { throw hermesError ?? CancellationError() }
         do {
-            return try await current.finish()
+            let streamedPCM = try await current.finish()
+            text = ""
+            return streamedPCM
         } catch {
             guard !usingFallback else { throw error }
             try hermesFailed(error)

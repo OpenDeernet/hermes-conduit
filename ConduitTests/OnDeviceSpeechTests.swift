@@ -25,6 +25,7 @@ extension HermesVoiceGatewayTimeoutTests {
         }
 
         XCTAssertEqual(VoiceSpeechOutput.resolved(chosen: nil, snapshot: snapshot("edge", ready: true)), .onDevice)
+        XCTAssertEqual(VoiceSpeechOutput.resolved(chosen: nil, snapshot: snapshot("Edge", ready: true)), .onDevice)
         XCTAssertEqual(VoiceSpeechOutput.resolved(chosen: nil, snapshot: snapshot("elevenlabs", ready: false)), .onDevice)
         XCTAssertEqual(VoiceSpeechOutput.resolved(chosen: nil, snapshot: .unavailable), .onDevice)
         XCTAssertEqual(VoiceSpeechOutput.resolved(chosen: nil, snapshot: snapshot("openai", ready: true)), .hermes)
