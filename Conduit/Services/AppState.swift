@@ -1224,37 +1224,47 @@ final class AppState: ObservableObject {
     /// A push from a Bot Chat is refused: its decisions are answered in
     /// Bots. A call from Hermes is the exception. Answering it opens voice
     /// in the call's own chat, so that Bot Chat opens the way Bots opens it,
-    /// under the bot's own profile with the workspace left as it is.
+    /// under the bot's own profile with the workspace left as it is. Only a
+    /// bot positively named as the chat's owner opens: `rowIDs` are the
+    /// catalog row's ids, and `canonicalProfile` is a profile the gateway
+    /// confirmed this is the canonical chat of. A chat that only carries
+    /// the reserved title proves no owner and stays refused. Call pushes
+    /// never carry a decision payload (the notifier sends none with
+    /// `call.requested`), so no card is recorded here.
     private func routeBotOwnedNotification(
         _ target: ConduitNotificationTarget,
-        notifiedProfile: String
+        notifiedProfile: String,
+        rowIDs: Set<String> = [],
+        canonicalProfile: String? = nil
     ) async -> Bool {
         guard target.call != nil,
-              let bot = botOwningNotificationTarget(target, notifiedProfile: notifiedProfile) else {
+              let bot = botOwningNotificationTarget(target, rowIDs: rowIDs, canonicalProfile: canonicalProfile) else {
             refuseBotOwnedRouting(for: notifiedProfile)
             return false
         }
         HermesCallTrace.shared.note("Call from a Bot Chat: opening it in Bots")
+        guard await openBotChat(for: bot) else { return false }
         showSidebar = false
-        return await openBotChat(for: bot)
+        return true
     }
 
-    /// The roster's bot whose Bot Chat a push names: the bot owning one of
-    /// the push's ids, else the bot this process registered for one of
-    /// them, else the bot of the profile the push carried.
+    /// The roster's bot that owns the chat a push names: the bot whose
+    /// canonical chat is one of its ids, else the bot this process
+    /// registered for one of them, else the bot of `canonicalProfile`. An id
+    /// registered to a bot the roster doesn't list names no other bot.
     private func botOwningNotificationTarget(
         _ target: ConduitNotificationTarget,
-        notifiedProfile: String
+        rowIDs: Set<String>,
+        canonicalProfile: String?
     ) -> BotProfile? {
         let ids = [target.sessionId, target.durableSessionID].compactMap {
             ChatScrollIdentityNormalization.sessionID($0)
-        }
+        } + rowIDs.compactMap { ChatScrollIdentityNormalization.sessionID($0) }.sorted()
         if let bot = botOwnership.bot(owningAny: Set(ids)) { return bot }
-        if let registered = ids.lazy.compactMap({ self.botConversationProfile(for: $0) }).first,
-           let bot = Self.linkedBot(named: registered, in: botRoster) {
-            return bot
+        if let registered = ids.lazy.compactMap({ self.botConversationProfile(for: $0) }).first {
+            return Self.linkedBot(named: registered, in: botRoster)
         }
-        return Self.linkedBot(named: notifiedProfile, in: botRoster)
+        return canonicalProfile.flatMap { Self.linkedBot(named: $0, in: botRoster) }
     }
 
     /// Whether a push's conversation is a bot's canonical chat, by any id the
@@ -16916,7 +16926,11 @@ final class AppState: ObservableObject {
             ) else { return false }
             if pushesCanonicalChat {
                 traceStage = "bot chat"
-                return await routeBotOwnedNotification(target, notifiedProfile: notified)
+                return await routeBotOwnedNotification(
+                    target,
+                    notifiedProfile: notified,
+                    canonicalProfile: targetProfile
+                )
             }
         }
         if let notified = target.profile, let targetProfile,
@@ -16938,7 +16952,11 @@ final class AppState: ObservableObject {
             ) else { return false }
             if pushesCanonicalChat {
                 traceStage = "bot chat"
-                return await routeBotOwnedNotification(target, notifiedProfile: notified)
+                return await routeBotOwnedNotification(
+                    target,
+                    notifiedProfile: notified,
+                    canonicalProfile: targetProfile
+                )
             }
         }
         if let targetProfile, targetProfile != activeProfile {
@@ -17010,7 +17028,7 @@ final class AppState: ObservableObject {
             ChatScrollIdentityNormalization.sessionID($0)
         })
         let botOwned = botOwnedSessionIDs
-        if sessions.contains(where: { row in
+        if let botRow = sessions.first(where: { row in
             let rowIDs = Set([row.id, row.storedSessionId].compactMap { $0 } + row.alternateIds)
             return !rowIDs.isDisjoint(with: routedIDs)
                 && (BotChatHygiene.isCanonicalBotChatRow(row, roster: botRoster)
@@ -17018,7 +17036,11 @@ final class AppState: ObservableObject {
                     || BotChatHygiene.isReservedCanonicalTitleRow(row))
         }) {
             traceStage = "bot chat"
-            return await routeBotOwnedNotification(target, notifiedProfile: target.profile ?? activeProfile)
+            return await routeBotOwnedNotification(
+                target,
+                notifiedProfile: target.profile ?? activeProfile,
+                rowIDs: Set([botRow.id, botRow.storedSessionId, botRow.lineageRootId].compactMap { $0 } + botRow.alternateIds)
+            )
         }
         // A decision raised while the app was backgrounded is delivered as a
         // structured payload on the notification (the one-shot gateway stream

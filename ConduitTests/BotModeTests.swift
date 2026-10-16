@@ -2588,9 +2588,10 @@ final class BotModeTests: XCTestCase {
         await harness.appState.refreshBotRoster()
         harness.appState.noteBotChatSessionForTesting("runtime-9", profile: "atlas")
 
+        // No profile on the push: only the registry can name the bot.
         let routed = await harness.appState.openNotificationTarget(
             ConduitNotificationTarget(
-                profile: "atlas",
+                profile: nil,
                 sessionId: "runtime-9",
                 type: HermesCallRequest.type,
                 call: HermesCallRequest(id: "call-1", kind: .done, title: nil, sessionIDs: ["runtime-9"])
@@ -2627,9 +2628,11 @@ final class BotModeTests: XCTestCase {
         await harness.appState.refreshBotRoster()
         harness.appState.noteBotChatSessionForTesting("runtime-9", profile: "ghost")
 
+        // The push names a listed bot's profile, but the chat is ghost's:
+        // that profile stamp never picks another bot's chat.
         let routed = await harness.appState.openNotificationTarget(
             ConduitNotificationTarget(
-                profile: "ghost",
+                profile: "atlas",
                 sessionId: "runtime-9",
                 type: HermesCallRequest.type,
                 call: HermesCallRequest(id: "call-1", kind: .done, title: nil, sessionIDs: ["runtime-9"])
@@ -2639,6 +2642,50 @@ final class BotModeTests: XCTestCase {
         XCTAssertFalse(routed)
         XCTAssertTrue(resumedIDs.isEmpty)
         XCTAssertEqual(harness.appState.activeProfile, "default")
+        XCTAssertEqual(
+            harness.appState.errorMessage,
+            "This decision belongs to a Bot Chat. Open Bots to answer it."
+        )
+    }
+
+    /// An ordinary chat that only carries the reserved "Bot Chat" title is
+    /// no bot's chat: a call from it is not opened in Bots, even when its
+    /// profile is on the roster.
+    func testCallFromChatWithOnlyTheReservedTitleIsNotOpenedInBots() async {
+        let harness = makeBotHarness(lifecycleOperations: ChatResumeLifecycleOperations(
+            loadCatalog: { _, _ in [self.makeSessionSummary(id: "ordinary-x", title: "Bot Chat")] },
+            openSessionWithProfile: { _, id, _, _ in
+                SessionResumeResult(
+                    sessionId: id,
+                    messages: [],
+                    snapshot: SessionRuntimeSnapshot(object: ["running": .bool(false)])
+                )
+            },
+            refreshContext: { _, _ in },
+            botRoster: { _ in
+                BotRosterSnapshot(
+                    bots: [self.makeBot(name: "default", canonicalID: "stored-default")],
+                    supportsBotProtocol: false
+                )
+            },
+            findBotChat: { _, _ in [] }
+        ))
+        let connection = HermesConnection(baseUrl: "https://one.example", ticket: "ticket")
+        harness.appState.client = HermesClient(connection: connection, profile: "default")
+        harness.appState.connection = connection
+        await harness.appState.refreshBotRoster()
+
+        let routed = await harness.appState.openNotificationTarget(
+            ConduitNotificationTarget(
+                profile: "default",
+                sessionId: "ordinary-x",
+                type: HermesCallRequest.type,
+                call: HermesCallRequest(id: "call-1", kind: .done, title: nil, sessionIDs: ["ordinary-x"])
+            )
+        )
+
+        XCTAssertFalse(routed)
+        XCTAssertNotEqual(harness.appState.activeSessionId, "stored-default", "no bot's chat is opened")
         XCTAssertEqual(
             harness.appState.errorMessage,
             "This decision belongs to a Bot Chat. Open Bots to answer it."
