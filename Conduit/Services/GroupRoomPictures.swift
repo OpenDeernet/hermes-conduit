@@ -165,9 +165,14 @@ extension AppState {
             return
         }
         let dashboard = activeDashboardID
+        let epoch = groupRoomEpoch
         do {
             if let image {
-                guard let upload = GroupRoomPictures.uploadBody(for: image) else {
+                // Scaling and encoding a large photo stays off the main actor.
+                let upload = await Task.detached(priority: .userInitiated) {
+                    GroupRoomPictures.uploadBody(for: image)
+                }.value
+                guard let upload else {
                     errorMessage = AppLocalization.string("That picture could not be used.")
                     return
                 }
@@ -177,7 +182,7 @@ extension AppState {
                     encodedBody: upload.body,
                     timeoutMilliseconds: GroupRoomPictures.uploadTimeoutMilliseconds
                 )
-                guard activeDashboardID == dashboard else { return }
+                guard activeDashboardID == dashboard, groupRoomEpoch == epoch else { return }
                 guard let revision = GroupRoomPictures.storedRevision(from: answer) else {
                     errorMessage = AppLocalization.string("The host's answer couldn't be read. Update the Conduit plugin and try again.")
                     return
@@ -186,7 +191,7 @@ extension AppState {
                 groupRoomPictureRevisions[roomID] = revision
             } else {
                 _ = try await bridge.requestJSON(path: path, method: "DELETE")
-                guard activeDashboardID == dashboard else { return }
+                guard activeDashboardID == dashboard, groupRoomEpoch == epoch else { return }
                 groupRoomPictureData.removeValue(forKey: roomID)
                 groupRoomPictureRevisions.removeValue(forKey: roomID)
             }
