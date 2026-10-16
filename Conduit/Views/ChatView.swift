@@ -1363,7 +1363,7 @@ private struct UserImageAttachmentPreview: View {
         }
         // The original kept on the phone (#652).
         if let key = gatewayResolver?.imageCacheKey(for: attachment),
-           let kept = TranscriptImageCache.cachedFile(for: key),
+           let kept = TranscriptImageCache.cachedFile(for: key, touch: true),
            MediaPreviewPresenter.shared.present(fileURL: kept, title: attachment.name) {
             return
         }

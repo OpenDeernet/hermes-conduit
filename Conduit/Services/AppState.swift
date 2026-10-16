@@ -25786,7 +25786,7 @@ final class AppState: ObservableObject {
             inlineImageRowFetches[key] = fetch
         }
         guard case .found(let urls) = await fetch.value else { return nil }
-        guard ref.index < urls.count, let url = urls[ref.index] else {
+        guard urls.indices.contains(ref.index), let url = urls[ref.index] else {
             // The row holds no copy of this picture (a web link, or fewer
             // pictures than stand-ins), so it is not asked for again.
             inlineImageRowsUnavailable.insert(pictureKey)
@@ -25819,6 +25819,10 @@ final class AppState: ObservableObject {
             guard let rows = Self.persistedMessageRows(in: response) else { return .unavailable }
             let urls = MessageNormalizer.inlineImageDataURLs(inRows: rows, rowId: ref.rowId)
             return urls.isEmpty ? .unavailable : .found(urls)
+        } catch DashboardTicketBridgeError.oversizedResponse {
+            // A stored message never gets smaller, so it is not asked for
+            // again.
+            return .unavailable
         } catch {
             return Self.historySourceIsUnavailable(error) ? .unavailable : .failed
         }
