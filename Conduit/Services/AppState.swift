@@ -6105,29 +6105,33 @@ final class AppState: ObservableObject {
 
     /// Continues a saved call with a new live call on the selected engine.
     /// It is seeded with the row (a summary when it's long) and appends to
-    /// the same row.
-    func resumeVoiceCall(sessionID: String) async {
-        guard canResumeVoiceCall, !isPreparingVoiceResume else { return }
+    /// the same row. False when no call started (one is already being
+    /// prepared, or the profile changed meanwhile).
+    @discardableResult
+    func resumeVoiceCall(sessionID: String) async -> Bool {
+        guard canResumeVoiceCall, !isPreparingVoiceResume else { return false }
         keepVoiceFromHermesCallCleanup()
         isPreparingVoiceResume = true
         defer { isPreparingVoiceResume = false }
         let profile = activeProfile
         let context = await voiceResumeContext(sessionID: sessionID, profile: profile)
-        guard profile == activeProfile, canResumeVoiceCall else { return }
+        guard profile == activeProfile, canResumeVoiceCall else { return false }
         // Without the saved turns the call still continues the row.
         pendingVoiceResume = (sessionID, context ?? VoiceResumeContext(summary: nil, recent: []))
         // A call started from a chat goes back to that chat.
         let thread = voiceCallChatLinks.latest(forCall: sessionID, profile: profile)?.thread
+        let started: Bool
         if isGeminiLiveEnabled {
-            openGeminiLiveConversation(attachingTo: thread)
+            started = openGeminiLiveConversation(attachingTo: thread)
         } else if isGrokLiveEnabled {
-            openGrokLiveConversation(attachingTo: thread)
+            started = openGrokLiveConversation(attachingTo: thread)
         } else {
-            openGPTLiveConversation(attachingTo: thread)
+            started = openGPTLiveConversation(attachingTo: thread)
         }
         // Starting the call took it; a call already running didn't, and a
         // later unrelated call must not.
         pendingVoiceResume = nil
+        return started
     }
 
     /// What a resumed call gets from the row. A long row's older turns are
@@ -26614,8 +26618,7 @@ final class AppState: ObservableObject {
         // not another one beside it.
         if liveEngine != nil, targetProfile == activeProfile,
            let callID = Self.savedCallToResume(source: intent.source, openCallID: activeVoiceCallSessionID, canResume: canResumeVoiceCall) {
-            await resumeVoiceCall(sessionID: callID)
-            return true
+            return await resumeVoiceCall(sessionID: callID)
         }
         if intent.source == .screenQuestion {
             // The device-test gate: an engine not cleared for screen
