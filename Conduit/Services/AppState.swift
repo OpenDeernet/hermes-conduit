@@ -16480,7 +16480,19 @@ final class AppState: ObservableObject {
         }
         let flightKey = bot.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if let flight = botChatOpenFlights[flightKey] {
-            return await flight.task?.value ?? false
+            let joined = await flight.task?.value ?? false
+            // A notification that joined a flight its own newer transition
+            // superseded would otherwise inherit that stand-down and do
+            // nothing. While its transition is still current, it opens the
+            // chat itself; the finished flight has left the map, so the
+            // one-flight-per-bot fence still holds.
+            guard !joined,
+                  let viewportTransitionGeneration,
+                  chatViewportTransitionIsCurrent(generation: viewportTransitionGeneration),
+                  isConnected, client === self.client,
+                  botChatOpenFlights[flightKey] == nil else {
+                return joined
+            }
         }
         // The closure captures the box WEAKLY: a strong capture would form
         // a flight<->task retain cycle that outlives the map entry.
@@ -17116,7 +17128,12 @@ final class AppState: ObservableObject {
         // match keeps its own diagnostic.
         if notificationTargetIsBotChat(target) {
             traceStage = "bot chat"
-            return await routeBotOwnedNotification(target, notifiedProfile: target.profile ?? "", attemptID: notificationAttemptID, transitionGeneration: transitionGeneration)
+            return await routeBotOwnedNotification(
+                target,
+                notifiedProfile: target.profile ?? "",
+                attemptID: notificationAttemptID,
+                transitionGeneration: transitionGeneration
+            )
         }
         let targetProfile = notificationProfileID(target.profile)
         if let notified = target.profile, let targetProfile,
@@ -17147,7 +17164,12 @@ final class AppState: ObservableObject {
                 // profile this dashboard's workspace would turn its Bot Chat
                 // into the workspace's own context.
                 traceStage = "bot chat"
-                return await routeBotOwnedNotification(target, notifiedProfile: notified, attemptID: notificationAttemptID, transitionGeneration: transitionGeneration)
+                return await routeBotOwnedNotification(
+                    target,
+                    notifiedProfile: notified,
+                    attemptID: notificationAttemptID,
+                    transitionGeneration: transitionGeneration
+                )
             }
             guard botEvidenceIsAvailable else {
                 // No usable Bot Mode evidence (the roster could not be
