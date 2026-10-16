@@ -168,7 +168,9 @@ final class ArtifactsClient {
         guard response["ok"] as? Bool == true, let rows = response["items"] as? [[String: Any]] else {
             throw Failure.malformed
         }
-        return ArtifactPage(items: rows.compactMap(ArtifactItem.init), nextBefore: response["next_before"] as? Int)
+        // Each artifact once, so list identity holds whatever the host sends.
+        return ArtifactPage(items: merged([], with: rows.compactMap(ArtifactItem.init)),
+                            nextBefore: response["next_before"] as? Int)
     }
 
     /// `older` appended to `items`, each artifact once (its newest mention

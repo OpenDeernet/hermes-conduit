@@ -220,6 +220,9 @@ private struct ArtifactsList: View {
             ForEach(ArtifactsClient.days(items)) { day in
                 section(day.day, items: day.items)
             }
+            // The last filter's rows, dimmed until the new ones arrive.
+            .opacity(loadedKey == currentKey ? 1 : 0.45)
+            .allowsHitTesting(loadedKey == currentKey)
             if nextBefore != nil {
                 if failure != nil {
                     Button("Try Again") {

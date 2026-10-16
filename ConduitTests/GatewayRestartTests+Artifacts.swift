@@ -66,6 +66,8 @@ extension GatewayRestartTests {
         let merged = ArtifactsClient.merged(first, with: older)
         XCTAssertEqual(merged.map(\.name), ["map.png", "older.png"])
         XCTAssertEqual(merged.first?.messageID, 12)
+        let repeated = try ArtifactsClient.parse(["ok": true, "items": [artifactRow([:]), artifactRow(["message_id": 3])]])
+        XCTAssertEqual(repeated.items.map(\.messageID), [12])
     }
 
     func testArtifactFiltersMatchTheHostsGroups() {
