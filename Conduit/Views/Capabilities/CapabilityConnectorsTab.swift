@@ -55,10 +55,7 @@ struct CapabilityConnectorsTab: View {
                 )
             } else {
                 if let error = store.connectorsError {
-                    Text("Refresh failed: \(error)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 16)
+                    CapabilityRefreshBanner(message: error)
                 }
                 if let actionError {
                     Text(verbatim: actionError)
@@ -572,8 +569,8 @@ struct ConnectorDetailPage: View {
                 dismiss()
             } catch {
                 message = UserFacingError.message(for: error)
+                removing = false
             }
-            removing = false
         }
     }
 }

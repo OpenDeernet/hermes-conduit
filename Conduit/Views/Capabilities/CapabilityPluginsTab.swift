@@ -64,10 +64,7 @@ struct CapabilityPluginsTab: View {
                 }
             } else {
                 if let error = store.pluginsError {
-                    Text("Refresh failed: \(error)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 16)
+                    CapabilityRefreshBanner(message: error)
                 }
                 if !canManage {
                     Text("Hermes installs plugins for the host's default profile. Switch to it to change them.")
