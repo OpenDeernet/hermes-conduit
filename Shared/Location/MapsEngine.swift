@@ -338,6 +338,20 @@ enum MapsEngine {
             return .failure(MapsRun.failure(error, transit: request.mode == .transit))
         }
     }
+
+    /// The place `ref` names, resolved as a lookup resolves it, to open
+    /// Apple Maps there (navigate). Never "me": directions start there.
+    static func destination(_ ref: MapsPlaceRef, places: [LocationSavedPlace], near hint: CLLocationCoordinate2D?,
+                            deadline: TimeInterval) async -> Result<MKMapItem, MapsFailure> {
+        let run = MapsRun(request: MapsRequest(id: "navigate", action: .lookup), context: MapsContext(me: nil, places: places))
+        return await MapsDeadline.run(after: deadline, fallback: .failure(.timeout)) {
+            do {
+                return .success(try await run.destination(ref, near: hint))
+            } catch {
+                return .failure(MapsRun.failure(error, transit: false))
+            }
+        }
+    }
 }
 
 /// One request's work: the places it resolved and "me".
@@ -429,6 +443,11 @@ private final class MapsRun {
     /// else near `fallback`.
     private func hint(_ fallback: CLLocationCoordinate2D? = nil) -> CLLocationCoordinate2D? {
         meLocation?.coordinate ?? fallback
+    }
+
+    func destination(_ ref: MapsPlaceRef, near hint: CLLocationCoordinate2D?) async throws -> MKMapItem {
+        if ref == .me { throw MapsFailure.failed("Directions start from where the user is; give where to go.") }
+        return try await resolve(ref, near: hint).item
     }
 
     private func resolve(_ ref: MapsPlaceRef, near hint: CLLocationCoordinate2D?) async throws -> Resolved {

@@ -109,6 +109,9 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
             if AppState.isPhoneChangesPush(request.content.userInfo) {
                 // A calendar change Hermes asked for: its card shows once fetched.
                 await AppStateRuntimeRegistry.shared.appState.handlePhoneChangesPush(request.content.userInfo)
+            } else if let maps = MapsNavigator.url(fromNotification: request.content.userInfo) {
+                // Directions Conduit couldn't open from the background.
+                await UIApplication.shared.open(maps)
             } else if request.trigger is UNPushNotificationTrigger {
                 PushNotificationService.shared.receiveNotificationPayload(request.content.userInfo)
             } else {
