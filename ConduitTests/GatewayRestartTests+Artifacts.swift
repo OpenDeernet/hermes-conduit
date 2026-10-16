@@ -78,7 +78,7 @@ extension GatewayRestartTests {
 
     func testArtifactsGroupByDayNewestFirst() throws {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let items = try ArtifactsClient.parse(["ok": true, "items": [
             artifactRow(["timestamp": 1_760_090_000.0, "path": "/a.png"]),
             artifactRow(["timestamp": 1_760_086_500.0, "path": "/b.png"]),

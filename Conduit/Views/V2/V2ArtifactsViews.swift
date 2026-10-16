@@ -594,7 +594,7 @@ private struct ArtifactThumbnail: View {
                     .padding(7)
             }
         }
-        .task(id: item.id) { await loadThumbnail() }
+        .task(id: cacheKey) { await loadThumbnail() }
     }
 
     private var placeholderGlyph: some View {
