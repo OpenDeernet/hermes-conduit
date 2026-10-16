@@ -975,6 +975,7 @@ final class HermesClient: ObservableObject {
         guard !isProbing, self.socket === socket, !closedIntentionally else { return }
         isProbing = true
         defer { isProbing = false }
+        let probeStarted = Date()
         for _ in 0..<2 {
             do {
                 try await ping(timeout: keepalivePingTimeout)
@@ -983,8 +984,8 @@ final class HermesClient: ObservableObject {
                 return
             } catch {
                 guard self.socket === socket, !closedIntentionally else { return }
-                // Any frame during the wait proves the socket alive.
-                if Date().timeIntervalSince(lastInboundAt) < keepalivePingTimeout { return }
+                // Any frame since the probe began proves the socket alive.
+                if lastInboundAt > probeStarted { return }
             }
         }
         guard self.socket === socket, !closedIntentionally else { return }
