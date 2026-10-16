@@ -1285,7 +1285,8 @@ final class AppState: ObservableObject {
         notifiedProfile: String,
         rowIDs: Set<String> = [],
         canonicalProfile: String? = nil,
-        attemptID: UUID
+        attemptID: UUID,
+        transitionGeneration: UInt64
     ) async -> Bool {
         guard let bot = botOwningNotificationTarget(target, rowIDs: rowIDs, canonicalProfile: canonicalProfile),
               target.call != nil || !Self.namesProfileOnlyWithCaseFolded(notifiedProfile, bot: bot) else {
@@ -1310,7 +1311,11 @@ final class AppState: ObservableObject {
             )
             migrationIDs = [requestedID]
         }
-        guard await openBotChat(for: bot, presentationMigrationSessionIDs: migrationIDs) else {
+        guard await openBotChat(
+            for: bot,
+            presentationMigrationSessionIDs: migrationIDs,
+            viewportTransitionGeneration: transitionGeneration
+        ) else {
             // A failed open evicts the pre-open card, as the workspace route
             // does, so no later open promotes it from the push-named id.
             if let decision = target.decision,
@@ -1330,8 +1335,8 @@ final class AppState: ObservableObject {
         // to the gateway's pending list, which the open already read.
         // A newer notification tap that replaced this attempt owns the
         // screen: the cache is still settled, but nothing is published over
-        // it. (The chat open began its own viewport transition, which already
-        // fences out any other open.)
+        // it. (The chat open reused this attempt's viewport transition, so a
+        // newer chat open already superseded it before it selected a chat.)
         let attemptIsCurrent = activeNotificationOpenAttemptID == attemptID
         if let decision = target.decision,
            let evictionKey = Self.pendingDecisionEvictionKey(for: decision),
@@ -16460,10 +16465,14 @@ final class AppState: ObservableObject {
     /// are the ids a notification recorded its decision card under; the
     /// open (existing, created or adopted chat) promotes that card into the
     /// chat (a flight already running for the bot keeps its own).
+    /// `viewportTransitionGeneration` is the transition a notification open
+    /// already began: the chat open reuses it, so a newer tap that began its
+    /// own supersedes this open before it selects the chat.
     @discardableResult
     func openBotChat(
         for bot: BotProfile,
-        presentationMigrationSessionIDs: Set<String> = []
+        presentationMigrationSessionIDs: Set<String> = [],
+        viewportTransitionGeneration: UInt64? = nil
     ) async -> Bool {
         guard let client, isConnected else {
             errorMessage = AppLocalization.string("Connect to Hermes to chat with bots.")
@@ -16492,7 +16501,8 @@ final class AppState: ObservableObject {
             return await self.resolveAndOpenBotChat(
                 bot,
                 client: client,
-                presentationMigrationSessionIDs: presentationMigrationSessionIDs
+                presentationMigrationSessionIDs: presentationMigrationSessionIDs,
+                viewportTransitionGeneration: viewportTransitionGeneration
             )
         }
         flight.task = task
@@ -16511,7 +16521,8 @@ final class AppState: ObservableObject {
     private func resolveAndOpenBotChat(
         _ bot: BotProfile,
         client: HermesClient,
-        presentationMigrationSessionIDs: Set<String> = []
+        presentationMigrationSessionIDs: Set<String> = [],
+        viewportTransitionGeneration: UInt64? = nil
     ) async -> Bool {
         let epoch = botRosterEpoch
         // THE identity lookup, on the bot's own profile. A failed RPC is not
@@ -16539,14 +16550,16 @@ final class AppState: ObservableObject {
                 resumeID: resumeID,
                 epoch: epoch,
                 client: client,
-                presentationMigrationSessionIDs: presentationMigrationSessionIDs
+                presentationMigrationSessionIDs: presentationMigrationSessionIDs,
+                viewportTransitionGeneration: viewportTransitionGeneration
             )
         case .success(.create):
             return await createAndOpenBotChat(
                 bot,
                 client: client,
                 epoch: epoch,
-                presentationMigrationSessionIDs: presentationMigrationSessionIDs
+                presentationMigrationSessionIDs: presentationMigrationSessionIDs,
+                viewportTransitionGeneration: viewportTransitionGeneration
             )
         }
     }
@@ -16561,13 +16574,14 @@ final class AppState: ObservableObject {
         resumeID: String,
         epoch: Int,
         client: HermesClient,
-        presentationMigrationSessionIDs: Set<String> = []
+        presentationMigrationSessionIDs: Set<String> = [],
+        viewportTransitionGeneration: UInt64? = nil
     ) async -> Bool {
         noteBotChatSession(resumeID, profile: bot.name, label: bot.displayLabel)
         noteBotChatSession(registryID, profile: bot.name, label: bot.displayLabel)
         let outcome = await performSessionOpen(
             resumeID,
-            reusing: nil,
+            reusing: viewportTransitionGeneration,
             presentationMigrationSessionIDs: presentationMigrationSessionIDs,
             conversationProfile: bot.name,
             preferredTitle: bot.displayLabel
@@ -16601,7 +16615,8 @@ final class AppState: ObservableObject {
         _ bot: BotProfile,
         client: HermesClient,
         epoch: Int,
-        presentationMigrationSessionIDs: Set<String> = []
+        presentationMigrationSessionIDs: Set<String> = [],
+        viewportTransitionGeneration: UInt64? = nil
     ) async -> Bool {
         let created: (sessionId: String, storedSessionId: String?)
         do {
@@ -16616,7 +16631,8 @@ final class AppState: ObservableObject {
                     bot,
                     client: client,
                     epoch: epoch,
-                    presentationMigrationSessionIDs: presentationMigrationSessionIDs
+                    presentationMigrationSessionIDs: presentationMigrationSessionIDs,
+                    viewportTransitionGeneration: viewportTransitionGeneration
                 )
             }
             guard botOpenFenceIsCurrent(epoch: epoch, client: client) else { return false }
@@ -16639,7 +16655,8 @@ final class AppState: ObservableObject {
                     bot,
                     client: client,
                     epoch: epoch,
-                    presentationMigrationSessionIDs: presentationMigrationSessionIDs
+                    presentationMigrationSessionIDs: presentationMigrationSessionIDs,
+                    viewportTransitionGeneration: viewportTransitionGeneration
                 )
             }
             guard botOpenFenceIsCurrent(epoch: epoch, client: client) else { return false }
@@ -16656,7 +16673,8 @@ final class AppState: ObservableObject {
             resumeID: created.sessionId,
             epoch: epoch,
             client: client,
-            presentationMigrationSessionIDs: presentationMigrationSessionIDs
+            presentationMigrationSessionIDs: presentationMigrationSessionIDs,
+            viewportTransitionGeneration: viewportTransitionGeneration
         )
     }
 
@@ -16669,7 +16687,8 @@ final class AppState: ObservableObject {
         _ bot: BotProfile,
         client: HermesClient,
         epoch: Int,
-        presentationMigrationSessionIDs: Set<String> = []
+        presentationMigrationSessionIDs: Set<String> = [],
+        viewportTransitionGeneration: UInt64? = nil
     ) async -> Bool {
         let rows: [BotChatLookupRow]
         do {
@@ -16694,7 +16713,8 @@ final class AppState: ObservableObject {
                 resumeID: resumeID,
                 epoch: epoch,
                 client: client,
-                presentationMigrationSessionIDs: presentationMigrationSessionIDs
+                presentationMigrationSessionIDs: presentationMigrationSessionIDs,
+                viewportTransitionGeneration: viewportTransitionGeneration
             )
         }
         refuseBotChatConfirmation(bot)
@@ -17096,7 +17116,7 @@ final class AppState: ObservableObject {
         // match keeps its own diagnostic.
         if notificationTargetIsBotChat(target) {
             traceStage = "bot chat"
-            return await routeBotOwnedNotification(target, notifiedProfile: target.profile ?? "", attemptID: notificationAttemptID)
+            return await routeBotOwnedNotification(target, notifiedProfile: target.profile ?? "", attemptID: notificationAttemptID, transitionGeneration: transitionGeneration)
         }
         let targetProfile = notificationProfileID(target.profile)
         if let notified = target.profile, let targetProfile,
@@ -17127,7 +17147,7 @@ final class AppState: ObservableObject {
                 // profile this dashboard's workspace would turn its Bot Chat
                 // into the workspace's own context.
                 traceStage = "bot chat"
-                return await routeBotOwnedNotification(target, notifiedProfile: notified, attemptID: notificationAttemptID)
+                return await routeBotOwnedNotification(target, notifiedProfile: notified, attemptID: notificationAttemptID, transitionGeneration: transitionGeneration)
             }
             guard botEvidenceIsAvailable else {
                 // No usable Bot Mode evidence (the roster could not be
@@ -17171,7 +17191,8 @@ final class AppState: ObservableObject {
                     target,
                     notifiedProfile: notified,
                     canonicalProfile: targetProfile,
-                    attemptID: notificationAttemptID
+                    attemptID: notificationAttemptID,
+                    transitionGeneration: transitionGeneration
                 )
             }
         }
@@ -17198,7 +17219,8 @@ final class AppState: ObservableObject {
                     target,
                     notifiedProfile: notified,
                     canonicalProfile: targetProfile,
-                    attemptID: notificationAttemptID
+                    attemptID: notificationAttemptID,
+                    transitionGeneration: transitionGeneration
                 )
             }
         }
@@ -17284,7 +17306,8 @@ final class AppState: ObservableObject {
                 target,
                 notifiedProfile: target.profile ?? activeProfile,
                 rowIDs: Set([botRow.id, botRow.storedSessionId, botRow.lineageRootId].compactMap { $0 } + botRow.alternateIds),
-                attemptID: notificationAttemptID
+                attemptID: notificationAttemptID,
+                transitionGeneration: transitionGeneration
             )
         }
         // A decision raised while the app was backgrounded is delivered as a
