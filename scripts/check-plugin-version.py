@@ -42,15 +42,27 @@ def plugin_version(plugin_yaml):
 
 
 def parts(version):
+    """Dotted numeric parts, or None when a part isn't a number."""
     core = version.split("-", 1)[0]
-    return tuple(int(part) for part in core.split("."))
+    try:
+        return tuple(int(part) for part in core.split("."))
+    except ValueError:
+        return None
 
 
 def compare(recommended, latest):
-    """Returns None when they match, else the problem to report."""
-    if parts(recommended) == parts(latest):
+    """Returns None when they match, else the problem to report. Missing
+    trailing parts count as zero ("0.41" matches "0.41.0"), as in Swift's
+    NotifierPluginStatus.isOlder."""
+    left, right = parts(recommended), parts(latest)
+    if left is None or right is None:
+        return f"Can't compare versions {recommended!r} and {latest!r}: not dotted numbers."
+    width = max(len(left), len(right))
+    left += (0,) * (width - len(left))
+    right += (0,) * (width - len(right))
+    if left == right:
         return None
-    where = "behind" if parts(recommended) < parts(latest) else "ahead of"
+    where = "behind" if left < right else "ahead of"
     return (
         f"NotifierPluginStatus.recommendedVersion is {recommended}, {where} the "
         f"plugin on hermes-conduit-notifier main ({latest}). Set it to "
@@ -67,7 +79,6 @@ def fetch(url, attempts=3):
                 raise
             print(f"fetch failed ({error}), retrying", file=sys.stderr)
             time.sleep(2 ** attempt)
-    return None
 
 
 def main(argv=None):
@@ -89,7 +100,7 @@ def main(argv=None):
     else:
         try:
             yaml_text = fetch(PLUGIN_YAML_URL)
-        except OSError as error:
+        except (OSError, UnicodeDecodeError) as error:
             print(f"::warning::Couldn't read the plugin version from GitHub ({error}); "
                   "recommendedVersion not checked.")
             return 0

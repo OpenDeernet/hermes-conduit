@@ -37,6 +37,14 @@ class CheckPluginVersionTests(unittest.TestCase):
         self.assertIn("behind", check.compare("0.9.0", "0.10.0"))
         self.assertIn("ahead of", check.compare("0.10.0", "0.9.0"))
 
+    def test_missing_trailing_parts_count_as_zero(self):
+        self.assertIsNone(check.compare("0.41", "0.41.0"))
+        self.assertIn("behind", check.compare("0.41", "0.41.1"))
+
+    def test_unreadable_versions_fail_cleanly(self):
+        self.assertIn("Can't compare", check.compare("0.41.x", "0.41.0"))
+        self.assertEqual(self.run_check("junk", "version: 0.41.0\n"), 1)
+
     def test_reads_quoted_yaml_versions(self):
         self.assertEqual(check.plugin_version('manifest_version: 1\nversion: "0.41.0"\n'), "0.41.0")
         self.assertIsNone(check.plugin_version("manifest_version: 1\n"))
