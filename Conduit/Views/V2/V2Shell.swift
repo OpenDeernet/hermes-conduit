@@ -320,7 +320,16 @@ struct V2Shell: View {
     /// the screen under it.
     /// On iOS 26 the clearance is a bar to the lists, so they draw the
     /// system's soft edge under the floating bar.
+    @ViewBuilder
     private func tabBarClearance<Content: View>(_ content: Content) -> some View {
+        if PTRProbe.has("-PTR_NO_CLEARANCE") {
+            content
+        } else {
+            tabBarClearanceBar(content)
+        }
+    }
+
+    private func tabBarClearanceBar<Content: View>(_ content: Content) -> some View {
         content.v2EdgeBar(.bottom) {
             Color.clear
                 .frame(height: tabBarHeight)

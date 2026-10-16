@@ -284,21 +284,29 @@ struct V2ChatsView: View {
     }
 
     var body: some View {
-        ZStack {
-            V2Backdrop(isTabRoot: true)
-            Group {
-                if showingProjects {
-                    projectsList
-                } else {
-                    sessionsList
+        ptrTopBar(ZStack {
+            if !PTRProbe.has("-PTR_NO_BACKDROP") { V2Backdrop(isTabRoot: true) }
+            if PTRProbe.has("-PTR_BARE") {
+                List {
+                    ForEach(0..<30, id: \.self) { Text("Row \($0)") }
                 }
+                .refreshable { await appState.refreshSessionCatalog() }
+            } else {
+                Group {
+                    if showingProjects {
+                        projectsList
+                    } else {
+                        sessionsList
+                    }
+                }
+                .opacity(shell.contentFaded ? 0 : 1)
             }
-            .opacity(shell.contentFaded ? 0 : 1)
-        }
-        .v2EdgeBar(.top) {
-            V2TopBar { trailingControls }
-                .withoutScrollEdge()
-                .modifier(V2LegacyScrollEdge())
+        })
+        .overlay(alignment: .topLeading) {
+            if appState.isRefreshingSessionCatalog {
+                Text("refreshing").font(.system(size: 2)).opacity(0.01)
+                    .accessibilityIdentifier("ptr.refreshing")
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             MinimisedLiveVoiceBar()
@@ -372,6 +380,21 @@ struct V2ChatsView: View {
         .sheet(item: $sessionPendingRename) { session in
             RenameSheet.conversation(session) { title in
                 Task { await appState.renameSession(session, to: title) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func ptrTopBar<C: View>(_ content: C) -> some View {
+        if PTRProbe.has("-PTR_INSET") {
+            content.safeAreaInset(edge: .top, spacing: 0) {
+                V2TopBar { trailingControls }
+            }
+        } else {
+            content.v2EdgeBar(.top) {
+                V2TopBar { trailingControls }
+                    .withoutScrollEdge()
+                    .modifier(V2LegacyScrollEdge())
             }
         }
     }
@@ -1405,5 +1428,12 @@ final class V2NestExpansionCache {
             line.hasPrefix(prefix) ? String(line.dropFirst(prefix.count)) : nil
         })
         return cached
+    }
+}
+
+/// TEMPORARY pull-to-refresh probe switches (launch arguments).
+enum PTRProbe {
+    static func has(_ flag: String) -> Bool {
+        ProcessInfo.processInfo.arguments.contains(flag)
     }
 }
