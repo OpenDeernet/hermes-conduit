@@ -207,9 +207,10 @@ struct ChatWorkingLine: View {
 
     var body: some View {
         let name = appState.profileDisplayName(appState.activeProfile)
+        let largeText = dynamicTypeSize.isAccessibilitySize
         // Large text: the words wrap and stack instead of truncating.
-        let lineLimit = dynamicTypeSize.isAccessibilitySize ? nil : 1 as Int?
-        HStack(spacing: 9) {
+        let lineLimit = largeText ? nil : 1 as Int?
+        let line = HStack(spacing: 9) {
             ConduitAgentMark(
                 isActive: true,
                 avatarURL: appState.profileAvatarURL(for: appState.activeProfile),
@@ -230,18 +231,26 @@ struct ChatWorkingLine: View {
                     .lineLimit(lineLimit)
                     .contentTransition(.opacity)
                     .animation(ConduitMotion.settle, value: phrase)
-
-                // Large text: under the words, not squeezed beside them.
-                if dynamicTypeSize.isAccessibilitySize { timer }
             }
-
-            Spacer(minLength: 8)
-
-            if !dynamicTypeSize.isAccessibilitySize { timer.fixedSize() }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(AppLocalization.string("\(name) is working"))
         .accessibilityValue(phrase)
+
+        // The timer stays its own element, so VoiceOver reads it current.
+        if largeText {
+            // Under the words, not squeezed beside them.
+            VStack(alignment: .leading, spacing: 6) {
+                line
+                timer
+            }
+        } else {
+            HStack(spacing: 9) {
+                line
+                Spacer(minLength: 8)
+                timer.fixedSize()
+            }
+        }
     }
 }
 
@@ -252,6 +261,8 @@ struct ChatStepGroupMember: Equatable {
     let messageID: String
     /// Nil for thinking.
     let toolName: String?
+    /// The run's card changes with it (placement equality re-renders the
+    /// rows when a step settles).
     let running: Bool
     let timestamp: String
     let duration: TimeInterval?
@@ -500,6 +511,8 @@ private struct ChatStepGroupHeader: View {
     }
 
     var body: some View {
+        // Once: it parses every step's time.
+        let title = self.title
         Button(action: toggle) {
             HStack(spacing: ChatStepStyle.iconGap) {
                 if !expanded {
