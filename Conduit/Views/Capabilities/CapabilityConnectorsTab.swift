@@ -348,7 +348,15 @@ struct ConnectorDetailPage: View {
                 await store.probe(name)
             }
         }
-        .onDisappear { signInTask?.cancel() }
+        .onDisappear {
+            // The host finishes a sign-in on its own; this page stops
+            // waiting for it, so it mustn't come back still saying so.
+            signInTask?.cancel()
+            if signInFlow != nil {
+                signInFlow = nil
+                message = nil
+            }
+        }
         .confirmationDialog(
             Text("Remove \(name)?"),
             isPresented: $confirmingRemove,

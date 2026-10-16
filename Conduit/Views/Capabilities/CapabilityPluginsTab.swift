@@ -434,8 +434,8 @@ struct AgentPluginDetailPage: View {
             Button(AppLocalization.string("Apply Update")) { update(consent.plugin, accept: true) }
             Button(AppLocalization.string("Cancel"), role: .cancel) {}
         } message: { consent in
-            Text(verbatim: AppLocalization.string("The new version adds what the installed one doesn't have. Apply it only if you trust it:")
-                + "\n\n" + consent.lines.joined(separator: "\n"))
+            let added = consent.lines.joined(separator: "\n")
+            Text(verbatim: AppLocalization.string("The new version adds what the installed one doesn't have. Apply it only if you trust it:\n\n\(added)"))
         }
     }
 
