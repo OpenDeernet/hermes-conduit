@@ -160,6 +160,11 @@ struct V2Shell: View {
         }
     }
 
+    /// Whether either tab holds the conversation, shown or not.
+    private var conversationPushed: Bool {
+        chatsPath.contains(.conversation) || botsPath.contains(.conversation)
+    }
+
     /// Whether a screen is pushed over the tab's root.
     private func isRootCovered(_ tab: V2Tab) -> Bool {
         switch tab {
@@ -201,7 +206,16 @@ struct V2Shell: View {
                     closeConversation()
                 }
             }
-            // Leaving a group room from its own toolbar ends that screen.
+            // Back or the edge swipe popped the room's screen: leave the
+            // room, so it stops polling and opens again on its next tap.
+            // Moving the screen between tabs keeps it pushed in one of them.
+            .onChange(of: conversationPushed) { _, pushed in
+                if !pushed, appState.activeRoomSurface != nil {
+                    appState.closeGroupRoom()
+                }
+            }
+            // Leaving a group room another way (disband, server change)
+            // ends that screen.
             .onChange(of: appState.activeRoomSurface?.room.roomID) { old, new in
                 // Leaving: whichever tab holds the room's screen, even one
                 // that isn't showing, drops it so it doesn't come back.
