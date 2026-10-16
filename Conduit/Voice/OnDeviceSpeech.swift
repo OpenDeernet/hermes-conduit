@@ -193,7 +193,7 @@ final class OnDeviceSpeechStream: VoiceSpeechStream {
         }
     }
 
-    static var appLanguage: String? {
+    nonisolated static var appLanguage: String? {
         let locale = AppLanguage.current.locale ?? Locale(identifier: Locale.preferredLanguages.first ?? "en")
         return locale.language.languageCode?.identifier
     }
