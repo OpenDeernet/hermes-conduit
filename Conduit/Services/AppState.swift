@@ -1322,6 +1322,31 @@ final class AppState: ObservableObject {
             }
             return false
         }
+        // The resume restores cards only from the chat's tip ids, and the
+        // card may sit under the durable id the push named. Once the chat is
+        // on screen, a relay clarify still missing is recorded under the open
+        // chat's own ids and merged into its transcript. Approvals are left
+        // to the gateway's pending list, which the open already read.
+        if let decision = target.decision,
+           let evictionKey = Self.pendingDecisionEvictionKey(for: decision),
+           evictionKey.hasPrefix("clarify:"),
+           let openID = activeSessionId,
+           activeBotChatProfile == bot.name,
+           !messages.contains(where: { SessionPresentationCache.decisionKey(for: $0) == evictionKey }) {
+            let openIDs = presentationCacheSessionIDs(for: openID)
+            recordNotificationDecision(
+                decision,
+                sessionIDs: [requestedID] + [target.durableSessionID].compactMap { $0 } + openIDs,
+                cacheSessionIDs: openIDs,
+                profile: bot.name
+            )
+            messages = sessionPresentationCache.merge(
+                messages,
+                profile: bot.name,
+                sessionIDs: openIDs,
+                includePendingClarifications: true
+            )
+        }
         showSidebar = false
         return true
     }
