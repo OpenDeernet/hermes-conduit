@@ -24495,8 +24495,8 @@ final class AppState: ObservableObject {
             // Only a result seen for the first time: a replay after a
             // reconnect finds its card already complete.
             if name.lowercased() == "conduit_maps", let promptID = Self.mapsNavigatePromptID(output),
-               !messages.contains(where: { $0.role == .tool && $0.tool?.id != nil && $0.tool?.id == eventToolID
-                   && $0.tool?.status == .complete }) {
+               let callID = eventToolID?.trimmingCharacters(in: .whitespacesAndNewlines), !callID.isEmpty,
+               !messages.contains(where: { $0.role == .tool && $0.tool?.id == callID && $0.tool?.status == .complete }) {
                 noteMapsNavigateExpected(promptID)
             }
             settleReasoningSegmentIntoTranscript()

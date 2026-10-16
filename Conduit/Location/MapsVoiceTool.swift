@@ -81,7 +81,7 @@ enum MapsVoiceTool {
         // Checked at each call: the user may have turned it off mid-call.
         let locationAllowed = sharedHere && controller.letsVoiceRead(mode) && controller.settings.talking
         let places = locationAllowed ? controller.places : []
-        if arguments["action"] as? String == "navigate" {
+        if (arguments["action"] as? String)?.lowercased() == "navigate" {
             return await navigate(arguments, mode: mode, controller: controller, places: places, locationAllowed: locationAllowed)
         }
         guard let actionName = arguments["action"] as? String, let action = MapsRequest.Action(rawValue: actionName) else {

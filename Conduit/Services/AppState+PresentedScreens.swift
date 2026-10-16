@@ -63,11 +63,10 @@ extension AppState {
               let session = prompt.sessionID, session == activeSessionId else { return }
         mapsNavigateExpected = nil
         presentedScreens.answer(prompt, outcome: .confirmed, via: .auto)
-        // Answered once: never opened again by the sync below.
-        guard !presentedScreens.prompts.contains(where: { $0.id == prompt.id }) else { return }
-        await openPresentedMaps(prompt)
-        // Reported on its own round, not nested in this one.
+        // Reported first, on its own round: Hermes hears the answer before
+        // Maps opens. The expectation is spent, so that round opens nothing.
         Task { [weak self] in await self?.syncPresentedScreens() }
+        await openPresentedMaps(prompt)
     }
 
     /// Opens Apple Maps for a confirmed Go confirmation.
