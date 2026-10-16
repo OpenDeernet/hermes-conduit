@@ -50,10 +50,17 @@ struct FinishSetupStatus: Equatable {
         }
     }
 
-    /// Turned on in Conduit counts only while iOS still allows them.
+    /// Turned on in Conduit counts only while iOS allows them. Not asked
+    /// yet (or not read yet, or reset by a reinstall that kept the
+    /// registration) is off, so the card neither finishes early nor hides
+    /// Turn on, which asks iOS.
     static func notifications(enabled: Bool, authorization: UNAuthorizationStatus) -> Notifications {
-        if authorization == .denied { return .denied }
-        return enabled ? .done : .off
+        switch authorization {
+        case .denied: return .denied
+        case .authorized, .provisional, .ephemeral: return enabled ? .done : .off
+        case .notDetermined: return .off
+        @unknown default: return .off
+        }
     }
 }
 
@@ -79,7 +86,8 @@ extension AppState {
     /// the next connect.
     func turnOnNotificationsFromSetup() async {
         let notifications = PushNotificationService.shared
-        guard !notifications.isEnabled else { return }
+        let step = FinishSetupStatus.notifications(enabled: notifications.isEnabled, authorization: notifications.authorizationStatus)
+        guard step == .off else { return }
         await notifications.enable()
         guard notifications.isEnabled, notifications.lastError == nil else {
             Haptics.error()

@@ -99,7 +99,9 @@ struct V2FinishSetupCard: View {
             }
         case .updating:
             FinishSetupRow(icon: icon, title: title, detail: AppLocalization.string("Updating…"), identifier: "finish-setup.plugin") {
+                // The detail already says it.
                 ProgressView()
+                    .accessibilityHidden(true)
             }
         case .install:
             FinishSetupRow(icon: icon, title: title, detail: AppLocalization.string("Needed for notifications and calls from Hermes"), identifier: "finish-setup.plugin") {
@@ -129,6 +131,7 @@ struct V2FinishSetupCard: View {
             if notifications.isWorking {
                 FinishSetupRow(icon: icon, title: title, detail: AppLocalization.string("Turning on…"), identifier: "finish-setup.notifications") {
                     ProgressView()
+                        .accessibilityHidden(true)
                 }
             } else {
                 FinishSetupRow(

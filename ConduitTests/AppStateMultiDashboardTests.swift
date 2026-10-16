@@ -803,9 +803,12 @@ extension AppStateMultiDashboardTests {
         XCTAssertEqual(appState.dashboardsFinishingSetup, [id])
         // Only a connected dashboard shows the card.
         XCTAssertFalse(appState.showsFinishSetup)
+        appState.isConnected = true
+        XCTAssertTrue(appState.showsFinishSetup)
 
         appState.endFinishSetup()
         XCTAssertTrue(appState.dashboardsFinishingSetup.isEmpty)
+        XCTAssertFalse(appState.showsFinishSetup)
         // Connecting again doesn't bring it back.
         _ = appState.adoptDashboard(forNormalizedURL: "https://mac.tailnet.ts.net")
         XCTAssertTrue(appState.dashboardsFinishingSetup.isEmpty)
@@ -818,10 +821,10 @@ extension AppStateMultiDashboardTests {
         XCTAssertTrue(appState.dashboardsFinishingSetup.isEmpty)
     }
 
-    func testRemovingADashboardForgetsItsFinishSetup() {
+    func testRemovingADashboardForgetsItsFinishSetup() throws {
         let mac = dashboard("Mac", "https://mac.tailnet.ts.net")
         let appState = makeAppState(registry: SavedDashboardRegistry(activeDashboardID: mac.id, dashboards: [mac]))
-        let added = track(appState.resolveDashboardID(forURL: "https://hermes.example.com", registerIfMissing: true)!)
+        let added = track(try XCTUnwrap(appState.resolveDashboardID(forURL: "https://hermes.example.com", registerIfMissing: true)))
         XCTAssertEqual(appState.dashboardsFinishingSetup, [added])
 
         appState.removeDashboard(added)
@@ -850,6 +853,9 @@ extension AppStateMultiDashboardTests {
     func testFinishSetupNotificationsStepNeedsIOSPermissionToo() {
         XCTAssertEqual(FinishSetupStatus.notifications(enabled: false, authorization: .notDetermined), .off)
         XCTAssertEqual(FinishSetupStatus.notifications(enabled: true, authorization: .authorized), .done)
+        XCTAssertEqual(FinishSetupStatus.notifications(enabled: true, authorization: .provisional), .done)
+        // Registered but iOS not asked (a reinstall keeps the registration).
+        XCTAssertEqual(FinishSetupStatus.notifications(enabled: true, authorization: .notDetermined), .off)
         XCTAssertEqual(FinishSetupStatus.notifications(enabled: true, authorization: .denied), .denied)
         XCTAssertEqual(FinishSetupStatus.notifications(enabled: false, authorization: .denied), .denied)
 
