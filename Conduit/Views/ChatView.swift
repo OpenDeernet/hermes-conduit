@@ -2081,6 +2081,7 @@ private struct ChatStepTimeLabel: View {
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                .accessibilityLabel(ChatStepTiming.spokenText(duration) ?? text)
         } else if !grouped {
             MessageTimestampLabel(timestamp: timestamp, tone: tone)
         }

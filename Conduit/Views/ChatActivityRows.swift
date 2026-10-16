@@ -327,10 +327,19 @@ enum ChatStepTiming {
 
     /// "12s", "1m 5s"; nil under a second, which reads as no time at all.
     static func text(_ seconds: TimeInterval?) -> String? {
+        formatted(seconds, width: .narrow)
+    }
+
+    /// The same time in words, for VoiceOver ("12 seconds").
+    static func spokenText(_ seconds: TimeInterval?) -> String? {
+        formatted(seconds, width: .wide)
+    }
+
+    private static func formatted(_ seconds: TimeInterval?, width: Duration.UnitsFormatStyle.UnitWidth) -> String? {
         guard let seconds, seconds.isFinite, seconds >= 1 else { return nil }
         return Duration.seconds(seconds.rounded())
             .formatted(
-                .units(allowed: [.hours, .minutes, .seconds], width: .narrow)
+                .units(allowed: [.hours, .minutes, .seconds], width: width)
                     .locale(AppLocalization.formattingLocale)
             )
     }
@@ -471,11 +480,14 @@ private struct ChatStepGroupHeader: View {
 
     private static let maxIcons = 5
 
-    private var title: String {
+    /// The run's count and, once it is done, its time (a running turn's
+    /// time is on the working line): shown, then spoken.
+    private var title: (shown: String, spoken: String) {
         let count = AppLocalization.string("\(members.count) steps")
-        // A running turn's time is on the working line.
-        guard !isLive, let time = ChatStepTiming.text(ChatStepTiming.span(of: members)) else { return count }
-        return "\(count) · \(time)"
+        let span = isLive ? nil : ChatStepTiming.span(of: members)
+        guard let time = ChatStepTiming.text(span),
+              let spoken = ChatStepTiming.spokenText(span) else { return (count, count) }
+        return ("\(count) · \(time)", "\(count), \(spoken)")
     }
 
     var body: some View {
@@ -488,10 +500,11 @@ private struct ChatStepGroupHeader: View {
                         }
                     }
                 }
-                Text(title)
+                Text(title.shown)
                     .font(expanded ? .subheadline.weight(.semibold) : .subheadline)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .accessibilityLabel(title.spoken)
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.semibold))

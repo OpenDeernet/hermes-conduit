@@ -126,6 +126,8 @@ extension ChatTypographyTests {
         XCTAssertNil(ChatStepTiming.text(nil))
         XCTAssertNil(ChatStepTiming.text(0.4))
         XCTAssertEqual(ChatStepTiming.text(12.2)?.contains("12"), true)
+        XCTAssertNil(ChatStepTiming.spokenText(0.4))
+        XCTAssertNotEqual(ChatStepTiming.spokenText(12), ChatStepTiming.text(12))
         XCTAssertEqual(
             ChatStepTiming.elapsed(from: "2026-10-16T09:00:00Z", to: "2026-10-16T09:00:05Z"),
             5
