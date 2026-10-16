@@ -747,10 +747,11 @@ final class HermesClient: ObservableObject {
     /// connections without a close, so a quiet socket can be dead for
     /// minutes before the next send finds out. The ping keeps the path warm
     /// and finds a dead one while nobody is waiting on it.
-    private var keepaliveTask: Task<Void, Never>?
+    // nonisolated(unsafe): deinit cancels both; cancel() is thread-safe.
+    nonisolated(unsafe) private var keepaliveTask: Task<Void, Never>?
     private var lastInboundAt = Date()
     private var isProbing = false
-    private var pathMonitor: NWPathMonitor?
+    nonisolated(unsafe) private var pathMonitor: NWPathMonitor?
     private var pathMonitorSawInitialPath = false
     private let keepaliveInterval: TimeInterval?
     private let keepalivePingTimeout: TimeInterval
@@ -832,6 +833,11 @@ final class HermesClient: ObservableObject {
         self.profile = profile
         self.cloudflareAccess = cloudflareAccess
         self.transportFactory = transportFactory
+    }
+
+    deinit {
+        keepaliveTask?.cancel()
+        pathMonitor?.cancel()
     }
 
     // MARK: - Connection

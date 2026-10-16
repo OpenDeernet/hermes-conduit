@@ -2814,9 +2814,14 @@ extension HermesClientTests {
         client.disconnect()
     }
 
-    private func connectKeepaliveClient() async throws -> (client: HermesClient, socket: FakeSocket) {
+    /// `onSend` is installed before the handshake so a keepalive ping sent
+    /// right after it is never missed.
+    private func connectKeepaliveClient(
+        onSend: (() -> Void)? = nil
+    ) async throws -> (client: HermesClient, socket: FakeSocket) {
         let transport = FakeTransport()
         let socket = FakeSocket()
+        socket.onSend = onSend
         transport.nextSocket = { socket }
         let client = HermesClient(
             connection: HermesConnection(baseUrl: "https://test.example", ticket: "ticket"),
@@ -2831,9 +2836,8 @@ extension HermesClientTests {
     }
 
     func testQuietSocketGetsAKeepalivePingAndStaysOpenWhenAnswered() async throws {
-        let (client, socket) = try await connectKeepaliveClient()
         let sent = Gate()
-        socket.onSend = { sent.signal() }
+        let (client, socket) = try await connectKeepaliveClient(onSend: { sent.signal() })
         try await sent.wait("a keepalive ping on a quiet socket")
         let request = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(try XCTUnwrap(socket.sentTexts.last).utf8)) as? [String: Any]
