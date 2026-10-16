@@ -16433,9 +16433,9 @@ final class AppState: ObservableObject {
     /// a failed or unconfirmable lookup NEVER mints a chat, because that is
     /// the one remaining way to fork a bot's forever chat. Concurrent opens
     /// of the same bot share one flight. `presentationMigrationSessionIDs`
-    /// are the ids a notification recorded its decision card under; an
-    /// existing chat's open promotes that card into the chat (a flight
-    /// already running for the bot keeps its own).
+    /// are the ids a notification recorded its decision card under; the
+    /// open (existing, created or adopted chat) promotes that card into the
+    /// chat (a flight already running for the bot keeps its own).
     @discardableResult
     func openBotChat(
         for bot: BotProfile,
@@ -16518,7 +16518,12 @@ final class AppState: ObservableObject {
                 presentationMigrationSessionIDs: presentationMigrationSessionIDs
             )
         case .success(.create):
-            return await createAndOpenBotChat(bot, client: client, epoch: epoch)
+            return await createAndOpenBotChat(
+                bot,
+                client: client,
+                epoch: epoch,
+                presentationMigrationSessionIDs: presentationMigrationSessionIDs
+            )
         }
     }
 
@@ -16568,7 +16573,12 @@ final class AppState: ObservableObject {
     /// winner instead of forking. The in-memory registry is only seeded
     /// AFTER the canonical title has landed, so an abandoned lazy session
     /// never leaves a stale entry behind.
-    private func createAndOpenBotChat(_ bot: BotProfile, client: HermesClient, epoch: Int) async -> Bool {
+    private func createAndOpenBotChat(
+        _ bot: BotProfile,
+        client: HermesClient,
+        epoch: Int,
+        presentationMigrationSessionIDs: Set<String> = []
+    ) async -> Bool {
         let created: (sessionId: String, storedSessionId: String?)
         do {
             if let createBotChat = chatResumeLifecycleOperations.createBotChat {
@@ -16578,7 +16588,12 @@ final class AppState: ObservableObject {
             }
         } catch {
             if BotChatTitleCollision.isError(error) {
-                return await adoptWinningBotChat(bot, client: client, epoch: epoch)
+                return await adoptWinningBotChat(
+                    bot,
+                    client: client,
+                    epoch: epoch,
+                    presentationMigrationSessionIDs: presentationMigrationSessionIDs
+                )
             }
             guard botOpenFenceIsCurrent(epoch: epoch, client: client) else { return false }
             return failBotChatOpen(bot, error: error, stage: .create)
@@ -16596,7 +16611,12 @@ final class AppState: ObservableObject {
             }
         } catch {
             if BotChatTitleCollision.isError(error) {
-                return await adoptWinningBotChat(bot, client: client, epoch: epoch)
+                return await adoptWinningBotChat(
+                    bot,
+                    client: client,
+                    epoch: epoch,
+                    presentationMigrationSessionIDs: presentationMigrationSessionIDs
+                )
             }
             guard botOpenFenceIsCurrent(epoch: epoch, client: client) else { return false }
             return failBotChatOpen(bot, error: error, stage: .title)
@@ -16611,7 +16631,8 @@ final class AppState: ObservableObject {
             registryID: created.storedSessionId ?? created.sessionId,
             resumeID: created.sessionId,
             epoch: epoch,
-            client: client
+            client: client,
+            presentationMigrationSessionIDs: presentationMigrationSessionIDs
         )
     }
 
@@ -16620,7 +16641,12 @@ final class AppState: ObservableObject {
     /// Our abandoned lazy session holds zero messages and the gateway prunes
     /// it. If the winner cannot be confirmed, fail closed — never open our
     /// untitled stray, never mint again.
-    private func adoptWinningBotChat(_ bot: BotProfile, client: HermesClient, epoch: Int) async -> Bool {
+    private func adoptWinningBotChat(
+        _ bot: BotProfile,
+        client: HermesClient,
+        epoch: Int,
+        presentationMigrationSessionIDs: Set<String> = []
+    ) async -> Bool {
         let rows: [BotChatLookupRow]
         do {
             if let findBotChat = chatResumeLifecycleOperations.findBotChat {
@@ -16643,7 +16669,8 @@ final class AppState: ObservableObject {
                 registryID: registryID,
                 resumeID: resumeID,
                 epoch: epoch,
-                client: client
+                client: client,
+                presentationMigrationSessionIDs: presentationMigrationSessionIDs
             )
         }
         refuseBotChatConfirmation(bot)
