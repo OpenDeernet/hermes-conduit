@@ -98,9 +98,13 @@ final class OnDeviceSpeechStream: VoiceSpeechStream {
         pending = ""
         if !rest.isEmpty { queue.append(rest) }
         finishRequested = true
-        return try await withCheckedThrowingContinuation { continuation in
-            completion = continuation
-            speakNext()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                self.completion = continuation
+                self.speakNext()
+            }
+        } onCancel: { [weak self] in
+            Task { @MainActor [weak self] in self?.cancel() }
         }
     }
 

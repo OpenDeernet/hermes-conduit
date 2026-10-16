@@ -26461,7 +26461,9 @@ final class AppState: ObservableObject {
         updateActiveProfileVoicePreferences { $0.speechOutput = output }
         voiceSpeechOutputChoice = output
         refreshVoiceControllerGateway()
-        refreshReadAloudGateway()
+        // A fresh gateway: the kept one may have given up on Hermes speech,
+        // which must not outlast the person choosing it again.
+        refreshReadAloudGateway(rebuild: true)
         return true
     }
 
@@ -27336,13 +27338,13 @@ final class AppState: ObservableObject {
         readAloudGatewayBridge = dashboardTicketBridge
     }
 
-    private func refreshReadAloudGateway() {
+    private func refreshReadAloudGateway(rebuild: Bool = false) {
         if readAloudUnavailableReason != nil {
             messageReadAloudController.setGateway(nil)
             readAloudGatewayBridge = nil
             return
         }
-        guard !readAloudGatewayIsCurrent else { return }
+        guard rebuild || !readAloudGatewayIsCurrent else { return }
         assignReadAloudGateway()
     }
 

@@ -1339,6 +1339,8 @@ struct VoiceSettingsView: View {
             if await setSpeechOutput(.onDevice) {
                 speechOutputChoice = .onDevice
                 testStatus = nil
+            } else {
+                testStatus = AppLocalization.string("Connect to Hermes to configure voice for this profile.")
             }
         } else {
             let providerSaved: Bool
@@ -1353,9 +1355,13 @@ struct VoiceSettingsView: View {
                     transcriptionModeChosen = true
                 }
             }
-            if providerSaved, kind == .tts, await setSpeechOutput(.hermes) {
-                speechOutputChoice = .hermes
-                testStatus = nil
+            if providerSaved, kind == .tts {
+                if await setSpeechOutput(.hermes) {
+                    speechOutputChoice = .hermes
+                    testStatus = nil
+                } else {
+                    testStatus = AppLocalization.string("Connect to Hermes to configure voice for this profile.")
+                }
             }
         }
     }
