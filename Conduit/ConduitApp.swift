@@ -105,7 +105,9 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let request = response.notification.request
-        if let maps = MapsNavigator.url(fromNotification: request.content.userInfo) {
+        // Only the notification Conduit posted itself, never a push carrying the key.
+        if request.identifier == MapsNavigator.notificationIdentifier, !(request.trigger is UNPushNotificationTrigger),
+           let maps = MapsNavigator.url(fromNotification: request.content.userInfo) {
             // Directions Conduit couldn't open from the background: done once Maps opened.
             Task { @MainActor in
                 _ = await UIApplication.shared.open(maps)
@@ -123,8 +125,8 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
                 // Conduit posts only "Hermes wants to talk" itself (#449).
                 PushNotificationService.shared.receiveLocalCallNotification(request.content.userInfo)
             }
+            completionHandler()
         }
-        completionHandler()
     }
 
     func userNotificationCenter(

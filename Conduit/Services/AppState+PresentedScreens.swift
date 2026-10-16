@@ -58,7 +58,9 @@ extension AppState {
               let expected = mapsNavigateExpected, expected.until > Date(),
               let prompt = presentedScreens.prompts.first(where: {
                   $0.id == expected.promptID && $0.maps != nil && !$0.isExpired()
-              }) else { return }
+              }),
+              // Only from the chat the user is looking at.
+              let session = prompt.sessionID, session == activeSessionId else { return }
         mapsNavigateExpected = nil
         presentedScreens.answer(prompt, outcome: .confirmed, via: .auto)
         // Answered once: never opened again by the sync below.
@@ -95,8 +97,8 @@ extension AppState {
     func answerPresentedConfirm(_ prompt: PresentedConfirm, outcome: PresentedConfirmOutcome,
                                 via source: PresentedConfirmAnswerSource) async {
         presentedScreens.answer(prompt, outcome: outcome, via: source)
-        if outcome == .confirmed { await openPresentedMaps(prompt) }
         await syncPresentedScreens()
+        if outcome == .confirmed { await openPresentedMaps(prompt) }
     }
 
     /// Edit: Hermes hears the user wants changes, and the chat it came from
@@ -151,9 +153,9 @@ extension AppState {
         ) { prompt, outcome in
             presentedScreens.answer(prompt, outcome: outcome, via: .voice)
             // Reported in the background: the call hears the outcome now.
-            Task {
-                if outcome == .confirmed { await self.openPresentedMaps(prompt) }
-                await self.syncPresentedScreens()
+            Task { [weak self] in
+                await self?.syncPresentedScreens()
+                if outcome == .confirmed { await self?.openPresentedMaps(prompt) }
             }
         }
     }
