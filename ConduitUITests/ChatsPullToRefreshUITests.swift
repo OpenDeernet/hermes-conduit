@@ -8,11 +8,8 @@
 
 import XCTest
 
-final class ChatsPullToRefreshUITests: XCTestCase {
-    override func setUpWithError() throws {
-        continueAfterFailure = true
-    }
-
+// TEMPORARY probe: rides the smoke-run ProfilePickerUITests for one CI run.
+extension ProfilePickerUITests {
     func testPullingTheChatsListShowsTheRefreshSpinner() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-CONDUIT_UI_TEST_CONNECTED_DASHBOARD", "https://conduit-ui-test.invalid"]
