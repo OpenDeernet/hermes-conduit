@@ -17,7 +17,8 @@ enum V2VoiceContext: Equatable {
     case home
     /// A project's page: a new chat in that project's folder, in voice.
     case project(ProjectSummary)
-    /// The open conversation: voice in it (a Bot Chat calls its bot).
+    /// The open conversation: voice in it (a Bot Chat calls its bot, a
+    /// saved call's row resumes the call).
     case conversation
 }
 
@@ -80,6 +81,7 @@ struct V2VoiceButton: View {
                 ? AppLocalization.string("New voice call")
                 : AppLocalization.string("Talk in this project")
         case .conversation:
+            if appState.openChatCallToResume != nil { return AppLocalization.string("Resume call") }
             if let bot = appState.activeBotChatProfile {
                 return AppLocalization.string("Call \(appState.profileDisplayName(bot))")
             }

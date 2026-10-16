@@ -5794,15 +5794,13 @@ final class AppState: ObservableObject {
 
     // MARK: Live voice attached to a chat
 
-    /// The open chat as a target for a live call started from it. A saved
-    /// call's row or a group room isn't a chat to work in.
+    /// The open chat as a target for a live call started from it, new and
+    /// empty ones too: voice started in a chat stays in it, rather than
+    /// leaving the chat empty beside a row of its own. A saved call's row
+    /// (voice there resumes it) or a group room isn't a chat to work in.
     func liveVoiceThreadForOpenChat() -> VoiceThreadTarget? {
         guard let sessionID = activeSessionId, !sessionID.isEmpty,
-              activeRoomSurface == nil, activeVoiceCallSessionID == nil,
-              Self.attachesLiveVoiceCall(
-                chatHasMessages: !messages.isEmpty || pendingScreenshot(forSession: sessionID) != nil,
-                turnState: turnState
-              ) else { return nil }
+              activeRoomSurface == nil, activeVoiceCallSessionID == nil else { return nil }
         // A Bot Chat's runtime, history and live rows are in the bot's own
         // profile: the call reads and resumes it there.
         let bot = botConversationProfile(for: sessionID)
@@ -5812,14 +5810,6 @@ final class AppState: ObservableObject {
         let stored = row.map { $0.storedSessionId ?? $0.id }
             ?? conversationIdentityIndex.durableID(forRuntime: sessionID, profile: bot ?? activeProfile)
         return VoiceThreadTarget(runtimeSessionID: sessionID, storedSessionID: stored, title: activeSessionTitle, profile: bot)
-    }
-
-    /// A new, empty chat has nothing to continue: a call started from it
-    /// works on its own, with jobs on the Voice Jobs model. A chat still
-    /// loading (its history may not be here yet) or running its first turn
-    /// counts as having messages.
-    static func attachesLiveVoiceCall(chatHasMessages: Bool, turnState: TurnState) -> Bool {
-        chatHasMessages || turnState == .synchronizing || turnState == .running
     }
 
     /// Whether `thread` is the chat on screen now.
@@ -6086,6 +6076,19 @@ final class AppState: ObservableObject {
     var isVoiceCallInProgress: Bool {
         isVoiceInUse || minimisedLiveVoice != nil || isCarPlayVoiceSurfaceActive
             || isWatchVoiceCallActive || isNativeHermesCallActive
+    }
+
+    /// The saved call voice started in a chat continues: the open chat's,
+    /// when it is one and can be resumed. Only the chat's own voice buttons
+    /// resume; Siri, the widget and the other launches start their own.
+    static func savedCallToResume(source: PendingVoiceIntent.Source, openCallID: String?, canResume: Bool) -> String? {
+        guard source == .composer, canResume, let openCallID, !openCallID.isEmpty else { return nil }
+        return openCallID
+    }
+
+    /// The saved call the open chat's voice buttons resume, when they do.
+    var openChatCallToResume: String? {
+        Self.savedCallToResume(source: .composer, openCallID: activeVoiceCallSessionID, canResume: canResumeVoiceCall)
     }
 
     /// Continues a saved call with a new live call on the selected engine.
@@ -26595,6 +26598,13 @@ final class AppState: ObservableObject {
         let startsInOpenChat = intent.source == .composer || intent.source == .screenQuestion || intent.source == .hermesCall
         let thread = startsInOpenChat && targetProfile == activeProfile ? liveVoiceThreadForOpenChat() : nil
         var liveEngine = configuredLiveVoiceEngine(profile: targetProfile)
+        // Voice from a saved call's row picks that call up: the same row,
+        // not another one beside it.
+        if liveEngine != nil, targetProfile == activeProfile,
+           let callID = Self.savedCallToResume(source: intent.source, openCallID: activeVoiceCallSessionID, canResume: canResumeVoiceCall) {
+            await resumeVoiceCall(sessionID: callID)
+            return true
+        }
         if intent.source == .screenQuestion {
             // The device-test gate: an engine not cleared for screen
             // questions takes them in classic voice.
