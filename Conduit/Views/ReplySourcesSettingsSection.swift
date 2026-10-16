@@ -25,8 +25,13 @@ struct ReplySourcesSettingsSection: View {
             Text(AppLocalization.string("A reply to a message you sent from a source turned off here sends no Response ready notification. Applies to this profile on this dashboard."))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            ForEach(ReplySource.allCases) { source in
-                toggle(source)
+            if loadedKey == key {
+                ForEach(ReplySource.allCases) { source in
+                    toggle(source)
+                }
+            } else if error == nil {
+                ProgressView()
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -39,7 +44,7 @@ struct ReplySourcesSettingsSection: View {
 
     private func toggle(_ source: ReplySource) -> some View {
         Toggle(isOn: Binding(
-            get: { loadedKey == key ? settings?[source] ?? true : true },
+            get: { settings?[source] ?? true },
             set: { value in
                 Haptics.selection()
                 Task { await save(value, source: source) }
@@ -51,8 +56,8 @@ struct ReplySourcesSettingsSection: View {
             }
         }
         .tint(.conduitAccent)
-        // Unknown until read, and one change at a time.
-        .disabled(loadedKey != key || saving != nil)
+        // One change at a time.
+        .disabled(saving != nil)
         .accessibilityIdentifier("notifications.reply-source.\(source.rawValue)")
     }
 
@@ -82,8 +87,9 @@ struct ReplySourcesSettingsSection: View {
         }
         do {
             let read = try await appState.replySourcesClient.settings(profile: appState.activeProfile)
-            // Moved on, or a change started meanwhile: that answer wins.
-            guard key == self.key, saving == nil else { return }
+            // Moved on meanwhile. A save still running for this key answers
+            // with the host's state after it, which then replaces this.
+            guard key == self.key else { return }
             settings = read
             loadedKey = key
         } catch is CancellationError {
@@ -97,7 +103,6 @@ struct ReplySourcesSettingsSection: View {
     private func save(_ notify: Bool, source: ReplySource) async {
         let key = key
         guard loadedKey == key, saving == nil, var changed = settings else { return }
-        let before = changed
         changed[source] = notify
         settings = changed
         saving = source
@@ -108,11 +113,18 @@ struct ReplySourcesSettingsSection: View {
             if key == self.key, loadedKey == key { settings = kept }
         } catch {
             guard key == self.key, loadedKey == key else { return }
-            settings = before
-            Haptics.error()
-            if error is CancellationError { return }
-            replySourcesLogger.notice("Reply sources not saved: \(error.localizedDescription, privacy: .public)")
-            self.error = AppLocalization.string("Could not change this setting: \(UserFacingError.message(for: error))")
+            if !(error is CancellationError) {
+                Haptics.error()
+                replySourcesLogger.notice("Reply sources not saved: \(error.localizedDescription, privacy: .public)")
+            }
+            // Read back what the host kept rather than guess at it.
+            saving = nil
+            settings = nil
+            loadedKey = nil
+            await load(key)
+            if !(error is CancellationError), loadedKey == key {
+                self.error = AppLocalization.string("Could not change this setting: \(UserFacingError.message(for: error))")
+            }
         }
     }
 }

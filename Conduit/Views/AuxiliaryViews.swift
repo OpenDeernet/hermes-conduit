@@ -2376,7 +2376,8 @@ private struct NotificationsSettingsDetail: View {
                 }
 
                 // #115: which sources' replies notify, per profile on the host.
-                if notifications.preferences.responseReady, appState.notifierPlugin.reports(ReplySourcesClient.capability) {
+                if notifications.preferences.responseReady, appState.activeDashboardID != nil,
+                   appState.notifierPlugin.reports(ReplySourcesClient.capability) {
                     ReplySourcesSettingsSection()
                 }
 
