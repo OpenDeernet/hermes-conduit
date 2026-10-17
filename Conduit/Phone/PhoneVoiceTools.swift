@@ -22,6 +22,8 @@ enum PhoneVoiceTools {
     static let alarmTool = "phone_alarm"
     /// What seals them: nothing, they never leave the phone.
     static let key = "local"
+    /// The user turns that already agreed to a deletion: each yes answers one.
+    static var usedConfirmations: Set<UUID> = []
 
     /// The tools for what's shared: changes whenever sharing is on (Hermes
     /// can ask for one), adding when events or reminders can be written,
@@ -137,7 +139,8 @@ enum PhoneVoiceTools {
             description: "Deletes \(things) from the user's iPhone at once, by its id from the calendar read "
                 + "(or from \(addTool) for one added in this call). Use this, not Hermes, when the user asks to remove, "
                 + "delete or cancel one. Only when the user asked for it in this call: find it first, say back which one "
-                + "you'll delete (title, day and time) and delete it once they agree, then confirm in a few words. "
+                + "you'll delete (title, day and time) and delete it once they say yes, then confirm in a few words. "
+                + "Each deletion needs its own yes: for several, ask about each in turn. "
                 + "For one event of a repeating series, span this (the default) deletes only that one; future deletes "
                 + "it and all later ones, only when the user said so.",
             parameters: [
@@ -397,7 +400,7 @@ enum PhoneVoiceTools {
 
     /// Whether the user's words agree to a deletion: a yes (in any language
     /// the call's own yes check knows), or a short "delete it" / "yes, remove
-    /// that one". Never a question, never a longer request.
+    /// that one" naming the deletion. Never a question, never a longer request.
     static func confirmsRemoval(_ words: String) -> Bool {
         if VoiceCallDecisionOutcome.isYes(words) { return true }
         guard !words.contains("?"), !words.contains("？") else { return false }
@@ -405,7 +408,7 @@ enum PhoneVoiceTools {
         let agreeing: Set<String> = ["yes", "yeah", "yep", "ok", "okay", "sure", "please", "go", "ahead", "do", "it",
                                      "delete", "remove", "cancel", "that", "this", "one", "them", "both", "the", "event",
                                      "reminder", "all", "of"]
-        let verbs: Set<String> = ["yes", "yeah", "yep", "ok", "okay", "sure", "delete", "remove", "cancel", "go"]
+        let verbs: Set<String> = ["delete", "remove", "cancel"]
         return (1...8).contains(said.count) && said.allSatisfy(agreeing.contains) && said.contains(where: verbs.contains)
     }
 
