@@ -2,9 +2,10 @@
 //  V2ChatsView.swift
 //  Conduit
 //
-//  Chats: the dense session list (Pinned, Recent, child sessions under
-//  their parent) and, behind the folder toggle, Projects. The filters are
-//  a native pull-down menu and combine (Unread and Chat lists unread
+//  Chats: the dense session list (Pinned, then Today, Yesterday, Last 7
+//  days and Older, each collapsible; child sessions under their parent)
+//  and, behind the folder toggle, Projects. The filters are a native
+//  pull-down menu and combine (Unread and Chat lists unread
 //  chats); the active ones show as a gold chip in the search field. Rows
 //  keep the old drawer's swipes and context menu.
 //
@@ -265,6 +266,12 @@ struct V2ChatsView: View {
     @AppStorage("conduit.v2.expandedNests") private var expandedNestsRaw = ""
     /// Parsed once per change of the store, not once per parent row.
     @State private var expansionCache = V2NestExpansionCache()
+    /// The closed list sections (#696), remembered across launches. Read
+    /// into state so a tap can animate the change, which an `@AppStorage`
+    /// write ignores.
+    @State private var collapsedSections = ChatListSection.collapsed(
+        from: UserDefaults.standard.string(forKey: V2ChatsView.collapsedSectionsKey) ?? ChatListSection.defaultCollapsedRaw
+    )
 
     private var showingProjects: Bool { sessionPresentationRaw == "projects" }
 
@@ -664,18 +671,12 @@ struct V2ChatsView: View {
             }
 
             if layout.liveSections && !sections.pinned.isEmpty {
-                Section {
-                    listRows(V2ChatsListItem.items(sections.pinned, expanded: expanded))
-                } header: {
-                    sectionHeader(AppLocalization.string("Pinned"))
-                }
+                collapsibleSection(.pinned, nodes: sections.pinned, expanded: expanded)
             }
 
-            if layout.liveSections && !sections.recent.isEmpty {
-                Section {
-                    listRows(V2ChatsListItem.items(sections.recent, expanded: expanded))
-                } header: {
-                    sectionHeader(AppLocalization.string("Recent"))
+            if layout.liveSections {
+                ForEach(ChatListSection.byDate(sections.recent)) { group in
+                    collapsibleSection(group.section, nodes: group.nodes, expanded: expanded)
                 }
             }
         }
@@ -697,6 +698,87 @@ struct V2ChatsView: View {
             revealLatch = NestRevealLatch()
             revealActiveNestAncestors()
         }
+    }
+
+    static let collapsedSectionsKey = "conduit.v2.collapsedChatSections"
+
+    /// A search or a status filter is a lookup: every section shows its
+    /// matches, and the saved open/closed state waits for the browse.
+    private var sectionsCollapsible: Bool {
+        !isSearching && !selection.flattens
+    }
+
+    private func isCollapsed(_ section: ChatListSection) -> Bool {
+        sectionsCollapsible && collapsedSections.contains(section)
+    }
+
+    private func toggleSection(_ section: ChatListSection) {
+        Haptics.selection()
+        var collapsed = collapsedSections
+        if collapsed.contains(section) { collapsed.remove(section) } else { collapsed.insert(section) }
+        UserDefaults.standard.set(ChatListSection.storageValue(collapsed), forKey: Self.collapsedSectionsKey)
+        withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) {
+            collapsedSections = collapsed
+        }
+    }
+
+    /// A list section whose header opens and closes it (#696).
+    private func collapsibleSection(
+        _ section: ChatListSection,
+        nodes: [SessionNesting.Node],
+        expanded: Set<String>
+    ) -> some View {
+        Section {
+            if !isCollapsed(section) {
+                listRows(V2ChatsListItem.items(nodes, expanded: expanded))
+            }
+        } header: {
+            collapsibleHeader(section, count: nodes.count)
+        }
+    }
+
+    /// The section's name and a chevron that turns with it; a closed
+    /// section counts the chats it hides.
+    private func collapsibleHeader(_ section: ChatListSection, count: Int) -> some View {
+        let collapsed = isCollapsed(section)
+        return Button {
+            toggleSection(section)
+        } label: {
+            HStack(spacing: 6) {
+                Text(section.title)
+                if sectionsCollapsible {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .conduitFixedGlyph()
+                        .rotationEffect(.degrees(collapsed ? 0 : 90))
+                }
+                Spacer(minLength: 6)
+                if collapsed {
+                    Text(verbatim: "\(count)")
+                        .monospacedDigit()
+                }
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(nil)
+            .padding(.leading, 16)
+            .padding(.trailing, 16)
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!sectionsCollapsible)
+        .listRowInsets(EdgeInsets())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(section.title))
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityValue(sectionsCollapsible
+            ? Text(AppLocalization.string(collapsed ? "Collapsed" : "Expanded"))
+            : Text(verbatim: ""))
+        .accessibilityHint(sectionsCollapsible
+            ? AppLocalization.string(collapsed ? "Shows the chats in this section." : "Hides the chats in this section.")
+            : "")
     }
 
     private func sectionHeader(_ title: String) -> some View {
@@ -919,9 +1001,11 @@ struct V2ChatsView: View {
 
             if !pinned.isEmpty {
                 Section {
-                    listRows(pinned.map(V2ChatsListItem.leaf))
+                    if !isCollapsed(.pinned) {
+                        listRows(pinned.map(V2ChatsListItem.leaf))
+                    }
                 } header: {
-                    sectionHeader(AppLocalization.string("Pinned"))
+                    collapsibleHeader(.pinned, count: pinned.count)
                 }
             }
 
