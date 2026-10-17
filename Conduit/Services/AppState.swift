@@ -6214,9 +6214,13 @@ final class AppState: ObservableObject {
     /// old name two bots once had opens neither, as in `BotMentions`.
     static func linkedBot(named profile: String, in roster: [BotProfile]) -> BotProfile? {
         let name = profile.trimmingCharacters(in: .whitespacesAndNewlines)
-        let names = roster.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
-        if let index = names.firstIndex(of: name)
-            ?? names.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+        // Same result as the trimmed-names array this replaces, without
+        // allocating it: this matcher runs per transcript row render.
+        if let index = roster.firstIndex(where: {
+            $0.name.trimmingCharacters(in: .whitespacesAndNewlines) == name
+        }) ?? roster.firstIndex(where: {
+            $0.name.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(name) == .orderedSame
+        }) {
             return roster[index]
         }
         let renamed = roster.filter { bot in
@@ -12605,9 +12609,23 @@ final class AppState: ObservableObject {
                     // later re-resume of this conversation (reconnects,
                     // refreshes) — in-memory only, never a durable pointer.
                     if let conversationScopeProfile {
-                        noteBotChatSession(result.sessionId, profile: conversationScopeProfile)
-                        noteBotChatSession(sessionId, profile: conversationScopeProfile)
-                        noteBotChatSession(result.storedSessionId, profile: conversationScopeProfile)
+                        // The captured label travels with the conversation:
+                        // a resume that rotates the runtime id must not
+                        // strand the label on the old id, or the reply
+                        // headers would fall to the roster's current label
+                        // while the title keeps the captured one. The
+                        // compaction-recovery path propagates it identically.
+                        // The candidates are the conversation's OWN ids —
+                        // addressed, returned and admitted-durable — never
+                        // `acceptedSessionIDs`, whose aliases can carry a
+                        // previous conversation's ids.
+                        let resumedLabel = [sessionId, result.sessionId, result.storedSessionId, admittedDurable]
+                            .compactMap { ChatScrollIdentityNormalization.sessionID($0) }
+                            .compactMap { botChatSessionLabels[$0] }
+                            .first
+                        noteBotChatSession(result.sessionId, profile: conversationScopeProfile, label: resumedLabel)
+                        noteBotChatSession(sessionId, profile: conversationScopeProfile, label: resumedLabel)
+                        noteBotChatSession(result.storedSessionId, profile: conversationScopeProfile, label: resumedLabel)
                     }
                     // Durable-owned presentation: the durable key is the
                     // only persistent presentation key for this

@@ -3497,9 +3497,9 @@ struct ConduitAgentMark: View {
             }
     }
 
-    /// Same size as ProfileAvatarView's default face; the bot branches size
-    /// their own faces to it.
-    private static let faceSize: CGFloat = 30
+    /// Same size as ProfileAvatarView's default face (one shared constant);
+    /// the bot branches size their own faces to it.
+    private static let faceSize: CGFloat = ProfileAvatarView.defaultSize
 
     /// The face a Bot Chat's agent wears — its picture, else its initial on
     /// its Desktop color (BotAvatarView's look) — else ProfileAvatarView's

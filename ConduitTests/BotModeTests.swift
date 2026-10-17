@@ -451,6 +451,15 @@ final class BotModeTests: XCTestCase {
         XCTAssertTrue(renamedIdentity.botImage === renamedPicture,
                       "a renamed bot keeps its picture through the previousNames match")
         XCTAssertEqual(renamedIdentity.botColor, BotAvatarView.color(for: "green", name: "atlas-2"))
+        XCTAssertEqual(
+            harness.appState.profileGlowTint("atlas"),
+            BotAvatarView.color(for: "green", name: "atlas-2"),
+            "the glow resolves the renamed bot through the same matcher as the face"
+        )
+        XCTAssertNil(
+            harness.appState.profileGlowTint(harness.appState.activeProfile),
+            "a workspace profile no bot answers to keeps the gold accent"
+        )
 
         // A second bot's chat presents the SECOND bot — the identity follows
         // the owning bot, never one fixed profile.
@@ -461,6 +470,51 @@ final class BotModeTests: XCTestCase {
         XCTAssertEqual(boIdentity.name, "bo")
         XCTAssertNil(boIdentity.botImage)
         XCTAssertEqual(boIdentity.botColor, BotAvatarView.color(for: nil, name: "bo"))
+    }
+
+    /// A resume that rotates the Bot Chat's runtime id carries the captured
+    /// label onto the rotated id: the reply headers keep presenting the
+    /// label the nav title pinned instead of falling to the roster's
+    /// current one.
+    func testRotatedBotChatResumeCarriesCapturedLabel() async {
+        let bo = makeBot(name: "bo", canonicalID: "stored-bo")
+        // The roster already carries a RETITLED row: if the captured label
+        // were stranded on the pre-rotation id, this label would take over.
+        let retitledBo = makeBot(name: "bo", canonicalID: "stored-bo", botTitle: "Bo II")
+        let harness = makeBotHarness(lifecycleOperations: ChatResumeLifecycleOperations(
+            openSessionWithProfile: { _, id, _, _ in
+                SessionResumeResult(
+                    sessionId: id == "runtime-bo" ? "runtime-bo-rot" : id,
+                    storedSessionId: "stored-bo",
+                    messages: [],
+                    snapshot: SessionRuntimeSnapshot(object: ["running": .bool(false)])
+                )
+            },
+            refreshContext: { _, _ in },
+            botRoster: { _ in
+                BotRosterSnapshot(bots: [retitledBo], supportsBotProtocol: true)
+            },
+            findBotChat: { _, profile in
+                [BotChatLookupRow(id: "stored-\(profile)", resolvedID: "runtime-\(profile)", title: "Bot Chat")]
+            }
+        ))
+        harness.appState.client = HermesClient(
+            connection: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"),
+            profile: "default"
+        )
+        await harness.appState.refreshBotRoster()
+        XCTAssertEqual(harness.appState.botRoster.map(\.name), ["bo"],
+                       "the retitled roster row this test's premise depends on committed")
+
+        let opened = await harness.appState.openBotChat(for: bo)
+        XCTAssertTrue(opened)
+        XCTAssertEqual(harness.appState.activeSessionId, "runtime-bo-rot",
+                       "the resume stub rotated the runtime id and the open adopted it")
+        XCTAssertEqual(
+            harness.appState.conversationAgentIdentity.name, "bo",
+            "the captured label travels to the rotated id; the roster's retitled label must not take over"
+        )
+        XCTAssertEqual(harness.appState.activeSessionTitle, "bo")
     }
 
     func testMissingCanonicalCreatesHiddenTitledChatThenOpensRuntime() async {
