@@ -791,6 +791,8 @@ final class PhoneSyncEngine: ObservableObject {
         }
         if change.kind == .deleteEvent || change.kind == .deleteReminder {
             let isEvent = change.kind == .deleteEvent
+            // Still shared after the wait for the user's yes.
+            guard isEvent ? preferences.calendar == .full : preferences.reminders else { throw VoiceNotReady() }
             // Only what's still shared: an id read before its calendar was
             // left out isn't.
             if let calendar = await calendarSource.itemCalendar(itemID: (isEvent ? change.eventID : change.reminderID) ?? "",
