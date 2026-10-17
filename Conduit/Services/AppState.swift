@@ -5649,6 +5649,9 @@ final class AppState: ObservableObject {
     @Published private(set) var isSavingQueuedVoiceCalls = false
     /// What the last Save Now did, shown under the button until the next.
     @Published private(set) var voiceCallSaveNowResult: String?
+    /// The key and waiting count the result was written for: it goes once
+    /// either changes (another profile, or a later retry saved some).
+    private var voiceCallSaveNowResultState: (key: String, pending: Int)?
     /// Keys whose host refused the last outbox save as unsupported. Kept
     /// across launches so Voice settings gives the reason at once.
     private var voiceCallSaveBlockedKeys: Set<String> {
@@ -6207,6 +6210,10 @@ final class AppState: ObservableObject {
                 && !voiceTranscriptsSaving.contains(entry.request.callID)
         }.count
         if pendingVoiceCallSaves != pending { pendingVoiceCallSaves = pending }
+        if let state = voiceCallSaveNowResultState, state.key != key || state.pending != pending {
+            voiceCallSaveNowResult = nil
+            voiceCallSaveNowResultState = nil
+        }
         // The reason lasts only while a refused call is still waiting.
         if pending == 0, voiceCallSaveBlockedKeys.contains(key) { voiceCallSaveBlockedKeys.remove(key) }
         let blocked = pending > 0 && voiceCallSaveBlockedKeys.contains(key)
@@ -6223,6 +6230,7 @@ final class AppState: ObservableObject {
         let profile = activeProfile
         let drain = await drainVoiceTranscriptOutbox(profile: profile, key: voiceHistoryKey(profile: profile))
         voiceCallSaveNowResult = Self.voiceCallSaveNowResult(drain, stillWaiting: pendingVoiceCallSaves)
+        voiceCallSaveNowResultState = (voiceHistoryKey(profile: profile), pendingVoiceCallSaves)
         if let result = voiceCallSaveNowResult {
             UIAccessibility.post(notification: .announcement, argument: result)
         }
@@ -6231,7 +6239,8 @@ final class AppState: ObservableObject {
     /// The line under Save Now. Nil when every call saved: the card goes.
     static func voiceCallSaveNowResult(_ drain: VoiceTranscriptDrainResult, stillWaiting: Int) -> String? {
         guard stillWaiting > 0 else { return nil }
-        if drain.waitedOnCall, drain.failure == nil {
+        // Whatever failed before it, what's left now waits on the call.
+        if drain.waitedOnCall {
             return AppLocalization.string("Calls save once the live call ends.")
         }
         let reason = drain.failure.map(voiceCallSaveFailureReason)
@@ -6249,7 +6258,10 @@ final class AppState: ObservableObject {
         case VoiceHistoryError.busy:
             return AppLocalization.string("Hermes is busy with that conversation. Try again in a moment.")
         case DashboardTicketBridgeError.http(let status, let detail):
-            let detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+            // The host's text, kept to one short line.
+            let firstLine = detail.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+            var detail = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if detail.count > 200 { detail = String(detail.prefix(200)) + "…" }
             return detail.isEmpty
                 ? AppLocalization.string("Hermes answered with error \(String(status)).")
                 : AppLocalization.string("Hermes answered: \(detail)")
@@ -11112,6 +11124,7 @@ final class AppState: ObservableObject {
         pendingVoiceCallSaves = 0
         voiceCallSavesBlocked = false
         voiceCallSaveNowResult = nil
+        voiceCallSaveNowResultState = nil
         appleSpeechAvailability = AppleOnDeviceSpeechTranscriber.currentAvailability()
         retireOutstandingPreferredReturnSurfaceRequests()
         showLogin = true
