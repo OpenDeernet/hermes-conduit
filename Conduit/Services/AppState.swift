@@ -5792,7 +5792,10 @@ final class AppState: ObservableObject {
                 self.errorMessage = Self.missingLinkedBotMessage(for: self.botModePhase)
                 return
             }
-            _ = await self.openBotChat(for: bot)
+            // Like a chat link, a bot's chat comes forward over V2's Chats list.
+            if await self.openBotChat(for: bot), self.explicitSessionOpenRequestID == nil {
+                self.dismissSidebarDrawer()
+            }
         }
     }
 
@@ -5857,8 +5860,9 @@ final class AppState: ObservableObject {
             }.value
             // From outside a chat (a Live Activity, another app) the chat
             // must come forward: V2 keeps the Chats list over it until the
-            // sidebar is let go, as a notification's open does. Not when a
-            // newer open is still under way: that navigation decides.
+            // sidebar is let go, as a notification's open does (once the open
+            // succeeded, so a dead link leaves the list up with its error).
+            // Not when a newer open is still under way: that one decides.
             if opened, self.explicitSessionOpenRequestID == nil { self.dismissSidebarDrawer() }
         }
     }
@@ -19606,7 +19610,7 @@ final class AppState: ObservableObject {
                         profile: activeProfile,
                         profileName: profileDisplayName(activeProfile),
                         glowHex: profileGlowColors()[activeProfile]?.hex
-                            ?? profileGlowTint(activeProfile).flatMap { ProfileGlowRGB(UIColor($0))?.hex }
+                            ?? profileGlowTint(activeProfile).flatMap { ProfileGlowRGB(UIColor($0).resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark)))?.hex }
                     )
                 case .queued:
                     // Hermes normally drains queued input as a later full turn,
