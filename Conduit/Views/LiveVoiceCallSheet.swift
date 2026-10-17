@@ -503,7 +503,7 @@ private struct LiveVoiceCallThreadLabel: View {
 /// The attached chat's name in a call's header, as a link to that chat
 /// (#698): a small chevron says it opens. Plain text when there is no
 /// chat to open.
-struct CallChatTitleLink<Title: View>: View {
+private struct CallChatTitleLink<Title: View>: View {
     let link: ConduitAppLink?
     let onOpenChat: ((ConduitAppLink) -> Void)?
     @ViewBuilder let label: () -> Title
@@ -891,6 +891,8 @@ struct V2CallHeaderTitle: View {
             // The header reads as one element: a label changing every second
             // would keep VoiceOver from settling on it. The state is announced.
             .accessibilityHidden(true)
+            // The chat link's tap area reaches under this line.
+            .allowsHitTesting(false)
         }
     }
 
