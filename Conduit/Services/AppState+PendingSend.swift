@@ -57,15 +57,16 @@ extension AppState {
     /// Conduit connects, or a chat synchronizing or reconnecting. Also while
     /// a message waits there, so the next one goes after it.
     var composerWaitsForChat: Bool {
-        guard isConnected || isRecoveringConnection else { return false }
+        // A Hermes too old to recover turns safely can't take it: the
+        // composer stays locked and says why.
+        guard isConnected || isRecoveringConnection, turnState != .unsupportedGateway else { return false }
         switch composerChatOnScreen {
         case .none:
             return false
         case .newChat, .savedCopy:
             return true
         case .live:
-            return liveChatIsOnItsWay
-                || (turnState != .unsupportedGateway && pendingComposerSendOnScreen != nil)
+            return liveChatIsOnItsWay || pendingComposerSendOnScreen != nil
         }
     }
 
@@ -207,6 +208,7 @@ extension AppState {
         // puts it back as a draft.
         guard pending.dashboardID == activeDashboardID else {
             pendingComposerSend = nil
+            cancelPendingComposerSendRecheck()
             return
         }
         // Another chat landed: it isn't sent anywhere.
@@ -233,8 +235,7 @@ extension AppState {
     /// Through the normal send, busy mode and all. One that doesn't go
     /// comes back to the composer, like any send that didn't.
     private func deliverPendingComposerSend(_ pending: PendingComposerSend) {
-        pendingComposerSendRecheckTask?.cancel()
-        pendingComposerSendRecheckTask = nil
+        cancelPendingComposerSendRecheck()
         pendingComposerSend = nil
         let context = composerSubmissionContext()
         let key = composerDraftKeyOnScreen
@@ -252,6 +253,11 @@ extension AppState {
         }
     }
 
+    private func cancelPendingComposerSendRecheck() {
+        pendingComposerSendRecheckTask?.cancel()
+        pendingComposerSendRecheckTask = nil
+    }
+
     private func recheckPendingComposerSendSoon() {
         guard pendingComposerSendRecheckTask == nil else { return }
         pendingComposerSendRecheckTask = Task { @MainActor [weak self] in
@@ -267,7 +273,10 @@ extension AppState {
     /// line saying so.
     func returnPendingComposerSendToDraft(_ pending: PendingComposerSend, saysWhy: Bool = true) {
         let onScreen = isOnScreen(pending)
-        if pendingComposerSend?.id == pending.id { pendingComposerSend = nil }
+        if pendingComposerSend?.id == pending.id {
+            pendingComposerSend = nil
+            cancelPendingComposerSendRecheck()
+        }
         composerRestoreRequests.append(
             restoreRequest(for: pending, key: onScreen ? composerDraftKeyOnScreen : nil, focuses: false)
         )
@@ -302,6 +311,7 @@ extension AppState {
     func leaveComposerSends(dashboardID: UUID?) {
         if let pending = pendingComposerSend, dashboardID == nil || pending.dashboardID == dashboardID {
             pendingComposerSend = nil
+            cancelPendingComposerSendRecheck()
         }
         if composerRestoreRequests.contains(where: { dashboardID == nil || $0.dashboardID == dashboardID }) {
             composerRestoreRequests.removeAll { dashboardID == nil || $0.dashboardID == dashboardID }

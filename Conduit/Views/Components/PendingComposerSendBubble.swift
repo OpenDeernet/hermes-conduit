@@ -15,13 +15,14 @@ struct PendingComposerSendBubble: View {
     @Environment(\.chatTextSize) private var chatTextSize
 
     static let scrollID = "pending-composer-send"
+    private static let timestampFormatter = ISO8601DateFormatter()
 
     private var message: ChatMessage {
         ChatMessage(
             id: "pending-\(pending.id.uuidString)",
             role: .user,
             content: pending.outboundText,
-            timestamp: ISO8601DateFormatter().string(from: pending.queuedAt)
+            timestamp: Self.timestampFormatter.string(from: pending.queuedAt)
         )
     }
 
@@ -47,6 +48,7 @@ struct PendingComposerSendBubble: View {
                     }
                     .font(.caption.weight(.semibold))
                     .accessibilityHint(Text("Puts the message back in the composer to change or delete"))
+                    .accessibilityIdentifier("pending-composer-send.edit")
                 }
             }
         }

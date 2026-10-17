@@ -1830,6 +1830,7 @@ struct ComposerBar: View {
         // chat a New Chat created): the field stays as it is, focus and
         // dictation with it.
         if let loadedDraftKey, appState.composerDraftKeysAreSameChat(loadedDraftKey, destinationKey) {
+            saveDraft(for: destinationKey)
             draftStore.removeDraft(for: loadedDraftKey)
             self.loadedDraftKey = destinationKey
             applyPendingPrefill()
