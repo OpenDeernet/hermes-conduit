@@ -127,9 +127,9 @@ struct ConnectionSetupView: View {
                                 .padding(.bottom, 28)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .accessibilityIdentifier("connection-setup.content")
                     }
                 }
-                .accessibilityIdentifier("connection-setup.content")
             }
             .onChange(of: flow.step) { _, newStep in
                 // Leaving the test screen for any editable step cancels the

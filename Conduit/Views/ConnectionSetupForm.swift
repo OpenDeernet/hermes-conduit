@@ -32,6 +32,9 @@ struct ConnectionSetupForm: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollDismissesKeyboard(.interactively)
+            // On the scroll view itself: set on a parent, the identifier
+            // would also replace the pinned button's own.
+            .accessibilityIdentifier("connection-setup.content")
             // The form steps' Continue stays pinned above the keyboard, so
             // it is never hidden behind it while a field is being edited.
             .safeAreaInset(edge: .bottom, spacing: 0) { pinnedAction }
