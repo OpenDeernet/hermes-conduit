@@ -619,7 +619,7 @@ enum CapabilityPluginFilter {
 /// How many rows a search finds on each Capabilities tab, so the search
 /// covers all four: the other tabs' finds show under the tab picker.
 enum CapabilitySearchCounts {
-    struct Sources {
+    struct Sources: Equatable {
         var skills: [CapabilitySkill] = []
         var officialSkills: [OfficialSkill] = []
         var toolsets: [CapabilityToolset] = []

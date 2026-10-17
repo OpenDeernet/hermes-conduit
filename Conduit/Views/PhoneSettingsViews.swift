@@ -24,6 +24,7 @@ struct PhoneSettingsPage: View {
     @State private var errorMessage: String?
     @State private var calendars: [PhoneCalendarRow] = []
     @State private var showsCalendars = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The voice mode whose switch is waiting on the user's yes.
     @State private var askingVoiceMode: LiveVoiceModeName?
     /// Loaded on appear (loading prunes and saves).
@@ -177,7 +178,7 @@ struct PhoneSettingsPage: View {
                 // Not a DisclosureGroup: outside a List it indents its rows
                 // without narrowing them, so their switches ran off the card.
                 Button {
-                    withAnimation(.snappy(duration: 0.25)) { showsCalendars.toggle() }
+                    withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { showsCalendars.toggle() }
                 } label: {
                     HStack {
                         Text("Calendars and lists")

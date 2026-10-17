@@ -13,6 +13,7 @@ struct CapabilitiesView: View {
     @FocusState private var searchFocused: Bool
     /// The scope whose unvisited tabs a search has already loaded.
     @State private var searchLoadedScope: Scope?
+    @State private var countsMemo = CapabilityListMemo<CountsInput, [CapabilitiesTab: Int]>()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var capabilitiesLoading = false
     @State private var loadError: String?
@@ -85,6 +86,11 @@ struct CapabilitiesView: View {
         let searching: Bool
     }
 
+    private struct CountsInput: Equatable {
+        let query: String
+        let sources: CapabilitySearchCounts.Sources
+    }
+
     /// Always on screen, rather than `.searchable`'s field that hides until
     /// the list is pulled down. One search for all four tabs: switching tabs
     /// keeps it.
@@ -110,7 +116,7 @@ struct CapabilitiesView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
-                            .frame(width: 32, height: 32)
+                            .frame(minWidth: 44, minHeight: 44)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(AppLocalization.string("Clear search"))
@@ -142,19 +148,23 @@ struct CapabilitiesView: View {
     /// What the search finds on the other tabs, each a button to go there.
     @ViewBuilder
     private var otherTabMatches: some View {
-        let counts = CapabilitySearchCounts.counts(query: query, in: searchSources)
+        // Kept until the query or what it searches changes: this bar
+        // re-renders on every AppState and store publish.
+        let counts = countsMemo.value(for: CountsInput(query: query, sources: searchSources)) {
+            CapabilitySearchCounts.counts(query: $0.query, in: $0.sources)
+        }
         let others = CapabilitiesTab.allCases.filter { $0 != tab && (counts[$0] ?? 0) > 0 }
         if !others.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    Text("Also in")
+                    Text(verbatim: AppLocalization.string("Also in"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     ForEach(others) { other in
                         Button {
                             tabRaw = other.rawValue
                         } label: {
-                            Text(verbatim: "\(other.title) \(counts[other] ?? 0)")
+                            Text(verbatim: "\(other.title) \((counts[other] ?? 0).formatted())")
                                 .font(.footnote.weight(.semibold))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
@@ -194,15 +204,19 @@ struct CapabilitiesView: View {
     private func loadForSearch() async {
         guard !query.isEmpty, let scope = configuredScope, scope == self.scope,
               searchLoadedScope != scope else { return }
-        searchLoadedScope = scope
         let store = self.store
         await withTaskGroup(of: Void.self) { group in
             if store.officialSkills.isEmpty { group.addTask { await store.loadOfficialSkills() } }
-            if !store.connectorsLoaded { group.addTask { await store.loadConnectors() } }
-            if !store.pluginsLoaded { group.addTask { await store.loadPlugins() } }
+            if !store.connectorsLoaded || store.connectorsError != nil { group.addTask { await store.loadConnectors() } }
+            if !store.pluginsLoaded || store.pluginsError != nil { group.addTask { await store.loadPlugins() } }
         }
-        // Cleared mid-read: the next search reads them again.
-        if Task.isCancelled { searchLoadedScope = nil }
+        // Only a full read counts: one cleared mid-read or failed is tried
+        // again on the next search.
+        if !Task.isCancelled, configuredScope == scope, !store.officialSkills.isEmpty,
+           store.connectorsLoaded, store.connectorsError == nil,
+           store.pluginsLoaded, store.pluginsError == nil {
+            searchLoadedScope = scope
+        }
     }
 
     private var tabPicker: some View {
