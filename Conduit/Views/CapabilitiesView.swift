@@ -10,6 +10,10 @@ struct CapabilitiesView: View {
     @StateObject private var store = CapabilitiesStore()
     @AppStorage("capabilities.tab") private var tabRaw = CapabilitiesTab.skills.rawValue
     @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
+    /// The scope whose unvisited tabs a search has already loaded.
+    @State private var searchLoadedScope: Scope?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var capabilitiesLoading = false
     @State private var loadError: String?
     /// Token of the most recent request. An older completion can never clear
@@ -51,10 +55,13 @@ struct CapabilitiesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .v2EdgeBar(.top) {
-            tabPicker
-                .modifier(V2LegacyScrollEdge())
+            VStack(spacing: 0) {
+                searchField
+                tabPicker
+                otherTabMatches
+            }
+            .modifier(V2LegacyScrollEdge())
         }
-        .searchable(text: $searchText, prompt: searchPrompt)
         // The other settings pages' backdrop and small title.
         .background { SettingsBackdrop() }
         .navigationTitle("Capabilities")
@@ -66,6 +73,136 @@ struct CapabilitiesView: View {
             configuredScope = scope
             await loadCapabilities()
         }
+        .task(id: SearchLoad(scope: configuredScope, searching: !query.isEmpty)) {
+            await loadForSearch()
+        }
+    }
+
+    // MARK: Search
+
+    private struct SearchLoad: Hashable {
+        let scope: Scope?
+        let searching: Bool
+    }
+
+    /// Always on screen, rather than `.searchable`'s field that hides until
+    /// the list is pulled down. One search for all four tabs: switching tabs
+    /// keeps it.
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField(searchPrompt, text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.subheadline)
+                    .submitLabel(.search)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .focused($searchFocused)
+                    .onSubmit { searchFocused = false }
+                    .accessibilityIdentifier("capabilities.search")
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(AppLocalization.string("Clear search"))
+                }
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 6)
+            .frame(minHeight: 40)
+            .conduitGlassSurface(cornerRadius: 20)
+            if searchFocused {
+                Button(AppLocalization.string("Cancel")) {
+                    searchText = ""
+                    searchFocused = false
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.conduitAccent)
+                .buttonStyle(.plain)
+                .frame(minHeight: 44)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: searchFocused)
+        .dynamicTypeSize(...DynamicTypeSize.pinnedChromeCap)
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .padding(.bottom, 4)
+    }
+
+    /// What the search finds on the other tabs, each a button to go there.
+    @ViewBuilder
+    private var otherTabMatches: some View {
+        let counts = CapabilitySearchCounts.counts(query: query, in: searchSources)
+        let others = CapabilitiesTab.allCases.filter { $0 != tab && (counts[$0] ?? 0) > 0 }
+        if !others.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Text("Also in")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    ForEach(others) { other in
+                        Button {
+                            tabRaw = other.rawValue
+                        } label: {
+                            Text(verbatim: "\(other.title) \(counts[other] ?? 0)")
+                                .font(.footnote.weight(.semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.conduitAccent.opacity(0.15), in: Capsule())
+                                .foregroundStyle(Color.conduitAccent)
+                        }
+                        .buttonStyle(PressableButtonStyle())
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .dynamicTypeSize(...DynamicTypeSize.pinnedChromeCap)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private var searchSources: CapabilitySearchCounts.Sources {
+        guard !query.isEmpty else { return CapabilitySearchCounts.Sources() }
+        // Skills and tools only once they're this profile's.
+        let ownRows = CapabilityLoadPolicy.shouldPresentRows(
+            snapshotProfile: appState.capabilitiesProfile,
+            activeProfile: appState.activeProfile
+        )
+        return CapabilitySearchCounts.Sources(
+            skills: ownRows ? appState.skills : [],
+            officialSkills: store.officialSkills,
+            toolsets: ownRows ? appState.toolsets : [],
+            servers: store.servers,
+            connectorCatalog: store.connectorCatalog,
+            plugins: store.plugins,
+            pluginCatalog: store.pluginCatalog
+        )
+    }
+
+    /// A search reads the tabs not opened yet, once per profile, so their
+    /// finds can show.
+    private func loadForSearch() async {
+        guard !query.isEmpty, let scope = configuredScope, scope == self.scope,
+              searchLoadedScope != scope else { return }
+        searchLoadedScope = scope
+        let store = self.store
+        await withTaskGroup(of: Void.self) { group in
+            if store.officialSkills.isEmpty { group.addTask { await store.loadOfficialSkills() } }
+            if !store.connectorsLoaded { group.addTask { await store.loadConnectors() } }
+            if !store.pluginsLoaded { group.addTask { await store.loadPlugins() } }
+        }
+        // Cleared mid-read: the next search reads them again.
+        if Task.isCancelled { searchLoadedScope = nil }
     }
 
     private var tabPicker: some View {
