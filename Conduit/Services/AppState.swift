@@ -23943,29 +23943,51 @@ final class AppState: ObservableObject {
                 errorMessage = result["confirm_message"] as? String ?? AppLocalization.string("Hermes requires confirmation before using this model.")
                 return false
             }
-            var config = try await dashboardTicketBridge.requestJSON(path: dashboardPath("/api/config", profile: profile))
-            var modelConfig = config["model"] as? [String: Any] ?? [:]
-            modelConfig["default"] = model
-            modelConfig["provider"] = provider
-            config["model"] = modelConfig
-            // Hermes reads the profile default from `agent.reasoning_effort`
-            // (Desktop writes it there too). The PUT deep-merges, so an old
-            // top-level `reasoning` stays on disk; loading reads the agent
-            // key first, so it no longer wins.
-            var agentConfig = config["agent"] as? [String: Any] ?? [:]
-            agentConfig["reasoning_effort"] = reasoning
-            config["agent"] = agentConfig
-            config["reasoning"] = nil
-            _ = try await dashboardTicketBridge.requestJSON(
-                path: dashboardPath("/api/config", profile: profile),
-                method: "PUT",
-                body: ["config": config, "profile": profile]
-            )
+            try await updateProfileConfig(profile: profile) { config in
+                var modelConfig = config["model"] as? [String: Any] ?? [:]
+                modelConfig["default"] = model
+                modelConfig["provider"] = provider
+                config["model"] = modelConfig
+                // Hermes reads the profile default from `agent.reasoning_effort`
+                // (Desktop writes it there too). The PUT deep-merges, so an old
+                // top-level `reasoning` stays on disk; loading reads the agent
+                // key first, so it no longer wins.
+                var agentConfig = config["agent"] as? [String: Any] ?? [:]
+                agentConfig["reasoning_effort"] = reasoning
+                config["agent"] = agentConfig
+                config["reasoning"] = nil
+            }
             return true
         } catch {
             errorMessage = AppLocalization.string("Could not save model defaults: \(UserFacingError.message(for: error))")
             return false
         }
+    }
+
+    private var profileConfigWrites: Task<Void, Never>?
+
+    /// One GET, change and PUT of the whole profile config, run after any
+    /// earlier one finishes. Settings pages save independently (the Model
+    /// page has three savers), and two overlapping round trips would let
+    /// the later PUT put back what the earlier one changed.
+    private func updateProfileConfig(
+        profile: String,
+        _ change: @escaping @MainActor (inout [String: Any]) -> Void
+    ) async throws {
+        let previous = profileConfigWrites
+        let write = Task { @MainActor [weak self] in
+            await previous?.value
+            guard let self, let bridge = self.dashboardTicketBridge else { throw CancellationError() }
+            var config = try await bridge.requestJSON(path: self.dashboardPath("/api/config", profile: profile))
+            change(&config)
+            _ = try await bridge.requestJSON(
+                path: self.dashboardPath("/api/config", profile: profile),
+                method: "PUT",
+                body: ["config": config, "profile": profile]
+            )
+        }
+        profileConfigWrites = Task { _ = try? await write.value }
+        try await write.value
     }
 
     /// The profile's default reasoning effort. Hermes keeps it at
@@ -24015,15 +24037,12 @@ final class AppState: ObservableObject {
     /// objects but replaces lists, so the whole list goes up each time.
     func setProfileFallbackModels(_ entries: [ProfileFallbackModel]) async -> Bool {
         let profile = activeProfile
-        guard let dashboardTicketBridge else { return false }
+        guard dashboardTicketBridge != nil else { return false }
+        let list = entries.filter(\.isComplete).map(\.jsonObject)
         do {
-            var config = try await dashboardTicketBridge.requestJSON(path: dashboardPath("/api/config", profile: profile))
-            config["fallback_providers"] = entries.filter(\.isComplete).map(\.jsonObject)
-            _ = try await dashboardTicketBridge.requestJSON(
-                path: dashboardPath("/api/config", profile: profile),
-                method: "PUT",
-                body: ["config": config, "profile": profile]
-            )
+            try await updateProfileConfig(profile: profile) { config in
+                config["fallback_providers"] = list
+            }
             return true
         } catch {
             errorMessage = AppLocalization.string("Could not save fallback models: \(UserFacingError.message(for: error))")
@@ -24041,13 +24060,9 @@ final class AppState: ObservableObject {
                 _ = try await dashboardTicketBridge.requestJSON(path: "/api/dashboard/plugin-providers", method: "PUT", body: body)
                 return true
             }
-            var config = try await dashboardTicketBridge.requestJSON(path: dashboardPath("/api/config", profile: profile))
-            setProfileSettingValue(value, in: &config, key: key)
-            _ = try await dashboardTicketBridge.requestJSON(
-                path: dashboardPath("/api/config", profile: profile),
-                method: "PUT",
-                body: ["config": config, "profile": profile]
-            )
+            try await updateProfileConfig(profile: profile) { [weak self] config in
+                self?.setProfileSettingValue(value, in: &config, key: key)
+            }
             if key == "approvals.mode", let mode = value.textValue?.lowercased(), profile == activeProfile {
                 // Mirror the saved profile mode immediately and re-resolve the
                 // effective indicator state through the same precedence
@@ -24086,7 +24101,9 @@ final class AppState: ObservableObject {
             return AnyCodable.isBoolean(value) ? .bool(value.boolValue) : .number(value.doubleValue)
         }
         if let value = current as? String { return .text(value) }
-        if let value = current as? [Any] { return .list(value.compactMap { $0 as? String }) }
+        // A stray number in a list is shown as text, so saving the list
+        // doesn't drop it.
+        if let value = current as? [Any] { return .list(value.map { $0 as? String ?? "\($0)" }) }
         return nil
     }
 

@@ -2154,6 +2154,10 @@ private struct FallbackModelsSettings: View {
                         .buttonStyle(.settingsPrimary)
                         .disabled(saving || entries == saved || entries.contains { !$0.isComplete })
                 }
+                if entries.contains(where: { !$0.isComplete }) {
+                    Text("Pick a provider and model for every fallback to save.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
         }
@@ -2168,10 +2172,10 @@ private struct FallbackModelsSettings: View {
                 Spacer()
                 Menu {
                     if index > 0 {
-                        Button { move(index, by: -1) } label: { Label(AppLocalization.string("Move up"), systemImage: "arrow.up") }
+                        Button { move(entry.id, by: -1) } label: { Label(AppLocalization.string("Move up"), systemImage: "arrow.up") }
                     }
                     if index < entries.count - 1 {
-                        Button { move(index, by: 1) } label: { Label(AppLocalization.string("Move down"), systemImage: "arrow.down") }
+                        Button { move(entry.id, by: 1) } label: { Label(AppLocalization.string("Move down"), systemImage: "arrow.down") }
                     }
                     Button(role: .destructive) { entries.removeAll { $0.id == entry.id } } label: { Label(AppLocalization.string("Delete"), systemImage: "trash") }
                 } label: {
@@ -2231,9 +2235,10 @@ private struct FallbackModelsSettings: View {
         entries.append(ProfileFallbackModel(provider: row.name, model: row.models.first?.id ?? ""))
     }
 
-    private func move(_ index: Int, by offset: Int) {
+    private func move(_ id: UUID, by offset: Int) {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         let target = index + offset
-        guard entries.indices.contains(index), entries.indices.contains(target) else { return }
+        guard entries.indices.contains(target) else { return }
         entries.swapAt(index, target)
     }
 
@@ -2494,6 +2499,7 @@ struct ProfileConfigSettingsPage: View {
                 else { save(field, value: .text(raw)) }
             }
             .buttonStyle(.settingsPrimary).disabled(savingKey != nil)
+            .accessibilityLabel(Text(AppLocalization.string("Save \(field.label)")))
         }
     }
 
@@ -2510,6 +2516,7 @@ struct ProfileConfigSettingsPage: View {
                 save(field, value: .list(Self.listEntries(raw)))
             }
             .buttonStyle(.settingsPrimary).disabled(savingKey != nil)
+            .accessibilityLabel(Text(AppLocalization.string("Save \(field.label)")))
         }
     }
 
