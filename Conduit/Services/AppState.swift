@@ -20133,7 +20133,16 @@ final class AppState: ObservableObject {
     // (SESSION_NOT_OWNED) offers "Take over"; see ChatTakeover.swift.
 
     /// What the host's notifier plugin serves; Settings nudges an update.
-    @Published private(set) var notifierPlugin = NotifierPluginStatus()
+    @Published private(set) var notifierPlugin = NotifierPluginStatus() {
+        didSet {
+            // A reset for another host keeps the latest plugin known.
+            if notifierPlugin.latestVersion == nil, let latest = latestNotifierPluginVersion {
+                notifierPlugin.latestVersion = latest
+            }
+        }
+    }
+    /// The plugin on its repository's main branch, once read.
+    private var latestNotifierPluginVersion: String?
     /// Apple Health sharing with one Hermes profile.
     /// Off until the user turns it on in Settings > Health.
     @Published var healthSyncPreferences = HealthSyncPreferences.load()
@@ -20193,6 +20202,7 @@ final class AppState: ObservableObject {
         notifierPluginStatusAcceptedGeneration = generation
         notifierPlugin.state = state
         notifierPlugin.runtime = runtime
+        Task { await refreshLatestNotifierPluginVersion() }
         clearSettledNotifierPluginUpdateOutcome()
         // Calls declined or missed while this host was out of reach.
         deliverHermesCallOutcomes()
@@ -20211,6 +20221,24 @@ final class AppState: ObservableObject {
         // Location waiting to go to this host, and its host pass.
         Task { await locationHostConnected() }
         Task { await runPhoneSync(reason: .connected) }
+    }
+
+    /// Reads the latest plugin version (saved, then from GitHub at most
+    /// hourly), so a plugin release is offered without a new Conduit build.
+    func refreshLatestNotifierPluginVersion() async {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        if latestNotifierPluginVersion == nil, let saved = NotifierPluginLatestVersion.cached(in: defaults) {
+            applyLatestNotifierPluginVersion(saved)
+        }
+        guard let fetched = await NotifierPluginLatestVersion.refresh(defaults: defaults) else { return }
+        applyLatestNotifierPluginVersion(fetched)
+    }
+
+    private func applyLatestNotifierPluginVersion(_ version: String) {
+        latestNotifierPluginVersion = version
+        guard notifierPlugin.latestVersion != version else { return }
+        notifierPlugin.latestVersion = version
+        clearSettledNotifierPluginUpdateOutcome()
     }
 
     /// Hands each of this dashboard's paired profiles an end-to-end
