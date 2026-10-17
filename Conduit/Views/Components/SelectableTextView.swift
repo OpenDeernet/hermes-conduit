@@ -336,6 +336,13 @@ struct SelectableTextView: UIViewRepresentable {
         // A drawn host measures with its canvas even once its text view is
         // mounted, so mounting never changes its size.
         if let canvas = uiView.canvas {
+            // Asked for its ideal width, wrapping text gives its unbroken
+            // width, as the pinned text view's intrinsic size did: an HStack
+            // sizes a sent bubble to fit its text from this.
+            if wrapsLines, selfSizingWidthRange == nil,
+               proposal.width == nil || proposal.width == .infinity {
+                return canvas.naturalSize()
+            }
             return measuredSizeCached(proposalWidth: proposal.width, coordinator: context.coordinator) { width in
                 canvas.height(atWidth: width)
             }

@@ -23,6 +23,8 @@ final class SelectableTextCanvas: UIView {
     private var wrapsLines = true
     /// The width the text is laid out at; nil after the text changes.
     private var layoutWidth: CGFloat?
+    /// The text's size on unbroken lines; nil after the text changes.
+    private var cachedNaturalSize: CGSize?
     private var tiles: [SelectableTextCanvasTile] = []
 
     override init(frame: CGRect) {
@@ -67,6 +69,7 @@ final class SelectableTextCanvas: UIView {
             self.text = text
             contentStorage.attributedString = text
             layoutWidth = nil
+            cachedNaturalSize = nil
         }
         self.font = font
         linkStyle.attributes = [
@@ -83,6 +86,7 @@ final class SelectableTextCanvas: UIView {
             textContainer.lineBreakMode = lineBreakMode
             self.wrapsLines = wrapsLines
             layoutWidth = nil
+            cachedNaturalSize = nil
         }
         setNeedsLayout()
         redrawTiles()
@@ -94,6 +98,24 @@ final class SelectableTextCanvas: UIView {
         guard text.length > 0 else { return Self.emptyHeight(for: font) }
         layOut(atWidth: width)
         return ceil(textLayoutManager.usageBoundsForTextContainer.height)
+    }
+
+    /// The size the text takes when no width bounds it, which a text view
+    /// pinned in its host gave as its intrinsic size: a short sent message's
+    /// bubble fits its text instead of the widest width it's offered.
+    func naturalSize() -> CGSize {
+        if let cachedNaturalSize { return cachedNaturalSize }
+        TranscriptPerf.note(.textKitMeasurement)
+        let size: CGSize
+        if text.length == 0 {
+            size = CGSize(width: 1, height: Self.emptyHeight(for: font))
+        } else {
+            layOut(atWidth: 100_000)
+            let bounds = textLayoutManager.usageBoundsForTextContainer
+            size = CGSize(width: max(1, ceil(bounds.width)), height: ceil(bounds.height))
+        }
+        cachedNaturalSize = size
+        return size
     }
 
     /// An empty text view still takes a line's height, where TextKit 2
