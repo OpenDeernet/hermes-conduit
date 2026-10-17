@@ -689,7 +689,10 @@ struct V2ChatsView: View {
             await appState.refreshSessionCatalog()
         }
         .onAppear { revealActiveNestAncestors() }
-        .onChange(of: appState.activeSessionId) { _, _ in revealActiveNestAncestors() }
+        .onChange(of: appState.activeSessionId) { _, _ in
+            revealActiveNestAncestors()
+            revealActiveSection()
+        }
         .onChange(of: displayed) { _, _ in revealActiveNestAncestors() }
         .onChange(of: appState.pinnedSessionIDs) { _, _ in revealActiveNestAncestors() }
         .onChange(of: appState.voiceSessionTagsByKey) { _, _ in revealActiveNestAncestors() }
@@ -712,8 +715,8 @@ struct V2ChatsView: View {
         sectionsCollapsible && collapsedSections.contains(section)
     }
 
-    private func toggleSection(_ section: ChatListSection) {
-        Haptics.selection()
+    private func toggleSection(_ section: ChatListSection, haptic: Bool = true) {
+        if haptic { Haptics.selection() }
         var collapsed = collapsedSections
         if collapsed.contains(section) { collapsed.remove(section) } else { collapsed.insert(section) }
         UserDefaults.standard.set(ChatListSection.storageValue(collapsed), forKey: Self.collapsedSectionsKey)
@@ -738,47 +741,64 @@ struct V2ChatsView: View {
     }
 
     /// The section's name and a chevron that turns with it; a closed
-    /// section counts the chats it hides.
+    /// section counts the chats it hides. While a search or status filter
+    /// keeps every section open it is a plain header.
+    @ViewBuilder
     private func collapsibleHeader(_ section: ChatListSection, count: Int) -> some View {
-        let collapsed = isCollapsed(section)
-        return Button {
-            toggleSection(section)
-        } label: {
-            HStack(spacing: 6) {
-                Text(section.title)
-                if sectionsCollapsible {
+        if sectionsCollapsible {
+            let collapsed = isCollapsed(section)
+            Button {
+                toggleSection(section)
+            } label: {
+                HStack(spacing: 6) {
+                    Text(section.title)
                     Image(systemName: "chevron.right")
                         .font(.caption2.weight(.bold))
                         .conduitFixedGlyph()
                         .rotationEffect(.degrees(collapsed ? 0 : 90))
+                    Spacer(minLength: 6)
+                    if collapsed {
+                        Text(count, format: .number)
+                            .monospacedDigit()
+                    }
                 }
-                Spacer(minLength: 6)
-                if collapsed {
-                    Text(verbatim: "\(count)")
-                        .monospacedDigit()
-                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(nil)
+                .padding(.leading, 16)
+                .padding(.trailing, 16)
+                .padding(.vertical, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .textCase(nil)
-            .padding(.leading, 16)
-            .padding(.trailing, 16)
-            .padding(.vertical, 2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(section.title))
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityValue(collapsed
+                ? Text(AppLocalization.string("Collapsed")) + Text(verbatim: ", ") + Text(count, format: .number)
+                : Text(AppLocalization.string("Expanded")))
+            .accessibilityHint(AppLocalization.string(collapsed
+                ? "Shows the chats in this section."
+                : "Hides the chats in this section."))
+        } else {
+            sectionHeader(section.title)
         }
-        .buttonStyle(.plain)
-        .disabled(!sectionsCollapsible)
-        .listRowInsets(EdgeInsets())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(section.title))
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityValue(sectionsCollapsible
-            ? Text(AppLocalization.string(collapsed ? "Collapsed" : "Expanded"))
-            : Text(verbatim: ""))
-        .accessibilityHint(sectionsCollapsible
-            ? AppLocalization.string(collapsed ? "Shows the chats in this section." : "Hides the chats in this section.")
-            : "")
+    }
+
+    /// Opens the section holding a conversation opened from elsewhere (a
+    /// notification, a widget, a new chat), so returning to the list shows
+    /// its row; a section closed while it stays open stays closed.
+    private func revealActiveSection() {
+        guard sectionsCollapsible, let active = appState.activeSessionId else { return }
+        let sections = nestedSections(displayedSessions)
+        guard let section = ChatListSection.section(
+            of: active,
+            pinned: sections.pinned,
+            recent: ChatListSection.byDate(sections.recent)
+        ), collapsedSections.contains(section) else { return }
+        toggleSection(section, haptic: false)
     }
 
     private func sectionHeader(_ title: String) -> some View {

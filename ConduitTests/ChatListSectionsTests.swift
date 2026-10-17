@@ -102,4 +102,20 @@ extension SessionNestingModelTests {
         XCTAssertEqual(ChatListSection.collapsed(from: "pinned,older,bogus"), [.pinned, .older])
         XCTAssertEqual(ChatListSection.collapsed(from: ""), [])
     }
+
+    func testTheActiveRowsSectionIsWhereverItsRootIsListed() {
+        let pinned = [sectionRow("pin", activity: at(day: 1, hour: 8))]
+        let recent = ChatListSection.byDate(
+            [
+                sectionRow("new", activity: at(day: 17, hour: 9)),
+                sectionRow("old", activity: at(day: 1, hour: 8), children: [sectionRow("job", activity: at(day: 2, hour: 8))]),
+            ],
+            now: sectionNow,
+            calendar: sectionCalendar
+        )
+        XCTAssertEqual(ChatListSection.section(of: "pin", pinned: pinned, recent: recent), .pinned)
+        XCTAssertEqual(ChatListSection.section(of: "new", pinned: pinned, recent: recent), .today)
+        XCTAssertEqual(ChatListSection.section(of: "job", pinned: pinned, recent: recent), .older)
+        XCTAssertNil(ChatListSection.section(of: "gone", pinned: pinned, recent: recent))
+    }
 }

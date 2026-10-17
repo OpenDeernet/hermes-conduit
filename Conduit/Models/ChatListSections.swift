@@ -94,6 +94,13 @@ enum ChatListSection: String, CaseIterable, Hashable {
         }
     }
 
+    /// The section listing the row `active` identifies, its own row or
+    /// one nested under a root there; nil when no listed row answers.
+    static func section(of active: String, pinned: [SessionNesting.Node], recent: [DateGroup]) -> ChatListSection? {
+        if SessionNesting.ancestorKeys(of: active, in: pinned).rowIsListed { return .pinned }
+        return recent.first { SessionNesting.ancestorKeys(of: active, in: $0.nodes).rowIsListed }?.section
+    }
+
     /// The newest activity in a nest: the row's own or any row below it.
     static func latestActivity(in node: SessionNesting.Node) -> TimeInterval? {
         node.children.reduce(node.session.lastActivityAt) { latest, child in
