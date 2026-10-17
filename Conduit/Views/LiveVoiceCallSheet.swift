@@ -520,9 +520,15 @@ struct CallChatTitleLink<Title: View>: View {
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
                 }
+                // A 44 pt tap target without moving the header: the padding
+                // widens the hit area and the negative padding takes the
+                // space back.
+                .padding(.vertical, 14)
                 .contentShape(Rectangle())
+                .padding(.vertical, -14)
             }
             .buttonStyle(.plain)
+            .accessibilityAddTraits(.isLink)
             // The header reads as one element; this keeps the link reachable.
             .accessibilityAction(named: Text("Open chat")) { onOpenChat(link) }
         } else {
