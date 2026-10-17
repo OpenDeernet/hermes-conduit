@@ -5647,6 +5647,8 @@ final class AppState: ObservableObject {
     /// (no plugin route, or no session store). Queued calls are kept.
     @Published private(set) var voiceCallSavesBlocked = false
     @Published private(set) var isSavingQueuedVoiceCalls = false
+    /// What the last Save Now did, shown under the button until the next.
+    @Published private(set) var voiceCallSaveNowResult: String?
     /// Keys whose host refused the last outbox save as unsupported. Kept
     /// across launches so Voice settings gives the reason at once.
     private var voiceCallSaveBlockedKeys: Set<String> {
@@ -6212,13 +6214,42 @@ final class AppState: ObservableObject {
     }
 
     /// Save Now in Voice settings: retries the active profile's queued
-    /// calls at once.
+    /// calls at once, and says what happened under the button.
     func saveQueuedVoiceCallsNow() async {
         guard !isSavingQueuedVoiceCalls else { return }
         isSavingQueuedVoiceCalls = true
         defer { isSavingQueuedVoiceCalls = false }
+        voiceCallSaveNowResult = nil
         let profile = activeProfile
-        await drainVoiceTranscriptOutbox(profile: profile, key: voiceHistoryKey(profile: profile))
+        let drain = await drainVoiceTranscriptOutbox(profile: profile, key: voiceHistoryKey(profile: profile))
+        voiceCallSaveNowResult = Self.voiceCallSaveNowResult(drain, stillWaiting: pendingVoiceCallSaves)
+    }
+
+    /// The line under Save Now. Nil when every call saved: the card goes.
+    static func voiceCallSaveNowResult(_ drain: VoiceTranscriptDrainResult, stillWaiting: Int) -> String? {
+        guard stillWaiting > 0 else { return nil }
+        let reason = drain.failure.map(voiceCallSaveFailureReason)
+            ?? AppLocalization.string("Conduit couldn't reach your Hermes server.")
+        if drain.saved > 0 {
+            return AppLocalization.string("Saved \(String(drain.saved)). Still waiting: \(String(stillWaiting)). \(reason)")
+        }
+        return AppLocalization.string("Nothing saved. \(reason)")
+    }
+
+    private static func voiceCallSaveFailureReason(_ error: Error) -> String {
+        switch error {
+        case VoiceHistoryError.pluginMissing, VoiceHistoryError.unsupported:
+            return AppLocalization.string("Your Hermes server can't save these calls yet.")
+        case VoiceHistoryError.busy:
+            return AppLocalization.string("Hermes is busy with that conversation. Try again in a moment.")
+        case DashboardTicketBridgeError.http(let status, let detail):
+            let detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty
+                ? AppLocalization.string("Hermes answered with error \(String(status)).")
+                : AppLocalization.string("Hermes answered: \(detail)")
+        default:
+            return error.localizedDescription
+        }
     }
 
     private func queueVoiceTranscript(_ request: VoiceTranscriptSaveRequest, dashboard: String, profile: String, jobs: [String] = [], attachment: VoiceCallAttachment? = nil) {
@@ -6247,9 +6278,13 @@ final class AppState: ObservableObject {
     }
 
     /// Retries the saves queued for this dashboard and profile, oldest first.
-    private func drainVoiceTranscriptOutbox(profile: String, key: String) async {
+    @discardableResult
+    private func drainVoiceTranscriptOutbox(profile: String, key: String) async -> VoiceTranscriptDrainResult {
+        var drain = VoiceTranscriptDrainResult()
         // A save while a live call runs stalls it: wait for the call to end.
-        guard !isLiveVoiceCallActive else { return }
+        guard !isLiveVoiceCallActive else { return drain }
+        // Set once the host refuses a call as one it can't store yet.
+        var hostCantSave = false
         var snapshot = VoiceTranscriptOutbox.load(from: defaults)
         snapshot.prune(now: Date())
         let dashboard = activeDashboardID?.uuidString ?? "-"
@@ -6264,7 +6299,8 @@ final class AppState: ObservableObject {
             var request = entry.request
             do {
                 let result = try await voiceHistoryClient.save(request, profile: profile)
-                voiceCallSaveBlockedKeys.remove(key)
+                if !hostCantSave { voiceCallSaveBlockedKeys.remove(key) }
+                drain.saved += 1
                 settled.append((entry, nil))
                 if let sessionID = result.sessionID, voiceSessionTagsByKey[key]?[sessionID] == nil {
                     voiceSessionTagsByKey[key, default: [:]][sessionID] = VoiceSessionTag(kind: .call, engine: request.engine.rawValue)
@@ -6315,8 +6351,21 @@ final class AppState: ObservableObject {
                 // session store) before the outbox gives up on the call.
                 // Voice settings says why the calls are waiting.
                 voiceCallSaveBlockedKeys.insert(key)
+                drain.failure = VoiceHistoryError.pluginMissing
                 break
+            } catch DashboardTicketBridgeError.http(let status, let detail) where (400..<500).contains(status) && status != 408 && status != 429 {
+                // The host refused this call itself (a plugin older than the
+                // call's engine, or a request it won't take): it's kept, and
+                // the calls behind it still save rather than wait on it.
+                if request.engine == .localLive, status == 400 {
+                    // Plugins before 0.44.1 don't know Local Live calls.
+                    hostCantSave = true
+                    voiceCallSaveBlockedKeys.insert(key)
+                }
+                drain.failure = DashboardTicketBridgeError.http(status: status, detail: detail)
+                continue
             } catch {
+                drain.failure = error
                 break
             }
         }
@@ -6328,6 +6377,7 @@ final class AppState: ObservableObject {
         }
         outbox.store(in: defaults)
         publishVoiceCallSaveStatus()
+        return drain
     }
 
     // MARK: Titles
@@ -11049,6 +11099,7 @@ final class AppState: ObservableObject {
         voiceCallSaveBlockedKeys = []
         pendingVoiceCallSaves = 0
         voiceCallSavesBlocked = false
+        voiceCallSaveNowResult = nil
         appleSpeechAvailability = AppleOnDeviceSpeechTranscriber.currentAvailability()
         retireOutstandingPreferredReturnSurfaceRequests()
         showLogin = true
