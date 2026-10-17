@@ -1134,7 +1134,14 @@ final class GeminiLiveConversationController: ObservableObject {
     private func stopSpokenToolMarkup() {
         guard let openAssistantEntry, let index = transcript.firstIndex(where: { $0.id == openAssistantEntry }),
               let start = Self.spokenToolMarkupStart(in: transcript[index].text) else { return }
-        transcript[index].text = String(transcript[index].text[..<start]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let spoken = String(transcript[index].text[..<start]).trimmingCharacters(in: .whitespacesAndNewlines)
+        if spoken.isEmpty {
+            // The whole line was markup: leave no blank line on the call.
+            transcript.remove(at: index)
+            self.openAssistantEntry = nil
+        } else {
+            transcript[index].text = spoken
+        }
         output.interrupt()
         suppressingModelTurn = true
         trace("Tool markup in the spoken reply: cut off, model asked to call the tool")
@@ -1160,7 +1167,7 @@ final class GeminiLiveConversationController: ObservableObject {
             if result["error"] != nil { return "error" }
             return result["status"] ?? "answered"
         }
-        return "no answer yet"
+        return "no answer"
     }
 
     static let acknowledgementPrompt = "[You just started a background job on Hermes for the user's last request. Acknowledge it out loud in a few words, like \"On it, Hermes is checking.\" Do not start another job.]"

@@ -32,7 +32,7 @@ final class LiveCallTrace {
         startedAt = date
         steps = []
         droppedSteps = 0
-        note("Call started", at: date)
+        note("Starting call", at: date)
     }
 
     func note(_ label: String, at date: Date = Date()) {

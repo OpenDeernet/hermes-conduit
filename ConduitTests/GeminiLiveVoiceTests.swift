@@ -2774,6 +2774,20 @@ extension VoiceConversationControllerTests {
         controller.stop()
     }
 
+    func testLiveCallLineThatIsOnlyToolMarkupLeavesNoBlankLine() async {
+        let (controller, session, _, output, _) = makeGeminiController(clock: { Date(timeIntervalSince1970: 1_000) })
+        await controller.start()
+        session.becomeReady()
+
+        session.onEvent?(.inputTranscription("Check the server."))
+        session.onEvent?(.outputTranscription(#"<tool_call>{"name":"list_jobs"}"#))
+        XCTAssertEqual(output.interrupts, 1)
+        XCTAssertFalse(controller.transcript.contains { $0.speaker == .assistant }, "no empty assistant line")
+        session.onEvent?(.turnComplete)
+        XCTAssertFalse(controller.transcript.contains { $0.speaker == .assistant })
+        controller.stop()
+    }
+
     func testSpokenToolMarkupIsFoundAnywhereInALine() {
         XCTAssertNotNil(GeminiLiveConversationController.spokenToolMarkupStart(in: "ok <TOOL_CALL>list_jobs"))
         XCTAssertNotNil(GeminiLiveConversationController.spokenToolMarkupStart(in: "<function_call name=start_job>"))
@@ -2800,7 +2814,7 @@ extension VoiceConversationControllerTests {
         let start = Date(timeIntervalSince1970: 1_000)
         trace.begin("Grok Live", at: start)
         trace.note("Function call start_job", at: start + 2.5)
-        XCTAssertEqual(trace.report, "Last Grok Live call: tool steps\n+0.0s Call started\n+2.5s Function call start_job")
+        XCTAssertEqual(trace.report, "Last Grok Live call: tool steps\n+0.0s Starting call\n+2.5s Function call start_job")
         for index in 0..<LiveCallTrace.maximumSteps { trace.note("step \(index)", at: start + 3) }
         XCTAssertEqual(trace.steps.count, LiveCallTrace.maximumSteps)
         XCTAssertTrue(trace.report?.hasSuffix("… 2 more steps not kept") == true)
