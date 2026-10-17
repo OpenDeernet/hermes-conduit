@@ -523,29 +523,44 @@ final class ChatResumeRecoverySequence {
 /// bot's picture compares by INSTANCE (the avatar cache hands out the same
 /// object until a refresh replaces it).
 struct ConversationAgentIdentity: Equatable {
-    /// The user-facing name: the bot's display label, or the workspace
+    /// The face a Bot Chat's agent wears, rendered by `BotAvatarView` — the
+    /// one definition of the roster's look, so the transcript can never
+    /// drift from the Bots tab.
+    struct BotFace: Equatable {
+        /// The bot's PROFILE name — the color's fallback hue seeds from it.
+        let name: String
+        /// The Desktop appearance color string, trimmed (`hsl(...)`, hex, a
+        /// named color); nil, empty, or unparseable seeds the name's own hue.
+        let colorString: String?
+        /// The bot's cached picture. Compares by INSTANCE, like the avatar
+        /// cache that stores it.
+        let image: UIImage?
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.name == rhs.name
+                && lhs.colorString == rhs.colorString
+                && lhs.image === rhs.image
+        }
+    }
+
+    /// The user-facing name: the bot's pinned label, or the workspace
     /// profile's display name.
     let name: String
-    /// The workspace profile's photo; always nil inside a Bot Chat, whose
-    /// face is the bot's own picture or colored initial.
+    /// The workspace profile's photo; always nil inside a Bot Chat.
     let photoURL: URL?
-    /// The bot's cached picture. Rendered before any other face.
-    let botImage: UIImage?
-    /// The bot's Desktop color, for the initial when it has no picture. Nil
-    /// for ordinary conversations, which fall to ProfileAvatarView's gold
-    /// monogram.
-    let botColor: Color?
+    /// The owning bot's face; nil for ordinary conversations, which render
+    /// ProfileAvatarView's photo-or-gold-monogram.
+    let botFace: BotFace?
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.name == rhs.name
             && lhs.photoURL == rhs.photoURL
-            && lhs.botImage === rhs.botImage
-            && lhs.botColor == rhs.botColor
+            && lhs.botFace == rhs.botFace
     }
 
     /// The identity ordinary (workspace) conversations present.
     static func workspace(name: String, photoURL: URL?) -> ConversationAgentIdentity {
-        ConversationAgentIdentity(name: name, photoURL: photoURL, botImage: nil, botColor: nil)
+        ConversationAgentIdentity(name: name, photoURL: photoURL, botFace: nil)
     }
 }
 
@@ -6215,7 +6230,8 @@ final class AppState: ObservableObject {
     static func linkedBot(named profile: String, in roster: [BotProfile]) -> BotProfile? {
         let name = profile.trimmingCharacters(in: .whitespacesAndNewlines)
         // Same result as the trimmed-names array this replaces, without
-        // allocating it: this matcher runs per transcript row render.
+        // building it first (each probe still trims the names it visits;
+        // this matcher runs per transcript row render).
         if let index = roster.firstIndex(where: {
             $0.name.trimmingCharacters(in: .whitespacesAndNewlines) == name
         }) ?? roster.firstIndex(where: {
@@ -17907,8 +17923,17 @@ final class AppState: ObservableObject {
         return ConversationAgentIdentity(
             name: botChatDisplayLabel(profile: botProfile, rosterBot: bot),
             photoURL: nil,
-            botImage: bot.flatMap(botAvatarImage(for:)),
-            botColor: bot.map { BotAvatarView.color(for: $0.appearanceColor, name: $0.name) }
+            botFace: bot.map { bot in
+                // Trimmed and emptied-to-nil so the equality key is
+                // canonical: a gateway flipping between `""`, `" "` and
+                // absence must not re-open settled rows over nothing.
+                let raw = bot.appearanceColor?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return ConversationAgentIdentity.BotFace(
+                    name: bot.name,
+                    colorString: raw?.isEmpty == true ? nil : raw,
+                    image: botAvatarImage(for: bot)
+                )
+            }
         )
     }
 

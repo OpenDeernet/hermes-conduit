@@ -311,7 +311,7 @@ struct ProfileAvatarView: View {
     let displayName: String
     let url: URL?
     /// The one face size every identity mark in a transcript draws at; the
-    /// bot branches beside this view size themselves to it.
+    /// transcript's bot face sizes itself to it.
     static let defaultSize: CGFloat = 30
     var size: CGFloat = ProfileAvatarView.defaultSize
     private var initials: String {

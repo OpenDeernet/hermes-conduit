@@ -398,8 +398,8 @@ final class BotModeTests: XCTestCase {
         XCTAssertTrue(openedAtlas)
         XCTAssertEqual(harness.appState.conversationIdentityProfile, "atlas")
         XCTAssertEqual(harness.appState.conversationAgentIdentity.name, "Atlas Prime")
-        XCTAssertNil(harness.appState.conversationAgentIdentity.botImage)
-        XCTAssertNil(harness.appState.conversationAgentIdentity.botColor)
+        XCTAssertNil(harness.appState.conversationAgentIdentity.botFace,
+                     "no roster row, no bot face yet")
         XCTAssertNil(harness.appState.conversationAgentIdentity.photoURL,
                      "a Bot Chat never presents the workspace profile's photo")
 
@@ -411,9 +411,10 @@ final class BotModeTests: XCTestCase {
         harness.appState.setBotAvatarImageForTesting(atlasPicture, for: atlas)
         let atlasIdentity = harness.appState.conversationAgentIdentity
         XCTAssertEqual(atlasIdentity.name, "Atlas Prime")
-        XCTAssertTrue(atlasIdentity.botImage === atlasPicture,
+        XCTAssertEqual(atlasIdentity.botFace?.name, "atlas")
+        XCTAssertTrue(atlasIdentity.botFace?.image === atlasPicture,
                       "the bot's cached picture faces the chat")
-        XCTAssertEqual(atlasIdentity.botColor, BotAvatarView.color(for: "purple", name: "atlas"))
+        XCTAssertEqual(atlasIdentity.botFace?.colorString, "purple")
 
         // The bot's TITLE renamed on the desktop, then a roster refresh: the
         // captured label still names the chat — the same string the nav
@@ -430,16 +431,17 @@ final class BotModeTests: XCTestCase {
         await harness.appState.refreshBotRoster()
         XCTAssertEqual(harness.appState.conversationAgentIdentity.name, "Atlas Prime",
                        "the captured label wins over the roster's current title")
-        XCTAssertTrue(harness.appState.conversationAgentIdentity.botImage === atlasPicture)
+        XCTAssertTrue(harness.appState.conversationAgentIdentity.botFace?.image === atlasPicture)
 
         // The bot's PROFILE renamed on the desktop (the old name survives in
         // previousNames): the chat still resolves its row, picture and color.
+        // The color arrives PADDED to pin the equality key's canonical trim.
         var renamedProfileAtlas = makeBot(
             name: "atlas-2",
             canonicalID: "stored-atlas",
             botTitle: "Atlas Prime",
             hasAvatar: true,
-            appearanceColor: "green"
+            appearanceColor: "  green  "
         )
         renamedProfileAtlas.previousNames = ["atlas"]
         roster = [renamedProfileAtlas, bo]
@@ -448,9 +450,10 @@ final class BotModeTests: XCTestCase {
         harness.appState.setBotAvatarImageForTesting(renamedPicture, for: renamedProfileAtlas)
         let renamedIdentity = harness.appState.conversationAgentIdentity
         XCTAssertEqual(renamedIdentity.name, "Atlas Prime")
-        XCTAssertTrue(renamedIdentity.botImage === renamedPicture,
+        XCTAssertEqual(renamedIdentity.botFace?.name, "atlas-2")
+        XCTAssertTrue(renamedIdentity.botFace?.image === renamedPicture,
                       "a renamed bot keeps its picture through the previousNames match")
-        XCTAssertEqual(renamedIdentity.botColor, BotAvatarView.color(for: "green", name: "atlas-2"))
+        XCTAssertEqual(renamedIdentity.botFace?.colorString, "green")
         XCTAssertEqual(
             harness.appState.profileGlowTint("atlas"),
             BotAvatarView.color(for: "green", name: "atlas-2"),
@@ -468,8 +471,9 @@ final class BotModeTests: XCTestCase {
         XCTAssertEqual(harness.appState.conversationIdentityProfile, "bo")
         let boIdentity = harness.appState.conversationAgentIdentity
         XCTAssertEqual(boIdentity.name, "bo")
-        XCTAssertNil(boIdentity.botImage)
-        XCTAssertEqual(boIdentity.botColor, BotAvatarView.color(for: nil, name: "bo"))
+        XCTAssertEqual(boIdentity.botFace?.name, "bo")
+        XCTAssertNil(boIdentity.botFace?.image)
+        XCTAssertNil(boIdentity.botFace?.colorString)
     }
 
     /// A resume that rotates the Bot Chat's runtime id carries the captured

@@ -3498,30 +3498,24 @@ struct ConduitAgentMark: View {
     }
 
     /// Same size as ProfileAvatarView's default face (one shared constant);
-    /// the bot branches size their own faces to it.
+    /// the bot face sizes itself to it.
     private static let faceSize: CGFloat = ProfileAvatarView.defaultSize
 
-    /// The face a Bot Chat's agent wears — its picture, else its initial on
-    /// its Desktop color (BotAvatarView's look) — else ProfileAvatarView's
-    /// photo-or-gold-monogram for ordinary workspace conversations.
+    /// A Bot Chat's agent wears the roster's own face — `BotAvatarView`, the
+    /// one definition of the initial-on-color recipe, so the face's styling
+    /// can never drift from the Bots tab (the initial keeps the captured
+    /// label by design); ordinary conversations keep ProfileAvatarView's
+    /// photo-or-gold-monogram.
     @ViewBuilder
     private var face: some View {
-        if let image = identity.botImage {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: Self.faceSize, height: Self.faceSize)
-                .clipShape(Circle())
-                .accessibilityHidden(true)
-        } else if let color = identity.botColor {
-            // BotAvatarView's initial sizing at this face's size.
-            Text(String(identity.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1)).uppercased())
-                .font(.system(size: max(11, Self.faceSize * 0.42), weight: .semibold, design: .rounded))
-                .foregroundStyle(.white)
-                .frame(width: Self.faceSize, height: Self.faceSize)
-                .background(color)
-                .clipShape(Circle())
-                .accessibilityHidden(true)
+        if let botFace = identity.botFace {
+            BotAvatarView(
+                name: botFace.name,
+                label: identity.name,
+                colorString: botFace.colorString,
+                image: botFace.image,
+                size: Self.faceSize
+            )
         } else {
             ProfileAvatarView(profile: "", displayName: identity.name, url: identity.photoURL)
         }

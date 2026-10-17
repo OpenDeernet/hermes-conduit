@@ -305,10 +305,13 @@ final class SettledMessageIsolationTests: XCTestCase {
             sizeCategory: .large,
             chatTextSize: .default
         )
-        let differentBotImage = SettledAssistantMessageContent(
+        let differentBotFace = SettledAssistantMessageContent(
             message: markdownMessage(),
             identity: ConversationAgentIdentity(
-                name: "Hermes", photoURL: nil, botImage: UIImage(), botColor: nil
+                name: "Hermes", photoURL: nil,
+                botFace: ConversationAgentIdentity.BotFace(
+                    name: "atlas", colorString: nil, image: UIImage()
+                )
             ),
             gatewayResolver: resolver,
             sizeCategory: .large,
@@ -317,7 +320,10 @@ final class SettledMessageIsolationTests: XCTestCase {
         let differentBotColor = SettledAssistantMessageContent(
             message: markdownMessage(),
             identity: ConversationAgentIdentity(
-                name: "Hermes", photoURL: nil, botImage: nil, botColor: .purple
+                name: "Hermes", photoURL: nil,
+                botFace: ConversationAgentIdentity.BotFace(
+                    name: "atlas", colorString: "purple", image: nil
+                )
             ),
             gatewayResolver: resolver,
             sizeCategory: .large,
@@ -330,7 +336,10 @@ final class SettledMessageIsolationTests: XCTestCase {
         let withPicture = SettledAssistantMessageContent(
             message: markdownMessage(),
             identity: ConversationAgentIdentity(
-                name: "Hermes", photoURL: nil, botImage: cachedPicture, botColor: nil
+                name: "Hermes", photoURL: nil,
+                botFace: ConversationAgentIdentity.BotFace(
+                    name: "atlas", colorString: nil, image: cachedPicture
+                )
             ),
             gatewayResolver: resolver,
             sizeCategory: .large,
@@ -339,7 +348,10 @@ final class SettledMessageIsolationTests: XCTestCase {
         let samePictureInstance = SettledAssistantMessageContent(
             message: markdownMessage(),
             identity: ConversationAgentIdentity(
-                name: "Hermes", photoURL: nil, botImage: cachedPicture, botColor: nil
+                name: "Hermes", photoURL: nil,
+                botFace: ConversationAgentIdentity.BotFace(
+                    name: "atlas", colorString: nil, image: cachedPicture
+                )
             ),
             gatewayResolver: resolver,
             sizeCategory: .large,
@@ -348,7 +360,36 @@ final class SettledMessageIsolationTests: XCTestCase {
         let refreshedPicture = SettledAssistantMessageContent(
             message: markdownMessage(),
             identity: ConversationAgentIdentity(
-                name: "Hermes", photoURL: nil, botImage: UIImage(), botColor: nil
+                name: "Hermes", photoURL: nil,
+                botFace: ConversationAgentIdentity.BotFace(
+                    name: "atlas", colorString: nil, image: UIImage()
+                )
+            ),
+            gatewayResolver: resolver,
+            sizeCategory: .large,
+            chatTextSize: .default
+        )
+        // Same picture INSTANCE, only one face input differing, so every
+        // arm of BotFace's equality is load-bearing on its own.
+        let samePictureDifferentColor = SettledAssistantMessageContent(
+            message: markdownMessage(),
+            identity: ConversationAgentIdentity(
+                name: "Hermes", photoURL: nil,
+                botFace: ConversationAgentIdentity.BotFace(
+                    name: "atlas", colorString: "green", image: cachedPicture
+                )
+            ),
+            gatewayResolver: resolver,
+            sizeCategory: .large,
+            chatTextSize: .default
+        )
+        let samePictureDifferentProfileName = SettledAssistantMessageContent(
+            message: markdownMessage(),
+            identity: ConversationAgentIdentity(
+                name: "Hermes", photoURL: nil,
+                botFace: ConversationAgentIdentity.BotFace(
+                    name: "atlas-2", colorString: nil, image: cachedPicture
+                )
             ),
             gatewayResolver: resolver,
             sizeCategory: .large,
@@ -362,45 +403,63 @@ final class SettledMessageIsolationTests: XCTestCase {
         XCTAssertNotEqual(a, differentChatTextSize, "a chat text-size change must compare unequal and re-open the gate")
         XCTAssertNotEqual(a, differentName, "an agent identity name change must compare unequal")
         XCTAssertNotEqual(a, differentPhotoURL, "a profile photo change must compare unequal")
-        XCTAssertNotEqual(a, differentBotImage, "a bot picture arriving must compare unequal")
+        XCTAssertNotEqual(a, differentBotFace, "a bot face arriving must compare unequal")
         XCTAssertNotEqual(a, differentBotColor, "a bot color change must compare unequal")
         XCTAssertEqual(withPicture, samePictureInstance,
                        "the same cached picture instance must keep the gate closed across streaming publishes")
         XCTAssertNotEqual(withPicture, refreshedPicture,
                           "a refreshed picture instance must re-open the gate")
+        XCTAssertNotEqual(withPicture, samePictureDifferentColor,
+                          "a color-string change must compare unequal")
+        XCTAssertNotEqual(withPicture, samePictureDifferentProfileName,
+                          "a profile-name change (the color's fallback seed) must compare unequal")
     }
 
     /// The identity value the transcript gates on must be stable across
     /// SEPARATE construction: a streaming publish re-creates the row's
     /// inputs, and the bot's picture (the same instance the avatar cache
-    /// hands out) and its Desktop color (structurally equal when re-derived)
-    /// must compare equal so the settled rows stay gated.
+    /// hands out) plus its face inputs must compare equal so the settled
+    /// rows stay gated.
     func testConversationAgentIdentityEqualityIsStableAcrossSeparateValues() {
         let picture = UIImage()
         let first = ConversationAgentIdentity(
             name: "Atlas Prime",
             photoURL: nil,
-            botImage: picture,
-            botColor: BotAvatarView.color(for: "purple", name: "atlas")
+            botFace: ConversationAgentIdentity.BotFace(
+                name: "atlas", colorString: "purple", image: picture
+            )
         )
         let second = ConversationAgentIdentity(
             name: "Atlas Prime",
             photoURL: nil,
-            botImage: picture,
-            botColor: BotAvatarView.color(for: "purple", name: "atlas")
+            botFace: ConversationAgentIdentity.BotFace(
+                name: "atlas", colorString: "purple", image: picture
+            )
         )
         XCTAssertEqual(first, second,
-                       "same picture instance + re-derived color must compare equal")
+                       "same picture instance + same face inputs must compare equal")
 
         XCTAssertNotEqual(
             first,
             ConversationAgentIdentity(
                 name: "Atlas Prime",
                 photoURL: nil,
-                botImage: UIImage(),
-                botColor: BotAvatarView.color(for: "purple", name: "atlas")
+                botFace: ConversationAgentIdentity.BotFace(
+                    name: "atlas", colorString: "purple", image: UIImage()
+                )
             ),
             "a refreshed picture instance must compare unequal"
+        )
+        XCTAssertNotEqual(
+            first,
+            ConversationAgentIdentity(
+                name: "Atlas Prime",
+                photoURL: nil,
+                botFace: ConversationAgentIdentity.BotFace(
+                    name: "atlas-2", colorString: "purple", image: picture
+                )
+            ),
+            "a bot profile rename re-seeds the fallback hue, so the face must compare unequal"
         )
     }
 
