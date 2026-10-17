@@ -283,6 +283,8 @@ struct V2VoiceButton: View {
 struct V2NewChatButton: View {
     let context: V2VoiceContext
     @EnvironmentObject private var appState: AppState
+    /// A creation in flight: a second tap doesn't make a second chat.
+    @State private var isCreating = false
 
     /// The saved copy has no live gateway to create a chat on.
     private var canAct: Bool {
@@ -303,10 +305,15 @@ struct V2NewChatButton: View {
 
     var body: some View {
         Button {
+            guard !isCreating else { return }
+            isCreating = true
             Haptics.medium()
             appState.dismissSidebarDrawer()
             let path = folder
-            Task { await appState.createNewSession(cwd: path) }
+            Task { @MainActor in
+                defer { isCreating = false }
+                await appState.createNewSession(cwd: path)
+            }
         } label: {
             Image(systemName: "square.and.pencil")
                 .font(.system(size: 21, weight: .semibold))
