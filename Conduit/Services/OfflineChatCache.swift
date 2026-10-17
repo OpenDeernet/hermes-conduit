@@ -597,9 +597,10 @@ final class OfflineChatCacheStore {
     /// scope's, so the same wipes remove it. Intentionally synchronous, like
     /// the saved-chat cache: recording finishes before the composer clears
     /// its submitted draft.
-    func recordPendingSend(_ pending: PendingComposerSend) {
-        guard let data = try? JSONEncoder().encode(pending) else { return }
-        guard write(data, to: pendingSendFileURL(dashboardID: pending.dashboardID, profile: pending.profile, id: pending.id)) else { return }
+    @discardableResult
+    func recordPendingSend(_ pending: PendingComposerSend) -> Bool {
+        guard let data = try? JSONEncoder().encode(pending) else { return false }
+        guard write(data, to: pendingSendFileURL(dashboardID: pending.dashboardID, profile: pending.profile, id: pending.id)) else { return false }
         // Migrate the earlier single-file format only after the new copy is safe.
         let legacy = pendingSendFileURL(dashboardID: pending.dashboardID, profile: pending.profile)
         if let data = try? Data(contentsOf: legacy),
@@ -607,6 +608,7 @@ final class OfflineChatCacheStore {
            old.id == pending.id {
             try? fileManager.removeItem(at: legacy)
         }
+        return true
     }
 
     /// The messages an earlier run left waiting on this dashboard.
@@ -669,8 +671,8 @@ final class OfflineChatCacheStore {
             try data.write(to: url, options: Self.writeOptions)
             return true
         } catch {
-            // Best effort: the cache is a convenience copy, never a source of
-            // truth, so a failed write only means a colder next launch.
+            // Display caches are best effort. Pending sends check the result
+            // before accepting the user's words and clearing their draft.
             return false
         }
     }

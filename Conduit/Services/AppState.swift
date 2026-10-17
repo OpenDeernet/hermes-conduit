@@ -4413,7 +4413,8 @@ final class AppState: ObservableObject {
         )
     }
 
-    func recordPendingComposerSendFile(_ pending: PendingComposerSend) {
+    @discardableResult
+    func recordPendingComposerSendFile(_ pending: PendingComposerSend) -> Bool {
         offlineChatCache.recordPendingSend(pending)
     }
 

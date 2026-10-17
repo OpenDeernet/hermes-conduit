@@ -125,14 +125,11 @@ extension AppState {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard composerWaitsForChat, !trimmed.isEmpty, Self.parseSlashCommand(trimmed) == nil,
               let dashboardID = activeDashboardID else { return false }
-        composerNotice = nil
         let pending: PendingComposerSend
         if let waiting = pendingComposerSendOnScreen {
             pending = waiting.appending(trimmed, replyReference: replyReference)
         } else {
             guard let chat = waitingChatOnScreen() else { return false }
-            // One left waiting for another chat goes back to its draft.
-            if let other = pendingComposerSend { returnPendingComposerSendToDraft(other) }
             pending = PendingComposerSend(
                 draftText: trimmed,
                 replyReference: replyReference,
@@ -144,8 +141,14 @@ extension AppState {
                 title: displayedChatTitle
             )
         }
+        // Accept only once the file is safe. On failure the caller keeps
+        // its draft, and any previously accepted message stays unchanged.
+        guard recordPendingComposerSendFile(pending) else { return false }
+        composerNotice = nil
+        if let other = pendingComposerSend, other.id != pending.id {
+            returnPendingComposerSendToDraft(other)
+        }
         pendingComposerSend = pending
-        recordPendingComposerSendFile(pending)
         // The live transcript shows it below its rows.
         if case .live = composerChatOnScreen { requestChatScrollToLatest() }
         schedulePendingComposerSendCheck()

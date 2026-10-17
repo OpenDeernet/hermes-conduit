@@ -50,7 +50,8 @@ struct PendingComposerSendBubble: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(pending.outboundText))
+            .accessibilityLabel(Text(pending.draftText))
+            .accessibilityHint(Text(pending.replyText ?? ""))
             .accessibilityValue(Text("Sends when connected"))
             .accessibilityAction(named: Text("Edit")) {
                 Haptics.selection()

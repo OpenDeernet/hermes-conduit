@@ -1586,6 +1586,29 @@ final class OfflineChatCacheTests: XCTestCase {
         XCTAssertEqual(store.loadPendingSends(dashboardID: dashboard).map(\.id), [newer.id])
     }
 
+    func testFailedPersistenceDoesNotAcceptOrReplaceAWaitingSend() throws {
+        let (appState, store, dashboard) = makeAppState()
+        seedCopy(store, dashboard: dashboard)
+        appState.presentOfflineChatIfAvailable(dashboardID: dashboard)
+        appState.isConnecting = true
+        let directory = store.pendingSendFileURL(dashboardID: dashboard, profile: "default").deletingLastPathComponent()
+        try FileManager.default.removeItem(at: directory)
+        try Data().write(to: directory) // A file cannot contain the cache's files.
+
+        XCTAssertFalse(appState.sendWhenConnected("Keep in composer", replyReference: nil))
+        XCTAssertNil(appState.pendingComposerSend)
+        XCTAssertTrue(appState.composerRestoreRequests.isEmpty)
+
+        try FileManager.default.removeItem(at: directory)
+        XCTAssertTrue(appState.sendWhenConnected("Already waiting", replyReference: nil))
+        let pending = try XCTUnwrap(appState.pendingComposerSend)
+        try FileManager.default.removeItem(at: directory)
+        try Data().write(to: directory)
+
+        XCTAssertFalse(appState.sendWhenConnected("Keep this addition in composer", replyReference: nil))
+        XCTAssertEqual(appState.pendingComposerSend, pending, "A failed append cannot change the accepted message")
+    }
+
     func testStopRemainsAvailableWhileAMessageWaitsOnARunningLiveChat() throws {
         let (appState, store, dashboard) = makeAppState()
         seedCopy(store, dashboard: dashboard)
