@@ -1363,8 +1363,7 @@ struct ComposerBar: View {
 
     private func restoreRequest(_ request: ComposerRestoreRequest, belongsTo key: ComposerDraftKey) -> Bool {
         guard request.key.profile == key.profile else { return false }
-        return request.sessionIDs.contains(key.sessionID)
-            || appState.composerDraftKeysAreSameChat(request.key, key)
+        return appState.composerDraftKeysAreSameChat(request.key, key)
     }
 
     /// Why a waiting message came back, until the next edit or send.

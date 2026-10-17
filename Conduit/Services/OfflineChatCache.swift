@@ -570,6 +570,17 @@ final class OfflineChatCacheStore {
         }
     }
 
+    /// Deletes presentation copies across dashboards, preserving accepted
+    /// unsent messages even when their dashboard is not loaded in memory.
+    func removeSavedChats() {
+        guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
+            return
+        }
+        for file in files where !file.lastPathComponent.hasSuffix(Self.pendingSendSuffix) {
+            try? fileManager.removeItem(at: file)
+        }
+    }
+
     func removeAll() {
         try? fileManager.removeItem(at: directory)
     }

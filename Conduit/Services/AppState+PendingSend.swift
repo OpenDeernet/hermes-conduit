@@ -17,8 +17,6 @@ struct ComposerRestoreRequest: Equatable, Identifiable {
     let id = UUID()
     let dashboardID: UUID
     let key: ComposerDraftKey
-    /// Every id that draft's chat answers to, so they find it under any.
-    let sessionIDs: Set<String>
     let draft: ComposerDraft
     /// The field takes focus too (the waiting message's Edit).
     let focuses: Bool
@@ -92,6 +90,14 @@ extension AppState {
         return ComposerBar.composerDraftKey(for: activeSessionId, profile: activeProfile)
     }
 
+    /// A restoration can outlive the current runtime alias. Capture the
+    /// durable destination while this chat still owns that alias.
+    private var durableComposerDraftKeyOnScreen: ComposerDraftKey {
+        let key = composerDraftKeyOnScreen
+        guard !key.isNewConversation else { return key }
+        return ComposerDraftKey(profile: key.profile, sessionID: durableComposerSessionID(for: key.sessionID))
+    }
+
     /// The waiting message, while its chat is the one on screen.
     var pendingComposerSendOnScreen: PendingComposerSend? {
         guard let pending = pendingComposerSend, isOnScreen(pending) else { return nil }
@@ -108,10 +114,13 @@ extension AppState {
         case .newChat:
             return pending.isNewChat
         case .savedCopy(let ids):
-            return !pending.isNewChat && !ids.isDisjoint(with: pending.chatSessionIDs)
+            return !pending.isNewChat && ids.contains(pending.draftSessionID)
         case .live(let sessionID):
-            if pending.isNewChat { return sessionID == newChatOpenedSessionID }
-            return !liveChatSessionIDs().isDisjoint(with: pending.chatSessionIDs)
+            if pending.isNewChat {
+                guard sessionID == newChatOpenedSessionID, let created = newChatOpenedDurableSessionID else { return false }
+                return liveChatOwnsComposerDraftSessionID(created)
+            }
+            return liveChatOwnsComposerDraftSessionID(pending.draftSessionID)
         }
     }
 
@@ -178,7 +187,7 @@ extension AppState {
         cancelPendingComposerSendRecheck()
         pendingComposerSend = nil
         composerNotice = nil
-        composerRestoreRequests.append(restoreRequest(for: pending, key: composerDraftKeyOnScreen, focuses: true))
+        composerRestoreRequests.append(restoreRequest(for: pending, key: durableComposerDraftKeyOnScreen, focuses: true))
     }
 
     /// The composer put the words back: the waiting message's file goes too.
@@ -242,20 +251,28 @@ extension AppState {
         cancelPendingComposerSendRecheck()
         pendingComposerSend = nil
         let context = composerSubmissionContext()
-        let key = composerDraftKeyOnScreen
+        let key = durableComposerDraftKeyOnScreen
         Task { @MainActor [weak self] in
             guard let self else { return }
             if await self.submitComposer(text: pending.outboundText, context: context) {
                 self.removePendingComposerSendFile(pending)
                 return
             }
-            let onScreen = self.isOnScreen(pending)
-            self.composerRestoreRequests.append(
-                self.restoreRequest(for: pending, key: onScreen ? self.composerDraftKeyOnScreen : key, focuses: false)
-            )
-            if !onScreen, pending.dashboardID == self.activeDashboardID, pending.profile == self.activeProfile {
-                self.composerNotice = self.pendingComposerSendNotice(for: pending, onScreen: false)
-            }
+            self.restoreFailedPendingComposerSend(pending, submittedDraftKey: key)
+        }
+    }
+
+    /// A submission can fail after sign-out or dashboard removal. Those
+    /// account boundaries wipe its file; a late failure must not put the
+    /// previous account's words back into a later login's draft.
+    func restoreFailedPendingComposerSend(_ pending: PendingComposerSend, submittedDraftKey: ComposerDraftKey) {
+        guard pendingComposerSendFiles(dashboardID: pending.dashboardID).contains(where: { $0.id == pending.id }) else { return }
+        let onScreen = isOnScreen(pending)
+        composerRestoreRequests.append(
+            restoreRequest(for: pending, key: submittedDraftKey, focuses: false)
+        )
+        if !onScreen, pending.dashboardID == activeDashboardID, pending.profile == activeProfile {
+            composerNotice = pendingComposerSendNotice(for: pending, onScreen: false)
         }
     }
 
@@ -284,7 +301,7 @@ extension AppState {
             cancelPendingComposerSendRecheck()
         }
         composerRestoreRequests.append(
-            restoreRequest(for: pending, key: onScreen ? composerDraftKeyOnScreen : nil, focuses: false)
+            restoreRequest(for: pending, key: onScreen ? durableComposerDraftKeyOnScreen : nil, focuses: false)
         )
         if pending.dashboardID == activeDashboardID, pending.profile == activeProfile {
             composerNotice = saysWhy ? pendingComposerSendNotice(for: pending, onScreen: onScreen) : nil
@@ -330,15 +347,6 @@ extension AppState {
         }
     }
 
-    /// Deleting the saved chats keeps the messages still waiting: they are
-    /// the user's own, not a copy.
-    func rerecordComposerSendFiles() {
-        for request in composerRestoreRequests {
-            if let pending = request.pending { recordPendingComposerSendFile(pending) }
-        }
-        if let pendingComposerSend { recordPendingComposerSendFile(pendingComposerSend) }
-    }
-
     private func restoreRequest(
         for pending: PendingComposerSend,
         key: ComposerDraftKey? = nil,
@@ -346,8 +354,9 @@ extension AppState {
     ) -> ComposerRestoreRequest {
         ComposerRestoreRequest(
             dashboardID: pending.dashboardID,
-            key: key ?? pending.draftKey,
-            sessionIDs: pending.chatSessionIDs,
+            // Normal chats keep their captured durable key. Historical
+            // runtime aliases must not redirect a deferred restoration.
+            key: pending.isNewChat ? key ?? pending.draftKey : pending.draftKey,
             draft: pending.draft,
             focuses: focuses,
             pending: pending

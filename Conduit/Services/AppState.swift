@@ -1919,7 +1919,12 @@ final class AppState: ObservableObject {
     @Published var composerNotice: String?
     /// The chat Conduit last created, while it's the one open: it takes the
     /// New Chat draft and a message that waited for it.
-    var newChatOpenedSessionID: String?
+    var newChatOpenedSessionID: String? {
+        didSet {
+            if newChatOpenedSessionID == nil { newChatOpenedDurableSessionID = nil }
+        }
+    }
+    var newChatOpenedDurableSessionID: String?
     var pendingComposerSendCheckScheduled = false
     /// A waiting message whose chat is ready but still settling is looked
     /// at again shortly: not all of that settling is published.
@@ -4362,6 +4367,18 @@ final class AppState: ObservableObject {
         return ids
     }
 
+    /// A current catalog claim wins over historical scroll aliases: a
+    /// runtime id can be reassigned to a different durable conversation.
+    func liveChatOwnsComposerDraftSessionID(_ sessionID: String) -> Bool {
+        guard let activeSessionId else { return false }
+        if let row = (sessions + cronSessions).first(where: {
+            sessionBelongsToProfile($0, profile: activeProfile) && $0.nestingIDs.contains(activeSessionId)
+        }) {
+            return row.nestingIDs.contains(sessionID)
+        }
+        return liveChatSessionIDs().contains(sessionID)
+    }
+
     /// The id a live chat's waiting message is kept under: its durable one,
     /// which outlives the runtime id the chat is open by.
     func durableComposerSessionID(for sessionID: String) -> String {
@@ -4376,23 +4393,25 @@ final class AppState: ObservableObject {
         if lhs.isNewConversation || rhs.isNewConversation {
             let chat = lhs.isNewConversation ? rhs : lhs
             return !chat.isNewConversation && chat.profile == activeProfile
-                && chat.sessionID == newChatOpenedSessionID
+                && (chat.sessionID == newChatOpenedSessionID || chat.sessionID == newChatOpenedDurableSessionID)
+                && newChatOpenedDurableSessionID.map(liveChatOwnsComposerDraftSessionID) == true
         }
-        if lhs.profile == activeProfile,
-           ComposerBar.draftKeysAreEquivalent(lhs, rhs, identity: activeChatScrollSessionIdentity) {
-            return true
+        let rows = (sessions + cronSessions).filter { sessionBelongsToProfile($0, profile: lhs.profile) }
+        if let destination = rows.first(where: { $0.nestingIDs.contains(rhs.sessionID) }) {
+            return destination.nestingIDs.contains(lhs.sessionID)
         }
-        return (sessions + cronSessions).contains { row in
-            let ids = row.nestingIDs
-            return ids.contains(lhs.sessionID) && ids.contains(rhs.sessionID)
+        if let origin = rows.first(where: { $0.nestingIDs.contains(lhs.sessionID) }) {
+            return origin.nestingIDs.contains(rhs.sessionID)
         }
+        return lhs.profile == activeProfile
+            && ComposerBar.draftKeysAreEquivalent(lhs, rhs, identity: activeChatScrollSessionIdentity)
     }
 
     /// Typing over a saved copy makes its chat the one that opens, as a tap
     /// on it in the saved list does: until the live list lands, the
     /// automatic resume could still open another chat under the words.
     func noteComposerEditOverSavedCopy() {
-        guard showsOfflineChatCopy,
+        guard case .savedCopy = composerChatOnScreen,
               let copy = offlineChatPresentation, !copy.isPickedChat,
               let transcript = copy.displayedTranscript,
               chatPickedFromSavedList == nil,
@@ -4644,9 +4663,10 @@ final class AppState: ObservableObject {
     /// and its picture reads carry on; the list is saved again once Hermes
     /// next sends it.
     func deleteSavedChats() {
-        offlineChatCache.removeAll()
-        // A message waiting to be sent is the user's, not a saved copy.
-        rerecordComposerSendFiles()
+        // Pending messages are the user's words, including those parked
+        // on other dashboards. Keep their files rather than rewriting only
+        // the messages currently loaded in memory.
+        offlineChatCache.removeSavedChats()
         Task.detached(priority: .utility) { TranscriptImageCache.removeAll() }
         if connection == nil, let copy = offlineChatPresentation {
             // Until this launch's sign-in goes through, the copy is what keeps
@@ -13337,6 +13357,7 @@ final class AppState: ObservableObject {
             markChatViewportReplacement()
             setActiveSessionState(id: runtimeSessionID, title: AppLocalization.string("New conversation"))
             newChatOpenedSessionID = runtimeSessionID
+            newChatOpenedDurableSessionID = created.storedSessionId ?? runtimeSessionID
             messages = []
             dismissOfflineChatPresentation()
             persistedTranscriptWindow = nil
