@@ -264,6 +264,7 @@ struct ConnectionSetupListItem: View {
         case .check:
             Image(systemName: "checkmark.circle")
                 .font(.subheadline)
+                .conduitFixedGlyph()
                 .foregroundStyle(Color.conduitAccent)
                 .accessibilityHidden(true)
         }

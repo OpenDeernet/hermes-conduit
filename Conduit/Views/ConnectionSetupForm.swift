@@ -487,6 +487,7 @@ struct ConnectionSetupStageRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             marker
+                .conduitFixedGlyph()
                 .frame(width: 22)
             Text(label)
                 .font(.subheadline.weight(stageState == .pending ? .regular : .semibold))
