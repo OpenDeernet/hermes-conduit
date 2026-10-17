@@ -468,7 +468,7 @@ private struct V2NoticeBanner: View {
     var body: some View {
         Button(action: dismiss) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Image(systemName: "pin.fill")
+                Image(systemName: notice.systemImage)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color.conduitAccent)
                     .accessibilityHidden(true)

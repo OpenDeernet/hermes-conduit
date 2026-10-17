@@ -655,6 +655,9 @@ final class AppState: ObservableObject {
                 guard let self, case .failed(let message) = outcome else { return }
                 self.widgetAwaitingInteractiveAuthenticationDashboardID = nil
                 self.errorMessage = message
+                // The composer shows errorMessage; over the V2 lists (the
+                // chat covered) nothing would, and the tap looks ignored.
+                if self.showSidebar { self.showNotice(message, systemImage: "exclamationmark.circle") }
             }
         )
     }()
@@ -4396,6 +4399,14 @@ final class AppState: ObservableObject {
     /// Says for a moment that a pin change stayed on this phone, and why.
     private func showPinSyncNotice(for error: Error, pinned: Bool) {
         let notice = PinSyncNotice(error: error, pinned: pinned)
+        pinSyncNotice = notice
+        UIAccessibility.post(notification: .announcement, argument: notice.message)
+    }
+
+    /// Says something briefly over the V2 lists (`pinSyncNotice` carries
+    /// every such notice).
+    func showNotice(_ message: String, systemImage: String) {
+        let notice = PinSyncNotice(message: message, systemImage: systemImage)
         pinSyncNotice = notice
         UIAccessibility.post(notification: .announcement, argument: notice.message)
     }
