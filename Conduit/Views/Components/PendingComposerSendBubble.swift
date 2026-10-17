@@ -47,7 +47,6 @@ struct PendingComposerSendBubble: View {
                     }
                     .font(.caption.weight(.semibold))
                     .accessibilityHint(Text("Puts the message back in the composer to change or delete"))
-                    .accessibilityIdentifier("pending-composer-send.edit")
                 }
             }
             .accessibilityElement(children: .ignore)

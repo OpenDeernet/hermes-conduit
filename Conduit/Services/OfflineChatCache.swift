@@ -594,7 +594,9 @@ final class OfflineChatCacheStore {
 
     /// Keeps a message waiting for its chat, so a launch after the app was
     /// stopped can put it back in its chat's draft. Its file sits beside its
-    /// scope's, so the same wipes remove it.
+    /// scope's, so the same wipes remove it. Intentionally synchronous, like
+    /// the saved-chat cache: recording finishes before the composer clears
+    /// its submitted draft.
     func recordPendingSend(_ pending: PendingComposerSend) {
         guard let data = try? JSONEncoder().encode(pending) else { return }
         guard write(data, to: pendingSendFileURL(dashboardID: pending.dashboardID, profile: pending.profile, id: pending.id)) else { return }

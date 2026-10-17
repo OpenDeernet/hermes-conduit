@@ -172,6 +172,7 @@ extension AppState {
     /// to change or delete.
     func editPendingComposerSend() {
         guard let pending = pendingComposerSendOnScreen else { return }
+        cancelPendingComposerSendRecheck()
         pendingComposerSend = nil
         composerNotice = nil
         composerRestoreRequests.append(restoreRequest(for: pending, key: composerDraftKeyOnScreen, focuses: true))
