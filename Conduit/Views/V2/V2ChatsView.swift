@@ -266,12 +266,12 @@ struct V2ChatsView: View {
     @AppStorage("conduit.v2.expandedNests") private var expandedNestsRaw = ""
     /// Parsed once per change of the store, not once per parent row.
     @State private var expansionCache = V2NestExpansionCache()
-    /// The closed list sections (#696), remembered across launches. Read
-    /// into state so a tap can animate the change, which an `@AppStorage`
-    /// write ignores.
     /// A conversation opened from elsewhere whose closed section still has
     /// to open once its row is listed.
     @State private var pendingSectionReveal: String?
+    /// The closed list sections (#696), remembered across launches. Read
+    /// into state so a tap can animate the change, which an `@AppStorage`
+    /// write ignores.
     @State private var collapsedSections = ChatListSection.collapsed(
         from: UserDefaults.standard.string(forKey: V2ChatsView.collapsedSectionsKey) ?? ChatListSection.defaultCollapsedRaw
     )
