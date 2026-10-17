@@ -706,9 +706,10 @@ struct V2ChatsView: View {
     static let collapsedSectionsKey = "conduit.v2.collapsedChatSections"
 
     /// A search or a status filter is a lookup: every section shows its
-    /// matches, and the saved open/closed state waits for the browse.
+    /// matches, and the saved open/closed state waits for the browse. The
+    /// status filters don't narrow Projects' Pinned section.
     private var sectionsCollapsible: Bool {
-        !isSearching && !selection.flattens
+        !isSearching && (showingProjects || !selection.flattens)
     }
 
     private func isCollapsed(_ section: ChatListSection) -> Bool {
@@ -768,7 +769,8 @@ struct V2ChatsView: View {
                 .padding(.leading, 16)
                 .padding(.trailing, 16)
                 .padding(.vertical, 2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // The whole strip is the tap target, at the 44 pt minimum.
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
