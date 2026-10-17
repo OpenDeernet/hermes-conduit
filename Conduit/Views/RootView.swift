@@ -181,9 +181,8 @@ struct MainView: View {
                 onClose: appState.closeGeminiLiveConversation,
                 onRetry: { Task { await appState.geminiLiveController.start() } }
             )
-            .safeAreaInset(edge: .top, spacing: 0) { voiceScreenshotBanner }
+            .safeAreaInset(edge: .top, spacing: 0) { callTopBanners }
             .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
-            .overlay(alignment: .top) { phoneChangeOverlay }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -196,9 +195,8 @@ struct MainView: View {
                 onClose: appState.closeGrokLiveConversation,
                 onRetry: { Task { await appState.grokLiveController.start() } }
             )
-            .safeAreaInset(edge: .top, spacing: 0) { voiceScreenshotBanner }
+            .safeAreaInset(edge: .top, spacing: 0) { callTopBanners }
             .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
-            .overlay(alignment: .top) { phoneChangeOverlay }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -211,9 +209,8 @@ struct MainView: View {
                 onClose: appState.closeLocalLiveConversation,
                 onRetry: { Task { await appState.localLiveController.start() } }
             )
-            .safeAreaInset(edge: .top, spacing: 0) { voiceScreenshotBanner }
+            .safeAreaInset(edge: .top, spacing: 0) { callTopBanners }
             .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
-            .overlay(alignment: .top) { phoneChangeOverlay }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -225,9 +222,8 @@ struct MainView: View {
                 onClose: appState.closeGPTLiveConversation,
                 onRetry: { Task { await appState.gptLiveController.start() } }
             )
-            .safeAreaInset(edge: .top, spacing: 0) { voiceScreenshotBanner }
+            .safeAreaInset(edge: .top, spacing: 0) { callTopBanners }
             .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
-            .overlay(alignment: .top) { phoneChangeOverlay }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -241,9 +237,8 @@ struct MainView: View {
                 onClose: appState.closeVoiceConversation,
                 shouldAutoListen: { appState.consumeVoiceSheetAutoListenIfPresenting() }
             )
-                .safeAreaInset(edge: .top, spacing: 0) { voiceScreenshotBanner }
+                .safeAreaInset(edge: .top, spacing: 0) { callTopBanners }
                 .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
-                .overlay(alignment: .top) { phoneChangeOverlay }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
@@ -541,11 +536,15 @@ struct MainView: View {
         appState.showSidebar = true
     }
 
-    /// Calendar changes Hermes asked for, over a call's screen: under it,
-    /// they were hidden until the call was minimised.
-    private var phoneChangeOverlay: some View {
-        PhoneChangeOverlay(engine: appState.phoneSync)
-            .environmentObject(appState)
+    /// A call screen's top: the screenshot banner, then calendar changes
+    /// Hermes asked for (under the call screen, they were hidden until the
+    /// call was minimised).
+    private var callTopBanners: some View {
+        VStack(spacing: 0) {
+            voiceScreenshotBanner
+            PhoneChangeOverlay(engine: appState.phoneSync)
+                .environmentObject(appState)
+        }
     }
 
     /// The confirmation Hermes is waiting on, answered by tap.

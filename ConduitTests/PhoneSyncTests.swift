@@ -324,6 +324,15 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertNotNil(reminder["result"], reminder["error"] ?? "")
         XCTAssertEqual(source.appliedChanges.last?.kind, .deleteReminder)
         XCTAssertEqual(source.appliedChanges.last?.reminderID, "r_milk")
+        // Not in a calendar the user left out since the id was read.
+        source.itemCalendars["e_hidden"] = "ek_work"
+        var leftOut = phonePreferences()
+        leftOut.hiddenCalendars = ["ek_work"]
+        engine.savePreferences(leftOut)
+        let hidden = await PhoneVoiceTools.run(removeTool, arguments: ["kind": "event", "id": "e_hidden"], engine: engine, answer: answer)
+        XCTAssertNotNil(hidden["error"])
+        XCTAssertNotEqual(source.appliedChanges.last?.eventID, "e_hidden")
+        engine.savePreferences(phonePreferences())
         let noID = await PhoneVoiceTools.run(removeTool, arguments: ["kind": "event"], engine: engine, answer: answer)
         XCTAssertNotNil(noID["error"])
         let badSpan = await PhoneVoiceTools.run(removeTool, arguments: ["kind": "event", "id": "e_1", "span": "all"],
@@ -630,6 +639,9 @@ private final class FakePhoneCalendarSource: PhoneCalendarSource {
         return "item_\(change.id)"
     }
     func removeAdded(itemID: String, isEvent: Bool, window: (from: Date, to: Date)) async throws {}
+    /// Item id to EventKit calendar id, for left-out calendars.
+    var itemCalendars: [String: String] = [:]
+    func itemCalendar(itemID: String, isEvent: Bool, window: (from: Date, to: Date)) async -> String? { itemCalendars[itemID] }
     func calendarTitle(id: String?, forEvents: Bool) -> String? { "Personal" }
     func eventKitCalendarID(forShared id: String) -> String? { id }
     func startObservingChanges(_ handler: @escaping @Sendable () -> Void) {}

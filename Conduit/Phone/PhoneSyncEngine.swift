@@ -789,6 +789,16 @@ final class PhoneSyncEngine: ObservableObject {
             guard preferences.alarms else { throw VoiceNotReady() }
             return try await alarmSource.apply(change, now: now())
         }
+        if change.kind == .deleteEvent || change.kind == .deleteReminder {
+            let isEvent = change.kind == .deleteEvent
+            // Only what's still shared: an id read before its calendar was
+            // left out isn't.
+            if let calendar = await calendarSource.itemCalendar(itemID: (isEvent ? change.eventID : change.reminderID) ?? "",
+                                                                isEvent: isEvent, window: window),
+               preferences.hiddenCalendars.contains(calendar) {
+                throw PhoneCalendarSourceError.notFound
+            }
+        }
         let itemID = try await calendarSource.apply(change, window: window)
         // A deletion needs nothing here: the next upload sees it gone.
         if change.kind.isAddition, let itemID {
