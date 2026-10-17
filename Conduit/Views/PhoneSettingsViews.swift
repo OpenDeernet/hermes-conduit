@@ -188,6 +188,7 @@ struct PhoneSettingsPage: View {
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(showsCalendars ? 90 : 0))
+                            .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
                 }
