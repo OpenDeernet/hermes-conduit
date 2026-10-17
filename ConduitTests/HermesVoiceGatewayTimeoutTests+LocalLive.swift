@@ -465,7 +465,14 @@ extension VoiceConversationControllerTests {
         runner.observe(.messageComplete(sessionId: "rt-1", messageId: "m2", content: "Here.\n```\nx = 1\n```", reasoning: nil))
         XCTAssertEqual(script.shown, ["```\nx = 1\n```"])
         XCTAssertEqual(script.spoken.last, "t2:Here.\n", "no screen took it: the call doesn't say it's there")
-        XCTAssertEqual(script.done, ["t1", "t2"])
+
+        script.hasScreen = true
+        runner.start(turnID: "t3", text: "And now?")
+        await localLiveSettle(until: { script.submitted.count == 3 })
+        runner.observe(.messageComplete(sessionId: "rt-1", messageId: "m3", content: "Now.\n| b |", reasoning: nil))
+        XCTAssertEqual(Array(script.spoken.suffix(2)), ["t3:Now.\n", "t3:" + LocalLiveTurnRunner.onScreenLine],
+                       "a line already ended: no extra pause")
+        XCTAssertEqual(script.done, ["t1", "t2", "t3"])
     }
 
     func testSpokenVisualSplitterGivesTheSameResultHoweverTheReplyIsSplit() {
@@ -514,6 +521,10 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(words.feed(" light h"), " light ")
         XCTAssertEqual(words.feed("ttps://a.b ok"), " ok")
         XCTAssertEqual(words.visualMarkdown, "- https://a.b")
+        // So is a word ending in "!".
+        var exclaimed = SpokenVisualSplitter()
+        XCTAssertEqual(exclaimed.feed("Hello!"), "Hello!")
+        XCTAssertEqual(exclaimed.feed(" See !"), " See ")
 
         for size in 1...9 {
             let parts = split(every: size)

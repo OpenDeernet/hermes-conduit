@@ -974,8 +974,18 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     /// call is running or there is nothing to show.
     @discardableResult
     func showOnScreen(title: String, markdown: String) -> VoiceScreenCard? {
+        showOnScreen(title: title, markdown: markdown, evenIfHidden: false)
+    }
+
+    /// `evenIfHidden`: the call screen is minimised or the phone locked, and
+    /// Hermes has already told the user it's there, so the card waits in the
+    /// call's strip (and opens if the screen comes back soon) instead of
+    /// being dropped.
+    @discardableResult
+    func showOnScreen(title: String, markdown: String, evenIfHidden: Bool) -> VoiceScreenCard? {
         let body = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty, liveCallScreenIsVisible?() ?? true, let anchor = currentCallAnchor else { return nil }
+        guard !body.isEmpty, evenIfHidden || liveCallScreenIsVisible?() ?? true,
+              let anchor = currentCallAnchor else { return nil }
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let card = VoiceScreenCard(
             id: UUID(),

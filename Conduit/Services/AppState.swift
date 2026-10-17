@@ -3273,7 +3273,7 @@ final class AppState: ObservableObject {
                 turns.onDone = { [weak session] turnID in session?.sendTurnDone(turnID) }
                 turns.onVisual = { [weak self] markdown in
                     self?.voiceBackgroundJobSupervisor.showOnScreen(
-                        title: AppLocalization.string("From Hermes"), markdown: markdown) != nil
+                        title: AppLocalization.string("From Hermes"), markdown: markdown, evenIfHidden: true) != nil
                 }
                 return session
             },
@@ -20176,6 +20176,9 @@ final class AppState: ObservableObject {
     }()
     /// A card Hermes showed during a Classic voice conversation, open over it.
     @Published var classicVoiceCard: PresentedCard?
+    /// The cards `classicVoiceCard` holds, so ones arriving while it's open
+    /// join it instead of replacing it.
+    var classicVoiceCardParts: [PresentedCard] = []
     /// The Go confirmation for Apple Maps that opens without a tap, and
     /// until when: Hermes was just seen asking for it in the chat on screen.
     var mapsNavigateExpected: (promptID: String, until: Date)?

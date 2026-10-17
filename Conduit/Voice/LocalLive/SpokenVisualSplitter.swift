@@ -133,13 +133,14 @@ struct SpokenVisualSplitter {
            !text[address.lowerBound...].contains(" "), address.lowerBound < held {
             held = address.lowerBound
         }
-        // "ht" starting a word may become an address, "!" an image.
+        // "ht" starting a word may become an address, "!" an image; a "!"
+        // ending a word ("Hello!") is the sentence's.
         let scheme = "https://"
         for length in stride(from: min(scheme.count, text.count), through: 1, by: -1)
         where text.hasSuffix(scheme.prefix(length)) || (length == 1 && text.hasSuffix("!")) {
             let start = text.index(text.endIndex, offsetBy: -length)
             let startsWord = start == text.startIndex || !text[text.index(before: start)].isLetter
-            if text[start] == "!" || startsWord { held = min(held, start) }
+            if startsWord { held = min(held, start) }
             break
         }
         return held

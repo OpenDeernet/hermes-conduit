@@ -61,22 +61,29 @@ extension AppState {
         }
     }
 
-    /// New cards from Hermes: on the call's screen, or over a Classic voice
-    /// conversation, where one sheet holds them all. Outside a voice
-    /// conversation they're only noted.
+    /// New cards from Hermes: on the call's screen (waiting there while
+    /// it's minimised: Hermes has said they're on it), or over a Classic
+    /// voice conversation, where one sheet holds them all, cards arriving
+    /// while it's open included. Outside a voice conversation they're only
+    /// noted.
     func showPresentedCards(_ cards: [PresentedCard]) {
-        let unshown = cards.filter {
-            voiceBackgroundJobSupervisor.showOnScreen(title: $0.title, markdown: $0.markdown) == nil
+        var unshown: [PresentedCard] = []
+        for card in cards {
+            let shown = voiceBackgroundJobSupervisor.showOnScreen(
+                title: card.title, markdown: card.markdown, evenIfHidden: true)
+            if shown == nil { unshown.append(card) }
         }
-        guard showVoiceSheet, let first = unshown.first else { return }
-        let title = unshown.count == 1 ? first.title : AppLocalization.string("From Hermes")
+        guard showVoiceSheet, !unshown.isEmpty else { return }
+        let parts = (classicVoiceCard == nil ? [] : classicVoiceCardParts) + unshown
+        classicVoiceCardParts = parts
+        let title = parts.count == 1 ? parts[0].title : AppLocalization.string("From Hermes")
         // Each card under its own heading when there are several, clipped as
         // the call screen clips its cards.
-        let markdown = unshown.count == 1 ? first.markdown : unshown.map { card in
+        let markdown = parts.count == 1 ? parts[0].markdown : parts.map { card in
             card.title.isEmpty ? card.markdown : "### \(card.title)\n\n\(card.markdown)"
         }.joined(separator: "\n\n")
         classicVoiceCard = PresentedCard(
-            id: unshown.map(\.id).joined(separator: "+"),
+            id: parts.map(\.id).joined(separator: "+"),
             title: String(title.prefix(VoiceBackgroundJobSupervisor.maximumTitleCharacters)),
             markdown: VoiceBackgroundJobSupervisor.clippedScreenMarkdown(markdown)
         )

@@ -85,6 +85,8 @@ final class LocalLiveTurnRunner {
     /// Hermes showed something with `conduit_show` while answering the
     /// open turn: what its reply writes isn't shown again.
     private var showedCard = false
+    /// What the open turn said so far ends a line (or nothing was said).
+    private var endedLine = true
     private var task: Task<Void, Never>?
     /// Bumped by every new turn and reset, so older work stops at its next step.
     private var generation = 0
@@ -104,6 +106,7 @@ final class LocalLiveTurnRunner {
         turn = (turnID, false)
         splitter.reset()
         showedCard = false
+        endedLine = true
         generation += 1
         let generation = generation
         // After the last turn's work: one send or correction at a time, in
@@ -135,6 +138,7 @@ final class LocalLiveTurnRunner {
         reply = nil
         splitter.reset()
         showedCard = false
+        endedLine = true
     }
 
     private func run(turnID: String, text: String, generation: Int) async {
@@ -275,7 +279,10 @@ final class LocalLiveTurnRunner {
         guard let current = turn, !text.isEmpty else { return }
         turn?.spoke = true
         let spoken = splitter.feed(text)
-        if !spoken.isEmpty { onDelta?(current.id, spoken) }
+        if !spoken.isEmpty {
+            endedLine = spoken.hasSuffix("\n")
+            onDelta?(current.id, spoken)
+        }
     }
 
     /// A line of the call's own instead of Hermes' reply.
@@ -294,12 +301,16 @@ final class LocalLiveTurnRunner {
     private func finish(_ turnID: String) {
         guard turn?.id == turnID else { return }
         let rest = splitter.finish()
-        if !rest.isEmpty { onDelta?(turnID, rest) }
+        if !rest.isEmpty {
+            endedLine = rest.hasSuffix("\n")
+            onDelta?(turnID, rest)
+        }
         if splitter.hasVisual, !showedCard, onVisual?(splitter.visualMarkdown) == true {
-            onDelta?(turnID, "\n" + Self.onScreenLine)
+            onDelta?(turnID, (endedLine ? "" : "\n") + Self.onScreenLine)
         }
         splitter.reset()
         showedCard = false
+        endedLine = true
         turn = nil
         onDone?(turnID)
     }
