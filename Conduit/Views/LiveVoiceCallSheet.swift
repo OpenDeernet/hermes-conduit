@@ -530,7 +530,7 @@ struct CallChatTitleLink<Title: View>: View {
             .buttonStyle(.plain)
             .accessibilityAddTraits(.isLink)
             // The header reads as one element; this keeps the link reachable.
-            .accessibilityAction(named: Text("Open chat")) { onOpenChat(link) }
+            .accessibilityAction(named: Text(verbatim: AppLocalization.string("Open chat"))) { onOpenChat(link) }
         } else {
             label().lineLimit(1)
         }
