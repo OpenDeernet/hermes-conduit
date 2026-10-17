@@ -37,7 +37,7 @@ struct ConnectionSetupHeader: View {
                     .accessibilityHidden(true)
                 if let progress {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(progress)
+                        Text(verbatim: progress)
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(Color.conduitAccent)
                             .accessibilityIdentifier("setup.step-label")
@@ -48,12 +48,12 @@ struct ConnectionSetupHeader: View {
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(title)
+                Text(verbatim: title)
                     .font(.title2.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                 if let detail {
-                    Text(detail)
+                    Text(verbatim: detail)
                         .font(.subheadline)
                         .foregroundStyle(Color.primary.opacity(0.62))
                         .fixedSize(horizontal: false, vertical: true)
@@ -129,6 +129,12 @@ struct ConnectionSetupChoiceRow: View {
     let identifier: String
     let action: () -> Void
 
+    /// A disclosure row says whether its content is open.
+    private var disclosureState: String {
+        guard case .disclosure(let expanded) = accessory else { return "" }
+        return expanded ? AppLocalization.string("Expanded") : AppLocalization.string("Collapsed")
+    }
+
     private var isSelected: Bool {
         if case .checkmark(selected: true) = accessory { return true }
         return false
@@ -187,6 +193,7 @@ struct ConnectionSetupChoiceRow: View {
             }
         }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityValue(disclosureState)
         .accessibilityIdentifier(identifier)
     }
 
@@ -250,6 +257,7 @@ struct ConnectionSetupListItem: View {
             Text(verbatim: "\(number)")
                 .font(.caption.weight(.bold))
                 .monospacedDigit()
+                .conduitFixedGlyph()
                 .foregroundStyle(Color.conduitAccent)
                 .frame(width: 22, height: 22)
                 .background(Color.conduitAccent.opacity(0.15), in: Circle())

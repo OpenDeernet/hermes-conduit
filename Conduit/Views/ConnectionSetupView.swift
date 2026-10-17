@@ -215,34 +215,34 @@ struct ConnectionSetupView: View {
                 )
             case .browser:
                 AuthWebView(
-                url: configuration.serverURL,
-                cloudflareAccess: flow.cloudflareAccessForDraft(),
-                dashboardIDProvider: { [appState, url = configuration.serverURL] in
-                    appState.resolveDashboardID(forURL: url, registerIfMissing: true)
-                },
-                // Repair targets are always registered dashboards: reuse
-                // their own identified WebKit store (read-only resolution —
-                // no render-time registration).
-                websiteDataStoreIdentifier: appState.resolveDashboardID(
-                    forURL: configuration.serverURL,
-                    registerIfMissing: false
-                ),
-                onTicket: { ticket, baseURL in
-                    Task { @MainActor in
+                    url: configuration.serverURL,
+                    cloudflareAccess: flow.cloudflareAccessForDraft(),
+                    dashboardIDProvider: { [appState, url = configuration.serverURL] in
+                        appState.resolveDashboardID(forURL: url, registerIfMissing: true)
+                    },
+                    // Repair targets are always registered dashboards: reuse
+                    // their own identified WebKit store (read-only resolution —
+                    // no render-time registration).
+                    websiteDataStoreIdentifier: appState.resolveDashboardID(
+                        forURL: configuration.serverURL,
+                        registerIfMissing: false
+                    ),
+                    onTicket: { ticket, baseURL in
+                        Task { @MainActor in
+                            showRepairSignIn = false
+                            await activate(.browserSignIn(
+                                ticket: ticket,
+                                baseURL: baseURL,
+                                configuration: configuration
+                            ))
+                        }
+                    },
+                    onError: { classifiedFailure, _ in
                         showRepairSignIn = false
-                        await activate(.browserSignIn(
-                            ticket: ticket,
-                            baseURL: baseURL,
-                            configuration: configuration
-                        ))
+                        // Sign-in failure consumed no transaction: the user may
+                        // retry sign-in directly, without re-testing.
+                        activationFailure = classifiedFailure
                     }
-                },
-                onError: { classifiedFailure, _ in
-                    showRepairSignIn = false
-                    // Sign-in failure consumed no transaction: the user may
-                    // retry sign-in directly, without re-testing.
-                    activationFailure = classifiedFailure
-                }
                 )
             }
         } else {
