@@ -8379,13 +8379,19 @@ final class AppState: ObservableObject {
     /// will need.
     func noteComposerUserEdit() {
         if composerNotice != nil { composerNotice = nil }
-        // While the chat is on its way, an edit takes nothing from the work
-        // bringing it in, which is what lands it. Over a saved copy, typing
-        // picks that chat, as a tap in the saved list does
-        // (AppState+PendingSend.swift).
+        // Saved copies and pending New Chats need their loading work to
+        // continue. An edit in an already-live chat still claims that chat
+        // from automatic selection, preserving it through the reconnect.
         if composerWaitsForChat {
-            noteComposerEditOverSavedCopy()
-            return
+            switch composerChatOnScreen {
+            case .savedCopy:
+                noteComposerEditOverSavedCopy()
+                return
+            case .newChat:
+                return
+            case .live, .none:
+                break
+            }
         }
         guard automaticChatResumeWorkMayStillSelectSession else { return }
         guard !composerEditClaimedAutomaticWork else { return }
