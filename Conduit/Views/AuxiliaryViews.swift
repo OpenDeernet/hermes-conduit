@@ -2665,6 +2665,7 @@ private struct AppearanceSettingsDetail: View {
     @AppStorage("conduit.ipadPersistentSidebar") private var iPadPersistentSidebar = false
     @AppStorage(V2ShellPreference.key) private var usesV2 = V2ShellPreference.defaultValue
     @AppStorage(V2MainButtonPreference.key) private var mainButtonNewChat = V2MainButtonPreference.defaultValue
+    @AppStorage(ConduitAccentChoice.storageKey) private var accentChoice = ConduitAccentChoice.defaultChoice
     @State private var selected: ThemePreference
     @State private var isChangingIcon = false
     init(theme: ThemePreference, saveTheme: @escaping (ThemePreference) -> Void) { self.theme = theme; self.saveTheme = saveTheme; _selected = State(initialValue: theme) }
@@ -2680,6 +2681,12 @@ private struct AppearanceSettingsDetail: View {
                 })) {
                     Text("Dark").tag(ThemePreference.dark); Text("Light").tag(ThemePreference.light); Text("System").tag(ThemePreference.system)
                 }.pickerStyle(.segmented)
+            }
+            ConduitSettingsSection(title: AppLocalization.string("Accent color"), symbol: "paintpalette", tint: .conduitAccent) {
+                Text("Choose the color of your own messages and Conduit’s highlights.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                AccentColorPicker(selection: $accentChoice)
             }
             ConduitSettingsSection(title: AppLocalization.string("App language"), symbol: "globe", tint: .conduitAccent) {
                 Text("Choose the language Conduit’s interface uses. Speech, transcription, and provider language settings are unaffected.")
@@ -2761,7 +2768,7 @@ private struct AppearanceSettingsDetail: View {
             // people who'd rather not talk. A chat keeps its voice button.
             if usesV2 {
                 ConduitSettingsSection(title: AppLocalization.string("Main button"), symbol: "circle.circle.fill", tint: .conduitAccent) {
-                    Text("Choose what the gold button beside the tabs does. The other one moves to the top bar, and a chat keeps its voice button.")
+                    Text("Choose what the round button beside the tabs does. The other one moves to the top bar, and a chat keeps its voice button.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     Picker("Main button", selection: Binding(get: { mainButtonNewChat }, set: {
@@ -2785,6 +2792,47 @@ private struct AppearanceSettingsDetail: View {
                 }
             }
         }.navigationTitle("Appearance")
+    }
+}
+
+/// One swatch per preset accent (#697); the pick redraws the app in place.
+private struct AccentColorPicker: View {
+    @Binding var selection: ConduitAccentChoice
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(ConduitAccentChoice.allCases) { choice in
+                let isSelected = choice == selection
+                Button {
+                    guard !isSelected else { return }
+                    Haptics.selection()
+                    selection = choice
+                } label: {
+                    Circle()
+                        .fill(Color(uiColor: choice.color(dark: colorScheme == .dark)))
+                        .frame(width: 32, height: 32)
+                        .overlay {
+                            if isSelected {
+                                Image(systemName: "checkmark")
+                                    .font(.footnote.weight(.bold))
+                                    .foregroundStyle(Color(uiColor: choice.selectionColorOnBubble(dark: colorScheme == .dark)))
+                            }
+                        }
+                        .padding(4)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(isSelected ? Color.primary.opacity(0.55) : .clear, lineWidth: 2)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityLabel(choice.title)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+        .conduitFixedGlyph()
     }
 }
 
