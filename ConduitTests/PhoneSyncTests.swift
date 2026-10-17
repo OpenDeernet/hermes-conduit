@@ -343,7 +343,7 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertFalse(PhoneVoiceTools.confirmsRemoval("delete it?"))
         XCTAssertFalse(PhoneVoiceTools.confirmsRemoval("what's on my calendar tomorrow"))
         XCTAssertFalse(PhoneVoiceTools.confirmsRemoval(""))
-        XCTAssertFalse(PhoneVoiceTools.confirmsRemoval("go it"), "Agreeing words without a yes or a delete verb")
+        XCTAssertFalse(PhoneVoiceTools.confirmsRemoval("of the event"), "Agreeing words without a yes or a delete verb")
         let noID = await PhoneVoiceTools.run(removeTool, arguments: ["kind": "event"], engine: engine, answer: answer)
         XCTAssertNotNil(noID["error"])
         let badSpan = await PhoneVoiceTools.run(removeTool, arguments: ["kind": "event", "id": "e_1", "span": "all"],
