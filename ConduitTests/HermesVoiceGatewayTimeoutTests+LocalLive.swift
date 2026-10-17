@@ -508,6 +508,13 @@ extension VoiceConversationControllerTests {
         open fence
         ~~~
         """)
+        // A word ending in "h" or "ht" is said whole, at once.
+        var words = SpokenVisualSplitter()
+        XCTAssertEqual(words.feed("Go with"), "Go with")
+        XCTAssertEqual(words.feed(" light h"), " light ")
+        XCTAssertEqual(words.feed("ttps://a.b ok"), " ok")
+        XCTAssertEqual(words.visualMarkdown, "- https://a.b")
+
         for size in 1...9 {
             let parts = split(every: size)
             XCTAssertEqual(parts.0, whole.0, "split every \(size)")

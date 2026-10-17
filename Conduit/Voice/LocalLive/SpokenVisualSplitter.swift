@@ -133,11 +133,13 @@ struct SpokenVisualSplitter {
            !text[address.lowerBound...].contains(" "), address.lowerBound < held {
             held = address.lowerBound
         }
-        // "ht" may become an address, "!" an image.
+        // "ht" starting a word may become an address, "!" an image.
         let scheme = "https://"
         for length in stride(from: min(scheme.count, text.count), through: 1, by: -1)
         where text.hasSuffix(scheme.prefix(length)) || (length == 1 && text.hasSuffix("!")) {
-            held = min(held, text.index(text.endIndex, offsetBy: -length))
+            let start = text.index(text.endIndex, offsetBy: -length)
+            let startsWord = start == text.startIndex || !text[text.index(before: start)].isLetter
+            if text[start] == "!" || startsWord { held = min(held, start) }
             break
         }
         return held
@@ -156,11 +158,15 @@ struct SpokenVisualSplitter {
 
     /// `text` with its links said by their titles and its images and bare
     /// addresses taken out, and what was taken, in order.
+    private static let link = try? NSRegularExpression(pattern: #"(!?)\[([^\]]*)\]\(([^)\s]+)\)"#)
+    // An address's closing full stop or comma is the sentence's.
+    private static let bareAddress = try? NSRegularExpression(pattern: #"https?://[^\s)]*[^\s).,;:!?]"#)
+
     private static func withoutLinks(_ text: String) -> (spoken: String, found: [String]) {
         guard text.contains("](") || text.contains("http") else { return (text, []) }
         var spoken = text
         var found: [String] = []
-        if let link = try? NSRegularExpression(pattern: #"(!?)\[([^\]]*)\]\(([^)\s]+)\)"#) {
+        if let link = Self.link {
             for match in link.matches(in: spoken, range: NSRange(spoken.startIndex..., in: spoken)).reversed() {
                 guard let whole = Range(match.range, in: spoken),
                       let title = Range(match.range(at: 2), in: spoken) else { continue }
@@ -169,8 +175,7 @@ struct SpokenVisualSplitter {
                 spoken.replaceSubrange(whole, with: isImage ? "" : String(spoken[title]))
             }
         }
-        // An address's closing full stop or comma is the sentence's.
-        if let bare = try? NSRegularExpression(pattern: #"https?://[^\s)]*[^\s).,;:!?]"#) {
+        if let bare = Self.bareAddress {
             var addresses: [String] = []
             for match in bare.matches(in: spoken, range: NSRange(spoken.startIndex..., in: spoken)).reversed() {
                 guard let whole = Range(match.range, in: spoken) else { continue }

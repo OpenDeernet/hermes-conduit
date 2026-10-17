@@ -133,6 +133,8 @@ final class LocalLiveTurnRunner {
         task = nil
         turn = nil
         reply = nil
+        splitter.reset()
+        showedCard = false
     }
 
     private func run(turnID: String, text: String, generation: Int) async {

@@ -48,7 +48,8 @@ extension AppState {
             guard name == PresentedCard.toolName else { return }
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1))
-                await self?.syncPresentedScreens()
+                guard let self, self.voiceConversationShowsCards else { return }
+                await self.syncPresentedScreens()
             }
         case .toolComplete(_, let name, _, _):
             guard name == PresentedCard.toolName else { return }
@@ -61,14 +62,24 @@ extension AppState {
     }
 
     /// New cards from Hermes: on the call's screen, or over a Classic voice
-    /// conversation. Outside a voice conversation they're only noted.
+    /// conversation, where one sheet holds them all. Outside a voice
+    /// conversation they're only noted.
     func showPresentedCards(_ cards: [PresentedCard]) {
-        for card in cards {
-            if voiceBackgroundJobSupervisor.showOnScreen(title: card.title, markdown: card.markdown) == nil,
-               showVoiceSheet {
-                classicVoiceCard = card
-            }
+        let unshown = cards.filter {
+            voiceBackgroundJobSupervisor.showOnScreen(title: $0.title, markdown: $0.markdown) == nil
         }
+        guard showVoiceSheet, let first = unshown.first else { return }
+        let title = unshown.count == 1 ? first.title : AppLocalization.string("From Hermes")
+        // Each card under its own heading when there are several, clipped as
+        // the call screen clips its cards.
+        let markdown = unshown.count == 1 ? first.markdown : unshown.map { card in
+            card.title.isEmpty ? card.markdown : "### \(card.title)\n\n\(card.markdown)"
+        }.joined(separator: "\n\n")
+        classicVoiceCard = PresentedCard(
+            id: unshown.map(\.id).joined(separator: "+"),
+            title: String(title.prefix(VoiceBackgroundJobSupervisor.maximumTitleCharacters)),
+            markdown: VoiceBackgroundJobSupervisor.clippedScreenMarkdown(markdown)
+        )
     }
 
     /// Hermes was seen asking to open Apple Maps (`conduit_maps` navigate)
