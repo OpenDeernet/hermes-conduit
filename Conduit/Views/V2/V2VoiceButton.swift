@@ -23,7 +23,18 @@ enum V2VoiceContext: Equatable {
 }
 
 struct V2VoiceButton: View {
+    /// The button's look: the gold circle, or a plain glyph in a top bar
+    /// when the gold circle starts new chats instead.
+    enum Style: Equatable {
+        case circle
+        /// In a top bar's glass capsule, like New chat's pencil.
+        case capsule
+        /// In a navigation bar's toolbar.
+        case toolbar
+    }
+
     let context: V2VoiceContext
+    var style: Style = .circle
     /// Faded out (the expanded composer): its bars stop redrawing unseen.
     var isHidden = false
     @EnvironmentObject private var appState: AppState
@@ -136,7 +147,19 @@ struct V2VoiceButton: View {
         }
     }
 
-    private var face: some View {
+    @ViewBuilder private var face: some View {
+        switch style {
+        case .circle: circleFace
+        case .capsule:
+            V2CapsuleIcon(systemImage: "waveform", tint: returnsToCall ? Color.conduitAccent : nil)
+                .opacity(canAct ? 1 : 0.55)
+        case .toolbar:
+            Image(systemName: "waveform")
+                .foregroundStyle(returnsToCall ? Color.conduitAccent : Color.primary)
+        }
+    }
+
+    private var circleFace: some View {
         // Only a minimised call moves them: any other call's screen covers
         // the button, so it doesn't redraw unseen.
         V2VoiceBars(isLive: returnsToCall && !isHidden)
@@ -250,6 +273,55 @@ struct V2VoiceButton: View {
             await startVoice(
                 PendingVoiceIntent(profile: appState.activeProfile, startsFreshConversation: false, source: .composer)
             )
+        }
+    }
+}
+
+/// The gold circle when the user swapped it for New chat (Settings >
+/// Appearance): a new chat in the current profile, or on a project's page a
+/// new chat in its folder. Voice moves to the top bar's New chat slot.
+struct V2NewChatButton: View {
+    let context: V2VoiceContext
+    @EnvironmentObject private var appState: AppState
+
+    /// The saved copy has no live gateway to create a chat on.
+    private var canAct: Bool {
+        appState.turnState != .synchronizing && appState.offlineChatPresentation == nil
+    }
+
+    private var folder: String? {
+        if case .project(let project) = context { return V2VoiceButton.folder(of: project) }
+        return nil
+    }
+
+    private var label: String {
+        if case .project(let project) = context, folder != nil {
+            return AppLocalization.string("New conversation in \(project.title)")
+        }
+        return AppLocalization.string("New Chat")
+    }
+
+    var body: some View {
+        Button {
+            Haptics.medium()
+            appState.dismissSidebarDrawer()
+            let path = folder
+            Task { await appState.createNewSession(cwd: path) }
+        } label: {
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: 21, weight: .semibold))
+                .conduitFixedGlyph()
+                .foregroundStyle(Color.black.opacity(0.82))
+                .frame(width: V2VoiceButton.diameter, height: V2VoiceButton.diameter)
+                .background(Color.conduitAccent, in: Circle())
+                .opacity(canAct ? 1 : 0.55)
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .disabled(!canAct)
+        .accessibilityLabel(label)
+        .accessibilityShowsLargeContentViewer {
+            Label(label, systemImage: "square.and.pencil")
         }
     }
 }
