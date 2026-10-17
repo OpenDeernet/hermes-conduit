@@ -458,9 +458,10 @@ struct V2Shell: View {
 
 // MARK: - Notice
 
-/// A short notice over the top of the screen: a pin change that stayed on
-/// this iPhone, and what Hermes said. It goes away after a few seconds, or
-/// on a tap.
+/// A short notice over the top of the screen, with its own symbol: a pin
+/// change that stayed on this iPhone and what Hermes said, or a widget
+/// action that couldn't finish. It goes away after a few seconds, or on a
+/// tap.
 private struct V2NoticeBanner: View {
     let notice: PinSyncNotice
     let dismiss: () -> Void

@@ -5,7 +5,7 @@ import Foundation
 struct PinSyncNotice: Identifiable, Equatable {
     let id = UUID()
     let message: String
-    var systemImage = "pin.fill"
+    let systemImage: String
 
     /// Any other brief notice over the V2 lists (a widget action that
     /// couldn't finish).
@@ -17,6 +17,7 @@ struct PinSyncNotice: Identifiable, Equatable {
     /// Where the change stayed, then what Hermes said.
     init(error: Error, pinned: Bool) {
         let reason = UserFacingError.message(for: error)
+        systemImage = "pin.fill"
         message = pinned
             ? AppLocalization.string("Pinned on this iPhone only. \(reason)")
             : AppLocalization.string("Unpinned on this iPhone only. \(reason)")
