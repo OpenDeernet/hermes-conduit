@@ -565,8 +565,14 @@ struct V2ChatsView: View {
         )
     }
 
-    private func filterRows(_ selection: V2FilterSelection) -> [SessionSummary] {
-        guard !selection.isEmpty else { return mainListRows(sourceRows(nil)) }
+    private func filterRows(_ selection: V2FilterSelection, searching: Bool = false) -> [SessionSummary] {
+        guard !selection.isEmpty else {
+            return V2ChatsView.allRows(
+                sourceRows(nil),
+                searching: searching,
+                inMainList: mainListShows
+            )
+        }
         return selection.rows(
             everything: sourceRows(nil),
             sessions: appState.activeProfileSessions,
@@ -589,16 +595,35 @@ struct V2ChatsView: View {
     /// a pinned one stays, since pinning asks for it here. The catalog
     /// carries no folder, so this hides the conversations the project tree
     /// is known to hold.
-    private func mainListRows(_ rows: [SessionSummary]) -> [SessionSummary] {
-        guard appState.supportsProjects else { return rows }
-        return rows.filter { appState.isSessionPinned($0) || appState.knownProjectID(for: $0) == nil }
+    private func mainListShows(_ session: SessionSummary) -> Bool {
+        guard appState.supportsProjects else { return true }
+        return appState.isSessionPinned(session) || appState.knownProjectID(for: session) == nil
+    }
+
+    /// What All lists. A search looks through every chat, a project's
+    /// included, as the status filters do (#708).
+    static func allRows(
+        _ rows: [SessionSummary],
+        searching: Bool,
+        inMainList: (SessionSummary) -> Bool
+    ) -> [SessionSummary] {
+        searching ? rows : rows.filter(inMainList)
     }
 
     private var displayedSessions: [SessionSummary] {
-        let rows = filterRows(selection)
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rows = filterRows(selection, searching: !query.isEmpty)
         guard !query.isEmpty else { return rows }
         return rows.filter { sessionMatches($0, query: query) }
+    }
+
+    /// While searching, a project's chat names its project, since the main
+    /// list doesn't otherwise hold it.
+    private func searchProjectTitle(_ item: V2ChatsListItem) -> String? {
+        guard isSearching, case .session(let node) = item.kind, !mainListShows(node.session),
+              let projectID = appState.knownProjectID(for: node.session)
+        else { return nil }
+        return appState.projects.first { $0.id == projectID }?.title
     }
 
     private func sessionMatches(_ session: SessionSummary, query: String) -> Bool {
@@ -945,6 +970,7 @@ struct V2ChatsView: View {
         ForEach(items) { item in
             V2ChatsRow(
                 item: item,
+                projectTitle: searchProjectTitle(item),
                 onRename: { sessionPendingRename = $0 },
                 onDelete: { sessionPendingDeletion = $0 },
                 setExpanded: setExpanded
@@ -1229,6 +1255,8 @@ private struct V2ChatsRow: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let item: V2ChatsListItem
+    /// The project a search result sits in, named before its preview.
+    let projectTitle: String?
     let onRename: (SessionSummary) -> Void
     let onDelete: (SessionSummary) -> Void
     /// Opens or closes the nest with this key.
@@ -1258,6 +1286,7 @@ private struct V2ChatsRow: View {
     /// nest never hides an unread reply.
     private func sessionRow(_ node: SessionNesting.Node) -> some View {
         let session = node.session
+        let preview = appState.v2RowPreview(for: session)
         let hasChildren = !node.children.isEmpty
         let signals = SessionNesting.signals(
             node,
@@ -1272,7 +1301,7 @@ private struct V2ChatsRow: View {
             V2SessionRow(
                 title: session.title,
                 time: session.updatedLabel,
-                preview: appState.v2RowPreview(for: session),
+                preview: projectTitle.map { "\($0) · \(preview)" } ?? preview,
                 status: appState.v2RowStatus(for: session),
                 isUnread: signals.isUnread,
                 isSelected: session.id == appState.activeSessionId,
