@@ -1154,7 +1154,7 @@ final class GeminiLiveConversationController: ObservableObject {
     }
 
     /// How a call was answered, for the trace: never its text.
-    nonisolated static func traceStatus(of outgoing: [GeminiLiveToolBridge.Outgoing], answering id: String) -> String {
+    static func traceStatus(of outgoing: [GeminiLiveToolBridge.Outgoing], answering id: String) -> String {
         for item in outgoing {
             guard case .toolResponse(let responseID, _, let result, _) = item, responseID == id else { continue }
             if result["error"] != nil { return "error" }
