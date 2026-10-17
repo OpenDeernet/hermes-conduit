@@ -5792,8 +5792,10 @@ final class AppState: ObservableObject {
                 self.errorMessage = Self.missingLinkedBotMessage(for: self.botModePhase)
                 return
             }
-            // Like a chat link, a bot's chat comes forward over V2's Chats list.
-            if await self.openBotChat(for: bot), self.explicitSessionOpenRequestID == nil {
+            // Like a chat link, a bot's chat comes forward over V2's Chats
+            // list. True means this open finished and holds the viewport (a
+            // superseded one returns false), as for the roster's own taps.
+            if await self.openBotChat(for: bot) {
                 self.dismissSidebarDrawer()
             }
         }
@@ -5862,7 +5864,8 @@ final class AppState: ObservableObject {
             // must come forward: V2 keeps the Chats list over it until the
             // sidebar is let go, as a notification's open does (once the open
             // succeeded, so a dead link leaves the list up with its error).
-            // Not when a newer open is still under way: that one decides.
+            // Not while a newer open is still under way; one that already
+            // finished has brought its own chat forward anyway.
             if opened, self.explicitSessionOpenRequestID == nil { self.dismissSidebarDrawer() }
         }
     }
