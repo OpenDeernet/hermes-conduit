@@ -79,6 +79,7 @@ extension GatewayRestartTests {
         let read = NotifierPluginLatestVersion.version(fromPluginYAML:)
         XCTAssertEqual(read("name: conduit_push\nmanifest_version: 1\nversion: 0.44.0\n"), "0.44.0")
         XCTAssertEqual(read("version: \"0.44.1\"  # next\n"), "0.44.1")
+        XCTAssertEqual(read("  version: 0.44.2\n"), "0.44.2")
         XCTAssertNil(read("manifest_version: 1\n"))
         XCTAssertNil(read("version: main\n"))
     }
@@ -90,7 +91,7 @@ extension GatewayRestartTests {
         var asked = 0
         let fetch: (URL) async throws -> (Data, URLResponse) = { url in
             asked += 1
-            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
             return (Data("version: 0.50.0\n".utf8), response)
         }
         let start = Date()
@@ -105,11 +106,15 @@ extension GatewayRestartTests {
         XCTAssertEqual(asked, 2)
 
         let missing: (URL) async throws -> (Data, URLResponse) = { url in
-            (Data(), HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+            asked += 1
+            return (Data(), try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)))
         }
         let failed = await NotifierPluginLatestVersion.refresh(defaults: defaults, now: start.addingTimeInterval(9_000), fetch: missing)
         XCTAssertNil(failed)
         XCTAssertEqual(NotifierPluginLatestVersion.cached(in: defaults), "0.50.0")
+        // A failed ask waits the interval too.
+        _ = await NotifierPluginLatestVersion.refresh(defaults: defaults, now: start.addingTimeInterval(9_060), fetch: missing)
+        XCTAssertEqual(asked, 3)
     }
 
     func testAnOlderPluginReportsNoRuntime() {

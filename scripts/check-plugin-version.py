@@ -111,7 +111,11 @@ def main(argv=None):
         return 1
 
     problem = compare(recommended, latest)
-    if problem and "behind" in problem:
+    if problem and parts(recommended) is not None and parts(latest) is not None:
+        behind = parts(recommended) + (0,) * 8 < parts(latest) + (0,) * 8
+    else:
+        behind = False
+    if problem and behind:
         # Conduit offers main's version itself; the floor may lag.
         print(f"::notice file={SWIFT_FILE}::{problem}")
         return 0

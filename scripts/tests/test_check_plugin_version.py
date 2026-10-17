@@ -45,6 +45,8 @@ class CheckPluginVersionTests(unittest.TestCase):
     def test_unreadable_versions_fail_cleanly(self):
         self.assertIn("Can't compare", check.compare("0.41.x", "0.41.0"))
         self.assertEqual(self.run_check("junk", "version: 0.41.0\n"), 1)
+        # An unreadable version whose message happens to say "behind" still fails.
+        self.assertEqual(self.run_check("behind", "version: 0.41.0\n"), 1)
 
     def test_reads_quoted_yaml_versions(self):
         self.assertEqual(check.plugin_version('manifest_version: 1\nversion: "0.41.0"\n'), "0.41.0")
