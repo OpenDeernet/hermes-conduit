@@ -6377,7 +6377,7 @@ final class AppState: ObservableObject {
                 voiceCallSaveBlockedKeys.insert(key)
                 drain.failure = VoiceHistoryError.pluginMissing
                 break
-            } catch DashboardTicketBridgeError.http(let status, let detail) where (400..<500).contains(status) && status != 408 && status != 429 {
+            } catch DashboardTicketBridgeError.http(let status, let detail) where status == 400 || status == 413 {
                 // The host refused this call itself (a plugin older than the
                 // call's engine, or a request it won't take): it's kept, and
                 // the calls behind it still save rather than wait on it.

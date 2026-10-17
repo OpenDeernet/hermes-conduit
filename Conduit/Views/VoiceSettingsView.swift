@@ -2100,7 +2100,7 @@ struct VoiceCallSaveStatusSection: View {
             } else if let result = model.lastResult, !model.isSaving {
                 Text(result)
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.primary)
             }
         }
     }
