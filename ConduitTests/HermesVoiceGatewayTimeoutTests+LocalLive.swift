@@ -641,6 +641,14 @@ extension VoiceConversationControllerTests {
         runner.observe(.messageError(sessionId: "rt-1", message: "Provider timeout"))
         XCTAssertEqual(script.spoken, ["t1:\(LocalLiveTurnRunner.errorLine)"])
         XCTAssertEqual(script.done, ["t1"])
+
+        runner.start(turnID: "t2", text: "Try again")
+        await localLiveSettle(until: { script.submitted.count == 2 })
+        runner.observe(.messageDelta(sessionId: "rt-1", text: "Here's the table:\n| a |"))
+        runner.observe(.messageError(sessionId: "rt-1", message: "Provider timeout"))
+        XCTAssertEqual(Array(script.spoken.suffix(2)), ["t2:Here's the table:\n", "t2:\(LocalLiveTurnRunner.errorLine)"],
+                       "what the broken reply still held isn't said after the call's line")
+        XCTAssertEqual(script.shown, [])
     }
 }
 

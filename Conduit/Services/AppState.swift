@@ -28873,6 +28873,7 @@ final class AppState: ObservableObject {
         suspendedVoiceConversation = nil
         voiceSheetShouldAutoListen = false
         classicVoiceCard = nil
+        classicVoiceCardParts = []
         // Live-mute persistence obeys the PR #159 authority rule: the
         // controller's mute wins only for the profile that owns the session.
         // A same-profile close that arrives after the controller was

@@ -289,6 +289,9 @@ final class LocalLiveTurnRunner {
     private func say(_ text: String, to turnID: String, generation: Int) {
         guard generation == self.generation, turn?.id == turnID else { return }
         turn?.spoke = true
+        // What the reply still held ends with it: nothing of it follows the
+        // call's line.
+        splitter.reset()
         onDelta?(turnID, text)
         finish(turnID)
     }
