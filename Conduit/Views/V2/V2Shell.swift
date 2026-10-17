@@ -551,6 +551,11 @@ private struct V2CapsuleTabBar: View {
 enum V2ShellPreference {
     static let key = "conduit.useV2Shell"
     static let defaultValue = true
+
+    /// The same value the views read through `@AppStorage`.
+    static var isOn: Bool {
+        UserDefaults.standard.object(forKey: key) as? Bool ?? defaultValue
+    }
 }
 
 private struct V2TabBarClearanceKey: EnvironmentKey {

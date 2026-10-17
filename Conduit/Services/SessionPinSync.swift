@@ -1,7 +1,8 @@
 import Foundation
 
-/// A pin change Hermes didn't take, kept on the phone: what the brief notice
-/// says. Each failure is a new notice, so a repeat shows again.
+/// A brief notice over the V2 lists: a pin change Hermes didn't take, kept
+/// on the phone, or a widget action that couldn't finish. Each failure is a
+/// new notice, so a repeat shows again.
 struct PinSyncNotice: Identifiable, Equatable {
     let id = UUID()
     let message: String

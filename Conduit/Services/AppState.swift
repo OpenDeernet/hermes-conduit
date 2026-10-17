@@ -657,7 +657,8 @@ final class AppState: ObservableObject {
                 self.errorMessage = message
                 // The composer shows errorMessage; over the V2 lists (the
                 // chat covered) nothing would, and the tap looks ignored.
-                if self.showSidebar { self.showNotice(message, systemImage: "exclamationmark.circle") }
+                // Only V2 draws the notice.
+                if self.showSidebar, V2ShellPreference.isOn { self.showNotice(message, systemImage: "exclamationmark.circle") }
             }
         )
     }()
@@ -15431,8 +15432,8 @@ final class AppState: ObservableObject {
             if sessionCatalogLoaderOverride == nil {
                 guard let activeClient, self.client === activeClient else { return false }
             }
-            guard requiredViewportTransitionGeneration.map({ chatViewportTransitionIsCurrent(generation: $0) }) ?? true,
-                  reportsFailure else { return false }
+            guard requiredViewportTransitionGeneration.map({ chatViewportTransitionIsCurrent(generation: $0) }) ?? true else { return false }
+            guard reportsFailure else { return false }
             errorMessage = AppLocalization.string("Failed to load sessions: \(UserFacingError.message(for: error))")
             return false
         }
