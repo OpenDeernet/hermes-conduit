@@ -156,6 +156,7 @@ struct V2VoiceButton: View {
         case .toolbar:
             Image(systemName: "waveform")
                 .foregroundStyle(returnsToCall ? Color.conduitAccent : Color.primary)
+                .opacity(canAct ? 1 : 0.55)
         }
     }
 
