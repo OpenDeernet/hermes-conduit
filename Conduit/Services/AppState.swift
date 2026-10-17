@@ -5857,8 +5857,9 @@ final class AppState: ObservableObject {
             }.value
             // From outside a chat (a Live Activity, another app) the chat
             // must come forward: V2 keeps the Chats list over it until the
-            // sidebar is let go, as a notification's open does.
-            if opened { self.dismissSidebarDrawer() }
+            // sidebar is let go, as a notification's open does. Not when a
+            // newer open is still under way: that navigation decides.
+            if opened, self.explicitSessionOpenRequestID == nil { self.dismissSidebarDrawer() }
         }
     }
 
@@ -19604,7 +19605,8 @@ final class AppState: ObservableObject {
                         title: activeSessionTitle,
                         profile: activeProfile,
                         profileName: profileDisplayName(activeProfile),
-                        glowHex: profileGlowTint(activeProfile).flatMap { ProfileGlowRGB(UIColor($0))?.hex }
+                        glowHex: profileGlowColors()[activeProfile]?.hex
+                            ?? profileGlowTint(activeProfile).flatMap { ProfileGlowRGB(UIColor($0))?.hex }
                     )
                 case .queued:
                     // Hermes normally drains queued input as a later full turn,
