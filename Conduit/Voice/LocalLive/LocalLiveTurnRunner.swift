@@ -90,7 +90,13 @@ final class LocalLiveTurnRunner {
         turn = (turnID, false)
         generation += 1
         let generation = generation
-        task = Task { [weak self] in await self?.run(turnID: turnID, text: text, generation: generation) }
+        // After the last turn's work: one send or correction at a time, in
+        // the order the user spoke.
+        let previous = task
+        task = Task { @MainActor [weak self] in
+            await previous?.value
+            await self?.run(turnID: turnID, text: text, generation: generation)
+        }
     }
 
     func cancel(turnID: String) {
@@ -114,6 +120,8 @@ final class LocalLiveTurnRunner {
     }
 
     private func run(turnID: String, text: String, generation: Int) async {
+        // A newer turn came while this one waited: the plugin let it go.
+        guard generation == self.generation else { return }
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty else {
             finish(turnID)

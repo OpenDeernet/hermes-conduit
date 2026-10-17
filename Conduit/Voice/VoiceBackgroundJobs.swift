@@ -1418,8 +1418,10 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     /// among them, and any job update.
     func dropPendingNotices() {
         chatNotes.removeAll()
+        // Each take consumes a notice; the cap only guards the loop, far
+        // above what the job limits (3 running, 10 settled) can queue.
         var dropped = 0
-        while dropped < 64, takePendingNotice() != nil { dropped += 1 }
+        while dropped < 256, takePendingNotice() != nil { dropped += 1 }
     }
 
     func detachLiveThread() {

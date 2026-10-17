@@ -157,7 +157,7 @@ final class LocalLiveSession: GeminiLiveSessionControlling {
         }
         let id = connectionID
         let previous = sendChain
-        sendChain = Task { [weak self] in
+        sendChain = Task { @MainActor [weak self] in
             await previous?.value
             guard let self, id == self.connectionID else {
                 onFailure?()
@@ -249,7 +249,7 @@ final class LocalLiveSession: GeminiLiveSessionControlling {
         // the call connecting forever.
         let timeout = setupTimeout
         setupTimeoutTask?.cancel()
-        setupTimeoutTask = Task { [weak self] in
+        setupTimeoutTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: timeout)
             guard !Task.isCancelled, let self, self.awaitingSetup?.id == id else { return }
             localLiveLogger.error("Local Live session setup timed out")
@@ -261,7 +261,7 @@ final class LocalLiveSession: GeminiLiveSessionControlling {
     private func startKeepalive(on id: UUID) {
         keepaliveTask?.cancel()
         let interval = keepaliveInterval
-        keepaliveTask = Task { [weak self] in
+        keepaliveTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: interval)
                 guard !Task.isCancelled, let self, id == self.connectionID,

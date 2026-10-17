@@ -67,6 +67,12 @@ extension HermesVoiceGatewayTimeoutTests {
         let chunks = LocalLiveProtocol.deltaChunks(long)
         XCTAssertEqual(chunks.map(\.count), [LocalLiveProtocol.maximumDeltaCharacters, LocalLiveProtocol.maximumDeltaCharacters, 5])
         XCTAssertEqual(chunks.joined(), long)
+
+        // The plugin counts code points: a flag is two.
+        let flags = String(repeating: "🇯🇵", count: LocalLiveProtocol.maximumDeltaCharacters)
+        let flagChunks = LocalLiveProtocol.deltaChunks(flags)
+        XCTAssertEqual(flagChunks.map(\.unicodeScalars.count), [LocalLiveProtocol.maximumDeltaCharacters, LocalLiveProtocol.maximumDeltaCharacters])
+        XCTAssertEqual(flagChunks.joined(), flags)
     }
 
     private func makeLocalLiveSession() -> (LocalLiveSession, () -> [FakeGeminiLiveSocket]) {
@@ -277,6 +283,21 @@ extension VoiceConversationControllerTests {
         await localLiveSettle(until: { script.submitted.count == 2 })
         XCTAssertEqual(script.redirected.count, 1, "nothing was running to redirect into")
         XCTAssertEqual(script.submitted.last, "Thanks")
+    }
+
+    func testLocalLiveTurnsRunOneAtATimeAndSkipOnesTheUserTalkedOver() async {
+        let script = LocalLiveTurnScript()
+        let runner = script.makeRunner()
+        runner.start(turnID: "t1", text: "Check my email")
+        await localLiveSettle(until: { !script.submitted.isEmpty })
+
+        // Two turns back to back: the first was let go before it ran.
+        runner.start(turnID: "t2", text: "only the work")
+        runner.start(turnID: "t3", text: "only the work inbox")
+        await localLiveSettle(until: { !script.redirected.isEmpty && !runner.isCorrecting })
+        // t2 ran before t3 in the chain: it is settled too.
+        XCTAssertEqual(script.redirected, ["only the work inbox"])
+        XCTAssertEqual(script.submitted, ["Check my email"])
     }
 
     func testLocalLiveCancelledTurnStopsSpeakingButHermesKeepsWorking() async {

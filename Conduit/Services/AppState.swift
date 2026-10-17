@@ -2978,6 +2978,9 @@ final class AppState: ObservableObject {
         let controller = GeminiLiveConversationController(
             makeSession: {
                 let session = LocalLiveSession(client: client)
+                // The turns follow the newest session: a turn opened on an
+                // older one can't be answered on this socket.
+                turns.dropTurn()
                 session.onTurn = { turnID, text in turns.start(turnID: turnID, text: text) }
                 session.onTurnCancel = { turnID in turns.cancel(turnID: turnID) }
                 session.onTurnsDropped = { turns.dropTurn() }
@@ -4986,7 +4989,8 @@ final class AppState: ObservableObject {
         "\(activeDashboardID?.uuidString ?? "-")|\(profile)"
     }
 
-    /// Whether Gemini Live and GPT-Live calls are saved on this profile.
+    /// Whether live calls are saved on this profile. Local Live calls are
+    /// saved too, though they can't be resumed.
     var voiceCallSavingEnabled: Bool {
         loadVoiceProfilePreferences(profile: activeProfile).saveVoiceCalls ?? true
     }
@@ -5048,7 +5052,8 @@ final class AppState: ObservableObject {
     /// What Conduit tells the live voice mode in use, for Voice settings:
     /// the text as the next call would send it, with the host's memory and
     /// persona shown as placeholders (they are read when a call starts).
-    /// Nil when no live mode is on.
+    /// Nil when no live mode is on, and for Local Live, which sends none
+    /// (the speech server's model is Hermes).
     func liveVoiceInstructionsPreview(profile: String? = nil) -> LiveVoiceInstructionsPreviewContent? {
         let placeholderMemory = GeminiLiveMemoryContext(text: AppLocalization.string("(What your Hermes agent remembers about you, read when the call starts.)"), canRecall: false)
         let placeholderPersona = AppLocalization.string("(This profile's SOUL.md, read when the call starts.)")

@@ -25,8 +25,8 @@ enum LocalLiveProtocol {
     /// The host's relay closes a socket that sends nothing for 60 s; a muted
     /// or paused call sends no audio, so a ping keeps it open.
     static let keepaliveInterval: Duration = .seconds(20)
-    /// What one delta carries at most. The plugin takes up to 8,000
-    /// characters a frame.
+    /// What one delta carries at most, in Unicode scalars (the plugin's
+    /// Python counts code points, and takes up to 8,000 a frame).
     static let maximumDeltaCharacters = 4_000
 
     static var pluginMissingReason: String {
@@ -69,9 +69,10 @@ enum LocalLiveProtocol {
 
     /// `text` in pieces the plugin takes whole.
     static func deltaChunks(_ text: String) -> [String] {
-        guard text.count > maximumDeltaCharacters else { return text.isEmpty ? [] : [text] }
+        let scalars = text.unicodeScalars
+        guard scalars.count > maximumDeltaCharacters else { return text.isEmpty ? [] : [text] }
         var chunks: [String] = []
-        var rest = Substring(text)
+        var rest = Substring(text).unicodeScalars
         while !rest.isEmpty {
             chunks.append(String(rest.prefix(maximumDeltaCharacters)))
             rest = rest.dropFirst(maximumDeltaCharacters)
