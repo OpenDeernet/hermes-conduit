@@ -597,7 +597,14 @@ final class OfflineChatCacheStore {
     /// scope's, so the same wipes remove it.
     func recordPendingSend(_ pending: PendingComposerSend) {
         guard let data = try? JSONEncoder().encode(pending) else { return }
-        write(data, to: pendingSendFileURL(dashboardID: pending.dashboardID, profile: pending.profile))
+        guard write(data, to: pendingSendFileURL(dashboardID: pending.dashboardID, profile: pending.profile, id: pending.id)) else { return }
+        // Migrate the earlier single-file format only after the new copy is safe.
+        let legacy = pendingSendFileURL(dashboardID: pending.dashboardID, profile: pending.profile)
+        if let data = try? Data(contentsOf: legacy),
+           let old = try? JSONDecoder().decode(PendingComposerSend.self, from: data),
+           old.id == pending.id {
+            try? fileManager.removeItem(at: legacy)
+        }
     }
 
     /// The messages an earlier run left waiting on this dashboard.
@@ -606,28 +613,36 @@ final class OfflineChatCacheStore {
             return []
         }
         let prefix = dashboardID.uuidString.lowercased() + "--"
+        var seen: Set<UUID> = []
         return files
             .filter { $0.lastPathComponent.hasPrefix(prefix) && $0.lastPathComponent.hasSuffix(Self.pendingSendSuffix) }
+            // Per-message filenames sort before the legacy scope filename.
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .compactMap { file -> PendingComposerSend? in
                 guard let data = try? Data(contentsOf: file),
                       let pending = try? JSONDecoder().decode(PendingComposerSend.self, from: data) else { return nil }
                 // Its own scope's file: one copied under another name is left.
-                let expected = pendingSendFileURL(dashboardID: dashboardID, profile: pending.profile)
+                let expected = pendingSendFileURL(dashboardID: dashboardID, profile: pending.profile, id: pending.id)
+                let legacy = pendingSendFileURL(dashboardID: dashboardID, profile: pending.profile)
                 guard pending.dashboardID == dashboardID,
-                      file.lastPathComponent == expected.lastPathComponent else { return nil }
+                      (file.lastPathComponent == expected.lastPathComponent || file.lastPathComponent == legacy.lastPathComponent),
+                      seen.insert(pending.id).inserted else { return nil }
                 return pending
             }
             .sorted { $0.queuedAt < $1.queuedAt }
     }
 
-    /// Removes the scope's waiting message while it is still `id`: one
-    /// recorded since stays.
+    /// Removes only this message, including an earlier single-file copy.
     func removePendingSend(id: UUID, dashboardID: UUID, profile: String) {
-        let url = pendingSendFileURL(dashboardID: dashboardID, profile: profile)
-        guard let data = try? Data(contentsOf: url),
-              let pending = try? JSONDecoder().decode(PendingComposerSend.self, from: data),
-              pending.id == id else { return }
-        try? fileManager.removeItem(at: url)
+        for url in [
+            pendingSendFileURL(dashboardID: dashboardID, profile: profile, id: id),
+            pendingSendFileURL(dashboardID: dashboardID, profile: profile),
+        ] {
+            guard let data = try? Data(contentsOf: url),
+                  let pending = try? JSONDecoder().decode(PendingComposerSend.self, from: data),
+                  pending.id == id, pending.dashboardID == dashboardID, pending.profile == profile else { continue }
+            try? fileManager.removeItem(at: url)
+        }
     }
 
     @discardableResult
@@ -676,8 +691,9 @@ final class OfflineChatCacheStore {
 
     private static let pendingSendSuffix = ".pending-send.json"
 
-    func pendingSendFileURL(dashboardID: UUID, profile: String) -> URL {
-        directory.appendingPathComponent("\(Self.scopeFileStem(dashboardID: dashboardID, profile: profile))\(Self.pendingSendSuffix)")
+    func pendingSendFileURL(dashboardID: UUID, profile: String, id: UUID? = nil) -> URL {
+        let message = id.map { "." + $0.uuidString.lowercased() } ?? ""
+        return directory.appendingPathComponent("\(Self.scopeFileStem(dashboardID: dashboardID, profile: profile))\(message)\(Self.pendingSendSuffix)")
     }
 
     /// "<dashboard>--<profile>": the dashboard prefix is what

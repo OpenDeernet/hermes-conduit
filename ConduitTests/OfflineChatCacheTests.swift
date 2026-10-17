@@ -1586,6 +1586,78 @@ final class OfflineChatCacheTests: XCTestCase {
         XCTAssertEqual(store.loadPendingSends(dashboardID: dashboard).map(\.id), [newer.id])
     }
 
+    func testStopRemainsAvailableWhileAMessageWaitsOnARunningLiveChat() throws {
+        let (appState, store, dashboard) = makeAppState()
+        seedCopy(store, dashboard: dashboard)
+        appState.presentOfflineChatIfAvailable(dashboardID: dashboard)
+        appState.isConnecting = true
+        appState.sendWhenConnected("Waiting", replyReference: nil)
+        appState.dismissOfflineChatPresentation()
+        appState.sessions = [session("stored-a")]
+        appState.activeSessionId = "stored-a"
+        appState.isConnected = true
+        appState.handleStreamEvent(.sessionBusy(sessionId: "stored-a", busy: true))
+
+        XCTAssertEqual(appState.turnState, .running)
+        XCTAssertNotNil(appState.pendingComposerSendOnScreen)
+        XCTAssertEqual(appState.composerAction(hasText: false, hasAttachments: false), .stop)
+        XCTAssertEqual(appState.composerAction(hasText: false, hasAttachments: true), .stop)
+        XCTAssertEqual(appState.composerAction(hasText: true, hasAttachments: false), .send,
+                       "Further text joins the waiting message in order")
+        XCTAssertEqual(appState.composerAction(hasText: true, hasAttachments: true), .unavailable)
+    }
+
+    func testRestoringOneMessageDoesNotOverwriteAnotherWaitingMessage() throws {
+        let (appState, store, dashboard) = makeAppState()
+        seedCopy(store, dashboard: dashboard)
+        appState.presentOfflineChatIfAvailable(dashboardID: dashboard)
+        appState.isConnecting = true
+        XCTAssertTrue(appState.sendWhenConnected("First", replyReference: nil))
+        appState.editPendingComposerSend()
+        let request = try XCTUnwrap(appState.composerRestoreRequests.first)
+
+        XCTAssertTrue(appState.sendWhenConnected("Second", replyReference: nil))
+        let waiting = try XCTUnwrap(appState.pendingComposerSend)
+        appState.rerecordComposerSendFiles()
+        XCTAssertEqual(Set(store.loadPendingSends(dashboardID: dashboard).map(\.id)),
+                       [try XCTUnwrap(request.pending).id, waiting.id])
+
+        appState.consumeComposerRestoreRequest(request.id)
+        XCTAssertEqual(store.loadPendingSends(dashboardID: dashboard).map(\.id), [waiting.id])
+    }
+
+    func testRestoreNoticeUsesTheActiveProfileEvenWhenAnotherProfileIsNewer() throws {
+        let (appState, store, dashboard) = makeAppState()
+        for (offset, profile) in ["default", "work"].enumerated() {
+            store.recordPendingSend(PendingComposerSend(
+                draftText: profile, replyReference: nil, dashboardID: dashboard,
+                profile: profile, sessionIDs: [profile], draftSessionID: profile,
+                isNewChat: false, title: profile,
+                queuedAt: Date(timeIntervalSince1970: Double(offset))
+            ))
+        }
+        appState.restorePendingSendsLeftBehind(dashboardID: dashboard)
+        XCTAssertEqual(appState.composerRestoreRequests.count, 2)
+        let active = try XCTUnwrap(appState.composerRestoreRequests.first { $0.key.profile == "default" }?.pending)
+        XCTAssertEqual(appState.composerNotice, appState.pendingComposerSendNotice(for: active, onScreen: false))
+    }
+
+    func testProfileSwitchClearsNoticeAndDoesNotReplaceItWithTheOutgoingProfilesNotice() throws {
+        let (appState, store, dashboard) = makeAppState()
+        seedCopy(store, dashboard: dashboard)
+        appState.presentOfflineChatIfAvailable(dashboardID: dashboard)
+        appState.isConnecting = true
+        appState.sendWhenConnected("Hello", replyReference: nil)
+        let pending = try XCTUnwrap(appState.pendingComposerSend)
+        appState.returnPendingComposerSendToDraft(pending)
+        XCTAssertNotNil(appState.composerNotice)
+
+        appState.setActiveProfileForTesting("work")
+        XCTAssertNil(appState.composerNotice)
+        appState.returnPendingComposerSendToDraft(pending)
+        XCTAssertNil(appState.composerNotice)
+    }
+
     // MARK: - Helpers
 
     private func makeStore() -> OfflineChatCacheStore {

@@ -249,7 +249,9 @@ extension AppState {
             self.composerRestoreRequests.append(
                 self.restoreRequest(for: pending, key: onScreen ? self.composerDraftKeyOnScreen : key, focuses: false)
             )
-            if !onScreen { self.composerNotice = self.pendingComposerSendNotice(for: pending, onScreen: false) }
+            if !onScreen, pending.dashboardID == self.activeDashboardID, pending.profile == self.activeProfile {
+                self.composerNotice = self.pendingComposerSendNotice(for: pending, onScreen: false)
+            }
         }
     }
 
@@ -280,7 +282,9 @@ extension AppState {
         composerRestoreRequests.append(
             restoreRequest(for: pending, key: onScreen ? composerDraftKeyOnScreen : nil, focuses: false)
         )
-        composerNotice = saysWhy ? pendingComposerSendNotice(for: pending, onScreen: onScreen) : nil
+        if pending.dashboardID == activeDashboardID, pending.profile == activeProfile {
+            composerNotice = saysWhy ? pendingComposerSendNotice(for: pending, onScreen: onScreen) : nil
+        }
     }
 
     /// A time away long enough that the chat may have moved on: the
@@ -300,9 +304,10 @@ extension AppState {
             file.id != pendingComposerSend?.id
                 && !composerRestoreRequests.contains { $0.pending?.id == file.id }
         }
-        guard let newest = leftBehind.last else { return }
         composerRestoreRequests.append(contentsOf: leftBehind.map { restoreRequest(for: $0, focuses: false) })
-        composerNotice = pendingComposerSendNotice(for: newest, onScreen: isOnScreen(newest))
+        if let newest = leftBehind.last(where: { $0.profile == activeProfile }) {
+            composerNotice = pendingComposerSendNotice(for: newest, onScreen: isOnScreen(newest))
+        }
     }
 
     /// A dashboard's waiting message, and words on their way back to its

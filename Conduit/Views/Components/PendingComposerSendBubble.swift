@@ -36,7 +36,6 @@ struct PendingComposerSendBubble: View {
                     sizeCategory: sizeCategory,
                     chatTextSize: chatTextSize
                 )
-                .opacity(0.62)
 
                 HStack(spacing: 10) {
                     Label("Sends when connected", systemImage: "clock")
@@ -50,6 +49,13 @@ struct PendingComposerSendBubble: View {
                     .accessibilityHint(Text("Puts the message back in the composer to change or delete"))
                     .accessibilityIdentifier("pending-composer-send.edit")
                 }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(pending.outboundText))
+            .accessibilityValue(Text("Sends when connected"))
+            .accessibilityAction(named: Text("Edit")) {
+                Haptics.selection()
+                appState.editPendingComposerSend()
             }
         }
         .id(Self.scrollID)

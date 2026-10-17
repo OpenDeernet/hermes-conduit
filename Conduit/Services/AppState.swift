@@ -589,6 +589,7 @@ final class AppState: ObservableObject {
         didSet {
             refreshActiveChatScrollSessionIdentity()
             if oldValue != activeProfile {
+                composerNotice = nil
                 dismissChatTakeover()
                 agentSettings.leave(scope: agentSettingsScope)
                 presentedScreens.leave()
@@ -603,6 +604,7 @@ final class AppState: ObservableObject {
     @Published private(set) var savedDashboardRegistry: SavedDashboardRegistry {
         didSet {
             if oldValue.activeDashboardID != savedDashboardRegistry.activeDashboardID {
+                composerNotice = nil
                 widgetSettledCatalogOwner = nil
                 let selectedDashboard = savedDashboardRegistry.activeDashboardID
                 let selectedProfile = selectedDashboard.flatMap { rememberedActiveProfile(for: $0) } ?? "default"
@@ -1691,6 +1693,9 @@ final class AppState: ObservableObject {
         // A chat on its way takes a message to send once it's ready;
         // attachments wait for the chat itself (AppState+PendingSend.swift).
         if composerWaitsForChat {
+            // A waiting send must not hide Stop for a live running turn.
+            // Further text still joins the pending message, preserving order.
+            if !hasText, turnState.isRunning, composerIsEnabled, isConnected { return .stop }
             return hasText && !hasAttachments ? .send : .unavailable
         }
         guard offlineChatPresentation == nil, !showsPendingNewChat else { return .unavailable }

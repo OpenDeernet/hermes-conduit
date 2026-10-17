@@ -1388,6 +1388,7 @@ struct ComposerBar: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Dismiss"))
+            .accessibilityValue(Text(notice))
         }
         .padding(.horizontal, 14)
         .padding(.top, 10)
