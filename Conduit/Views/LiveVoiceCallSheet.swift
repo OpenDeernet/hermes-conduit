@@ -205,7 +205,8 @@ struct LiveVoiceCallSheet: View {
                     V2CallHeaderTitle(
                         jobs: jobs,
                         engine: title,
-                        profile: appState.profileDisplayName(appState.activeProfile)
+                        profile: appState.profileDisplayName(appState.activeProfile),
+                        onOpenChat: openAttachedChat
                     )
                 } else {
                     Text(verbatim: title)
@@ -216,7 +217,7 @@ struct LiveVoiceCallSheet: View {
                     LiveVoiceBillingBadge(billing: billingBadge)
                 }
                 if !usesV2 {
-                    LiveVoiceCallThreadLabel(jobs: jobs)
+                    LiveVoiceCallThreadLabel(jobs: jobs, onOpenChat: openAttachedChat)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -232,6 +233,13 @@ struct LiveVoiceCallSheet: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
+    }
+
+    /// The chat name in the header opens the chat the call works in. The
+    /// call goes on minimised, as it does when a job's chat opens.
+    private func openAttachedChat(_ link: ConduitAppLink) {
+        dismiss()
+        openURL(link.url)
     }
 
     // MARK: Stage
@@ -476,15 +484,49 @@ struct LiveVoiceBillingBadge: View {
 }
 
 /// "Working in <chat>" under the title while the call is attached to one.
+/// Tapping it opens that chat.
 private struct LiveVoiceCallThreadLabel: View {
     @ObservedObject var jobs: VoiceBackgroundJobSupervisor
+    let onOpenChat: (ConduitAppLink) -> Void
 
     var body: some View {
-        if let thread = jobs.liveThread?.title {
-            Text(verbatim: thread)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+        if let thread = jobs.liveThread {
+            CallChatTitleLink(link: thread.appLink, onOpenChat: onOpenChat) {
+                Text(verbatim: thread.title)
+                    .font(.footnote)
+            }
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// The attached chat's name in a call's header, as a link to that chat
+/// (#698): a small chevron says it opens. Plain text when there is no
+/// chat to open.
+struct CallChatTitleLink<Title: View>: View {
+    let link: ConduitAppLink?
+    let onOpenChat: ((ConduitAppLink) -> Void)?
+    @ViewBuilder let label: () -> Title
+
+    var body: some View {
+        if let link, let onOpenChat {
+            Button {
+                onOpenChat(link)
+            } label: {
+                HStack(spacing: 3) {
+                    label().lineLimit(1)
+                    Image(systemName: "chevron.forward")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            // The header reads as one element; this keeps the link reachable.
+            .accessibilityAction(named: Text("Open chat")) { onOpenChat(link) }
+        } else {
+            label().lineLimit(1)
         }
     }
 }
@@ -820,15 +862,18 @@ struct V2CallHeaderTitle: View {
     @ObservedObject var jobs: VoiceBackgroundJobSupervisor
     let engine: String
     let profile: String
+    /// Opens the attached chat when its name is tapped; nil leaves it text.
+    var onOpenChat: ((ConduitAppLink) -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 2) {
-            Text(verbatim: jobs.liveThread?.title ?? AppLocalization.string("Voice call"))
-                .font(.headline)
-                .lineLimit(1)
-                // The subtitle is hidden below; VoiceOver still hears the
-                // profile and engine, just not the ticking clock.
-                .accessibilityValue(Text(verbatim: [profile, engine].filter { !$0.isEmpty }.joined(separator: ", ")))
+            CallChatTitleLink(link: jobs.liveThread?.appLink, onOpenChat: onOpenChat) {
+                Text(verbatim: jobs.liveThread?.title ?? AppLocalization.string("Voice call"))
+                    .font(.headline)
+            }
+            // The subtitle is hidden below; VoiceOver still hears the
+            // profile and engine, just not the ticking clock.
+            .accessibilityValue(Text(verbatim: [profile, engine].filter { !$0.isEmpty }.joined(separator: ", ")))
             // Ticks once a second while the call runs; nothing redraws
             // before it starts or after it ends.
             TimelineView(.animation(minimumInterval: 1, paused: jobs.liveCallStartedAt == nil)) { context in
