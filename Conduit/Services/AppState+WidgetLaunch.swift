@@ -73,9 +73,16 @@ extension AppState {
             // would have read this catalog (routeWidgetLaunchURL), and a
             // cancelled sync drops the rows it fetched. Read it here rather
             // than wait for a load nothing else starts.
+            // A read that fails is tried again on the next readiness change,
+            // and the launch reports its own failure if it runs out of time:
+            // the read's error isn't the composer's to show.
+            let shownError = errorMessage
             await loadSessions()
             guard lease.isCurrent else { return .deferred }
-            if widgetSettledCatalogOwner != workspace { return .deferred }
+            if widgetSettledCatalogOwner != workspace {
+                errorMessage = shownError
+                return .deferred
+            }
         }
         if link.action == .resume, let reference = link.reference, reference.kind == .dashboard {
             guard widgetSettledCatalogOwner == workspace else { return .deferred }
