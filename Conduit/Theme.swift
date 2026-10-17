@@ -78,6 +78,8 @@ enum ConduitAccentChoice: String, CaseIterable, Identifiable, Sendable {
     case amber, blue, green, teal, purple, pink
 
     static let storageKey = "conduit.accentChoice"
+    /// The pick before the user makes one: the original look.
+    static let defaultChoice = ConduitAccentChoice.amber
 
     var id: String { rawValue }
 
@@ -93,7 +95,8 @@ enum ConduitAccentChoice: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// The accent itself. The light-mode shade is darker so white text on a
-    /// sent bubble stays readable.
+    /// sent bubble stays readable. Presets are sRGB literals: the selection
+    /// contrast pick reads their components.
     func color(dark: Bool) -> UIColor {
         switch self {
         case .amber: return dark ? UIColor(red: 0.88, green: 0.67, blue: 0.28, alpha: 1) : UIColor(red: 0.55, green: 0.37, blue: 0.13, alpha: 1)
@@ -128,7 +131,7 @@ enum ConduitAccentChoice: String, CaseIterable, Identifiable, Sendable {
 /// Carries the accent choice through UIKit traits, so the dynamic accent
 /// colours resolve it wherever they draw, SwiftUI and UIKit alike.
 struct ConduitAccentTrait: UITraitDefinition {
-    static let defaultValue = ConduitAccentChoice.amber
+    static let defaultValue = ConduitAccentChoice.defaultChoice
     static let affectsColorAppearance = true
     static let name = "ConduitAccent"
 }
@@ -145,7 +148,7 @@ extension UIMutableTraits {
 }
 
 private struct ConduitAccentEnvironmentKey: EnvironmentKey {
-    static let defaultValue = ConduitAccentChoice.amber
+    static let defaultValue = ConduitAccentChoice.defaultChoice
 }
 
 extension ConduitAccentEnvironmentKey: UITraitBridgedEnvironmentKey {

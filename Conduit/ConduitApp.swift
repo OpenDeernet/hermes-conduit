@@ -174,7 +174,7 @@ struct ConduitApp: App {
     @ObservedObject private var pendingVoiceIntents = PendingVoiceIntentStore.shared
     @ObservedObject private var appLanguage = AppLanguageStore.shared
     /// The accent picked in Settings > Appearance (#697).
-    @AppStorage(ConduitAccentChoice.storageKey) private var accentChoice = ConduitAccentChoice.amber
+    @AppStorage(ConduitAccentChoice.storageKey) private var accentChoice = ConduitAccentChoice.defaultChoice
     /// A chat another app asked to open (`conduit://session/<id>`), held
     /// until Hermes is connected: a cold launch opens it once connecting
     /// finishes instead of failing against an empty session list.

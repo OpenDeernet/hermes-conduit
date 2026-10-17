@@ -1018,6 +1018,7 @@ final class SelectableTextViewHostView: UIView {
     /// every mounted view gets this value.
     var selectionTint: UIColor? {
         didSet {
+            // The tint is a shared static colour, so equality is identity.
             guard selectionTint != oldValue else { return }
             mountedTextView.tintColor = selectionTint
         }

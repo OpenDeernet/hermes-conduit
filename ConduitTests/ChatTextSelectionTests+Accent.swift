@@ -125,11 +125,12 @@ extension ChatTextSelectionTests {
     // MARK: Helpers
 
     private static func isClose(_ lhs: UIColor, _ rhs: UIColor, tolerance: CGFloat = 0.03) -> Bool {
-        var a = [CGFloat](repeating: 0, count: 4), b = [CGFloat](repeating: 0, count: 4)
-        guard lhs.getRed(&a[0], green: &a[1], blue: &a[2], alpha: &a[3]),
-              rhs.getRed(&b[0], green: &b[1], blue: &b[2], alpha: &b[3])
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        guard lhs.getRed(&r1, green: &g1, blue: &b1, alpha: &a1),
+              rhs.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
         else { return false }
-        return zip(a.prefix(3), b.prefix(3)).allSatisfy { abs($0 - $1) <= tolerance }
+        return abs(r1 - r2) <= tolerance && abs(g1 - g2) <= tolerance && abs(b1 - b2) <= tolerance
     }
 
     @MainActor
@@ -174,14 +175,14 @@ extension ChatTextSelectionTests {
             view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
         }
         let cgImage = try XCTUnwrap(image.cgImage)
-        var pixel = [UInt8](repeating: 0, count: 4)
+        // The context owns its one-pixel buffer.
         let context = try XCTUnwrap(CGContext(
-            data: &pixel,
+            data: nil,
             width: 1,
             height: 1,
             bitsPerComponent: 8,
             bytesPerRow: 4,
-            space: CGColorSpaceCreateDeviceRGB(),
+            space: try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ))
         let point = CGPoint(x: view.bounds.width / 4, y: view.bounds.height / 2)
@@ -191,6 +192,7 @@ extension ChatTextSelectionTests {
             width: CGFloat(cgImage.width),
             height: CGFloat(cgImage.height)
         ))
+        let pixel = try XCTUnwrap(context.data).assumingMemoryBound(to: UInt8.self)
         return UIColor(
             red: CGFloat(pixel[0]) / 255,
             green: CGFloat(pixel[1]) / 255,

@@ -2663,7 +2663,7 @@ private struct AppearanceSettingsDetail: View {
     let theme: ThemePreference
     let saveTheme: (ThemePreference) -> Void
     @AppStorage("conduit.ipadPersistentSidebar") private var iPadPersistentSidebar = false
-    @AppStorage(ConduitAccentChoice.storageKey) private var accentChoice = ConduitAccentChoice.amber
+    @AppStorage(ConduitAccentChoice.storageKey) private var accentChoice = ConduitAccentChoice.defaultChoice
     @State private var selected: ThemePreference
     @State private var isChangingIcon = false
     init(theme: ThemePreference, saveTheme: @escaping (ThemePreference) -> Void) { self.theme = theme; self.saveTheme = saveTheme; _selected = State(initialValue: theme) }
