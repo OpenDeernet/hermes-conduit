@@ -2932,7 +2932,8 @@ final class AppState: ObservableObject {
         isBusy: { [weak self] chat in
             guard let self else { return false }
             if chat.runtimeID == self.activeSessionId { return self.isBusy }
-            guard let rows = try? await self.client?.activeSessions(inProfile: chat.profile) else { return false }
+            guard let client = self.client else { throw HermesError.notConnected }
+            let rows = try await client.activeSessions(inProfile: chat.profile)
             return rows.contains { $0.runtimeSessionId == chat.runtimeID && $0.isRunning }
         },
         submit: { [weak self] chat, text in

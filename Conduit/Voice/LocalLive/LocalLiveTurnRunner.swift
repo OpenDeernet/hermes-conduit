@@ -38,7 +38,9 @@ final class LocalLiveTurnRunner {
         /// when it isn't), or one made for a call that has none.
         var resolveChat: @MainActor () async throws -> Chat
         /// Whether a turn (typed, or from another device) runs there now.
-        var isBusy: @MainActor (_ chat: Chat) async -> Bool
+        /// Throws when that can't be read: the words aren't sent then, so a
+        /// typed turn is never steered.
+        var isBusy: @MainActor (_ chat: Chat) async throws -> Bool
         /// Sends `text` as the chat's next spoken turn. Throws
         /// `VoiceThreadBusyError` when a turn got there first.
         var submit: @MainActor (_ chat: Chat, _ text: String) async throws -> Submission
@@ -144,7 +146,7 @@ final class LocalLiveTurnRunner {
             }
             let chat = try await backend.resolveChat()
             guard generation == self.generation else { return }
-            if await backend.isBusy(chat) {
+            if try await backend.isBusy(chat) {
                 say(Self.busyLine, to: turnID, generation: generation)
                 return
             }
@@ -205,7 +207,10 @@ final class LocalLiveTurnRunner {
             if !current.correcting { reply?.skipsInterruption = false }
         case .messageDelta(let id, let text):
             guard id == current.runtimeID else { return }
-            if !current.correcting { reply?.skipsInterruption = false }
+            // Until Hermes takes the correction, the words are the reply
+            // the user talked over: the new turn doesn't say them.
+            guard !current.correcting else { return }
+            reply?.skipsInterruption = false
             speak(text)
         case .messageComplete(let id, _, let content, _):
             guard id == current.runtimeID else { return }

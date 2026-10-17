@@ -183,6 +183,9 @@ private final class LocalLiveTurnScript {
     var chat = LocalLiveTurnRunner.Chat(runtimeID: "rt-1")
     var submission: LocalLiveTurnRunner.Submission = .started(runtimeID: "rt-1")
     var redirectResult: VoiceRedirectResult = .redirected
+    var busyReadFails = false
+    /// Runs while a correction is on its way to Hermes.
+    var duringRedirect: (() -> Void)?
     private(set) var submitted: [String] = []
     private(set) var redirected: [String] = []
     private(set) var spoken: [String] = []
@@ -191,13 +194,17 @@ private final class LocalLiveTurnScript {
     func makeRunner() -> LocalLiveTurnRunner {
         let runner = LocalLiveTurnRunner(backend: LocalLiveTurnRunner.Backend(
             resolveChat: { [unowned self] in self.chat },
-            isBusy: { [unowned self] _ in self.busy },
+            isBusy: { [unowned self] _ in
+                if self.busyReadFails { throw URLError(.timedOut) }
+                return self.busy
+            },
             submit: { [unowned self] _, text in
                 self.submitted.append(text)
                 return self.submission
             },
             redirect: { [unowned self] _, text in
                 self.redirected.append(text)
+                self.duringRedirect?()
                 return self.redirectResult
             }
         ))
@@ -247,6 +254,14 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(script.submitted, [], "a turn already running in the chat is never steered")
         XCTAssertEqual(script.spoken, ["t1:\(LocalLiveTurnRunner.busyLine)"])
         XCTAssertEqual(script.done, ["t1"])
+
+        // A chat whose state can't be read isn't sent to either.
+        script.busy = false
+        script.busyReadFails = true
+        runner.start(turnID: "t2", text: "Hi")
+        await localLiveSettle(until: { script.done.count == 2 })
+        XCTAssertEqual(script.submitted, [])
+        XCTAssertEqual(script.spoken.last, "t2:\(LocalLiveTurnRunner.failureLine)")
     }
 
     func testLocalLiveSaysWhatHermesDidWithWordsItDidNotStartATurnFor() async {
@@ -268,8 +283,12 @@ extension VoiceConversationControllerTests {
 
         // The user speaks again: the plugin cancels t1 and sends t2.
         runner.cancel(turnID: "t1")
+        // The talked-over reply's words still in flight aren't t2's answer.
+        script.duringRedirect = { runner.observe(.messageDelta(sessionId: "rt-1", text: " through everything")) }
         runner.start(turnID: "t2", text: "only the work inbox")
         await localLiveSettle(until: { !script.redirected.isEmpty && !runner.isCorrecting })
+        script.duringRedirect = nil
+        XCTAssertEqual(script.spoken, ["t1:Looking"])
         XCTAssertEqual(script.redirected, ["only the work inbox"])
         XCTAssertEqual(script.submitted, ["Check my email"], "no second turn starts")
 
