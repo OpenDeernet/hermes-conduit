@@ -269,6 +269,9 @@ struct V2ChatsView: View {
     /// The closed list sections (#696), remembered across launches. Read
     /// into state so a tap can animate the change, which an `@AppStorage`
     /// write ignores.
+    /// A conversation opened from elsewhere whose closed section still has
+    /// to open once its row is listed.
+    @State private var pendingSectionReveal: String?
     @State private var collapsedSections = ChatListSection.collapsed(
         from: UserDefaults.standard.string(forKey: V2ChatsView.collapsedSectionsKey) ?? ChatListSection.defaultCollapsedRaw
     )
@@ -689,11 +692,15 @@ struct V2ChatsView: View {
             await appState.refreshSessionCatalog()
         }
         .onAppear { revealActiveNestAncestors() }
-        .onChange(of: appState.activeSessionId) { _, _ in
+        .onChange(of: appState.activeSessionId) { _, active in
+            revealActiveNestAncestors()
+            pendingSectionReveal = active
+            revealActiveSection()
+        }
+        .onChange(of: displayed) { _, _ in
             revealActiveNestAncestors()
             revealActiveSection()
         }
-        .onChange(of: displayed) { _, _ in revealActiveNestAncestors() }
         .onChange(of: appState.pinnedSessionIDs) { _, _ in revealActiveNestAncestors() }
         .onChange(of: appState.voiceSessionTagsByKey) { _, _ in revealActiveNestAncestors() }
         .onChange(of: appState.voiceCallChatLinksRevision) { _, _ in revealActiveNestAncestors() }
@@ -791,16 +798,25 @@ struct V2ChatsView: View {
 
     /// Opens the section holding a conversation opened from elsewhere (a
     /// notification, a widget, a new chat), so returning to the list shows
-    /// its row; a section closed while it stays open stays closed.
+    /// its row; a section closed while it stays open stays closed, and a
+    /// launch opens the list the way it was left. An activation whose row
+    /// hasn't been listed yet waits for the list to bring it.
     private func revealActiveSection() {
-        guard sectionsCollapsible, let active = appState.activeSessionId else { return }
+        guard let active = pendingSectionReveal, active == appState.activeSessionId else {
+            pendingSectionReveal = nil
+            return
+        }
+        guard sectionsCollapsible else { return }
         let sections = nestedSections(displayedSessions)
         guard let section = ChatListSection.section(
             of: active,
             pinned: sections.pinned,
             recent: ChatListSection.byDate(sections.recent)
-        ), collapsedSections.contains(section) else { return }
-        toggleSection(section, haptic: false)
+        ) else { return }
+        pendingSectionReveal = nil
+        if collapsedSections.contains(section) {
+            toggleSection(section, haptic: false)
+        }
     }
 
     private func sectionHeader(_ title: String) -> some View {
