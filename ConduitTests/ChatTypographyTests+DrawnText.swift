@@ -152,8 +152,8 @@ extension ChatTypographyTests {
                 gatewayResolver: nil
             ))
         }
-        XCTAssertLessThan(widths[0], 150, "a short message's bubble fits its text")
-        XCTAssertGreaterThan(widths[1], 250, "a long message still wraps at the column")
+        XCTAssertEqual(widths[0], natural.width, accuracy: 2, "a short message's bubble fits its text")
+        XCTAssertGreaterThan(widths[1], 2 * widths[0], "a long message still wraps at the column")
     }
 
     @MainActor
