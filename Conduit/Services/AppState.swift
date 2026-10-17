@@ -6223,11 +6223,17 @@ final class AppState: ObservableObject {
         let profile = activeProfile
         let drain = await drainVoiceTranscriptOutbox(profile: profile, key: voiceHistoryKey(profile: profile))
         voiceCallSaveNowResult = Self.voiceCallSaveNowResult(drain, stillWaiting: pendingVoiceCallSaves)
+        if let result = voiceCallSaveNowResult {
+            UIAccessibility.post(notification: .announcement, argument: result)
+        }
     }
 
     /// The line under Save Now. Nil when every call saved: the card goes.
     static func voiceCallSaveNowResult(_ drain: VoiceTranscriptDrainResult, stillWaiting: Int) -> String? {
         guard stillWaiting > 0 else { return nil }
+        if drain.waitedOnCall, drain.failure == nil {
+            return AppLocalization.string("Calls save once the live call ends.")
+        }
         let reason = drain.failure.map(voiceCallSaveFailureReason)
             ?? AppLocalization.string("Conduit couldn't reach your Hermes server.")
         if drain.saved > 0 {
@@ -6282,7 +6288,10 @@ final class AppState: ObservableObject {
     private func drainVoiceTranscriptOutbox(profile: String, key: String) async -> VoiceTranscriptDrainResult {
         var drain = VoiceTranscriptDrainResult()
         // A save while a live call runs stalls it: wait for the call to end.
-        guard !isLiveVoiceCallActive else { return drain }
+        guard !isLiveVoiceCallActive else {
+            drain.waitedOnCall = true
+            return drain
+        }
         // Set once the host refuses a call as one it can't store yet.
         var hostCantSave = false
         var snapshot = VoiceTranscriptOutbox.load(from: defaults)
@@ -6295,7 +6304,10 @@ final class AppState: ObservableObject {
         for entry in snapshot.entries where entry.dashboard == dashboard && entry.profile == profile
             && !voiceTranscriptsSaving.contains(entry.request.callID) {
             // A call started meanwhile: the rest waits for it to end.
-            if isLiveVoiceCallActive { break }
+            if isLiveVoiceCallActive {
+                drain.waitedOnCall = true
+                break
+            }
             var request = entry.request
             do {
                 let result = try await voiceHistoryClient.save(request, profile: profile)

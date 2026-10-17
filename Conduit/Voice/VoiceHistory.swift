@@ -479,6 +479,8 @@ struct VoiceTranscriptDrainResult {
     var saved = 0
     /// The last reason a call didn't save, if one didn't.
     var failure: Error?
+    /// A live call was running, so saving waited for it to end.
+    var waitedOnCall = false
 }
 
 struct VoiceTranscriptOutbox: Codable, Equatable {
