@@ -248,66 +248,108 @@ final class SettledMessageIsolationTests: XCTestCase {
         let resolver = GatewayMediaDataURLResolver(appState: appState, profile: "default")
         let otherResolver = GatewayMediaDataURLResolver(appState: appState, profile: "default")
 
+        let identity = ConversationAgentIdentity.workspace(name: "Hermes", photoURL: nil)
         let a = SettledAssistantMessageContent(
             message: markdownMessage(),
-            displayName: "Hermes",
-            avatarURL: nil,
+            identity: identity,
             gatewayResolver: resolver,
             sizeCategory: .large,
             chatTextSize: .default
         )
         let sameInputs = SettledAssistantMessageContent(
             message: markdownMessage(),
-            displayName: "Hermes",
-            avatarURL: nil,
+            identity: identity,
             gatewayResolver: resolver,
             sizeCategory: .large,
             chatTextSize: .default
         )
         let differentResolver = SettledAssistantMessageContent(
             message: markdownMessage(),
-            displayName: "Hermes",
-            avatarURL: nil,
+            identity: identity,
             gatewayResolver: otherResolver,
             sizeCategory: .large,
             chatTextSize: .default
         )
         let differentMessage = SettledAssistantMessageContent(
             message: markdownMessage(id: "m2"),
-            displayName: "Hermes",
-            avatarURL: nil,
+            identity: identity,
             gatewayResolver: resolver,
             sizeCategory: .large,
             chatTextSize: .default
         )
         let differentSizeCategory = SettledAssistantMessageContent(
             message: markdownMessage(),
-            displayName: "Hermes",
-            avatarURL: nil,
+            identity: identity,
             gatewayResolver: resolver,
             sizeCategory: .extraExtraLarge,
             chatTextSize: .default
         )
         let differentChatTextSize = SettledAssistantMessageContent(
             message: markdownMessage(),
-            displayName: "Hermes",
-            avatarURL: nil,
+            identity: identity,
             gatewayResolver: resolver,
             sizeCategory: .large,
             chatTextSize: .largest
         )
-        let differentDisplayName = SettledAssistantMessageContent(
+        let differentName = SettledAssistantMessageContent(
             message: markdownMessage(),
-            displayName: "Hermes (work)",
-            avatarURL: nil,
+            identity: .workspace(name: "Hermes (work)", photoURL: nil),
             gatewayResolver: resolver,
             sizeCategory: .large,
             chatTextSize: .default
         )
-        let differentAvatarURL = SettledAssistantMessageContent(
+        let differentPhotoURL = SettledAssistantMessageContent(
             message: markdownMessage(),
-            displayName: "Hermes",
-            avatarURL: URL(string: "https://example.com/avatar.png"),
+            identity: .workspace(name: "Hermes", photoURL: URL(string: "https://example.com/avatar.png")),
+            gatewayResolver: resolver,
+            sizeCategory: .large,
+            chatTextSize: .default
+        )
+        let differentBotImage = SettledAssistantMessageContent(
+            message: markdownMessage(),
+            identity: ConversationAgentIdentity(
+                name: "Hermes", photoURL: nil, botImage: UIImage(), botColor: nil
+            ),
+            gatewayResolver: resolver,
+            sizeCategory: .large,
+            chatTextSize: .default
+        )
+        let differentBotColor = SettledAssistantMessageContent(
+            message: markdownMessage(),
+            identity: ConversationAgentIdentity(
+                name: "Hermes", photoURL: nil, botImage: nil, botColor: .purple
+            ),
+            gatewayResolver: resolver,
+            sizeCategory: .large,
+            chatTextSize: .default
+        )
+        // The bot picture compares by INSTANCE: the avatar cache hands out
+        // the same object across streaming publishes, and a refresh delivers
+        // a new one. Both directions of that contract are pinned here.
+        let cachedPicture = UIImage()
+        let withPicture = SettledAssistantMessageContent(
+            message: markdownMessage(),
+            identity: ConversationAgentIdentity(
+                name: "Hermes", photoURL: nil, botImage: cachedPicture, botColor: nil
+            ),
+            gatewayResolver: resolver,
+            sizeCategory: .large,
+            chatTextSize: .default
+        )
+        let samePictureInstance = SettledAssistantMessageContent(
+            message: markdownMessage(),
+            identity: ConversationAgentIdentity(
+                name: "Hermes", photoURL: nil, botImage: cachedPicture, botColor: nil
+            ),
+            gatewayResolver: resolver,
+            sizeCategory: .large,
+            chatTextSize: .default
+        )
+        let refreshedPicture = SettledAssistantMessageContent(
+            message: markdownMessage(),
+            identity: ConversationAgentIdentity(
+                name: "Hermes", photoURL: nil, botImage: UIImage(), botColor: nil
+            ),
             gatewayResolver: resolver,
             sizeCategory: .large,
             chatTextSize: .default
@@ -318,8 +360,48 @@ final class SettledMessageIsolationTests: XCTestCase {
         XCTAssertNotEqual(a, differentMessage, "different message must compare unequal")
         XCTAssertNotEqual(a, differentSizeCategory, "a Dynamic Type change must compare unequal and re-open the gate")
         XCTAssertNotEqual(a, differentChatTextSize, "a chat text-size change must compare unequal and re-open the gate")
-        XCTAssertNotEqual(a, differentDisplayName, "a profile display-name change must compare unequal")
-        XCTAssertNotEqual(a, differentAvatarURL, "an avatar change must compare unequal")
+        XCTAssertNotEqual(a, differentName, "an agent identity name change must compare unequal")
+        XCTAssertNotEqual(a, differentPhotoURL, "a profile photo change must compare unequal")
+        XCTAssertNotEqual(a, differentBotImage, "a bot picture arriving must compare unequal")
+        XCTAssertNotEqual(a, differentBotColor, "a bot color change must compare unequal")
+        XCTAssertEqual(withPicture, samePictureInstance,
+                       "the same cached picture instance must keep the gate closed across streaming publishes")
+        XCTAssertNotEqual(withPicture, refreshedPicture,
+                          "a refreshed picture instance must re-open the gate")
+    }
+
+    /// The identity value the transcript gates on must be stable across
+    /// SEPARATE construction: a streaming publish re-creates the row's
+    /// inputs, and the bot's picture (the same instance the avatar cache
+    /// hands out) and its Desktop color (structurally equal when re-derived)
+    /// must compare equal so the settled rows stay gated.
+    func testConversationAgentIdentityEqualityIsStableAcrossSeparateValues() {
+        let picture = UIImage()
+        let first = ConversationAgentIdentity(
+            name: "Atlas Prime",
+            photoURL: nil,
+            botImage: picture,
+            botColor: BotAvatarView.color(for: "purple", name: "atlas")
+        )
+        let second = ConversationAgentIdentity(
+            name: "Atlas Prime",
+            photoURL: nil,
+            botImage: picture,
+            botColor: BotAvatarView.color(for: "purple", name: "atlas")
+        )
+        XCTAssertEqual(first, second,
+                       "same picture instance + re-derived color must compare equal")
+
+        XCTAssertNotEqual(
+            first,
+            ConversationAgentIdentity(
+                name: "Atlas Prime",
+                photoURL: nil,
+                botImage: UIImage(),
+                botColor: BotAvatarView.color(for: "purple", name: "atlas")
+            ),
+            "a refreshed picture instance must compare unequal"
+        )
     }
 
     /// Dynamic Type invalidation (#4): a size-category change must re-open
