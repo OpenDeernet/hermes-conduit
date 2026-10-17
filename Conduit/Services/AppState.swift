@@ -2092,6 +2092,7 @@ final class AppState: ObservableObject {
                     ) + (self?.liveVoiceResumeContext?.instructionBlock ?? "")
                         + (self?.liveHermesCall?.instructionBlock(delegation: false) ?? "")
                         + (self.map { $0.liveVoiceThreadInstructions(delegation: false) + $0.phoneVoiceSettingHint(for: .geminiLive) } ?? "")
+                        + VoiceHostTool.functionToolsFirst(self?.voiceBackgroundJobSupervisor.hostTools ?? [])
                         + LiveVoiceStyle.askFirstInstructions(on: self?.voiceBackgroundJobSupervisor.asksBeforeSending == true)
                         + (self?.liveVoiceStyle.instructions ?? ""),
                     functions: GeminiLiveToolBridge.declarations(
@@ -2767,6 +2768,7 @@ final class AppState: ObservableObject {
                 instructions += self?.liveHermesCall?.instructionBlock(delegation: false) ?? ""
                 instructions += self?.liveVoiceThreadInstructions(delegation: false) ?? ""
                 instructions += self?.phoneVoiceSettingHint(for: .grokLive) ?? ""
+                instructions += VoiceHostTool.functionToolsFirst(self?.voiceBackgroundJobSupervisor.hostTools ?? [])
                 instructions += LiveVoiceStyle.askFirstInstructions(on: self?.voiceBackgroundJobSupervisor.asksBeforeSending == true)
                 instructions += self?.liveVoiceStyle.instructions ?? ""
                 let session = GrokLiveSession(

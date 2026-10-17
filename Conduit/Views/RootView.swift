@@ -107,8 +107,11 @@ struct MainView: View {
                 AgentSettingsBanner(sync: appState.agentSettings)
                 // A newer Conduit plugin for this dashboard's host.
                 NotifierPluginUpdateBanner()
-                // Calendar changes Hermes asked for (AppState+PhoneSync.swift).
-                PhoneChangeOverlay(engine: appState.phoneSync)
+                // Calendar changes Hermes asked for (AppState+PhoneSync.swift);
+                // a call's screen shows them over the call.
+                if !appState.isVoiceCallScreenPresented {
+                    PhoneChangeOverlay(engine: appState.phoneSync)
+                }
             }
         }
         // Confirmations Hermes asks to present (PresentedScreens.swift); a
@@ -180,6 +183,7 @@ struct MainView: View {
             )
             .safeAreaInset(edge: .top, spacing: 0) { voiceScreenshotBanner }
             .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
+            .overlay(alignment: .top) { phoneChangeOverlay }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -194,6 +198,7 @@ struct MainView: View {
             )
             .safeAreaInset(edge: .top, spacing: 0) { voiceScreenshotBanner }
             .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
+            .overlay(alignment: .top) { phoneChangeOverlay }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -208,6 +213,7 @@ struct MainView: View {
             )
             .safeAreaInset(edge: .top, spacing: 0) { voiceScreenshotBanner }
             .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
+            .overlay(alignment: .top) { phoneChangeOverlay }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -221,6 +227,7 @@ struct MainView: View {
             )
             .safeAreaInset(edge: .top, spacing: 0) { voiceScreenshotBanner }
             .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
+            .overlay(alignment: .top) { phoneChangeOverlay }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
@@ -236,6 +243,7 @@ struct MainView: View {
             )
                 .safeAreaInset(edge: .top, spacing: 0) { voiceScreenshotBanner }
                 .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
+                .overlay(alignment: .top) { phoneChangeOverlay }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
@@ -531,6 +539,13 @@ struct MainView: View {
             drawerPresented: appState.showSidebar
         ) else { return }
         appState.showSidebar = true
+    }
+
+    /// Calendar changes Hermes asked for, over a call's screen: under it,
+    /// they were hidden until the call was minimised.
+    private var phoneChangeOverlay: some View {
+        PhoneChangeOverlay(engine: appState.phoneSync)
+            .environmentObject(appState)
     }
 
     /// The confirmation Hermes is waiting on, answered by tap.

@@ -127,8 +127,11 @@ extension AppState {
             }
             if result["error"] == nil {
                 Self.recordPhoneVoiceUse(tool, arguments: arguments, mode: mode)
-                // Hermes' alarm list catches up with the one just set.
-                if tool.name == PhoneVoiceTools.alarmTool { Task { await self.runPhoneSync(reason: .answered) } }
+                // Hermes' alarm list catches up with the one just set, and
+                // its calendar with the one just deleted.
+                if tool.name == PhoneVoiceTools.alarmTool || tool.name == PhoneVoiceTools.removeTool {
+                    Task { await self.runPhoneSync(reason: .answered) }
+                }
             }
             return result
         }
@@ -162,6 +165,8 @@ extension AppState {
         let action: String
         if tool.name == PhoneVoiceTools.addTool {
             action = (arguments["kind"] as? String).map { "add \($0)" } ?? tool.name
+        } else if tool.name == PhoneVoiceTools.removeTool {
+            action = (arguments["kind"] as? String).map { "delete \($0)" } ?? tool.name
         } else if tool.name == PhoneVoiceTools.alarmTool {
             action = (arguments["kind"] as? String).map { "set \($0)" } ?? tool.name
         } else if tool.name == PhoneVoiceTools.changesTool {
