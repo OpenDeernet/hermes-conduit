@@ -287,9 +287,10 @@ struct V2NewChatButton: View {
     /// A creation in flight: a second tap doesn't make a second chat.
     @State private var isCreating = false
 
-    /// The saved copy has no live gateway to create a chat on.
+    /// Dimmed while disconnected (a tap would do nothing) and on the saved
+    /// copy, which has no live gateway to create a chat on.
     private var canAct: Bool {
-        appState.turnState != .synchronizing && appState.offlineChatPresentation == nil
+        appState.isConnected && appState.turnState != .synchronizing && appState.offlineChatPresentation == nil
     }
 
     private var folder: String? {
