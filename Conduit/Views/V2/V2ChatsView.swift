@@ -329,6 +329,12 @@ struct V2ChatsView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .navigationTitle(V2Tab.chats.title)
+        // Here rather than on the chats list, so an activation that arrives
+        // while Projects is shown still opens its section on the way back.
+        .onChange(of: appState.activeSessionId) { _, active in
+            pendingSectionReveal = active
+            revealActiveSection()
+        }
         .sheet(isPresented: $showArchivedSessions) {
             ArchivedSessionsSheet()
                 .environmentObject(appState)
@@ -691,12 +697,11 @@ struct V2ChatsView: View {
         .refreshable {
             await appState.refreshSessionCatalog()
         }
-        .onAppear { revealActiveNestAncestors() }
-        .onChange(of: appState.activeSessionId) { _, active in
+        .onAppear {
             revealActiveNestAncestors()
-            pendingSectionReveal = active
             revealActiveSection()
         }
+        .onChange(of: appState.activeSessionId) { _, _ in revealActiveNestAncestors() }
         .onChange(of: displayed) { _, _ in
             revealActiveNestAncestors()
             revealActiveSection()
@@ -806,7 +811,7 @@ struct V2ChatsView: View {
             pendingSectionReveal = nil
             return
         }
-        guard sectionsCollapsible else { return }
+        guard !showingProjects, sectionsCollapsible else { return }
         let sections = nestedSections(displayedSessions)
         guard let section = ChatListSection.section(
             of: active,
