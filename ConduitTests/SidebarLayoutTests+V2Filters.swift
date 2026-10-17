@@ -120,6 +120,12 @@ extension SidebarLayoutTests {
         )
     }
 
+    func testV2SearchPreviewNamesTheProject() {
+        XCTAssertEqual(V2ChatsView.searchPreview("Last reply", projectTitle: "Website"), "Website · Last reply")
+        XCTAssertEqual(V2ChatsView.searchPreview("", projectTitle: "Website"), "Website")
+        XCTAssertEqual(V2ChatsView.searchPreview("Last reply", projectTitle: nil), "Last reply")
+    }
+
     func testV2FiltersSaveAsOneValue() {
         let selection = V2FilterSelection(filters: [.source(.chat), .unread, .scheduled])
         XCTAssertEqual(selection.rawValue, "unread,scheduled,source.chat")

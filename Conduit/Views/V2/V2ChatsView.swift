@@ -520,7 +520,7 @@ struct V2ChatsView: View {
                 select(savedSelection.setting(option, on: on))
             }
         )) {
-            Label("\(option.title) \(String(filterRows(selection.facet(option)).count))", systemImage: option.symbol)
+            Label("\(option.title) \(String(filterRows(selection.facet(option), searching: false).count))", systemImage: option.symbol)
         }
         .menuActionDismissBehavior(option == .all ? .automatic : .disabled)
     }
@@ -565,7 +565,7 @@ struct V2ChatsView: View {
         )
     }
 
-    private func filterRows(_ selection: V2FilterSelection, searching: Bool = false) -> [SessionSummary] {
+    private func filterRows(_ selection: V2FilterSelection, searching: Bool) -> [SessionSummary] {
         guard !selection.isEmpty else {
             return V2ChatsView.allRows(
                 sourceRows(nil),
@@ -610,6 +610,12 @@ struct V2ChatsView: View {
         searching ? rows : rows.filter(inMainList)
     }
 
+    /// A search result's preview led by its project, if it has one.
+    static func searchPreview(_ preview: String, projectTitle: String?) -> String {
+        guard let projectTitle, !projectTitle.isEmpty else { return preview }
+        return preview.isEmpty ? projectTitle : "\(projectTitle) · \(preview)"
+    }
+
     private var displayedSessions: [SessionSummary] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let rows = filterRows(selection, searching: !query.isEmpty)
@@ -618,17 +624,22 @@ struct V2ChatsView: View {
     }
 
     /// While searching, a project's chat names its project, since the main
-    /// list doesn't otherwise hold it.
+    /// list doesn't otherwise say where it lives.
     private func searchProjectTitle(_ item: V2ChatsListItem) -> String? {
-        guard isSearching, case .session(let node) = item.kind, !mainListShows(node.session),
-              let projectID = appState.knownProjectID(for: node.session)
-        else { return nil }
+        guard isSearching, case .session(let node) = item.kind else { return nil }
+        return projectTitle(for: node.session)
+    }
+
+    private func projectTitle(for session: SessionSummary) -> String? {
+        guard appState.supportsProjects, let projectID = appState.knownProjectID(for: session) else { return nil }
         return appState.projects.first { $0.id == projectID }?.title
     }
 
     private func sessionMatches(_ session: SessionSummary, query: String) -> Bool {
+        // The project name a result shows finds it too.
         [session.title, session.model, session.id, session.preview ?? "", appState.sessionCategory(for: session).label]
             .contains { $0.localizedCaseInsensitiveContains(query) }
+            || projectTitle(for: session)?.localizedCaseInsensitiveContains(query) == true
     }
 
     private var isSearching: Bool {
@@ -1301,7 +1312,7 @@ private struct V2ChatsRow: View {
             V2SessionRow(
                 title: session.title,
                 time: session.updatedLabel,
-                preview: projectTitle.map { "\($0) · \(preview)" } ?? preview,
+                preview: V2ChatsView.searchPreview(preview, projectTitle: projectTitle),
                 status: appState.v2RowStatus(for: session),
                 isUnread: signals.isUnread,
                 isSelected: session.id == appState.activeSessionId,
