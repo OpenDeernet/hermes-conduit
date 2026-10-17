@@ -180,6 +180,9 @@ struct LiveVoiceStyleSettingsSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Button {
+                // A greeting still being typed is saved first, so the
+                // preview shows it.
+                flushPendingSave()
                 showsPreview = true
             } label: {
                 Label(AppLocalization.string("What Conduit sends"), systemImage: "doc.text.magnifyingglass")
