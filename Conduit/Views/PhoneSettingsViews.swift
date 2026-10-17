@@ -809,7 +809,8 @@ struct PhoneChangeOverlay: View {
         .onChange(of: engine.prompts.first?.id) { _, id in
             // The card isn't modal: tell VoiceOver users Hermes is waiting.
             guard id != nil, let change = engine.prompts.first?.change else { return }
-            UIAccessibility.post(notification: .announcement, argument: PhoneChangeWording.headline(change))
+            let spoken = [PhoneChangeWording.headline(change), PhoneChangeWording.detail(change)].filter { !$0.isEmpty }
+            UIAccessibility.post(notification: .announcement, argument: spoken.joined(separator: ". "))
         }
     }
 }
