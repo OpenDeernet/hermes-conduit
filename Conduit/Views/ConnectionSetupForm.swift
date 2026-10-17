@@ -32,6 +32,9 @@ struct ConnectionSetupForm: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollDismissesKeyboard(.interactively)
+            // The form steps' Continue stays pinned above the keyboard, so
+            // it is never hidden behind it while a field is being edited.
+            .safeAreaInset(edge: .bottom, spacing: 0) { pinnedAction }
             .onChange(of: focusedField) { _, field in
                 guard let field else { return }
                 withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(field, anchor: .center) }
@@ -44,6 +47,24 @@ struct ConnectionSetupForm: View {
                 Button("Done") { focusedField = nil }
                     .accessibilityIdentifier("setup.keyboard-done")
             }
+        }
+    }
+
+    @ViewBuilder
+    private var pinnedAction: some View {
+        switch flow.step {
+        case .connectionDetails:
+            nextButton(AppLocalization.string("Continue")) { flow.submitDetails() }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+        case .loginCredentials:
+            nextButton(AppLocalization.string("Continue")) { flow.submitCredentials() }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+        default:
+            EmptyView()
         }
     }
 
@@ -135,7 +156,6 @@ struct ConnectionSetupForm: View {
                 ConnectionSetupAddressCard(title: AppLocalization.string("Dashboard address"), address: address)
             }
             validationNotice
-            nextButton(AppLocalization.string("Continue")) { flow.submitDetails() }
         }
     }
 
@@ -171,7 +191,6 @@ struct ConnectionSetupForm: View {
                     .loginFieldChrome(isFocused: focusedField == .password)
             }.id(Field.password)
             validationNotice
-            nextButton(AppLocalization.string("Continue")) { flow.submitCredentials() }
         }
     }
 
