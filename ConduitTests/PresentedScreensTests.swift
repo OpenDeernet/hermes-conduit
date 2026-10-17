@@ -99,7 +99,7 @@ extension AppStateVoiceCapabilityTests {
             sent = body
             return ["ok": true, "prompts": []]
         }
-        XCTAssertEqual(sent["features"] as? [String], ["maps-navigate"])
+        XCTAssertEqual(sent["features"] as? [String], ["maps-navigate", "show-cards"])
     }
 
     func testMapsOpensWithDirectionsFromALinkOnlyItMade() throws {
@@ -125,5 +125,30 @@ extension AppStateVoiceCapabilityTests {
         let prompt = PresentedConfirm(id: "p1", title: "Buy it?", preview: "", actionLabel: "Buy",
                                       expiresAt: Date().addingTimeInterval(-1))
         XCTAssertTrue(prompt.isExpired())
+    }
+
+    func testHermesCardsAreHandedOnOnceAndNotFromBeforeTheApp() async throws {
+        let suite = "present-tests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let sync = PresentedScreensSync(defaults: defaults)
+        var handed: [[String]] = []
+        sync.onCards = { cards in handed.append(cards.map(\.id)) }
+        var cards: [[String: Any]] = [["id": "old", "title": "Before", "markdown": "| a |"]]
+        let exchange: PresentedScreensSync.Request = { _, _ in ["ok": true, "prompts": [], "cards": cards] }
+
+        await sync.sync(scope: "host|default", profile: "default", installationID: "install-1", request: exchange)
+        XCTAssertEqual(handed, [], "a card from before this app's first exchange was for another conversation")
+
+        cards.append(["id": "new", "title": "Forecast", "markdown": " | Mon | 20 | "])
+        cards.append(["id": "empty", "title": "Nothing", "markdown": "  "])
+        await sync.sync(scope: "host|default", profile: "default", installationID: "install-1", request: exchange)
+        await sync.sync(scope: "host|default", profile: "default", installationID: "install-1", request: exchange)
+        XCTAssertEqual(handed, [["new"]], "once, and never a card with nothing to show")
+        XCTAssertEqual(PresentedCard(json: cards[1]), PresentedCard(id: "new", title: "Forecast", markdown: "| Mon | 20 |"))
+
+        // Another host or profile starts over.
+        await sync.sync(scope: "host|bot", profile: "bot", installationID: "install-1", request: exchange)
+        XCTAssertEqual(handed, [["new"]])
     }
 }

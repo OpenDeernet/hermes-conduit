@@ -243,6 +243,12 @@ struct MainView: View {
             )
                 .safeAreaInset(edge: .top, spacing: 0) { callTopBanners }
                 .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
+                // What Hermes put on screen (conduit_show), over the conversation.
+                .sheet(item: $appState.classicVoiceCard) { card in
+                    LiveVoiceScreenCardSheet(title: card.title, markdown: card.markdown)
+                        .environmentObject(appState)
+                        .presentationDetents([.medium, .large])
+                }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }

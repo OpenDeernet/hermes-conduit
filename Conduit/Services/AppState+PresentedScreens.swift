@@ -32,6 +32,45 @@ extension AppState {
         await openExpectedPresentedMaps()
     }
 
+    /// Whether a voice conversation is up that can show Hermes' cards.
+    var voiceConversationShowsCards: Bool {
+        isGeminiLiveActive || isGrokLiveActive || isLocalLiveActive || showVoiceSheet
+    }
+
+    /// Hermes showing a card (`conduit_show`) or ending a reply during a
+    /// voice conversation: fetch what it showed. The tool's start comes
+    /// before the card is kept, and its end isn't sent when tool progress
+    /// is off, so the reply's end fetches too.
+    func notePresentedCardEvent(_ event: StreamEvent) {
+        guard voiceConversationShowsCards else { return }
+        switch event {
+        case .toolStart(_, let name, _, _):
+            guard name == PresentedCard.toolName else { return }
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                await self?.syncPresentedScreens()
+            }
+        case .toolComplete(_, let name, _, _):
+            guard name == PresentedCard.toolName else { return }
+            Task { [weak self] in await self?.syncPresentedScreens() }
+        case .messageComplete:
+            Task { [weak self] in await self?.syncPresentedScreens() }
+        default:
+            return
+        }
+    }
+
+    /// New cards from Hermes: on the call's screen, or over a Classic voice
+    /// conversation. Outside a voice conversation they're only noted.
+    func showPresentedCards(_ cards: [PresentedCard]) {
+        for card in cards {
+            if voiceBackgroundJobSupervisor.showOnScreen(title: card.title, markdown: card.markdown) == nil,
+               showVoiceSheet {
+                classicVoiceCard = card
+            }
+        }
+    }
+
     /// Hermes was seen asking to open Apple Maps (`conduit_maps` navigate)
     /// in the chat on screen: that Go confirmation opens Maps without a tap.
     func noteMapsNavigateExpected(_ promptID: String) {

@@ -279,7 +279,19 @@ private struct LiveVoiceTimelinePlacement {
 
 /// What the voice model put on screen, over the call.
 struct LiveVoiceScreenCardSheet: View {
-    let card: VoiceScreenCard
+    let title: String
+    let markdown: String
+
+    init(card: VoiceScreenCard) {
+        self.init(title: LiveVoiceScreenCardRow.title(for: card), markdown: card.markdown)
+    }
+
+    /// A card Hermes showed in a Classic voice conversation, which has no
+    /// call screen to keep it on.
+    init(title: String, markdown: String) {
+        self.title = title.isEmpty ? AppLocalization.string("On screen") : title
+        self.markdown = markdown
+    }
 
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -289,14 +301,14 @@ struct LiveVoiceScreenCardSheet: View {
             ScrollView {
                 // Hermes' own images (MEDIA: paths) load through the gateway.
                 let profile = appState.activeProfile
-                MarkdownText(source: card.markdown, gatewayMediaDataURL: { path in
+                MarkdownText(source: markdown, gatewayMediaDataURL: { path in
                     await appState.gatewayMediaDataURL(for: path, profile: profile)
                 })
                 .environment(\.gatewayMediaFiles, appState.gatewayMediaResolver)
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle(LiveVoiceScreenCardRow.title(for: card))
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

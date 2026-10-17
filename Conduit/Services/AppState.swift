@@ -3271,6 +3271,10 @@ final class AppState: ObservableObject {
                 session.onTurnsDropped = { turns.dropTurn() }
                 turns.onDelta = { [weak session] turnID, text in session?.sendTurnDelta(turnID, text: text) }
                 turns.onDone = { [weak session] turnID in session?.sendTurnDone(turnID) }
+                turns.onVisual = { [weak self] markdown in
+                    self?.voiceBackgroundJobSupervisor.showOnScreen(
+                        title: AppLocalization.string("From Hermes"), markdown: markdown) != nil
+                }
                 return session
             },
             availability: {
@@ -20163,8 +20167,15 @@ final class AppState: ObservableObject {
     /// The settings Hermes may change, and the changes it asked for
     /// (AgentSettings.swift).
     lazy var agentSettings = AgentSettingsSync(defaults: defaults)
-    /// Confirmations Hermes asks this iPhone to present (PresentedScreens.swift).
-    lazy var presentedScreens = PresentedScreensSync(defaults: defaults)
+    /// Confirmations Hermes asks this iPhone to present (PresentedScreens.swift),
+    /// and the cards it shows on a voice conversation's screen.
+    lazy var presentedScreens: PresentedScreensSync = {
+        let sync = PresentedScreensSync(defaults: defaults)
+        sync.onCards = { [weak self] cards in self?.showPresentedCards(cards) }
+        return sync
+    }()
+    /// A card Hermes showed during a Classic voice conversation, open over it.
+    @Published var classicVoiceCard: PresentedCard?
     /// The Go confirmation for Apple Maps that opens without a tap, and
     /// until when: Hermes was just seen asking for it in the chat on screen.
     var mapsNavigateExpected: (promptID: String, until: Date)?
@@ -25901,6 +25912,7 @@ final class AppState: ObservableObject {
         voiceBackgroundJobSupervisor.observe(event)
         // A Local Live call's reply streams back to the speech server.
         if isLocalLiveActive { localLiveTurns.observe(event) }
+        notePresentedCardEvent(event)
         if case .sessionTitle(let runtimeSessionId, let storedSessionId, let title) = event {
             let taskKey = Self.secondaryTitleRecoveryTaskKey(
                 profile: activeProfile,
@@ -28857,6 +28869,7 @@ final class AppState: ObservableObject {
         // lifecycle suspension: the conversation is not restorable.
         suspendedVoiceConversation = nil
         voiceSheetShouldAutoListen = false
+        classicVoiceCard = nil
         // Live-mute persistence obeys the PR #159 authority rule: the
         // controller's mute wins only for the profile that owns the session.
         // A same-profile close that arrives after the controller was
