@@ -200,6 +200,7 @@ extension ChatTextSelectionTests {
     }
 }
 
+@MainActor
 private final class AccentProbeModel: ObservableObject {
     @Published var choice = ConduitAccentChoice.amber
 }
