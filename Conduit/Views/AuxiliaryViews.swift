@@ -2173,7 +2173,7 @@ private struct FallbackModelsSettings: View {
                     if index < entries.count - 1 {
                         Button { move(index, by: 1) } label: { Label(AppLocalization.string("Move down"), systemImage: "arrow.down") }
                     }
-                    Button(role: .destructive) { entries.remove(at: index) } label: { Label(AppLocalization.string("Delete"), systemImage: "trash") }
+                    Button(role: .destructive) { entries.removeAll { $0.id == entry.id } } label: { Label(AppLocalization.string("Delete"), systemImage: "trash") }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.footnote.weight(.semibold))
@@ -2184,10 +2184,10 @@ private struct FallbackModelsSettings: View {
                 .accessibilityLabel(Text(AppLocalization.string("More")))
                 .accessibilityValue(Text(verbatim: entry.model))
             }
-            ConduitMenuPicker(value: entry.provider, choices: providerChoices(entry), onSelect: { chooseProvider($0, at: index) }) {
+            ConduitMenuPicker(value: entry.provider, choices: providerChoices(entry), onSelect: { chooseProvider($0, for: entry.id) }) {
                 Text("Provider").foregroundStyle(.secondary)
             }
-            ConduitMenuPicker(value: entry.model, choices: modelChoices(entry), onSelect: { entries[index].model = $0 }) {
+            ConduitMenuPicker(value: entry.model, choices: modelChoices(entry), onSelect: { chooseModel($0, for: entry.id) }) {
                 Text("Model").foregroundStyle(.secondary)
             }
             .disabled(modelChoices(entry).isEmpty)
@@ -2207,8 +2207,15 @@ private struct FallbackModelsSettings: View {
         return entry.model.isEmpty || listed.contains(where: { $0.id == entry.model }) ? listed : [(id: entry.model, title: entry.model)] + listed
     }
 
-    private func chooseProvider(_ next: String, at index: Int) {
-        guard entries.indices.contains(index), next != entries[index].provider else { return }
+    /// Menus act on the entry they were drawn for, found again by id: the
+    /// row may have moved or gone while the menu was open.
+    private func chooseModel(_ next: String, for id: UUID) {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        entries[index].model = next
+    }
+
+    private func chooseProvider(_ next: String, for id: UUID) {
+        guard let index = entries.firstIndex(where: { $0.id == id }), next != entries[index].provider else { return }
         entries[index].provider = next
         let models = providers.first(where: { $0.name == next })?.models ?? []
         if !models.contains(where: { $0.id == entries[index].model }) {

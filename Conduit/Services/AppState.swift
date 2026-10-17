@@ -23949,8 +23949,9 @@ final class AppState: ObservableObject {
             modelConfig["provider"] = provider
             config["model"] = modelConfig
             // Hermes reads the profile default from `agent.reasoning_effort`
-            // (Desktop writes it there too); the old top-level key is dropped
-            // so it can't shadow the new one on the next load.
+            // (Desktop writes it there too). The PUT deep-merges, so an old
+            // top-level `reasoning` stays on disk; loading reads the agent
+            // key first, so it no longer wins.
             var agentConfig = config["agent"] as? [String: Any] ?? [:]
             agentConfig["reasoning_effort"] = reasoning
             config["agent"] = agentConfig
