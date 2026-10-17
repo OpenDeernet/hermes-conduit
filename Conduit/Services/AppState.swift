@@ -1929,6 +1929,10 @@ final class AppState: ObservableObject {
     /// A waiting message whose chat is ready but still settling is looked
     /// at again shortly: not all of that settling is published.
     var pendingComposerSendRecheckTask: Task<Void, Never>?
+    /// Waiting messages handed to the normal send and not back yet. Their
+    /// files stay until it goes, so a switch back to their dashboard
+    /// mustn't restore them meanwhile.
+    var deliveringPendingComposerSendIDs: Set<UUID> = []
     /// New Chats creating their chat right now: the transcript on screen
     /// until then is the one being left, so the composer doesn't wait on it.
     private var newSessionCreationsInFlight = 0

@@ -1733,6 +1733,29 @@ final class OfflineChatCacheTests: XCTestCase {
         XCTAssertEqual(store.loadPendingSends(dashboardID: dashboard).map(\.id), [pending.id])
     }
 
+    func testFailedPendingSubmissionDoesNotRestoreWordsTwice() throws {
+        let (appState, store, dashboard) = makeAppState()
+        seedCopy(store, dashboard: dashboard)
+        appState.presentOfflineChatIfAvailable(dashboardID: dashboard)
+        appState.isConnecting = true
+        appState.sendWhenConnected("Only once", replyReference: nil)
+        let pending = try XCTUnwrap(appState.pendingComposerSend)
+        let key = appState.composerDraftKeyOnScreen
+        appState.pendingComposerSend = nil
+        appState.deliveringPendingComposerSendIDs.insert(pending.id)
+
+        // A switch back to the dashboard while the send is out leaves it be.
+        appState.restorePendingSendsLeftBehind(dashboardID: dashboard)
+        XCTAssertTrue(appState.composerRestoreRequests.isEmpty)
+
+        appState.deliveringPendingComposerSendIDs.remove(pending.id)
+        appState.restoreFailedPendingComposerSend(pending, submittedDraftKey: key)
+        appState.restorePendingSendsLeftBehind(dashboardID: dashboard)
+        appState.restoreFailedPendingComposerSend(pending, submittedDraftKey: key)
+
+        XCTAssertEqual(appState.composerRestoreRequests.map(\.draft.text), [pending.draftText])
+    }
+
     func testDeletingSavedChatsKeepsWaitingFilesFromOtherDashboards() throws {
         let (appState, store, dashboard) = makeAppState()
         let otherDashboard = UUID()

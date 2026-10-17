@@ -250,11 +250,14 @@ extension AppState {
     private func deliverPendingComposerSend(_ pending: PendingComposerSend) {
         cancelPendingComposerSendRecheck()
         pendingComposerSend = nil
+        deliveringPendingComposerSendIDs.insert(pending.id)
         let context = composerSubmissionContext()
         let key = durableComposerDraftKeyOnScreen
         Task { @MainActor [weak self] in
             guard let self else { return }
-            if await self.submitComposer(text: pending.outboundText, context: context) {
+            let sent = await self.submitComposer(text: pending.outboundText, context: context)
+            self.deliveringPendingComposerSendIDs.remove(pending.id)
+            if sent {
                 self.removePendingComposerSendFile(pending)
                 return
             }
@@ -266,7 +269,8 @@ extension AppState {
     /// account boundaries wipe its file; a late failure must not put the
     /// previous account's words back into a later login's draft.
     func restoreFailedPendingComposerSend(_ pending: PendingComposerSend, submittedDraftKey: ComposerDraftKey) {
-        guard pendingComposerSendFiles(dashboardID: pending.dashboardID).contains(where: { $0.id == pending.id }) else { return }
+        guard pendingComposerSendFiles(dashboardID: pending.dashboardID).contains(where: { $0.id == pending.id }),
+              !composerRestoreRequests.contains(where: { $0.pending?.id == pending.id }) else { return }
         let onScreen = isOnScreen(pending)
         composerRestoreRequests.append(
             restoreRequest(for: pending, key: submittedDraftKey, focuses: false)
@@ -323,6 +327,7 @@ extension AppState {
         guard dashboardID == activeDashboardID else { return }
         let leftBehind = pendingComposerSendFiles(dashboardID: dashboardID).filter { file in
             file.id != pendingComposerSend?.id
+                && !deliveringPendingComposerSendIDs.contains(file.id)
                 && !composerRestoreRequests.contains { $0.pending?.id == file.id }
         }
         composerRestoreRequests.append(contentsOf: leftBehind.map { restoreRequest(for: $0, focuses: false) })
