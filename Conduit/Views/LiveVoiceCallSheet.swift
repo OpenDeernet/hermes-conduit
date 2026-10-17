@@ -215,6 +215,8 @@ struct LiveVoiceCallSheet: View {
                 }
                 if let billingBadge {
                     LiveVoiceBillingBadge(billing: billingBadge)
+                        // The chat link's tap area reaches under the badge.
+                        .allowsHitTesting(false)
                 }
                 if !usesV2 {
                     LiveVoiceCallThreadLabel(jobs: jobs, onOpenChat: openAttachedChat)
