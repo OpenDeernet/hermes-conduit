@@ -172,6 +172,8 @@ struct CapabilitiesView: View {
                                 .foregroundStyle(Color.conduitAccent)
                         }
                         .buttonStyle(PressableButtonStyle())
+                        .accessibilityLabel(Text(verbatim: AppLocalization.string("Show matches in \(other.title)")))
+                        .accessibilityValue(Text(verbatim: (counts[other] ?? 0).formatted()))
                     }
                 }
                 .padding(.horizontal, 16)

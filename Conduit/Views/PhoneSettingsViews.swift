@@ -181,7 +181,7 @@ struct PhoneSettingsPage: View {
                     withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { showsCalendars.toggle() }
                 } label: {
                     HStack {
-                        Text("Calendars and lists")
+                        Text(verbatim: AppLocalization.string("Calendars and lists"))
                             .foregroundStyle(.primary)
                         Spacer(minLength: 8)
                         Image(systemName: "chevron.right")
