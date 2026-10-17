@@ -2796,7 +2796,7 @@ private struct AccentColorPicker: View {
                             if isSelected {
                                 Image(systemName: "checkmark")
                                     .font(.footnote.weight(.bold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(Color(uiColor: choice.selectionColorOnBubble(dark: colorScheme == .dark)))
                             }
                         }
                         .padding(4)

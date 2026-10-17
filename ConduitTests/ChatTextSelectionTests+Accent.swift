@@ -34,7 +34,7 @@ extension ChatTextSelectionTests {
                 let selection = choice.selectionColorOnBubble(dark: dark).conduitRelativeLuminance
                 XCTAssertGreaterThan(
                     (max(bubble, selection) + 0.05) / (min(bubble, selection) + 0.05),
-                    2.5,
+                    3.0,
                     "\(choice) dark=\(dark)"
                 )
             }
@@ -89,6 +89,24 @@ extension ChatTextSelectionTests {
             "SwiftUI fills redraw in the new accent"
         )
         XCTAssertEqual(swatch.traitCollection.conduitAccent, .blue, "UIKit views see the new accent too")
+    }
+
+    @MainActor
+    func testAPickRetintsAMountedSentBubbleSelection() throws {
+        let model = AccentProbeModel()
+        model.choice = .pink
+        let host = UIHostingController(rootView: SentBubbleProbeView(model: model))
+        let window = Self.window(hosting: host)
+        defer { Self.close(window) }
+
+        let textView = try XCTUnwrap(Self.subviews(of: UITextView.self, in: host.view).first)
+        XCTAssertTrue(Self.isClose(textView.tintColor.resolvedColor(with: textView.traitCollection), .black))
+
+        // Dark-mode purple is a dark bubble: the selection turns white.
+        model.choice = .purple
+        Self.settle(host)
+        XCTAssertEqual(textView.traitCollection.conduitAccent, .purple)
+        XCTAssertTrue(Self.isClose(textView.tintColor.resolvedColor(with: textView.traitCollection), .white))
     }
 
     func testCopyingASentMessageLeavesOutTheQuotedReply() {
@@ -197,6 +215,15 @@ private struct AccentProbeView: View {
             AccentProbeRepresentable()
         }
         .environment(\.conduitAccent, model.choice)
+    }
+}
+
+private struct SentBubbleProbeView: View {
+    @ObservedObject var model: AccentProbeModel
+
+    var body: some View {
+        MarkdownText(source: "Something I wrote", foregroundStyle: .white, usesAccentSurface: true)
+            .environment(\.conduitAccent, model.choice)
     }
 }
 
