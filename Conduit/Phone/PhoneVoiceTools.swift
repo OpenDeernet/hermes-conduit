@@ -179,7 +179,10 @@ enum PhoneVoiceTools {
     // MARK: Running them
 
     /// One call of a local tool. What the model hears back.
+    /// `confirmed` says whether the user's own last words agree to a
+    /// deletion (a deletion can't be undone, so the model's word isn't enough).
     static func run(_ tool: VoiceHostTool, arguments: [String: Any], engine: PhoneSyncEngine,
+                    confirmed: () async -> Bool = { true },
                     answer: (PhoneChangePrompt, Bool) async -> Void) async -> [String: String] {
         switch tool.name {
         case changesTool:
@@ -187,7 +190,7 @@ enum PhoneVoiceTools {
         case addTool:
             return await runAdd(arguments, engine: engine)
         case removeTool:
-            return await runRemove(arguments, engine: engine)
+            return await runRemove(arguments, engine: engine, confirmed: confirmed)
         case alarmTool:
             return await runAlarm(arguments, engine: engine)
         default:
@@ -281,13 +284,14 @@ enum PhoneVoiceTools {
             let itemID = try await engine.applyFromVoice(change)
             // Its id, so "actually, take that off" needs no read.
             return ["result": "Added on the phone. Confirm it to the user in a few words."
-                + (itemID.map { " Its id, should they want it deleted: \($0)." } ?? "")]
+                + (itemID.map { " Its id, for \(removeTool) should they want it deleted (never say it aloud): \($0)." } ?? "")]
         } catch {
             return ["error": "It couldn't be added: \(PhoneSyncEngine.describe(error))"]
         }
     }
 
-    private static func runRemove(_ arguments: [String: Any], engine: PhoneSyncEngine) async -> [String: String] {
+    private static func runRemove(_ arguments: [String: Any], engine: PhoneSyncEngine,
+                                  confirmed: () async -> Bool) async -> [String: String] {
         let allowed = removable(engine.preferences, access: engine.calendarSource.eventAccess,
                                 remindersAuthorized: engine.calendarSource.remindersAuthorized)
         guard let itemID = (arguments["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -303,7 +307,7 @@ enum PhoneVoiceTools {
         }
         var fields: [String: Any] = [:]
         if isEvent {
-            let span = (arguments["span"] as? String)?.trimmingCharacters(in: .whitespaces).lowercased() ?? "this"
+            let span = (arguments["span"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "this"
             guard span == "this" || span == "future" else { return ["error": "span is this or future."] }
             fields["span"] = span
         }
@@ -312,6 +316,10 @@ enum PhoneVoiceTools {
         guard let change = PhoneChange(json: ["id": id, "kind": isEvent ? "delete_event" : "delete_reminder",
                                               "target": [target: itemID], "fields": fields]) else {
             return ["error": "That couldn't be deleted; check the id."]
+        }
+        guard await confirmed() else {
+            return ["error": "Not deleted: the user's own last words weren't a yes. Say back which one you'll delete and "
+                + "delete it only once they say yes."]
         }
         do {
             _ = try await engine.applyFromVoice(change)
@@ -385,6 +393,20 @@ enum PhoneVoiceTools {
         } catch {
             return ["error": "It couldn't be set: \(PhoneSyncEngine.describe(error))"]
         }
+    }
+
+    /// Whether the user's words agree to a deletion: a yes (in any language
+    /// the call's own yes check knows), or a short "delete it" / "yes, remove
+    /// that one". Never a question, never a longer request.
+    static func confirmsRemoval(_ words: String) -> Bool {
+        if VoiceCallDecisionOutcome.isYes(words) { return true }
+        guard !words.contains("?"), !words.contains("？") else { return false }
+        let said = words.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        let agreeing: Set<String> = ["yes", "yeah", "yep", "ok", "okay", "sure", "please", "go", "ahead", "do", "it",
+                                     "delete", "remove", "cancel", "that", "this", "one", "them", "both", "the", "event",
+                                     "reminder", "all", "of"]
+        let verbs: Set<String> = ["yes", "yeah", "yep", "ok", "okay", "sure", "delete", "remove", "cancel", "go"]
+        return (1...8).contains(said.count) && said.allSatisfy(agreeing.contains) && said.contains(where: verbs.contains)
     }
 
     // MARK: Wording for the model

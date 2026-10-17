@@ -333,6 +333,16 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertNotNil(hidden["error"])
         XCTAssertNotEqual(source.appliedChanges.last?.eventID, "e_hidden")
         engine.savePreferences(phonePreferences())
+        // Only on the user's own yes.
+        let unconfirmed = await PhoneVoiceTools.run(removeTool, arguments: ["kind": "event", "id": "e_gym"], engine: engine,
+                                                    confirmed: { false }, answer: answer)
+        XCTAssertNotNil(unconfirmed["error"])
+        XCTAssertNotEqual(source.appliedChanges.last?.eventID, "e_gym")
+        XCTAssertTrue(PhoneVoiceTools.confirmsRemoval("Yes, delete it."))
+        XCTAssertTrue(PhoneVoiceTools.confirmsRemoval("remove that one"))
+        XCTAssertFalse(PhoneVoiceTools.confirmsRemoval("delete it?"))
+        XCTAssertFalse(PhoneVoiceTools.confirmsRemoval("what's on my calendar tomorrow"))
+        XCTAssertFalse(PhoneVoiceTools.confirmsRemoval(""))
         let noID = await PhoneVoiceTools.run(removeTool, arguments: ["kind": "event"], engine: engine, answer: answer)
         XCTAssertNotNil(noID["error"])
         let badSpan = await PhoneVoiceTools.run(removeTool, arguments: ["kind": "event", "id": "e_1", "span": "all"],

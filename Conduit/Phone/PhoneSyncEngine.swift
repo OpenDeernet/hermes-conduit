@@ -751,7 +751,7 @@ final class PhoneSyncEngine: ObservableObject {
 
     struct VoiceNotReady: Error {}
     /// Voice adds and deletions only: updates stay with Hermes' cards.
-    struct NotAnAddition: Error {}
+    struct NotForVoice: Error {}
 
     /// One sealed read for a live voice call (`op: "voice"`, at `path`): the
     /// host's result, for this iPhone's data only. Checks only that sharing
@@ -782,7 +782,7 @@ final class PhoneSyncEngine: ObservableObject {
     /// sends it. Like `voiceRead`, the caller checks the voice mode may use it.
     func applyFromVoice(_ change: PhoneChange) async throws -> String? {
         guard change.kind.addsWithoutAsking || change.kind == .deleteEvent || change.kind == .deleteReminder else {
-            throw NotAnAddition()
+            throw NotForVoice()
         }
         guard preferences.isOn, readStateIfNeeded() else { throw VoiceNotReady() }
         if change.kind.isAlarm {

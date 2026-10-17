@@ -120,16 +120,24 @@ extension AppState {
             return ["error": "The user hasn't let this voice call use their calendar, or it isn't reachable now."]
         }
         if tool.key == PhoneVoiceTools.key {
-            let result = await PhoneVoiceTools.run(tool, arguments: arguments, engine: engine) { prompt, approve in
+            let result = await PhoneVoiceTools.run(tool, arguments: arguments, engine: engine, confirmed: {
+                // Their words reach Conduit a moment after the model heard them.
+                let deadline = ContinuousClock.now + .seconds(2)
+                while !PhoneVoiceTools.confirmsRemoval(self.liveCallLastUserTurn().text) {
+                    guard ContinuousClock.now < deadline else { return false }
+                    do { try await Task.sleep(for: .milliseconds(250)) } catch { return false }
+                }
+                return true
+            }) { prompt, approve in
                 await engine.answer(prompt, approve: approve)
                 // Reported in the background: the call hears the outcome now.
                 Task { await self.runPhoneSync(reason: .answered) }
             }
             if result["error"] == nil {
                 Self.recordPhoneVoiceUse(tool, arguments: arguments, mode: mode)
-                // Hermes' alarm list catches up with the one just set, and
-                // its calendar with the one just deleted.
-                if tool.name == PhoneVoiceTools.alarmTool || tool.name == PhoneVoiceTools.removeTool {
+                // Hermes' alarm list and calendar catch up with what was
+                // just set, added or deleted.
+                if [PhoneVoiceTools.alarmTool, PhoneVoiceTools.addTool, PhoneVoiceTools.removeTool].contains(tool.name) {
                     Task { await self.runPhoneSync(reason: .answered) }
                 }
             }
