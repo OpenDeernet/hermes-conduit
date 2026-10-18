@@ -164,7 +164,7 @@ final class V2ShownUpdates: ObservableObject {
     /// position there.
     let defaults: UserDefaults
     private let defaultsKeys: [String]
-    private var defaultsValues: [String?]
+    private var defaultsValues: [NSObject?]
 
     /// Read through here by the list's rows, which follow these updates.
     /// Held strongly: AppState never holds the gate, and the sink below
@@ -204,8 +204,9 @@ final class V2ShownUpdates: ObservableObject {
         passOn()
     }
 
-    private static func values(of keys: [String], in defaults: UserDefaults) -> [String?] {
-        keys.map { key in defaults.object(forKey: key).map { String(describing: $0) } }
+    /// Property-list values, compared by `isEqual:`.
+    private static func values(of keys: [String], in defaults: UserDefaults) -> [NSObject?] {
+        keys.map { defaults.object(forKey: $0) as? NSObject }
     }
 }
 

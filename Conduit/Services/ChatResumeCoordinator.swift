@@ -175,13 +175,13 @@ final class ChatResumeCoordinator {
     func recordViewport(
         _ snapshot: ChatScrollSnapshot,
         for key: ChatScrollSessionKey,
-        holdWhile: (@MainActor () -> Bool)? = nil
+        holdWhile: (@MainActor @Sendable () -> Bool)? = nil
     ) {
         guard !viewportIsFrozen, key.isValid else { return }
 
         store.stageSnapshot(snapshot, for: key, at: Date())
         pendingFlushTask?.cancel()
-        pendingFlushTask = Task { [weak self] in
+        pendingFlushTask = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(for: .milliseconds(300))
                 while holdWhile?() == true {
