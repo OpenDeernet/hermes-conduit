@@ -358,11 +358,11 @@ enum HTMLPreviewPage {
     static let baseURL: URL? = nil
     /// The page can draw anything and load images, media, styles and
     /// scripts from anywhere, but can't send data off with fetch, XHR,
-    /// sockets, beacons or forms, or start frames, workers or plug-ins that
-    /// would run outside this policy (#770). Only `srcdoc` frames, which
-    /// keep it, draw. A policy in the file itself only adds limits; it
-    /// can't lift these. What it may still load can carry data one way in
-    /// the URL; blocking that would break charts drawn with a CDN library.
+    /// sockets, beacons or forms, or load frames, workers or plug-ins that
+    /// would run outside this policy (#770). A policy in the file itself
+    /// only adds limits; it can't lift these. What it may still load can
+    /// carry data one way in the URL; blocking that would break charts
+    /// drawn with a CDN library.
     /// WebRTC is outside any policy; closing it would take a script of the
     /// app's own in the page.
     static let contentSecurityPolicy = "connect-src data: blob:; frame-src 'none'; worker-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'"
@@ -458,12 +458,13 @@ enum HTMLPreviewPage {
         return range.upperBound
     }
 
-    /// The page itself and its `srcdoc` frames stay; any other frame and
+    /// The page itself stays; frames (which the policy blocks too) and
     /// navigations away from it are cancelled, and a link the user tapped
-    /// opens in the browser.
+    /// opens in the browser. A navigation without a URL is the page's own
+    /// load.
     static func navigationDecision(url: URL?, isMainFrame: Bool, userTapped: Bool) -> (allow: Bool, openExternally: URL?) {
         let scheme = url?.scheme?.lowercased()
-        if url == nil || url?.absoluteString == "about:blank" || (!isMainFrame && url?.absoluteString == "about:srcdoc") {
+        if url == nil || url?.absoluteString == "about:blank" {
             return (true, nil)
         }
         if isMainFrame, userTapped, let url, scheme == "https" || scheme == "http" {

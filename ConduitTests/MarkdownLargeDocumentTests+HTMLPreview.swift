@@ -150,11 +150,11 @@ extension MarkdownLargeDocumentTests {
         let link = URL(string: "https://example.com/details")!
         // The page itself loads.
         XCTAssertTrue(HTMLPreviewPage.navigationDecision(url: URL(string: "about:blank"), isMainFrame: true, userTapped: false).allow)
-        // Only a srcdoc frame, which keeps the page's policy, may load: a
-        // data:, blob: or web frame could send what the page shows anywhere (#770).
+        // No frame loads: a data:, blob: or web frame could send what the
+        // page shows anywhere (#770).
         XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: URL(string: "data:text/html,<p>x</p>"), isMainFrame: false, userTapped: false).allow)
         XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: URL(string: "blob:null/1234"), isMainFrame: false, userTapped: false).allow)
-        XCTAssertTrue(HTMLPreviewPage.navigationDecision(url: URL(string: "about:srcdoc"), isMainFrame: false, userTapped: false).allow)
+        XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: URL(string: "about:srcdoc"), isMainFrame: false, userTapped: false).allow)
         XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: URL(string: "about:srcdoc"), isMainFrame: true, userTapped: false).allow)
         XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: link, isMainFrame: false, userTapped: false).allow)
         XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: URL(string: "http://example.com/"), isMainFrame: false, userTapped: false).allow)
