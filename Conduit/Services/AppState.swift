@@ -16773,11 +16773,11 @@ final class AppState: ObservableObject {
     }
 
     private func setSessionArchived(_ session: SessionSummary, archived: Bool) async -> Bool {
-        guard sessionMutationID == nil,
-              sessionBelongsToProfile(session, profile: activeProfile),
-              dashboardTicketBridge != nil || widgetSessionMutationRequestOverride != nil else { return false }
+        guard sessionBelongsToProfile(session, profile: activeProfile),
+              sessionMutationCanStart(hasTransport: dashboardTicketBridge != nil || widgetSessionMutationRequestOverride != nil)
+        else { return false }
         if archived, isBusy, sessionMatchesActiveSession(session) {
-            errorMessage = AppLocalization.string("Stop the active response before archiving this conversation.")
+            showSessionMutationNotice(AppLocalization.string("Stop the active response before archiving this conversation."))
             return false
         }
 
@@ -16824,9 +16824,9 @@ final class AppState: ObservableObject {
         } catch {
             guard profile == activeProfile else { return false }
             let reason = UserFacingError.message(for: error)
-            errorMessage = archived
+            showSessionMutationNotice(archived
                 ? AppLocalization.string("Could not archive this conversation: \(reason)")
-                : AppLocalization.string("Could not restore this conversation: \(reason)")
+                : AppLocalization.string("Could not restore this conversation: \(reason)"))
             return false
         }
     }
@@ -16906,17 +16906,17 @@ final class AppState: ObservableObject {
             return false
         } catch {
             guard profile == activeProfile else { return false }
-            errorMessage = SessionRenameOperation.failureMessage(error)
+            showSessionMutationNotice(SessionRenameOperation.failureMessage(error))
             return false
         }
     }
 
     func deleteSession(_ session: SessionSummary) async -> Bool {
-        guard sessionMutationID == nil,
-              sessionBelongsToProfile(session, profile: activeProfile),
-              let dashboardTicketBridge else { return false }
+        guard sessionBelongsToProfile(session, profile: activeProfile),
+              sessionMutationCanStart(hasTransport: dashboardTicketBridge != nil || widgetSessionMutationRequestOverride != nil)
+        else { return false }
         if isBusy, sessionMatchesActiveSession(session) {
-            errorMessage = AppLocalization.string("Stop the active response before deleting this conversation.")
+            showSessionMutationNotice(AppLocalization.string("Stop the active response before deleting this conversation."))
             return false
         }
 
@@ -16924,7 +16924,13 @@ final class AppState: ObservableObject {
         sessionMutationID = session.id
         defer { sessionMutationID = nil }
         do {
-            try await sendSessionMutation(session.id, body: nil, profile: profile, bridge: dashboardTicketBridge)
+            if let widgetSessionMutationRequestOverride {
+                try await sendSessionMutation(session.id, body: nil, profile: profile, using: widgetSessionMutationRequestOverride)
+            } else if let dashboardTicketBridge {
+                try await sendSessionMutation(session.id, body: nil, profile: profile, bridge: dashboardTicketBridge)
+            } else {
+                return false
+            }
             guard profile == activeProfile else { return false }
             let deletedSessionIDs = Set([session.id] + session.alternateIds)
             sessionYoloStore.clearOverride(
@@ -16944,13 +16950,35 @@ final class AppState: ObservableObject {
             return true
         } catch {
             guard profile == activeProfile else { return false }
-            errorMessage = AppLocalization.string("Could not delete this conversation: \(UserFacingError.message(for: error))")
+            showSessionMutationNotice(AppLocalization.string("Could not delete this conversation: \(UserFacingError.message(for: error))"))
             return false
         }
     }
 
     func isSessionMutationInFlight(_ session: SessionSummary) -> Bool {
         sessionMutationID == session.id
+    }
+
+    /// Whether an archive or delete may start now; says why not when it
+    /// can't, instead of the tap doing nothing.
+    private func sessionMutationCanStart(hasTransport: Bool) -> Bool {
+        guard sessionMutationID == nil else {
+            showSessionMutationNotice(AppLocalization.string("Wait for the current conversation change to finish, then try again."))
+            return false
+        }
+        guard hasTransport else {
+            showSessionMutationNotice(AppLocalization.string("Reconnect to Hermes to change this conversation."))
+            return false
+        }
+        return true
+    }
+
+    /// A chat change that didn't happen says so over the Chats list and the
+    /// open chat. `errorMessage` shows only while the composer is locked or
+    /// the connection needs repair, so a refused archive or delete used to
+    /// look like the tap did nothing.
+    private func showSessionMutationNotice(_ message: String) {
+        showNotice(message, systemImage: "exclamationmark.triangle.fill")
     }
 
     /// Explicit deletion revokes the conversation's identity: index
