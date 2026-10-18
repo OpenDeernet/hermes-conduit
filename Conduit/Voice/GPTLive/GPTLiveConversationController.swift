@@ -223,8 +223,8 @@ final class GPTLiveConversationController: ObservableObject {
     private var hasSentOpening = false
     /// Until the greeting has played, nothing of Conduit's goes in: a quiet
     /// note arriving first (a reply that finished in the chat as the call
-    /// connected) could stop the model greeting at all (#761). Cleared by
-    /// either side finishing a turn, or at this time.
+    /// connected) could stop the model greeting at all (#761). Cleared once
+    /// either side starts talking, or at this time.
     private var openingHeldUntil: Date?
     /// When the greeting was asked for; nil when none is.
     private var openingRequestedAt: Date?
@@ -672,12 +672,16 @@ final class GPTLiveConversationController: ObservableObject {
         switch event {
         case .inputTranscript(let text):
             lastUserSpeechAt = now()
+            // Someone is talking: the opening is under way or not wanted.
+            clearOpeningHold()
             appendTranscript(text, speaker: .user)
         case .outputTranscript(let text):
             // Kept while paused: GPT-Live can't be told to hold its turn, so
             // what it said into the pause stays readable.
             modelTurnActive = true
             lastModelOutputAt = now()
+            // The model's turn already holds Conduit's sends back.
+            clearOpeningHold()
             // Only the change: an unchanged phase would still publish.
             // Skipping phase's didSet then is fine: it is idempotent.
             if endRequestedAt == nil, !audioPaused, phase != .speaking { phase = .speaking }
@@ -987,6 +991,7 @@ final class GPTLiveConversationController: ObservableObject {
     private func retireSession() {
         callLimitTask?.cancel()
         callLimitTask = nil
+        clearOpeningHold()
         guard let old = session else { return }
         session = nil
         voiceNote = nil
