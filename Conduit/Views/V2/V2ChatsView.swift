@@ -708,8 +708,8 @@ struct V2ChatsView: View, Equatable {
     /// A project's chat names its project while searching, or when
     /// Settings lists project chats here, since the main list doesn't
     /// otherwise say where it lives.
-    private func rowProjectTitle(_ item: V2ChatsListItem) -> String? {
-        guard isSearching || projectChats != .hidden, case .session(let node) = item.kind else { return nil }
+    private func rowProjectTitle(_ item: V2ChatsListItem, namesProjects: Bool) -> String? {
+        guard namesProjects, case .session(let node) = item.kind else { return nil }
         return projectTitle(for: node.session)
     }
 
@@ -1188,10 +1188,12 @@ struct V2ChatsView: View, Equatable {
 
     /// One List row per item, so the List builds only the rows on screen.
     private func listRows(_ items: [V2ChatsListItem]) -> some View {
-        ForEach(items) { item in
+        // Read once, not once per row.
+        let namesProjects = isSearching || projectChats != .hidden
+        return ForEach(items) { item in
             V2ChatsRow(
                 item: item,
-                projectTitle: rowProjectTitle(item),
+                projectTitle: rowProjectTitle(item, namesProjects: namesProjects),
                 onRename: { sessionPendingRename = $0 },
                 onDelete: { sessionPendingDeletion = $0 },
                 setExpanded: setExpanded
