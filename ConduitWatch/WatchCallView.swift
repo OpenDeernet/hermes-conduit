@@ -240,14 +240,19 @@ struct WatchCallCaptions: View {
                 // for two lines where an Ultra has three. Head truncation
                 // over several lines cuts the middle of the text instead.
                 ViewThatFits(in: .vertical) {
+                    // No line limit here, so a cut that needs more lines
+                    // than fit measures taller and is passed over instead
+                    // of losing its newest words to tail truncation.
                     ForEach(Self.budgets, id: \.self) { limit in
                         line(Self.newestWords(of: current, limit: limit))
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    // Past the smallest budget (the largest text), the
-                    // oldest words go.
-                    line(Self.newestWords(of: current, limit: Self.budgets.last ?? 28))
+                    // Past the shortest cut (the largest text), the oldest
+                    // words go, and the text may shrink a little.
+                    line(Self.newestWords(of: current, limit: Self.shortestBudget))
+                        .lineLimit(3)
                         .truncationMode(.head)
+                        .minimumScaleFactor(0.75)
                 }
                 // VoiceOver reads the whole line, not the cut one.
                 .accessibilityElement(children: .ignore)
@@ -260,20 +265,20 @@ struct WatchCallCaptions: View {
     }
 
     /// Caption lengths to try, longest first: about three lines on an
-    /// Ultra down to one.
-    static let budgets = [84, 70, 56, 42, 28]
+    /// Ultra down to two short ones. A rough guide only: the fit check
+    /// picks among them.
+    private static let budgets = [84, 70, 56, 42]
+    private static let shortestBudget = 28
 
     private func line(_ text: String) -> some View {
         Text(verbatim: text)
             .font(.system(.body, weight: .semibold))
-            .lineLimit(3)
             // Three lines of it still leave the controls on screen.
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-            .minimumScaleFactor(0.75)
     }
 
     /// The last `limit` characters or so, from a word's start.
-    static func newestWords(of text: String, limit: Int = 84) -> String {
+    static func newestWords(of text: String, limit: Int) -> String {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.count > limit else { return text }
         let tail = text.suffix(limit)
