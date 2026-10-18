@@ -141,6 +141,7 @@ extension MarkdownFallbackTests {
         XCTAssertTrue(MarkupHTML.allowsNavigation(to: URL(string: "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css")))
         XCTAssertTrue(MarkupHTML.allowsNavigation(to: URL(string: "https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/fonts/KaTeX_Main-Regular.woff2")))
         XCTAssertFalse(MarkupHTML.allowsNavigation(to: URL(string: "https://cdn.jsdelivr.net/npm/other@1.0.0/index.js")))
+        XCTAssertFalse(MarkupHTML.allowsNavigation(to: URL(string: "https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.esm.min.mjs")), "only the hashed files")
         XCTAssertFalse(MarkupHTML.allowsNavigation(to: URL(string: "https://cdn.jsdelivr.net/npm/mermaid@11.0.0/dist/mermaid.min.js")), "only the pinned version")
         XCTAssertFalse(MarkupHTML.allowsNavigation(to: URL(string: "https://cdn.jsdelivr.net/npm/katex@0.16.2/dist/katex.min.js")))
         XCTAssertFalse(MarkupHTML.allowsNavigation(to: URL(string: "https://conduit.local/elsewhere")))

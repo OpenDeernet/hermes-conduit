@@ -149,10 +149,10 @@ extension MarkdownLargeDocumentTests {
         let link = URL(string: "https://example.com/details")!
         // The page itself loads.
         XCTAssertTrue(HTMLPreviewPage.navigationDecision(url: URL(string: "about:blank"), isMainFrame: true, userTapped: false).allow)
-        // A frame drawn from the page's own data may load; one on another
-        // site can't, so the page can't send what it shows anywhere (#770).
-        XCTAssertTrue(HTMLPreviewPage.navigationDecision(url: URL(string: "data:text/html,<p>x</p>"), isMainFrame: false, userTapped: false).allow)
-        XCTAssertTrue(HTMLPreviewPage.navigationDecision(url: URL(string: "blob:null/1234"), isMainFrame: false, userTapped: false).allow)
+        // Only a srcdoc frame, which keeps the page's policy, may load: a
+        // data:, blob: or web frame could send what the page shows anywhere (#770).
+        XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: URL(string: "data:text/html,<p>x</p>"), isMainFrame: false, userTapped: false).allow)
+        XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: URL(string: "blob:null/1234"), isMainFrame: false, userTapped: false).allow)
         XCTAssertTrue(HTMLPreviewPage.navigationDecision(url: URL(string: "about:srcdoc"), isMainFrame: false, userTapped: false).allow)
         XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: URL(string: "about:srcdoc"), isMainFrame: true, userTapped: false).allow)
         XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: link, isMainFrame: false, userTapped: false).allow)
@@ -200,7 +200,8 @@ extension MarkdownLargeDocumentTests {
     func testHTMLPreview_PageCannotSendDataOff() {
         let policy = HTMLPreviewPage.contentSecurityPolicy
         XCTAssertTrue(policy.contains("connect-src data: blob:"))
-        XCTAssertTrue(policy.contains("frame-src data: blob:"))
+        XCTAssertTrue(policy.contains("frame-src 'none'"))
+        XCTAssertTrue(policy.contains("worker-src 'none'"))
         XCTAssertTrue(policy.contains("form-action 'none'"))
         XCTAssertTrue(policy.contains("object-src 'none'"))
         XCTAssertFalse(policy.contains("https:") || policy.contains("http:") || policy.contains("*"))

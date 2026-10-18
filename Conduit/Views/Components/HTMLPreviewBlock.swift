@@ -358,10 +358,12 @@ enum HTMLPreviewPage {
     static let baseURL: URL? = nil
     /// The page can draw anything and load images, media, styles and
     /// scripts from anywhere, but can't send data off with fetch, XHR,
-    /// sockets, beacons or forms, or open frames or plug-ins on other sites
-    /// (#770). A policy in the file itself only adds limits; it can't lift
-    /// these. Loads it may still make (an image's URL) can carry data one way.
-    static let contentSecurityPolicy = "connect-src data: blob:; frame-src data: blob:; object-src 'none'; form-action 'none'; base-uri 'none'"
+    /// sockets, beacons or forms, or start frames, workers or plug-ins that
+    /// would run outside this policy (#770). Only `srcdoc` frames, which
+    /// keep it, draw. A policy in the file itself only adds limits; it
+    /// can't lift these. What it may still load can carry data one way in
+    /// the URL; blocking that would break charts drawn with a CDN library.
+    static let contentSecurityPolicy = "connect-src data: blob:; frame-src 'none'; worker-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'"
 
     /// The app listens for the inline page's height and nothing else.
     static func messageHandlerNames(reportsHeight: Bool) -> [String] {
@@ -441,15 +443,12 @@ enum HTMLPreviewPage {
         return range.upperBound
     }
 
-    /// The page itself and frames drawn from its own data stay; frames on
-    /// other sites and navigations away from it are cancelled, and a link
-    /// the user tapped opens in the browser.
+    /// The page itself and its `srcdoc` frames stay; any other frame and
+    /// navigations away from it are cancelled, and a link the user tapped
+    /// opens in the browser.
     static func navigationDecision(url: URL?, isMainFrame: Bool, userTapped: Bool) -> (allow: Bool, openExternally: URL?) {
         let scheme = url?.scheme?.lowercased()
         if url == nil || url?.absoluteString == "about:blank" || (!isMainFrame && url?.absoluteString == "about:srcdoc") {
-            return (true, nil)
-        }
-        if !isMainFrame, scheme == "data" || scheme == "blob" {
             return (true, nil)
         }
         if isMainFrame, userTapped, let url, scheme == "https" || scheme == "http" {

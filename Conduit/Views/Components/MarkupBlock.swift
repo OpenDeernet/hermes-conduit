@@ -549,19 +549,20 @@ enum MarkupHTML {
         case "conduit.local":
             return url.path.isEmpty || url.path == "/"
         case "cdn.jsdelivr.net":
-            return rendererPathPrefixes.contains { url.path.hasPrefix($0) }
+            return rendererPaths.contains(url.path) || url.path.hasPrefix(rendererFontFolder)
         default:
             return false
         }
     }
 
-    /// Only the pinned versions' folders, so a reference to another version
-    /// can't load around the hashes below.
-    private static let rendererPathPrefixes = ["/npm/mermaid@11.16.0/", "/npm/katex@0.16.22/"]
+    /// Only the hashed files below and KaTeX's fonts, so a reference to
+    /// another file or version can't load around the hashes.
+    private static let rendererPaths = [mermaidScript, katexScript, katexStylesheet].compactMap { URL(string: $0.url)?.path }
+    private static let rendererFontFolder = "/npm/katex@0.16.22/dist/fonts/"
 
     /// The renderers' files, pinned by version and by hash: a file the CDN
     /// serves changed doesn't run. A version bump takes new hashes and the
-    /// folders above; hash the files in the npm package
+    /// font folder above; hash the files in the npm package
     /// (`openssl dgst -sha384 -binary <file> | base64`).
     static let mermaidScript = Subresource(
         url: "https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js",
