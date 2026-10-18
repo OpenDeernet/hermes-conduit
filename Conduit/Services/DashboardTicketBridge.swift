@@ -682,6 +682,8 @@ final class DashboardTicketBridge: NSObject {
         for deadline in requestDeadlines.values { deadline.cancel() }
         requestDeadlines.removeAll()
         pendingRequests.rejectAll(with: DashboardTicketBridgeError.notReady)
+        // The bridge registers exactly one handler; removing them all keeps
+        // this nonisolated deinit off the main-actor `DashboardScriptWorld`.
         webView.configuration.userContentController.removeAllScriptMessageHandlers()
     }
 

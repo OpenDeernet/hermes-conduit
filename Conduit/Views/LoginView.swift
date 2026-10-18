@@ -319,6 +319,7 @@ struct AuthWebView: UIViewRepresentable {
         Coordinator(parent: self)
     }
 
+    @MainActor
     class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         let parent: AuthWebView
         private var hasDeliveredTicket = false
