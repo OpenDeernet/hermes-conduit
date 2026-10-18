@@ -29,5 +29,10 @@ final class PreviewTextTests: XCTestCase {
     func testPlainTextStaysAsIs() {
         XCTAssertEqual(PreviewText.plain("Make me a watering schedule, 5 * 3 = 15"), "Make me a watering schedule, 5 * 3 = 15")
         XCTAssertEqual(PreviewText.plain("#hashtag and -dash"), "#hashtag and -dash")
+        XCTAssertEqual(PreviewText.plain("Python power: 5 ** 3"), "Python power: 5 ** 3")
+    }
+
+    func testNestedQuotesDrop() {
+        XCTAssertEqual(PreviewText.plain(">> Pack water"), "Pack water")
     }
 }

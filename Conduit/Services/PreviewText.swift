@@ -36,10 +36,10 @@ enum PreviewText {
         guard joined.contains(where: { "*_`[~\\".contains($0) }) else { return joined }
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         let parsed = (try? AttributedString(markdown: joined, options: options)).map { String($0.characters) } ?? joined
-        // A preview cut mid-span leaves its opening mark unmatched.
-        return parsed
-            .replacingOccurrences(of: "**", with: "")
-            .replacingOccurrences(of: "`", with: "")
+        // A preview cut mid-span leaves its opening mark unmatched; a mark
+        // touching a word goes, a spaced one ("5 ** 3") is the text's own.
+        return parsed.replacingOccurrences(of: #"\*\*(?=\S)|(?<=\S)\*\*|`(?=\S)|(?<=\S)`"#,
+                                           with: "", options: .regularExpression)
     }
 
     /// "## Camp" -> "Camp", "- Tent" -> "Tent", "2. Pack" -> "Pack",
@@ -52,7 +52,8 @@ enum PreviewText {
             let after = rest.dropFirst(hashes.count)
             if hashes.count <= 6, after.first == " " { rest = after }
         } else if rest.hasPrefix(">") {
-            rest = rest.dropFirst()
+            // ">> quote" nests: drop every level.
+            while let first = rest.first, first == ">" || first == " " { rest = rest.dropFirst() }
         } else if let first = rest.first, "-*+".contains(first), rest.dropFirst().first == " " {
             rest = rest.dropFirst(2)
         } else {
