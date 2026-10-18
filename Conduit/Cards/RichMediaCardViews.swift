@@ -11,6 +11,7 @@
 //
 
 import AVKit
+import Combine
 import Contacts
 import ContactsUI
 import SwiftUI
@@ -230,6 +231,9 @@ final class RichAudioPlayer: ObservableObject {
 
     private var player: AVPlayer?
     private var observer: Any?
+    /// A file that won't load, or a call or Siri taking the audio, ends
+    /// the item, so its row doesn't stay on Pause.
+    private var endings: Set<AnyCancellable> = []
 
     func toggle(_ url: URL) {
         if playing == url {
@@ -252,6 +256,16 @@ final class RichAudioPlayer: ObservableObject {
                 }
             }
         }
+        player.currentItem?.publisher(for: \.status)
+            .filter { $0 == .failed }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in MainActor.assumeIsolated { if self?.playing == url { self?.stop() } } }
+            .store(in: &endings)
+        NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)
+            .filter { ($0.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) == AVAudioSession.InterruptionType.began.rawValue }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in MainActor.assumeIsolated { if self?.playing == url { self?.stop(endingSession: false) } } }
+            .store(in: &endings)
         self.player = player
         playing = url
         elapsed = 0
@@ -285,6 +299,7 @@ final class RichAudioPlayer: ObservableObject {
     /// `endingSession` false: another item starts right away.
     func stop(endingSession: Bool = true) {
         let wasPlaying = player != nil
+        endings.removeAll()
         if let observer { player?.removeTimeObserver(observer) }
         observer = nil
         player?.pause()
