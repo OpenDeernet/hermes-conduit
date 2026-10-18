@@ -305,6 +305,26 @@ final class ChatResumeCoordinatorTests: XCTestCase {
         XCTAssertEqual(ChatResumeStore(defaults: harness.defaults).snapshot(for: key), reading)
     }
 
+    /// Saving writes the defaults, which redraws every `@AppStorage` view,
+    /// so a reading taken mid-scroll waits until the scrolling stops.
+    func testViewportUpdateWaitsForScrollingToStopBeforeSaving() async throws {
+        let harness = makeHarness()
+        let key = ChatScrollSessionKey(profile: "default", sessionID: "stored-a")
+        let reading = ChatScrollSnapshot(anchorMessageID: "anchor-12", followsLatest: false)
+        var scrolling = true
+
+        harness.coordinator.recordViewport(reading, for: key) { scrolling }
+        try await Task.sleep(for: .milliseconds(900))
+        XCTAssertNil(ChatResumeStore(defaults: harness.defaults).snapshot(for: key), "saved mid-scroll")
+
+        scrolling = false
+        let deadline = Date().addingTimeInterval(5)
+        while ChatResumeStore(defaults: harness.defaults).snapshot(for: key) == nil, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(ChatResumeStore(defaults: harness.defaults).snapshot(for: key), reading)
+    }
+
     func testPreservingCurrentSessionDoesNotCreateARestorationRequest() {
         let harness = makeHarness()
         let key = ChatScrollSessionKey(profile: "default", sessionID: "stored-a")

@@ -372,7 +372,7 @@ struct ConduitBackdrop: View {
 
     private var shouldAnimate: Bool {
         ConduitBackdropMotionPolicy.shouldAnimate(
-            drifts: drifts && !ChatProbeSwitches.stillBackdrop,
+            drifts: drifts,
             sceneIsActive: scenePhase == .active,
             reduceMotion: reduceMotion,
             lowPowerMode: devicePower.isLowPowerModeEnabled,

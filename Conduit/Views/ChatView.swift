@@ -727,7 +727,10 @@ private final class ChatScrollEventRouter {
             identity: appState.activeChatScrollSessionIdentity
         ) else { return }
         guard let snapshot = engine.renderedViewportSnapshot()?.snapshot else { return }
-        appState.recordChatViewport(snapshot, for: sessionKey)
+        // Saved once the reader stops scrolling (recordViewport).
+        appState.recordChatViewport(snapshot, for: sessionKey) { [weak engine] in
+            engine?.isUserScrolling ?? false
+        }
     }
 
     private func scrollWithoutAnimation(_ body: (ScrollViewProxy) -> Void) {
@@ -1209,7 +1212,7 @@ struct UserMessageContent: View, Equatable {
                         endPoint: .bottomTrailing
                     )
                 )
-                .shadow(color: Color.conduitAccent.opacity(ChatProbeSwitches.noBubbleShadow ? 0 : 0.16), radius: ChatProbeSwitches.noBubbleShadow ? 0 : 14, y: ChatProbeSwitches.noBubbleShadow ? 0 : 6)
+                .shadow(color: Color.conduitAccent.opacity(0.16), radius: 14, y: 6)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 21, style: .continuous)
@@ -3680,10 +3683,4 @@ extension View {
         background(tint, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .settingsCard(cornerRadius: cornerRadius)
     }
-}
-
-/// PROBE ONLY (removed before merge): A/B switches for the scroll probe.
-enum ChatProbeSwitches {
-    nonisolated(unsafe) static var noBubbleShadow = false
-    nonisolated(unsafe) static var stillBackdrop = false
 }

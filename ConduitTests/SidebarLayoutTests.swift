@@ -180,6 +180,36 @@ final class SidebarLayoutTests: XCTestCase {
         XCTAssertEqual(sent, 0)
     }
 
+    /// SwiftUI redraws every `@AppStorage` view on any defaults write, and a
+    /// chat saves its scroll position there: the list reads its settings
+    /// through the gate, which passes on only its own keys' changes, and
+    /// only while the list shows.
+    @MainActor
+    func testChatsListRedrawsOnlyForItsOwnSettingsAndOnlyWhileShown() {
+        let state = makeAppState()
+        let suite = "SidebarLayoutTests.listDefaults.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let updates = V2ShownUpdates(state, defaults: defaults, defaultsKeys: ["list.filter"])
+        var sent = 0
+        let watch = updates.objectWillChange.sink { sent += 1 }
+        defer { watch.cancel() }
+
+        defaults.set(Data([1, 2, 3]), forKey: "conduit.chatResume.v1")
+        XCTAssertEqual(sent, 0, "another key's write redrew the list")
+
+        defaults.set("scheduled", forKey: "list.filter")
+        XCTAssertEqual(sent, 1)
+        defaults.set("scheduled", forKey: "list.filter")
+        XCTAssertEqual(sent, 1, "an unchanged value redrew the list")
+
+        updates.isShown = false
+        defaults.set("all", forKey: "list.filter")
+        XCTAssertEqual(sent, 1)
+        updates.isShown = true
+        XCTAssertEqual(sent, 2)
+    }
+
     @MainActor
     private func makeAppState() -> AppState {
         let suite = "SidebarLayoutTests.\(UUID().uuidString)"

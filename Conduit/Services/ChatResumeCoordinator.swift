@@ -168,7 +168,15 @@ final class ChatResumeCoordinator {
         if pendingSessionKey != nil { viewportIsFrozen = true }
     }
 
-    func recordViewport(_ snapshot: ChatScrollSnapshot, for key: ChatScrollSessionKey) {
+    /// Stages the reading and saves it 300 ms later, or once `holdWhile`
+    /// turns false: a save writes the defaults, and SwiftUI redraws every
+    /// `@AppStorage` view on any write there, which mid-scroll cost frames.
+    /// Leaving the app saves at once (`freezeViewport`).
+    func recordViewport(
+        _ snapshot: ChatScrollSnapshot,
+        for key: ChatScrollSessionKey,
+        holdWhile: (@MainActor () -> Bool)? = nil
+    ) {
         guard !viewportIsFrozen, key.isValid else { return }
 
         store.stageSnapshot(snapshot, for: key, at: Date())
@@ -176,6 +184,9 @@ final class ChatResumeCoordinator {
         pendingFlushTask = Task { [weak self] in
             do {
                 try await Task.sleep(for: .milliseconds(300))
+                while holdWhile?() == true {
+                    try await Task.sleep(for: .milliseconds(250))
+                }
             } catch {
                 return
             }
