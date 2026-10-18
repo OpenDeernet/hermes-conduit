@@ -8,10 +8,11 @@ final class SecurityBoundaryTests: XCTestCase {
         let appTransportSecurity = try XCTUnwrap(
             appInfo["NSAppTransportSecurity"] as? [String: Any]
         )
-        // Raw IPs (Tailscale 100.64.0.0/10, LAN) rely on local networking:
-        // exception-domain keys match names only, so a CIDR key would be inert.
+        // Exception-domain keys match host names only, so a CIDR key such as
+        // 100.64.0.0/10 is inert; plain HTTP to raw IPs depends on local
+        // networking, and MagicDNS names use the ts.net exception.
         XCTAssertEqual(appTransportSecurity["NSAllowsLocalNetworking"] as? Bool, true)
-        XCTAssertNil(appTransportSecurity["NSAllowsArbitraryLoads"])
+        XCTAssertNotEqual(appTransportSecurity["NSAllowsArbitraryLoads"] as? Bool, true)
         let exceptionDomains = try XCTUnwrap(
             appTransportSecurity["NSExceptionDomains"] as? [String: Any]
         )
