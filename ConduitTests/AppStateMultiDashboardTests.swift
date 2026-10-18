@@ -838,6 +838,11 @@ extension AppStateMultiDashboardTests {
         XCTAssertEqual(FinishSetupStatus.plugin(NotifierPluginStatus(state: .unknown), updating: false), .unknown)
         XCTAssertEqual(FinishSetupStatus.plugin(NotifierPluginStatus(state: .predatesCapabilities), updating: false), .install)
         XCTAssertEqual(FinishSetupStatus.plugin(NotifierPluginStatus(state: .predatesCapabilities), updating: true), .updating)
+        var listedOld = NotifierPluginStatus(state: .predatesCapabilities)
+        listedOld.hostCopy = .old
+        XCTAssertEqual(FinishSetupStatus.plugin(listedOld, updating: false), .update)
+        listedOld.hostCopy = .missing
+        XCTAssertEqual(FinishSetupStatus.plugin(listedOld, updating: false), .install)
         XCTAssertEqual(FinishSetupStatus.plugin(NotifierPluginStatus(state: reported, runtime: running), updating: false), .done)
         XCTAssertEqual(
             FinishSetupStatus.plugin(NotifierPluginStatus(

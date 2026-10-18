@@ -145,7 +145,7 @@ struct ConduitPluginSettingsDetail: View {
             ConduitSettingsSection(title: AppLocalization.string("Do it manually"), symbol: "terminal", tint: .conduitAura) {
                 DisclosureGroup(isExpanded: $showsCommands) {
                     VStack(alignment: .leading, spacing: 12) {
-                        if case .predatesCapabilities = status.state {
+                        if status.offersInstall {
                             NotificationSetupCommand(step: 1, title: AppLocalization.string("Install the notifier"), command: "hermes plugins install \(NotifierPluginStatus.repository) --enable")
                         } else {
                             NotificationSetupCommand(step: 1, title: AppLocalization.string("Update the notifier"), command: "hermes plugins update conduit_push")
@@ -178,8 +178,7 @@ struct ConduitPluginSettingsDetail: View {
     }
 
     private func isInstall(_ status: NotifierPluginStatus) -> Bool {
-        if case .predatesCapabilities = status.state { return true }
-        return false
+        status.offersInstall
     }
 
     private func showsAction(_ status: NotifierPluginStatus, update: NotifierPluginUpdateState) -> Bool {
@@ -432,21 +431,23 @@ struct NotifierPluginUpdateBanner: View {
         .notifierPluginUpdateConfirmation(isPresented: $confirming, install: isInstall)
     }
 
-    private var isInstall: Bool {
-        if case .predatesCapabilities = appState.notifierPlugin.state { return true }
-        return false
-    }
+    private var isInstall: Bool { appState.notifierPlugin.offersInstall }
 
     private var banner: some View {
         let update = appState.activeNotifierPluginUpdate
         let status = appState.notifierPlugin
         let row = NotifierPluginUpdateStatusView.row(for: update, plugin: status)
+        let offer = appState.notifierPluginNoticeOffer
         // Updated on the host already: only the restart is left.
-        let restartOnly = status.restartPending && !status.updateAvailable
-        let offer = restartOnly
-            ? AppLocalization.string("\(AppLocalization.string("Conduit plugin")) · Restart to finish updating")
-            : AppLocalization.string("Conduit plugin \(status.offeredVersion) is available")
-        let text = row?.title ?? offer
+        let restartOnly = offer == .restart
+        let offerText = switch offer {
+        case .restart: AppLocalization.string("\(AppLocalization.string("Conduit plugin")) · Restart to finish updating")
+        // Out of date too, when the host couldn't list its plugins.
+        case .install: "\(AppLocalization.string("Conduit plugin")) · "
+            + (status.hostCopy == .missing ? AppLocalization.string("Not installed") : AppLocalization.string("Not installed or out of date"))
+        case .update, .none: AppLocalization.string("Conduit plugin \(status.offeredVersion) is available")
+        }
+        let text = row?.title ?? offerText
         return HStack(spacing: 10) {
             if row != nil, row?.symbol == nil {
                 ProgressView().controlSize(.small)
@@ -475,7 +476,8 @@ struct NotifierPluginUpdateBanner: View {
             }
             if update == .idle {
                 Button { confirming = true } label: {
-                    Text(restartOnly ? AppLocalization.string("Finish Update") : AppLocalization.string("Update"))
+                    Text(restartOnly ? AppLocalization.string("Finish Update")
+                        : offer == .install ? AppLocalization.string("Install") : AppLocalization.string("Update"))
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }

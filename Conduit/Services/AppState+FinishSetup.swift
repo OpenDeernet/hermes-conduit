@@ -17,7 +17,7 @@ struct FinishSetupStatus: Equatable {
         /// The host hasn't answered yet.
         case unknown
         case updating
-        /// Missing, or too old to say what it serves.
+        /// Missing, or too old to say what it serves (`offersInstall`).
         case install
         case update
         /// The new plugin is on the host and waits for Hermes to restart.
@@ -42,7 +42,7 @@ struct FinishSetupStatus: Equatable {
         if updating { return .updating }
         switch status.state {
         case .unknown: return .unknown
-        case .predatesCapabilities: return .install
+        case .predatesCapabilities: return status.offersInstall ? .install : .update
         case .reported:
             if status.updateAvailable { return .update }
             if status.restartPending { return .restart }

@@ -138,15 +138,23 @@ extension AppState {
 
     static let dismissedPluginUpdateKey = "conduit.notifierPlugin.dismissedUpdateVersion"
 
-    /// The notice over the main screen: an update is offered, or one is
-    /// running or just ended. "Not now" hides it on this dashboard until a
-    /// newer plugin is offered.
+    /// The notice over the main screen: an update (or the install) is
+    /// offered, or one is running or just ended. "Not now" hides it on this
+    /// dashboard until a newer plugin is offered.
     var showsNotifierPluginUpdateNotice: Bool {
         if activeNotifierPluginUpdate != .idle { return true }
         // A plugin already on the host that waits for a restart is offered
         // too: Update finishes it.
-        guard notifierPlugin.updateAvailable || notifierPlugin.restartPending else { return false }
+        guard notifierPluginNoticeOffer != .none else { return false }
         return !dismissedPluginUpdates.contains(pluginUpdateDismissalToken)
+    }
+
+    /// What the notice offers. While Finish setting up is pending for this
+    /// dashboard, its plugin row on Chats is the one place that offers the
+    /// install.
+    var notifierPluginNoticeOffer: NotifierPluginNoticeOffer {
+        let finishingSetup = activeDashboardID.map(dashboardsFinishingSetup.contains) ?? false
+        return notifierPlugin.noticeOffer(finishSetupOffersInstall: finishingSetup && V2ShellPreference.isOn)
     }
 
     /// "Not now" belongs to one dashboard and one offered version.
