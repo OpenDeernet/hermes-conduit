@@ -1370,7 +1370,9 @@ final class PushNotificationService: ObservableObject {
             waiters.forEach { $0.resume() }
         }
         let body = TokenChallengeRequest(bundleID: bundleID, deviceToken: deviceToken, environment: "production")
-        let request = try jsonRequest(path: "/v1/token-challenges", method: "POST", body: body)
+        var request = try jsonRequest(path: "/v1/token-challenges", method: "POST", body: body)
+        // The whole proof stays near the push wait, not URLSession's minute.
+        request.timeoutInterval = 15
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response, data: data)
         // The push can beat the relay's answer.
