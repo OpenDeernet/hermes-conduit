@@ -223,18 +223,24 @@ final class ConnectionSetupSettingsUITests: XCTestCase {
         element.tap()
     }
 
-    /// The Connection Setup row, scrolled to the bottom of Settings, can sit
-    /// with its centre under the floating tab bar, where a centre tap
-    /// selects the tab instead: tap its upper part.
+    /// The floating tab bar covers the bottom of Settings: the Connection
+    /// Setup row can be hittable while part of it sits under the bar, and a
+    /// tap there selects a tab instead (two Nightly runs, at different
+    /// scroll positions). Scroll until the whole row is above the bar.
     private func openConnectionSetup(_ app: XCUIApplication) {
         let row = app.buttons[Identity.settingsRow]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let barTop = app.buttons["Settings"].firstMatch.frame.minY
         for _ in 0..<6 {
-            if row.isHittable { break }
+            if row.isHittable, row.frame.maxY < barTop - 8 { break }
             app.swipeUp()
         }
         XCTAssertTrue(row.isHittable)
-        row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        XCTAssertLessThan(
+            row.frame.maxY, barTop - 8,
+            "Connection Setup row still reaches under the tab bar. Tree:\n\(app.debugDescription)"
+        )
+        row.tap()
     }
 
     private func dismissKeyboard(_ app: XCUIApplication) {
