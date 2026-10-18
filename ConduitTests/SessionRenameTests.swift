@@ -298,6 +298,31 @@ final class SessionRenameTests: XCTestCase {
         XCTAssertNil(appState.pinSyncNotice)
     }
 
+    func testDeleteDuringAnotherChangeSaysToWait() async {
+        let appState = AppState(loadSavedConnection: false)
+        let session = makeSession(profile: appState.activeProfile)
+        appState.sessions = [session]
+        var release: CheckedContinuation<Void, Never>?
+        appState.widgetSessionMutationRequestOverride = { _, method, _ in
+            if method == "GET" { return ["runtime_revision": 3, "runtime_generation": 1] }
+            await withCheckedContinuation { release = $0 }
+            return ["ok": true]
+        }
+
+        let archive = Task { await appState.archiveSession(session) }
+        while !appState.isSessionMutationInFlight(session) || release == nil { await Task.yield() }
+        let deleted = await appState.deleteSession(session)
+
+        XCTAssertFalse(deleted)
+        XCTAssertEqual(
+            appState.pinSyncNotice?.message,
+            "Wait for the current conversation change to finish, then try again."
+        )
+        release?.resume()
+        let archived = await archive.value
+        XCTAssertTrue(archived)
+    }
+
     func testArchiveWithoutHermesSaysToReconnect() async {
         let appState = AppState(loadSavedConnection: false)
         let session = makeSession(profile: appState.activeProfile)

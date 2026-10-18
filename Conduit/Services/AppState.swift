@@ -16836,9 +16836,9 @@ final class AppState: ObservableObject {
             title,
             currentTitle: session.title
         ),
-              sessionMutationID == nil,
               sessionBelongsToProfile(session, profile: activeProfile),
-              sessionRenameOperationsOverride != nil || dashboardTicketBridge != nil else { return false }
+              sessionMutationCanStart(hasTransport: sessionRenameOperationsOverride != nil || dashboardTicketBridge != nil)
+        else { return false }
 
         let profile = activeProfile
         let knownIDs = [session.id] + session.alternateIds
@@ -16929,6 +16929,7 @@ final class AppState: ObservableObject {
             } else if let dashboardTicketBridge {
                 try await sendSessionMutation(session.id, body: nil, profile: profile, bridge: dashboardTicketBridge)
             } else {
+                showSessionMutationNotice(AppLocalization.string("Reconnect to Hermes to change this conversation."))
                 return false
             }
             guard profile == activeProfile else { return false }
@@ -16959,8 +16960,8 @@ final class AppState: ObservableObject {
         sessionMutationID == session.id
     }
 
-    /// Whether an archive or delete may start now; says why not when it
-    /// can't, instead of the tap doing nothing.
+    /// Whether an archive, delete or rename may start now; says why not
+    /// when it can't, instead of the tap doing nothing.
     private func sessionMutationCanStart(hasTransport: Bool) -> Bool {
         guard sessionMutationID == nil else {
             showSessionMutationNotice(AppLocalization.string("Wait for the current conversation change to finish, then try again."))
