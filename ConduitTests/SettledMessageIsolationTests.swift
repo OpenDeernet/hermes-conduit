@@ -245,13 +245,27 @@ final class SettledMessageIsolationTests: XCTestCase {
         testWindow = window
         XCTAssertTrue(PerformanceFixtureWait.settleUntilCountersQuiet(quietFor: 1.0), "the mount never settled")
 
-        TranscriptPerf.reset()
-        appState.objectWillChange.send()
-        drainUntil(0.5) { false }
-        XCTAssertEqual(
-            TranscriptPerf.composerBarBodyEvaluations, 0,
-            "a publish that changes nothing the composer shows must not redraw it, though its parent redraws"
-        )
+        // A fresh AppState can still finish its own startup work after the
+        // mount settles (seen on a loaded runner): a window in which what
+        // the composer shows changed is not a no-change publish, and its
+        // redraw is correct, so that window is measured again.
+        var measured = false
+        for _ in 0..<3 where !measured {
+            let shown = ComposerInputs(appState)
+            TranscriptPerf.reset()
+            appState.objectWillChange.send()
+            drainUntil(0.5) { false }
+            guard ComposerInputs(appState) == shown else {
+                PerformanceFixtureWait.settleUntilCountersQuiet(quietFor: 1.0)
+                continue
+            }
+            measured = true
+            XCTAssertEqual(
+                TranscriptPerf.composerBarBodyEvaluations, 0,
+                "a publish that changes nothing the composer shows must not redraw it, though its parent redraws"
+            )
+        }
+        XCTAssertTrue(measured, "what the composer shows kept changing; no window measured a no-change publish")
 
         appState.composerNotice = "Reconnecting"
         drainUntil(2.0) { TranscriptPerf.composerBarBodyEvaluations > 0 }
