@@ -49,12 +49,14 @@ tests)
   ;;
 probe)
   # Interleaved: the first process in a job runs slower.
-  run_probe warm TEST_RUNNER_PROBE_CONFIG=gated
-  run_probe markdown TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=markdown
-  run_probe rich TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=rich
-  run_probe rich-stacks TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=rich TEST_RUNNER_PROBE_STACKS=1
-  run_probe markdown-stacks TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=markdown TEST_RUNNER_PROBE_STACKS=1
-  for name in markdown rich rich-stacks markdown-stacks; do
+  run_probe warm TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=rich
+  run_probe base-1 TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=rich
+  run_probe noshadow-1 TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=rich TEST_RUNNER_PROBE_SWITCHES=noshadow
+  run_probe still-1 TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=rich TEST_RUNNER_PROBE_SWITCHES=stillbackdrop
+  run_probe base-2 TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=rich
+  run_probe both-1 TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=rich TEST_RUNNER_PROBE_SWITCHES=noshadow,stillbackdrop
+  run_probe stacks TEST_RUNNER_PROBE_CONFIG=gated TEST_RUNNER_PROBE_TRANSCRIPT=rich TEST_RUNNER_PROBE_STACKS=1
+  for name in base-1 noshadow-1 still-1 base-2 both-1 stacks; do
     echo "===== $name"
     grep -E "PUBLISH_PROBE|SCROLL_PROBE stacks|^Test Case .*(passed|failed)" "probe-$name.log" || tail -n 30 "probe-$name.log"
     awk '/: error: /{p=1} p{print; n++} n>=30{exit}' "probe-$name.log"

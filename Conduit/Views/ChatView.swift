@@ -1209,7 +1209,7 @@ struct UserMessageContent: View, Equatable {
                         endPoint: .bottomTrailing
                     )
                 )
-                .shadow(color: Color.conduitAccent.opacity(0.16), radius: 14, y: 6)
+                .shadow(color: Color.conduitAccent.opacity(ChatProbeSwitches.noBubbleShadow ? 0 : 0.16), radius: ChatProbeSwitches.noBubbleShadow ? 0 : 14, y: ChatProbeSwitches.noBubbleShadow ? 0 : 6)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 21, style: .continuous)
@@ -3680,4 +3680,10 @@ extension View {
         background(tint, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .settingsCard(cornerRadius: cornerRadius)
     }
+}
+
+/// PROBE ONLY (removed before merge): A/B switches for the scroll probe.
+enum ChatProbeSwitches {
+    nonisolated(unsafe) static var noBubbleShadow = false
+    nonisolated(unsafe) static var stillBackdrop = false
 }

@@ -1,5 +1,6 @@
 import Combine
 import Darwin
+import ObjectiveC
 import QuartzCore
 import SwiftUI
 import UIKit
@@ -37,10 +38,17 @@ extension TranscriptPerformanceFixtureTests {
         appState.sessions = (0..<600).map { row("chat-\($0)", $0 % 7 == 0 ? .voice : .chat, $0) }
         appState.cronSessions = (0..<2000).map { row("cron-\($0)", .cron, $0) }
         let transcript = environment["PROBE_TRANSCRIPT"] ?? "markdown"
+        let switches = environment["PROBE_SWITCHES"] ?? ""
+        ChatProbeSwitches.noBubbleShadow = switches.contains("noshadow")
+        ChatProbeSwitches.stillBackdrop = switches.contains("stillbackdrop")
+        defer {
+            ChatProbeSwitches.noBubbleShadow = false
+            ChatProbeSwitches.stillBackdrop = false
+        }
         appState.messages = transcript == "rich" ? Self.publishProbeRichTranscript(turns: 30) : Self.markdownTranscript(count: 120)
         appState.activeSessionId = "chat-0"
         appState.showSidebar = false
-        print("PUBLISH_PROBE setup config=\(config) transcript=\(transcript) messages=\(appState.messages.count) chats=\(appState.sessions.count) runs=\(appState.cronSessions.count)")
+        print("PUBLISH_PROBE setup config=\(config) switches=\(switches) transcript=\(transcript) messages=\(appState.messages.count) chats=\(appState.sessions.count) runs=\(appState.cronSessions.count)")
 
         let host = UIHostingController(rootView: DormancyHarnessEnvironment.applying(
             PublishProbeCoveredChat(appState: appState, showsList: config == "gated" || config == "ungated")
@@ -139,32 +147,52 @@ extension TranscriptPerformanceFixtureTests {
             print("PUBLISH_PROBE \(config) \(phase) " + line("otherFrames", result.other))
         }
 
-        // Warm up once, then still; then flings up from the bottom to the
-        // top with no publishes, as a thumb does: each starts at 60 pt a
-        // frame and slows by 5% a frame.
+        // Warm up once, then still. Then, with no publishes: flings up from
+        // the bottom to the top as a thumb does (each starts at 60 pt a
+        // frame and slows by 5% a frame), flings back down, flings up again
+        // over rows seen once, and a slow 4 pt-a-frame drag up from the
+        // bottom.
         _ = frames(60, delta: 0, every: 6)
         report("still", frames(360, delta: 0, every: 12))
-        print(String(format: "PUBLISH_PROBE %@ contentHeight=%.0f offset=%.0f", config, scrollView.contentSize.height, scrollView.contentOffset.y))
+        PublishProbeLayerCensus.install()
         engine.userDragBegan()
-        sampling = true
-        var flingFrames: [Double] = []
-        for _ in 0..<40 where scrollView.contentOffset.y > 0 {
-            var speed: CGFloat = 60
-            let result = frames(90, every: 0) { _ in
-                guard scrollView.contentOffset.y > 0 else { return nil }
-                speed *= 0.95
-                return -max(speed, 2)
+        func fling(_ name: String, up: Bool) {
+            PublishProbeLayerCensus.reset()
+            let start = allFrames.count
+            var collected: [Double] = []
+            let atEnd = { up ? scrollView.contentOffset.y <= 0
+                : scrollView.contentOffset.y >= scrollView.contentSize.height - scrollView.bounds.height }
+            for _ in 0..<60 where !atEnd() {
+                var speed: CGFloat = 60
+                collected += frames(90, every: 0) { _ in
+                    guard !atEnd() else { return nil }
+                    speed *= 0.95
+                    let step = max(speed, 2)
+                    return up ? -step : min(step, scrollView.contentSize.height - scrollView.bounds.height - scrollView.contentOffset.y)
+                }.other
             }
-            flingFrames += result.other
+            report(name, (publish: [], other: collected))
+            let slow = allFrames[start...].filter { $0.milliseconds > 16.7 }
+            print("PUBLISH_PROBE \(config) \(name) slowFrames=\(slow.count) " + slow.prefix(40).map { String(format: "%ld:%.0f", $0.index, $0.milliseconds) }.joined(separator: " "))
+            PublishProbeLayerCensus.print(name)
         }
-        sampling = false
-        report("fling-up", (publish: [], other: flingFrames))
+        sampling = true
+        fling("fling-up-first", up: true)
         print(String(format: "PUBLISH_PROBE %@ after-fling contentHeight=%.0f offset=%.0f", config, scrollView.contentSize.height, scrollView.contentOffset.y))
-        let slow = allFrames.filter { $0.milliseconds > 16.7 }
-        print("PUBLISH_PROBE \(config) fling-up slowFrames " + slow.map { String(format: "%ld:%.0f", $0.index, $0.milliseconds) }.joined(separator: " "))
+        sampling = false
+        fling("fling-down", up: false)
+        fling("fling-up-again", up: true)
+        fling("fling-down-again", up: false)
+        PublishProbeLayerCensus.reset()
+        let dragStart = allFrames.count
+        sampling = true
+        report("slow-drag-up", frames(600, delta: -4, every: 0))
+        sampling = false
+        print("PUBLISH_PROBE \(config) slow-drag-up slowFrames " + allFrames[dragStart...].filter { $0.milliseconds > 16.7 }.map { String(format: "%ld:%.0f", $0.index, $0.milliseconds) }.joined(separator: " "))
+        PublishProbeLayerCensus.print("slow-drag-up")
         if let sampler {
             sampler.stop()
-            sampler.printReport(phases: [(name: "fling-up", frames: allFrames, slowest: 6)])
+            sampler.printReport(phases: [(name: "scrolling", frames: allFrames, slowest: 5)])
         }
         engine.userDragEnded()
         XCTAssertGreaterThan(scrollView.contentSize.height, 0)
@@ -219,6 +247,67 @@ private struct PublishProbeCoveredChat: View {
                 }
             }
         }
+    }
+}
+
+/// Counts `-[RBLayer display]` calls (SwiftUI's drawn layers) by the views
+/// that hold them, and the time each owner's displays take.
+private enum PublishProbeLayerCensus {
+    nonisolated(unsafe) static var entries: [String: (count: Int, ms: Double, maxArea: Double)] = [:]
+    nonisolated(unsafe) static var installed = false
+
+    static func install() {
+        guard !installed else { return }
+        installed = true
+        guard let rbClass = NSClassFromString("RBLayer"),
+              let method = class_getInstanceMethod(rbClass, #selector(CALayer.display)) else {
+            Swift.print("PUBLISH_PROBE census no RBLayer display")
+            return
+        }
+        typealias Display = @convention(c) (AnyObject, Selector) -> Void
+        let original = unsafeBitCast(method_getImplementation(method), to: Display.self)
+        let replacement: @convention(block) (AnyObject) -> Void = { object in
+            let start = CACurrentMediaTime()
+            original(object, #selector(CALayer.display))
+            let ms = (CACurrentMediaTime() - start) * 1000
+            guard let layer = object as? CALayer else { return }
+            let key = describe(layer)
+            var entry = entries[key] ?? (0, 0, 0)
+            entry.count += 1
+            entry.ms += ms
+            entry.maxArea = max(entry.maxArea, Double(layer.bounds.width * layer.bounds.height))
+            entries[key] = entry
+        }
+        method_setImplementation(method, imp_implementationWithBlock(replacement))
+    }
+
+    static func reset() { entries = [:] }
+
+    static func print(_ phase: String) {
+        let total = entries.values.reduce(0) { $0 + $1.ms }
+        let count = entries.values.reduce(0) { $0 + $1.count }
+        Swift.print(String(format: "PUBLISH_PROBE census %@ displays=%ld totalMs=%.1f", phase, count, total))
+        for (key, entry) in entries.sorted(by: { $0.value.ms > $1.value.ms }).prefix(12) {
+            Swift.print(String(format: "PUBLISH_PROBE census %@ n=%ld ms=%.1f maxArea=%.0f %@", phase, entry.count, entry.ms, entry.maxArea, key))
+        }
+    }
+
+    private static func describe(_ layer: CALayer) -> String {
+        var current: CALayer? = layer
+        var depth = 0
+        while let candidate = current, !(candidate.delegate is UIView) {
+            current = candidate.superlayer
+            depth += 1
+        }
+        var names: [String] = []
+        var inScroll = false
+        var view = current?.delegate as? UIView
+        while let shown = view {
+            if shown is UIScrollView { inScroll = true }
+            if names.count < 4 { names.append(String(String(describing: type(of: shown)).prefix(48))) }
+            view = shown.superview
+        }
+        return (inScroll ? "inScroll " : "outside ") + "up\(depth) " + names.joined(separator: " < ")
     }
 }
 
