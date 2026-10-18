@@ -93,7 +93,9 @@ struct SpokenVisualSplitter {
         let newline = ended ? "\n" : ""
         if let open = fence {
             visual.append(line)
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix(open) { fence = nil }
+            // Only a bare marker closes it; ```bash inside a block is content.
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let marker = open.first, trimmed.hasPrefix(open), trimmed.allSatisfy({ $0 == marker }) { fence = nil }
             return ""
         }
         if !lineIsProse, let kind = Self.blockKind(line.trimmingCharacters(in: .whitespaces)) {

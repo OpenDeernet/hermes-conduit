@@ -9835,6 +9835,7 @@ final class AppState: ObservableObject {
         voiceSheetShouldAutoListen = false
         voiceControllerSessionProfile = nil
         showVoiceSheet = false
+        clearClassicVoiceCards()
     }
 
     /// Internal so the saved-dashboard migration can normalize the legacy
@@ -11137,6 +11138,7 @@ final class AppState: ObservableObject {
         voiceSheetShouldAutoListen = false
         voiceControllerSessionProfile = nil
         showVoiceSheet = false
+        clearClassicVoiceCards()
         voiceCapabilitySnapshot = .unavailable
         isVoiceEnabled = false
         voiceTranscriptionMode = .hermes
@@ -11943,6 +11945,7 @@ final class AppState: ObservableObject {
         stopGrokLiveConversation()
         stopLocalLiveConversation()
         showVoiceSheet = false
+        clearClassicVoiceCards()
         projects = []
         supportsProjects = false
         projectsLoading = false
@@ -24341,6 +24344,7 @@ final class AppState: ObservableObject {
             stopLocalLiveConversation()
             retireVoiceBackgroundJobs()
             showVoiceSheet = false
+            clearClassicVoiceCards()
             suspendedVoiceConversation = nil
             voiceSheetShouldAutoListen = false
             voiceControllerSessionProfile = nil
@@ -24607,6 +24611,7 @@ final class AppState: ObservableObject {
         stopLocalLiveConversation()
         retireVoiceBackgroundJobs()
         showVoiceSheet = false
+        clearClassicVoiceCards()
         suspendedVoiceConversation = nil
         voiceSheetShouldAutoListen = false
         voiceControllerSessionProfile = nil
@@ -28203,6 +28208,7 @@ final class AppState: ObservableObject {
             voiceSheetShouldAutoListen = false
             voiceControllerSessionProfile = nil
             showVoiceSheet = false
+            clearClassicVoiceCards()
         }
         return true
     }
@@ -29019,13 +29025,19 @@ final class AppState: ObservableObject {
         suspendVoiceConversationForBackground()
     }
 
+    /// Drops the Classic voice card sheet and anything waiting to join it,
+    /// so nothing from the old call, account or profile shows afterwards.
+    func clearClassicVoiceCards() {
+        classicVoiceCard = nil
+        classicVoiceCardParts = []
+    }
+
     func closeVoiceConversation() {
         // Explicit Close (button, swipe, spoken End Conversation) beats any
         // lifecycle suspension: the conversation is not restorable.
         suspendedVoiceConversation = nil
         voiceSheetShouldAutoListen = false
-        classicVoiceCard = nil
-        classicVoiceCardParts = []
+        clearClassicVoiceCards()
         // Live-mute persistence obeys the PR #159 authority rule: the
         // controller's mute wins only for the profile that owns the session.
         // A same-profile close that arrives after the controller was

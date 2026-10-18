@@ -525,6 +525,11 @@ extension VoiceConversationControllerTests {
         var exclaimed = SpokenVisualSplitter()
         XCTAssertEqual(exclaimed.feed("Hello!"), "Hello!")
         XCTAssertEqual(exclaimed.feed(" See !"), " See ")
+        // A fence opened with a language inside a block is content, not its end.
+        var nested = SpokenVisualSplitter()
+        XCTAssertEqual(nested.feed("```markdown\n```bash\nls\n"), "", "ls is still inside the block")
+        XCTAssertEqual(nested.feed("```\nAfter.\n"), "After.\n")
+        XCTAssertEqual(nested.visualMarkdown, "```markdown\n```bash\nls\n```")
 
         for size in 1...9 {
             let parts = split(every: size)
