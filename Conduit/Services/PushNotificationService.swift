@@ -1360,6 +1360,8 @@ final class PushNotificationService: ObservableObject {
         while awaitingTokenChallenge {
             await withCheckedContinuation { tokenProofWaiters.append($0) }
         }
+        // A caller that gave up while it waited doesn't start a proof.
+        try Task.checkCancellation()
         awaitingTokenChallenge = true
         receivedTokenChallenge = nil
         defer {
