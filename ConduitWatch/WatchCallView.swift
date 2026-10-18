@@ -243,10 +243,10 @@ struct WatchCallCaptions: View {
                     // No line limit here, so a cut that needs more lines
                     // than fit measures taller and is passed over instead
                     // of losing its newest words to tail truncation.
-                    ForEach(Self.budgets, id: \.self) { limit in
-                        line(Self.newestWords(of: current, limit: limit))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    candidate(current, limit: 84)
+                    candidate(current, limit: 70)
+                    candidate(current, limit: 56)
+                    candidate(current, limit: 42)
                     // Past the shortest cut (the largest text), the oldest
                     // words go, and the text may shrink a little.
                     line(Self.newestWords(of: current, limit: Self.shortestBudget))
@@ -264,11 +264,15 @@ struct WatchCallCaptions: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: current)
     }
 
-    /// Caption lengths to try, longest first: about three lines on an
-    /// Ultra down to two short ones. A rough guide only: the fit check
-    /// picks among them.
-    private static let budgets = [84, 70, 56, 42]
+    /// The shortest cut. The cuts tried before it, from about three lines
+    /// on an Ultra down to two short ones, are a rough guide only: the fit
+    /// check picks among them.
     private static let shortestBudget = 28
+
+    private func candidate(_ text: String, limit: Int) -> some View {
+        line(Self.newestWords(of: text, limit: limit))
+            .fixedSize(horizontal: false, vertical: true)
+    }
 
     private func line(_ text: String) -> some View {
         Text(verbatim: text)
