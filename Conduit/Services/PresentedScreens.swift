@@ -48,11 +48,15 @@ struct PresentedCard: Identifiable, Equatable {
     let title: String
     /// What to show, as Markdown.
     let markdown: String
+    /// Maps and places drawn above the Markdown, as the card schema
+    /// normalized them.
+    let cards: [[String: Any]]
 
-    init(id: String, title: String, markdown: String) {
+    init(id: String, title: String, markdown: String, cards: [[String: Any]] = []) {
         self.id = id
         self.title = title
         self.markdown = markdown
+        self.cards = cards
     }
 
     init?(json: Any?) {
@@ -60,8 +64,17 @@ struct PresentedCard: Identifiable, Equatable {
               let id = entry["id"] as? String, !id.isEmpty,
               let markdown = (entry["markdown"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !markdown.isEmpty else { return nil }
+        let cards = RichCardSchema.bundled?.normalizeCards(entry["cards"]) ?? []
+        // Markdown that's only the cards' own text (plugin 0.45.1+) would
+        // show the places twice beside the drawn cards.
+        let isFallback = !cards.isEmpty && entry["fallback"] as? Bool == true
         self.init(id: id, title: (entry["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-                  markdown: markdown)
+                  markdown: isFallback ? "" : markdown, cards: cards)
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id && lhs.title == rhs.title && lhs.markdown == rhs.markdown
+            && RichCard.cards(lhs.cards) == RichCard.cards(rhs.cards)
     }
 }
 
@@ -179,9 +192,11 @@ final class PresentedScreensSync: ObservableObject {
     static let path = "/api/plugins/conduit_push/present/exchange"
     static let capability = "present-v1"
     /// What this Conduit does with a confirmation beyond showing it, told to
-    /// the host in each exchange.
-    /// "show-cards": the cards `conduit_show` puts on a voice call's screen.
-    static let features = ["maps-navigate", "show-cards"]
+    /// the host in each exchange. "show-cards": it shows the cards
+    /// `conduit_show` puts on a voice call's screen. "chat-cards": it draws
+    /// conduit_show's map and place cards in a chat, so the host offers the
+    /// tool there too.
+    static let features = ["maps-navigate", "show-cards", "chat-cards"]
     /// Card ids remembered as seen, so a card is shown at most once.
     private static let maxSeenCards = 200
     private static let resultsKey = "conduit.presentedScreens.results.v1"

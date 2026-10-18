@@ -99,7 +99,7 @@ extension AppStateVoiceCapabilityTests {
             sent = body
             return ["ok": true, "prompts": []]
         }
-        XCTAssertEqual(sent["features"] as? [String], ["maps-navigate", "show-cards"])
+        XCTAssertEqual(sent["features"] as? [String], ["maps-navigate", "show-cards", "chat-cards"])
     }
 
     func testMapsOpensWithDirectionsFromALinkOnlyItMade() throws {
@@ -150,5 +150,20 @@ extension AppStateVoiceCapabilityTests {
         // Another host or profile starts over.
         await sync.sync(scope: "host|bot", profile: "bot", installationID: "install-1", request: exchange)
         XCTAssertEqual(handed, [["new"]])
+    }
+
+    func testAHermesCardDrawsItsPlacesAndLeavesOutTheirOwnText() throws {
+        let map: [String: Any] = ["type": "map", "places": [["name": "Kin Khao", "lat": 37.7853, "lon": -122.4089]]]
+        let drawn = try XCTUnwrap(PresentedCard(json: [
+            "id": "dinner", "title": "Dinner", "markdown": "- **Kin Khao**", "cards": [map], "fallback": true,
+        ]))
+        XCTAssertEqual(drawn.cards.count, 1)
+        XCTAssertEqual(drawn.markdown, "", "the places' own text would show them twice")
+
+        let written = try XCTUnwrap(PresentedCard(json: [
+            "id": "plan", "title": "Plan", "markdown": "| a |", "cards": [map],
+        ]))
+        XCTAssertEqual(written.markdown, "| a |", "what Hermes wrote shows beside the cards")
+        XCTAssertNotEqual(drawn, PresentedCard(id: "dinner", title: "Dinner", markdown: ""), "the cards count")
     }
 }

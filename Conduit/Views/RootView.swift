@@ -245,7 +245,7 @@ struct MainView: View {
                 .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
                 // What Hermes put on screen (conduit_show), over the conversation.
                 .sheet(item: $appState.classicVoiceCard) { card in
-                    LiveVoiceScreenCardSheet(title: card.title, markdown: card.markdown)
+                    LiveVoiceScreenCardSheet(title: card.title, markdown: card.markdown, cards: RichCard.cards(card.cards))
                         .environmentObject(appState)
                         .presentationDetents([.medium, .large])
                 }

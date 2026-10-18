@@ -70,7 +70,7 @@ extension AppState {
         var unshown: [PresentedCard] = []
         for card in cards {
             let shown = voiceBackgroundJobSupervisor.showOnScreen(
-                title: card.title, markdown: card.markdown, evenIfHidden: true)
+                title: card.title, markdown: card.markdown, cards: card.cards, evenIfHidden: true)
             if shown == nil { unshown.append(card) }
         }
         guard showVoiceSheet, !unshown.isEmpty else { return }
@@ -85,7 +85,8 @@ extension AppState {
         classicVoiceCard = PresentedCard(
             id: parts.map(\.id).joined(separator: "+"),
             title: String(title.prefix(VoiceBackgroundJobSupervisor.maximumTitleCharacters)),
-            markdown: VoiceBackgroundJobSupervisor.clippedScreenMarkdown(markdown)
+            markdown: VoiceBackgroundJobSupervisor.clippedScreenMarkdown(markdown),
+            cards: parts.flatMap(\.cards)
         )
     }
 
