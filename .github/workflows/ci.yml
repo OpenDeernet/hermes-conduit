@@ -212,11 +212,11 @@ jobs:
     name: Smoke
     needs: plan
     runs-on: macos-26
-    # 60: the UI smoke job alone needed 45 (a stalled first attempt plus the
+    # 75: the UI smoke job alone needed 45 (a stalled first attempt plus the
     # one targeted retry ran past 30 minutes, which GitHub reports as
     # "cancelled" instead of a failure), and the unit smoke invocation now
     # runs on the same runner first.
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
 
@@ -350,6 +350,20 @@ jobs:
               echo "::error title=unit smoke failures::$(printf '%s\n' "$failures" | sed 's/%/%25/g' | awk '{printf "%s%s", (NR > 1 ? "%0A" : ""), $0}')"
             fi
             exit 1
+          fi
+
+      - name: Remove the app before UI smoke
+        # The unit classes run inside the app as their test host, so its data
+        # container (defaults, saved chats, files) holds whatever they left.
+        # UI smoke used to get a fresh simulator; uninstalling gives it a
+        # fresh container instead (test-without-building installs the app
+        # again). Keychain items outlive an uninstall on the simulator.
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          if [ -n "${SIMULATOR_UDID:-}" ]; then
+            xcrun simctl uninstall "$SIMULATOR_UDID" com.milim.relay || true
+          else
+            xcrun simctl uninstall booted com.milim.relay || true
           fi
 
       - name: Run the curated UI smoke suite
