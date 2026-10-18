@@ -540,7 +540,8 @@ private struct BotRosterRow: View {
         let preview = bot.canonicalSession?.preview
             ?? bot.lastPreview?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !preview.isEmpty { return PreviewText.plain(preview) }
+        let plain = PreviewText.plain(preview)
+        if !plain.isEmpty { return plain }
         if !detail.isEmpty { return detail }
         return BotMode.canonicalChatTitle
     }
