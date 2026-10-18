@@ -10,7 +10,9 @@
 //
 //  The line was written in the app language of the day, so it is matched
 //  against every shipped language's wording. A line that matches none of
-//  them stays plain text.
+//  them stays plain text. A reply in exactly that shape, ending in an app
+//  link, would draw as a card too; that is accepted, as it opens the same
+//  chat the link would.
 //
 
 import Foundation

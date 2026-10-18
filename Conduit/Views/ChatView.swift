@@ -920,7 +920,8 @@ struct MessageBubble: View, Equatable {
             }
         case .assistant:
             if let note = VoiceJobLinkNote(text: message.content) {
-                // A saved call's job or chat line: a card that opens it.
+                // A saved call's job or chat line: a card that opens it. Not a
+                // reply, so it has no read-aloud or reaction controls.
                 VoiceJobLinkCard(note: note, timestamp: message.timestamp) {
                     openURL(note.link.url)
                 }

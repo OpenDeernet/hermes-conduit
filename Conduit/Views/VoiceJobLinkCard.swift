@@ -53,7 +53,12 @@ struct VoiceJobLinkCard: View {
                     .background(Color.conduitAccent.opacity(0.14), in: Circle())
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
+                    // Time under the kicker at the largest sizes, as the
+                    // button moves under the title.
+                    let header = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                        : AnyLayout(HStackLayout(spacing: 6))
+                    header {
                         Text(verbatim: kicker)
                             .font(.caption2.weight(.bold))
                             .tracking(0.6)

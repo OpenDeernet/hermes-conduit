@@ -31,7 +31,7 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(VoiceJobLinkNote(text: text)?.title, "Fix [CI]: the build.")
     }
 
-    func testLinesThatAreNotAJobNoteStayText() throws {
+    func testLinesThatAreNotAJobNoteStayText() {
         // No link: a job on another profile, or no chat yet.
         XCTAssertNil(VoiceJobLinkNote(text: AppState.voiceJobStartedNote(title: "Late one", sessionID: nil)))
         // A reply that only happens to end in an app link.
