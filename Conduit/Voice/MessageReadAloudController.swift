@@ -241,8 +241,10 @@ final class MessageReadAloudController: ObservableObject {
     func setSpeed(_ speed: ReadAloudSpeed) {
         self.speed = speed
         storeSpeed(speed)
-        guard state != .idle else { return }
-        playback.changeRate(speed.rate)
+        switch state {
+        case .preparing, .playing: playback.changeRate(speed.rate)
+        case .idle, .failed: break
+        }
     }
 
     /// The sentence of the playing reply estimated to be sounding now, as an
@@ -312,7 +314,9 @@ final class MessageReadAloudController: ObservableObject {
             // whatever intent a shared playback instance last claimed.
             playback.ownershipIntent = .standalonePlayback
             playback.keepsRateAdjustable = true
-            playback.playbackRate = playbackRate()
+            // The player shows one of the Read Aloud speeds, so the reply
+            // plays at exactly that one.
+            playback.playbackRate = ReadAloudSpeed.closest(to: playbackRate()).rate
             let stream = try await gateway.openSpeechStream(
                 onStart: { [weak self] sampleRate in
                     guard let self, self.isCurrent(generation) else { return }

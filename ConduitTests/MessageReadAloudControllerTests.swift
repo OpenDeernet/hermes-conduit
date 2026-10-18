@@ -738,10 +738,20 @@ final class MessageReadAloudControllerTests: XCTestCase {
 
     // MARK: - Player (#759)
 
-    /// Yields until the condition holds, for at most 10 s of wall clock.
-    private func waitUntil(_ condition: @MainActor () -> Bool) async {
+    /// Yields until the condition holds, failing after 10 s of wall clock.
+    private func waitUntil(
+        _ condition: @MainActor () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
         let deadline = Date().addingTimeInterval(10)
-        while !condition(), Date() < deadline { await Task.yield() }
+        while !condition() {
+            guard Date() < deadline else {
+                XCTFail("Timed out waiting for the condition", file: file, line: line)
+                return
+            }
+            await Task.yield()
+        }
     }
 
     func testPlayerSpeedRetimesThePlayingReplyAndBecomesTheSetting() async {

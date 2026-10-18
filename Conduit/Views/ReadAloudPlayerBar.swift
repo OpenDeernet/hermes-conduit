@@ -51,7 +51,7 @@ struct ReadAloudPlayerBar: View {
                 showsReading = true
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: controller.isPaused ? "pause.circle" : "text.line.first.and.arrowtriangle.forward")
+                    Image(systemName: "text.line.first.and.arrowtriangle.forward")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Color.conduitAccent)
                         .frame(width: iconWidth)
@@ -172,6 +172,9 @@ struct ReadAloudReadingView: View {
     let reading: MessageReadAloudController.NowReading
     @Environment(\.dismiss) private var dismiss
     @State private var current: Int?
+    /// When the reader last scrolled by hand: following the voice waits a
+    /// few seconds after that, so re-reading isn't snapped back.
+    @State private var lastManualScroll: Date?
 
     private struct Paragraph: Identifiable {
         let id: Int
@@ -212,8 +215,12 @@ struct ReadAloudReadingView: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
                 }
+                .simultaneousGesture(DragGesture(minimumDistance: 8).onChanged { _ in
+                    lastManualScroll = Date()
+                })
                 .onChange(of: current) { _, index in
                     guard let index, reading.script.segments.indices.contains(index) else { return }
+                    if let lastManualScroll, Date().timeIntervalSince(lastManualScroll) < 5 { return }
                     withAnimation(.easeInOut(duration: 0.35)) {
                         proxy.scrollTo(reading.script.segments[index].paragraph, anchor: UnitPoint(x: 0.5, y: 0.35))
                     }
@@ -242,7 +249,9 @@ struct ReadAloudReadingView: View {
                 if index != current {
                     withAnimation(.easeInOut(duration: 0.25)) { current = index }
                 }
-                try? await Task.sleep(for: .milliseconds(150))
+                // Once this reply has ended nothing can move; check rarely in
+                // case it is played again.
+                try? await Task.sleep(for: .milliseconds(isReadingThis ? 150 : 1_000))
             }
         }
     }
@@ -257,7 +266,6 @@ struct ReadAloudReadingView: View {
                 Text(verbatim: code.text)
                     .font(.callout.monospaced())
                     .foregroundStyle(.secondary)
-                    .lineLimit(12)
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -267,7 +275,15 @@ struct ReadAloudReadingView: View {
                 .font(.title3)
                 .lineSpacing(4)
                 .textSelection(.enabled)
+                // The highlight is colour; VoiceOver hears which paragraph
+                // the voice is in.
+                .accessibilityValue(isSpeaking(paragraph) ? Text("Reading aloud") : Text(verbatim: ""))
         }
+    }
+
+    private func isSpeaking(_ paragraph: Paragraph) -> Bool {
+        guard let current else { return false }
+        return paragraph.segments.contains { $0.id == current }
     }
 
     /// The paragraph's sentences as running text: the one being spoken
