@@ -635,7 +635,9 @@ final class GPTLiveConversationController: ObservableObject {
         guard !openingAskedAgain, !audioPaused, !modelTurnActive, lastModelOutputAt == nil, lastUserSpeechAt == nil,
               current.timeIntervalSince(requestedAt) >= Self.openingFallbackDelay,
               let opening = openingPrompt() else { return }
-        openingAskedAgain = session?.appendContext(opening, channel: .speakable, delegationID: nil) == true
+        // Once, sent or not: a channel that refuses it is failing anyway.
+        openingAskedAgain = true
+        session?.appendContext(opening, channel: .speakable, delegationID: nil)
     }
 
     private func clearOpeningHold() {

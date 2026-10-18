@@ -922,6 +922,23 @@ extension VoiceConversationControllerTests {
         XCTAssertTrue(timedSession.speakable.isEmpty, "It was already speaking")
         timed.stop()
 
+        // True silence: the hold runs out and the waiting note goes in.
+        let (expired, expiredSession, expiredSupervisor, _) = makeGPTController(openingPrompt: "[greet]", clock: { current })
+        expiredSupervisor.liveThread = VoiceThreadTarget(runtimeSessionID: "rt-chat", storedSessionID: nil, title: "New chat")
+        expiredSession.briefingApplied = true
+        expiredSession.greetingApplied = true
+        await expired.start()
+        expiredSession.becomeReady()
+        expiredSupervisor.observe(.messageComplete(sessionId: "rt-chat", messageId: "m2", content: "Typed reply.", reasoning: nil))
+        expired.deliverPendingJobUpdates()
+        XCTAssertEqual(expired.pendingContextCountForTesting, 1)
+        current += GPTLiveConversationController.openingHold
+        expired.checkOpening()
+        XCTAssertFalse(expired.isHoldingForOpeningForTesting)
+        XCTAssertEqual(expired.pendingContextCountForTesting, 0, "The note goes in once the hold runs out")
+        XCTAssertTrue(expiredSession.appended.last?.text.contains("Typed reply.") == true)
+        expired.stop()
+
         let (silent, silentSession, _, _) = makeGPTController(clock: { current })
         await silent.start()
         silentSession.becomeReady()
