@@ -34,7 +34,7 @@ struct VoiceJobLinkNote: Equatable {
     }
 
     init?(text: String) {
-        guard text.contains("](\(ConduitAppLink.scheme)://"), !text.contains("\n") else { return nil }
+        guard text.range(of: "](\(ConduitAppLink.scheme)://", options: .caseInsensitive) != nil, !text.contains("\n") else { return nil }
         let range = NSRange(text.startIndex..., in: text)
         guard let match = Self.trailingLink.firstMatch(in: text, range: range),
               let labelRange = Range(match.range(at: 1), in: text),
