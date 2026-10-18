@@ -170,6 +170,7 @@ private struct RichMediaViewer: View {
                     VideoPlayer(player: player)
                         .aspectRatio(16 / 9, contentMode: .fit)
                         .accessibilityLabel(Text(verbatim: RichMediaText.spoken(item)))
+                        .accessibilityAddTraits(.startsMediaSession)
                 } else {
                     AsyncImage(url: item.url) { phase in
                         if case .success(let image) = phase {
@@ -406,6 +407,7 @@ private struct RichPersonRow: View {
                             }
                         } icon: {
                             Image(systemName: "person.crop.circle.badge.checkmark")
+                                .accessibilityHidden(true)
                         }
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Color.conduitAccent)
@@ -599,6 +601,7 @@ struct RichStatusCard: View {
                                     Text(verbatim: eta)
                                 } icon: {
                                     Image(systemName: "clock")
+                                        .accessibilityHidden(true)
                                 }
                                 .font(.subheadline.weight(.semibold))
                                 .monospacedDigit()
@@ -681,6 +684,7 @@ struct RichLiveUpdatedLine: View {
             }
         } icon: {
             Image(systemName: "arrow.down.circle")
+                .accessibilityHidden(true)
         }
         .font(.footnote)
         .foregroundStyle(.secondary)

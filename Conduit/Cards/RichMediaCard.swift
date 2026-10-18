@@ -76,8 +76,8 @@ struct RichPerson: Equatable, Hashable {
         guard let phone else { return nil }
         let digits = phone.filter(\.isASCII).filter(\.isNumber)
         guard !digits.isEmpty else { return nil }
-        // "+44 …" or "(+44) …": an international number.
-        return phone.contains("+") ? "+" + digits : digits
+        // "+44 …" or "(+44) …": a + before the first digit is international.
+        return phone.prefix(while: { !$0.isNumber }).contains("+") ? "+" + digits : digits
     }
 
     /// The person the user shared with Hermes that this is: the same
