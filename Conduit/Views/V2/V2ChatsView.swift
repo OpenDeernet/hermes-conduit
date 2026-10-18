@@ -290,6 +290,10 @@ struct V2ChatsView: View, Equatable {
         nonmutating set { updates.set(newValue, forKey: Self.expandedNestsKey) }
     }
 
+    private var projectChats: ProjectChatsInChats {
+        ProjectChatsInChats.stored(updates.defaults.string(forKey: ProjectChatsInChats.key))
+    }
+
     private var mainButtonNewChat: Bool {
         updates.defaults.object(forKey: V2MainButtonPreference.key) as? Bool ?? V2MainButtonPreference.defaultValue
     }
@@ -309,6 +313,7 @@ struct V2ChatsView: View, Equatable {
         self.appState = appState
         _updates = StateObject(wrappedValue: V2ShownUpdates(appState, defaultsKeys: [
             Self.presentationKey, Self.filterKey, Self.expandedNestsKey, V2MainButtonPreference.key,
+            ProjectChatsInChats.key,
         ]))
     }
 
@@ -664,12 +669,15 @@ struct V2ChatsView: View, Equatable {
     }
 
     /// A project's conversations live on its page, not in the main list;
-    /// a pinned one stays, since pinning asks for it here. The catalog
-    /// carries no folder, so this hides the conversations the project tree
-    /// is known to hold.
+    /// a pinned one stays, since pinning asks for it here, and Settings can
+    /// list the recent ones or all of them too. The catalog carries no
+    /// folder, so this hides the conversations the project tree is known
+    /// to hold.
     private func mainListShows(_ session: SessionSummary) -> Bool {
         guard appState.supportsProjects else { return true }
-        return appState.isSessionPinned(session) || appState.knownProjectID(for: session) == nil
+        return appState.isSessionPinned(session)
+            || appState.knownProjectID(for: session) == nil
+            || projectChats.shows(lastActivity: session.lastActivityAt)
     }
 
     /// What All lists. A search looks through every chat, a project's
@@ -695,10 +703,11 @@ struct V2ChatsView: View, Equatable {
         return rows.filter { sessionMatches($0, query: query) }
     }
 
-    /// While searching, a project's chat names its project, since the main
-    /// list doesn't otherwise say where it lives.
-    private func searchProjectTitle(_ item: V2ChatsListItem) -> String? {
-        guard isSearching, case .session(let node) = item.kind else { return nil }
+    /// A project's chat names its project while searching, or when
+    /// Settings lists project chats here, since the main list doesn't
+    /// otherwise say where it lives.
+    private func rowProjectTitle(_ item: V2ChatsListItem) -> String? {
+        guard isSearching || projectChats != .hidden, case .session(let node) = item.kind else { return nil }
         return projectTitle(for: node.session)
     }
 
@@ -1180,7 +1189,7 @@ struct V2ChatsView: View, Equatable {
         ForEach(items) { item in
             V2ChatsRow(
                 item: item,
-                projectTitle: searchProjectTitle(item),
+                projectTitle: rowProjectTitle(item),
                 onRename: { sessionPendingRename = $0 },
                 onDelete: { sessionPendingDeletion = $0 },
                 setExpanded: setExpanded
@@ -1442,7 +1451,7 @@ private struct V2ChatsRow: View {
     private var appState: AppState { updates.appState }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let item: V2ChatsListItem
-    /// The project a search result sits in, named before its preview.
+    /// The project a listed project chat sits in, named before its preview.
     let projectTitle: String?
     let onRename: (SessionSummary) -> Void
     let onDelete: (SessionSummary) -> Void
