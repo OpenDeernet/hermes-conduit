@@ -9,10 +9,11 @@ on:
         required: true
         type: string
 concurrency:
-  # Adding run-review shares the PR's group with its pushes (a later push
-  # supersedes that review and is reviewed itself); any other label gets one
-  # group per run, so it can't cancel anything.
-  group: opencode-review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}${{ github.event.action == 'labeled' && github.event.label.name != 'run-review' && format('-{0}', github.run_id) || '' }}
+  # Adding run-review to a fork's PR shares the PR's group with its pushes (a
+  # later push supersedes that review and is reviewed itself); any other label,
+  # or any label on an own-branch PR, gets one group per run, so it can't
+  # cancel anything.
+  group: opencode-review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}${{ github.event.action == 'labeled' && (github.event.label.name != 'run-review' || github.event.pull_request.head.repo.full_name == github.repository) && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 jobs:
