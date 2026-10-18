@@ -236,27 +236,43 @@ struct WatchCallCaptions: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let current {
-                Text(verbatim: Self.newestWords(of: current))
-                    // VoiceOver reads the whole line, not the cut one.
-                    .accessibilityLabel(Text(verbatim: current))
-                    .font(.system(.body, weight: .semibold))
-                    // Three lines leave room for the bars and buttons on
-                    // the smallest Watch.
-                    .lineLimit(3)
-                    // Past the budget (the largest text), the oldest words go.
-                    .truncationMode(.head)
-                    .layoutPriority(1)
-                    // Three lines of it still leave the controls on screen.
-                    .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-                    .minimumScaleFactor(0.75)
+                // The longest cut that fits whole: a 42 mm Watch has room
+                // for two lines where an Ultra has three. Head truncation
+                // over several lines cuts the middle of the text instead.
+                ViewThatFits(in: .vertical) {
+                    ForEach(Self.budgets, id: \.self) { limit in
+                        line(Self.newestWords(of: current, limit: limit))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    // Past the smallest budget (the largest text), the
+                    // oldest words go.
+                    line(Self.newestWords(of: current, limit: Self.budgets.last ?? 28))
+                        .truncationMode(.head)
+                }
+                // VoiceOver reads the whole line, not the cut one.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: current))
+                .layoutPriority(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: current)
     }
 
-    /// About three lines' worth from the end, from a word's start. Head
-    /// truncation over several lines cuts the middle of the text instead.
+    /// Caption lengths to try, longest first: about three lines on an
+    /// Ultra down to one.
+    static let budgets = [84, 70, 56, 42, 28]
+
+    private func line(_ text: String) -> some View {
+        Text(verbatim: text)
+            .font(.system(.body, weight: .semibold))
+            .lineLimit(3)
+            // Three lines of it still leave the controls on screen.
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            .minimumScaleFactor(0.75)
+    }
+
+    /// The last `limit` characters or so, from a word's start.
     static func newestWords(of text: String, limit: Int = 84) -> String {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.count > limit else { return text }
