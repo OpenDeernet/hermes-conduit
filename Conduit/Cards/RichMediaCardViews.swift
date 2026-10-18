@@ -204,13 +204,17 @@ private struct RichMediaViewer: View {
         }
         .onAppear {
             guard item.kind == .video, player == nil else { return }
-            RichAudioPlayer.shared.stop()
+            RichAudioPlayer.shared.stop(endingSession: false)
             RichAudioPlayer.preparePlayback()
             let player = AVPlayer(url: item.url)
             self.player = player
             player.play()
         }
-        .onDisappear { player?.pause() }
+        .onDisappear {
+            guard let player else { return }
+            player.pause()
+            RichAudioPlayer.endPlayback()
+        }
     }
 }
 
@@ -231,7 +235,7 @@ final class RichAudioPlayer: ObservableObject {
             stop()
             return
         }
-        stop()
+        stop(endingSession: false)
         Self.preparePlayback()
         let player = AVPlayer(url: url)
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] time in
@@ -254,16 +258,32 @@ final class RichAudioPlayer: ObservableObject {
         player.play()
     }
 
-    /// Over a call the session is the call's; otherwise media plays even
-    /// with the ringer switch off, as a player does.
+    /// Whether a call, a voice conversation or Read Aloud holds the audio
+    /// session, which a card then plays within and leaves alone.
+    private static var sessionIsOwnedElsewhere: Bool {
+        let coordinator = VoiceAudioSessionCoordinator.shared
+        return coordinator.appliedPolicy != nil || coordinator.isInNativeCall
+            || AVAudioSession.sharedInstance().category == .playAndRecord
+    }
+
+    /// Media plays even with the ringer switch off, as a player does.
     static func preparePlayback() {
+        guard !sessionIsOwnedElsewhere else { return }
         let session = AVAudioSession.sharedInstance()
-        guard session.category != .playAndRecord else { return }
         try? session.setCategory(.playback, mode: .default)
         try? session.setActive(true)
     }
 
-    func stop() {
+    /// Hands the audio back to whatever the card's media paused.
+    static func endPlayback() {
+        let session = AVAudioSession.sharedInstance()
+        guard !sessionIsOwnedElsewhere, session.category == .playback else { return }
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    /// `endingSession` false: another item starts right away.
+    func stop(endingSession: Bool = true) {
+        let wasPlaying = player != nil
         if let observer { player?.removeTimeObserver(observer) }
         observer = nil
         player?.pause()
@@ -271,6 +291,7 @@ final class RichAudioPlayer: ObservableObject {
         playing = nil
         elapsed = 0
         length = 0
+        if endingSession, wasPlaying { Self.endPlayback() }
     }
 }
 

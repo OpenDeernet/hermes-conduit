@@ -1024,7 +1024,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
                 guard shown.callAnchor.callID == anchor.callID, shown.isUpdated(by: card) else { return shown }
                 var kept = shown
                 kept.cards.removeAll { $0.live.map(live.contains) ?? false }
-                return kept.cards.isEmpty ? nil : kept
+                return kept.cards.isEmpty && kept.markdown.isEmpty ? nil : kept
             }
         }
         screenCards.append(card)
