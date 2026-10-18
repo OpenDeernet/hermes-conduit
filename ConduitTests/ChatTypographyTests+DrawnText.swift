@@ -141,13 +141,13 @@ extension ChatTypographyTests {
         let plain = view.makeUIViewForTests(coordinator: view.makeCoordinator())
         let natural = try XCTUnwrap(drawn.canvas).naturalSize()
         let textViewWidth = ceil(plain.mountedTextView.sizeThatFits(
-            CGSize(width: 100_000, height: CGFloat.greatestFiniteMagnitude)
+            CGSize(width: SelectableTextCanvas.unboundedWidth, height: CGFloat.greatestFiniteMagnitude)
         ).width)
         XCTAssertEqual(natural.width, textViewWidth, accuracy: 1)
         XCTAssertEqual(drawn.canvas?.height(atWidth: natural.width), natural.height, "fits on one line")
 
-        let widths = ["Goodbye.", String(repeating: "A sent message long enough to wrap. ", count: 4)].map { text in
-            sentBubbleTextWidth(UserBubble(
+        let widths = try ["Goodbye.", String(repeating: "A sent message long enough to wrap. ", count: 4)].map { text in
+            try sentBubbleTextWidth(UserBubble(
                 message: ChatMessage(id: text, role: .user, content: text, timestamp: "1"),
                 gatewayResolver: nil
             ))
@@ -157,7 +157,7 @@ extension ChatTypographyTests {
     }
 
     @MainActor
-    private func sentBubbleTextWidth(_ bubble: UserBubble) -> CGFloat {
+    private func sentBubbleTextWidth(_ bubble: UserBubble) throws -> CGFloat {
         let host = UIHostingController(rootView: bubble.environment(\.selectableTextDrawsUntilTouched, true))
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 600))
         window.rootViewController = host
@@ -171,8 +171,9 @@ extension ChatTypographyTests {
         }
         let found = hosts(in: host.view)
         XCTAssertEqual(found.count, 1)
-        XCTAssertNotNil(found.first?.canvas, "the text draws until touched")
-        return found.first?.bounds.width ?? 0
+        let textHost = try XCTUnwrap(found.first)
+        XCTAssertNotNil(textHost.canvas, "the text draws until touched")
+        return textHost.bounds.width
     }
 
     /// A code block's line can run thousands of points, and tiles that wide

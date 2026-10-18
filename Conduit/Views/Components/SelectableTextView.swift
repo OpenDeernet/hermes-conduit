@@ -322,7 +322,7 @@ struct SelectableTextView: UIViewRepresentable {
         }
 
         let measured = styledText.boundingRect(
-            with: CGSize(width: 100_000, height: CGFloat.greatestFiniteMagnitude),
+            with: CGSize(width: SelectableTextCanvas.unboundedWidth, height: CGFloat.greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             context: nil
         )
@@ -492,7 +492,7 @@ struct SelectableTextView: UIViewRepresentable {
         textView.textContainer.widthTracksTextView = wrapsLines
         textView.textContainer.size = wrapsLines
             ? CGSize(width: max(textView.bounds.width, 1), height: CGFloat.greatestFiniteMagnitude)
-            : CGSize(width: 100_000, height: CGFloat.greatestFiniteMagnitude)
+            : CGSize(width: SelectableTextCanvas.unboundedWidth, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer.maximumNumberOfLines = maximumNumberOfLines
         textView.textContainer.lineBreakMode = maximumNumberOfLines > 0
             ? .byTruncatingTail
