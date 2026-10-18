@@ -146,15 +146,31 @@ struct RichCard: Identifiable, Equatable, Hashable {
 
     /// The live names a transcript row's cards carry. Only a row whose
     /// JSON names one is read, since every publish asks.
+    @MainActor
     static func liveNames(_ message: ChatMessage) -> [String] {
         guard message.role == .tool, let tool = message.tool, tool.name.lowercased() == toolName,
               tool.status == .complete,
               (tool.output ?? "").contains("\"live\"") || (tool.input ?? "").contains("\"live\"") else { return [] }
-        return cards(for: tool).compactMap(\.live)
+        // Each row is read once, not on every publish.
+        let key = LiveNamesKey(id: message.id, input: tool.input, output: tool.output)
+        if let names = liveNamesCache[key] { return names }
+        let names = cards(for: tool).compactMap(\.live)
+        if liveNamesCache.count >= 200 { liveNamesCache.removeAll() }
+        liveNamesCache[key] = names
+        return names
     }
+
+    private struct LiveNamesKey: Hashable {
+        let id: String
+        let input: String?
+        let output: String?
+    }
+
+    @MainActor private static var liveNamesCache: [LiveNamesKey: [String]] = [:]
 
     /// Each live name's last row in `messages`: the earlier rows with it
     /// were brought up to date there.
+    @MainActor
     static func latestLiveRows(_ messages: [ChatMessage]) -> [String: String] {
         var latest: [String: String] = [:]
         for message in messages {

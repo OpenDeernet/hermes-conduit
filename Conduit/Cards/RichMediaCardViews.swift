@@ -169,6 +169,7 @@ private struct RichMediaViewer: View {
                 if item.kind == .video {
                     VideoPlayer(player: player)
                         .aspectRatio(16 / 9, contentMode: .fit)
+                        .accessibilityLabel(Text(verbatim: RichMediaText.spoken(item)))
                 } else {
                     AsyncImage(url: item.url) { phase in
                         if case .success(let image) = phase {
@@ -204,6 +205,7 @@ private struct RichMediaViewer: View {
         .onAppear {
             guard item.kind == .video, player == nil else { return }
             RichAudioPlayer.shared.stop()
+            RichAudioPlayer.preparePlayback()
             let player = AVPlayer(url: item.url)
             self.player = player
             player.play()
@@ -230,13 +232,7 @@ final class RichAudioPlayer: ObservableObject {
             return
         }
         stop()
-        // Over a call the session is the call's; otherwise play even with
-        // the ringer switch off, as a player does.
-        let session = AVAudioSession.sharedInstance()
-        if session.category != .playAndRecord {
-            try? session.setCategory(.playback, mode: .default)
-            try? session.setActive(true)
-        }
+        Self.preparePlayback()
         let player = AVPlayer(url: url)
         observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
@@ -244,7 +240,11 @@ final class RichAudioPlayer: ObservableObject {
                 self.elapsed = time.seconds
                 let length = item.duration.seconds
                 self.length = length.isFinite ? length : 0
-                if self.length > 0, self.elapsed >= self.length - 0.25 { self.stop() }
+                // Not from inside the observer's own callback.
+                if self.length > 0, self.elapsed >= self.length - 0.25 {
+                    let ended = self.playing
+                    Task { @MainActor in if self.playing == ended { self.stop() } }
+                }
             }
         }
         self.player = player
@@ -252,6 +252,15 @@ final class RichAudioPlayer: ObservableObject {
         elapsed = 0
         length = 0
         player.play()
+    }
+
+    /// Over a call the session is the call's; otherwise media plays even
+    /// with the ringer switch off, as a player does.
+    static func preparePlayback() {
+        let session = AVAudioSession.sharedInstance()
+        guard session.category != .playAndRecord else { return }
+        try? session.setCategory(.playback, mode: .default)
+        try? session.setActive(true)
     }
 
     func stop() {
@@ -328,23 +337,30 @@ private struct RichAudioRow: View {
 struct RichContactCard: View {
     let card: RichCard
 
+    /// The people the user shared with Hermes, read once for the card.
+    @State private var shared: [PhonePerson] = []
+
     var body: some View {
         RichInfoCardFrame(title: card.title, source: card.source) {
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(Array(card.people.enumerated()), id: \.offset) { index, person in
                     if index > 0 { Divider() }
-                    RichPersonRow(person: person)
+                    RichPersonRow(person: person, known: person.match(in: shared))
                 }
             }
+        }
+        .task(id: card) {
+            shared = PhonePeopleStore.load(from: .standard)
         }
     }
 }
 
 private struct RichPersonRow: View {
     let person: RichPerson
+    /// Who it is among the people the user shared with Hermes.
+    let known: PhonePerson?
 
     @Environment(\.openURL) private var openURL
-    @State private var known: PhonePerson?
     @State private var addsContact = false
     @ScaledMetric(relativeTo: .body) private var avatarSize: CGFloat = 46
 
@@ -401,9 +417,6 @@ private struct RichPersonRow: View {
                     .italic()
             }
             actions
-        }
-        .task(id: person) {
-            known = person.match(in: PhonePeopleStore.load(from: .standard))
         }
         .sheet(isPresented: $addsContact) {
             RichNewContactSheet(person: person)
@@ -474,6 +487,7 @@ private struct RichPersonAction: View {
                 title
             } icon: {
                 Image(systemName: symbol)
+                    .accessibilityHidden(true)
             }
             .font(.caption.weight(.semibold))
             .labelStyle(RichCompactLabelStyle())
@@ -548,6 +562,7 @@ struct RichStatusCard: View {
                     if let progress = status.progress {
                         ProgressView(value: status.phase == .done ? 1 : progress)
                             .tint(RichPhaseBadge.color(status.phase))
+                            .accessibilityLabel(Text(verbatim: status.state))
                             .accessibilityValue(Text(verbatim: progress.formatted(.percent.precision(.fractionLength(0)).locale(AppLocalization.formattingLocale))))
                     }
                     if status.detail != nil || status.eta != nil {
