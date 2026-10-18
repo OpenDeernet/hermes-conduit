@@ -16791,6 +16791,7 @@ final class AppState: ObservableObject {
             } else if let dashboardTicketBridge {
                 try await sendSessionMutation(session.id, body: body, profile: profile, bridge: dashboardTicketBridge)
             } else {
+                showSessionMutationNotice(AppLocalization.string("Reconnect to Hermes to change this conversation."))
                 return false
             }
             guard profile == activeProfile else { return false }

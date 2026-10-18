@@ -310,7 +310,11 @@ final class SessionRenameTests: XCTestCase {
         }
 
         let archive = Task { await appState.archiveSession(session) }
-        while !appState.isSessionMutationInFlight(session) || release == nil { await Task.yield() }
+        let deadline = Date().addingTimeInterval(5)
+        while !appState.isSessionMutationInFlight(session) || release == nil {
+            guard Date() < deadline else { return XCTFail("The archive never reached Hermes") }
+            await Task.yield()
+        }
         let deleted = await appState.deleteSession(session)
 
         XCTAssertFalse(deleted)
