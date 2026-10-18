@@ -11902,6 +11902,7 @@ final class AppState: ObservableObject {
         lastConnectionFailure = failure
         showLogin = true
         pendingLoginFailure = .presenting(failure)
+        // The saved-password restore never resets the plugin status.
         endLockScreenTurnsForSignIn(plugin: notifierPlugin.state)
         return true
     }
@@ -12168,10 +12169,12 @@ final class AppState: ObservableObject {
         endLockScreenTurnsForSignIn(plugin: pluginStateBeforeSignIn)
     }
 
-    /// Every path that presents sign-in for the active dashboard: a turn of
-    /// it nothing can end now stops counting up on the Lock Screen.
-    /// `plugin` is the notifier plugin's state before the sign-in reset it.
-    func endLockScreenTurnsForSignIn(plugin: NotifierPluginStatus.State) {
+    /// A refused or expired sign-in of the active dashboard (required,
+    /// saved password, native OAuth restore): a turn of it nothing can end
+    /// now stops counting up on the Lock Screen. A cancelled Face ID isn't
+    /// a refusal, and leaves them for the retry. `plugin` is the notifier
+    /// plugin's state before the sign-in reset it.
+    private func endLockScreenTurnsForSignIn(plugin: NotifierPluginStatus.State) {
         if let keepingThoseOnRelay = Self.signInEndsLockScreenTurns(
             screenAway: phoneScreenIsAway(),
             plugin: plugin
