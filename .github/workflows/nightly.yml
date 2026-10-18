@@ -308,6 +308,17 @@ jobs:
           xcrun simctl list runtimes available || true
           xcrun simctl list devices available
 
+      - name: Upload the unit batch logs
+        # The job log API returns only a job's last 5,000 lines, which an
+        # early batch's output does not reach; each batch's whole log is here.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-unit-shard-${{ matrix.shard }}-logs
+          path: ${{ runner.temp }}/unit-batch-*.log
+          retention-days: 7
+          if-no-files-found: ignore
+
   timing:
     # One job per repeat: a single pass of the timing families is ~15-20 min
     # on a hosted runner (MarkdownRichContentHostedTests alone is 810s in
