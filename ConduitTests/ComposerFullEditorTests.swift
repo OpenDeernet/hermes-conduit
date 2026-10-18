@@ -25,6 +25,7 @@ final class ComposerFullEditorTests: XCTestCase {
         XCTAssertTrue(ComposerBar.turnControlExpandsComposer(action: .steer, restsWhenIdle: true))
         XCTAssertTrue(ComposerBar.turnControlExpandsComposer(action: .interrupt, restsWhenIdle: true))
         XCTAssertFalse(ComposerBar.turnControlExpandsComposer(action: .unavailable, restsWhenIdle: true))
+        XCTAssertEqual(ComposerBar.trailingControl(action: .stop, showsVoiceButton: true), .action, "the resting bar's slot holds Stop, not voice")
     }
 
     /// #762: a live call can start while Hermes replies; classic voice waits.

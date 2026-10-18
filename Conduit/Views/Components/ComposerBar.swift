@@ -1446,7 +1446,7 @@ struct ComposerBar: View, Equatable {
             .contentShape(Self.controlHitShape)
         }
         .buttonStyle(.plain)
-        .disabled(appState.isPreparingVoiceResume)
+        .disabled(appState.isPreparingVoiceResume || appState.voiceWaitsForRunningTurn)
         .conduitGlassControl(cornerRadius: Self.controlSize / 2, tint: .conduitAura.opacity(0.14), interactive: true)
         .accessibilityLabel(AppLocalization.string("Resume call"))
         .accessibilityHint(AppLocalization.string("Starts a new live call that continues this one"))
