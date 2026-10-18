@@ -230,7 +230,9 @@ final class ConnectionSetupSettingsUITests: XCTestCase {
     private func openConnectionSetup(_ app: XCUIApplication) {
         let row = app.buttons[Identity.settingsRow]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        let barTop = app.buttons["Settings"].firstMatch.frame.minY
+        let settingsTab = app.buttons["Settings"].firstMatch
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 5), "Tab bar did not appear. Tree:\n\(app.debugDescription)")
+        let barTop = settingsTab.frame.minY
         for _ in 0..<6 {
             if row.isHittable, row.frame.maxY < barTop - 8 { break }
             app.swipeUp()
