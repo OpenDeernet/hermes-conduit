@@ -705,9 +705,9 @@ struct V2ChatsView: View, Equatable {
         return rows.filter { sessionMatches($0, query: query) }
     }
 
-    /// A project's chat names its project while searching, or when
-    /// Settings lists project chats here, since the main list doesn't
-    /// otherwise say where it lives.
+    /// A project's chat names its project while searching or filtering,
+    /// or when Settings lists project chats here, since the main list
+    /// doesn't otherwise say where it lives.
     private func rowProjectTitle(_ item: V2ChatsListItem, namesProjects: Bool) -> String? {
         guard namesProjects, case .session(let node) = item.kind else { return nil }
         return projectTitle(for: node.session)
@@ -1188,8 +1188,9 @@ struct V2ChatsView: View, Equatable {
 
     /// One List row per item, so the List builds only the rows on screen.
     private func listRows(_ items: [V2ChatsListItem]) -> some View {
-        // Read once, not once per row.
-        let namesProjects = isSearching || projectChats != .hidden
+        // Read once, not once per row. A search or a filter looks through
+        // project chats whatever the setting, so it names them too.
+        let namesProjects = isSearching || !selection.isEmpty || projectChats != .hidden
         return ForEach(items) { item in
             V2ChatsRow(
                 item: item,
