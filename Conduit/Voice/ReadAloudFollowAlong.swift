@@ -84,6 +84,8 @@ struct ReadAloudScript: Equatable {
                 segments.append(Segment(id: segments.count, text: code, paragraph: paragraph, kind: .code, weight: 0))
             case .prose(let text):
                 let sentences = Self.sentences(in: text)
+                // Nothing to show: the next block takes this paragraph id.
+                guard !sentences.isEmpty else { continue }
                 for (offset, sentence) in sentences.enumerated() {
                     var weight = spokenWeight(of: sentence)
                     if weight > 0 {
@@ -92,7 +94,6 @@ struct ReadAloudScript: Equatable {
                     }
                     segments.append(Segment(id: segments.count, text: sentence, paragraph: paragraph, kind: .sentence, weight: weight))
                 }
-                if sentences.isEmpty { continue }
             }
             paragraph += 1
         }
@@ -184,6 +185,8 @@ struct ReadAloudScript: Equatable {
         return digits.count + 2
     }
 
+    /// A table's `|---|---|` row, or a `---` rule: both only separate, so
+    /// they end the paragraph and show nothing.
     private static func isTableRule(_ line: String) -> Bool {
         line.contains("-") && line.allSatisfy { "|-: ".contains($0) }
     }

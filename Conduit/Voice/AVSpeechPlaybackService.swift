@@ -74,7 +74,10 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
     /// pitch-preserving time stretch.
     var playbackRate: Float = 1.0
     /// Read Aloud's player (#759): every stream gets the time stretch, even
-    /// at 1x, so the speed can change while it plays.
+    /// at 1x, so the speed can change while it plays. Only Read Aloud's own
+    /// instance (MessageReadAloudController's) sets it; conversations play
+    /// through instances of their own and keep the plain graph. Not reset by
+    /// stop(), which every stream start runs first.
     var keepsRateAdjustable = false
     /// The time stretch of the current stream, when it has one.
     private var timePitch: AVAudioUnitTimePitch?
@@ -229,6 +232,8 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
         return alignedBytes
     }
 
+    /// One whole clip (Hermes' non-streaming fallback): it replaces whatever
+    /// was playing, so position comes from this clip alone.
     func playEncodedAudioData(_ data: Data) throws {
         stop()
         interruptedStandaloneStream = false

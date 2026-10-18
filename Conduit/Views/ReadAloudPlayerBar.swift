@@ -72,7 +72,7 @@ struct ReadAloudPlayerBar: View {
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
-            .accessibilityHint(Text("Shows the reply as it is read"))
+            .accessibilityHint(Text(AppLocalization.string("Shows the reply as it is read")))
 
             ReadAloudControls(controller: controller, size: .compact)
         }
@@ -124,7 +124,7 @@ struct ReadAloudControls: View {
                         Text(verbatim: speed.label).tag(speed)
                     }
                 } label: {
-                    Text("Speed")
+                    Text(AppLocalization.string("Speed"))
                 }
             } label: {
                 Text(verbatim: controller.speed.label)
@@ -132,7 +132,7 @@ struct ReadAloudControls: View {
                     .frame(minWidth: buttonSide, minHeight: buttonSide)
                     .contentShape(Rectangle())
             }
-            .accessibilityLabel(Text("Speed"))
+            .accessibilityLabel(Text(AppLocalization.string("Speed")))
             .accessibilityValue(Text(verbatim: controller.speed.label))
 
             Button {
@@ -146,8 +146,8 @@ struct ReadAloudControls: View {
             }
             .disabled(!isPlaying)
             .accessibilityLabel(controller.isPaused
-                ? Text("Resume reading response")
-                : Text("Pause reading response"))
+                ? Text(AppLocalization.string("Resume reading response"))
+                : Text(AppLocalization.string("Pause reading response")))
 
             Button {
                 Haptics.medium()
@@ -159,7 +159,7 @@ struct ReadAloudControls: View {
                     .contentShape(Rectangle())
             }
             .disabled(!isActive)
-            .accessibilityLabel(Text("Stop reading response"))
+            .accessibilityLabel(Text(AppLocalization.string("Stop reading response")))
         }
         .foregroundStyle(Color.conduitAccent)
     }
@@ -206,7 +206,7 @@ struct ReadAloudReadingView: View {
                             paragraphView(paragraph)
                                 .id(paragraph.id)
                         }
-                        Text("The highlight is an estimate of where the voice is, so it can run a little ahead or behind.")
+                        Text(AppLocalization.string("The highlight is an estimate of where the voice is, so it can run a little ahead or behind."))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .padding(.top, 8)
@@ -237,7 +237,7 @@ struct ReadAloudReadingView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button { dismiss() } label: { Text("Done") }
+                    Button { dismiss() } label: { Text(AppLocalization.string("Done")) }
                 }
             }
         }
@@ -260,7 +260,7 @@ struct ReadAloudReadingView: View {
     private func paragraphView(_ paragraph: Paragraph) -> some View {
         if paragraph.segments.count == 1, let code = paragraph.segments.first, code.kind == .code {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Code")
+                Text(AppLocalization.string("Code"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(verbatim: code.text)
@@ -277,7 +277,7 @@ struct ReadAloudReadingView: View {
                 .textSelection(.enabled)
                 // The highlight is colour; VoiceOver hears which paragraph
                 // the voice is in.
-                .accessibilityValue(isSpeaking(paragraph) ? Text("Reading aloud") : Text(verbatim: ""))
+                .accessibilityValue(isSpeaking(paragraph) ? Text(AppLocalization.string("Reading aloud")) : Text(verbatim: ""))
         }
     }
 
