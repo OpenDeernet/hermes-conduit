@@ -250,12 +250,16 @@ final class SettledMessageIsolationTests: XCTestCase {
         // the composer shows changed is not a no-change publish, and its
         // redraw is correct, so that window is measured again.
         var measured = false
-        for _ in 0..<3 where !measured {
+        var attempts = 0
+        while !measured, attempts < 3 {
+            attempts += 1
             let shown = ComposerInputs(appState)
             TranscriptPerf.reset()
             appState.objectWillChange.send()
             drainUntil(0.5) { false }
             guard ComposerInputs(appState) == shown else {
+                // An unsettled result is fine here: the next window checks
+                // the inputs again.
                 PerformanceFixtureWait.settleUntilCountersQuiet(quietFor: 1.0)
                 continue
             }

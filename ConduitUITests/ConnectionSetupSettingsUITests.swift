@@ -41,7 +41,7 @@ final class ConnectionSetupSettingsUITests: XCTestCase {
 
         // The Connection section carries the current dashboard (the Gateway
         // row) and the new Connection Setup entry.
-        tapVisible(app.buttons[Identity.settingsRow], in: app)
+        openConnectionSetup(app)
 
         // The passwordless seed opens straight on the staged test with the
         // current URL preserved exactly — no first-run readiness questions,
@@ -115,7 +115,7 @@ final class ConnectionSetupSettingsUITests: XCTestCase {
         app.launch()
 
         openSettings(app)
-        tapVisible(app.buttons[Identity.settingsRow], in: app)
+        openConnectionSetup(app)
 
         let preview = addressPreview(app)
         XCTAssertTrue(preview.waitForExistence(timeout: 5), "Wizard did not open on the staged test. Tree:\n\(app.debugDescription)")
@@ -130,7 +130,7 @@ final class ConnectionSetupSettingsUITests: XCTestCase {
         let signInAgain = app.staticTexts["setup.test.sign-in-again"]
         XCTAssertTrue(signInAgain.waitForExistence(timeout: 5), "Review did not offer Sign In Again. Tree:\n\(app.debugDescription)")
         XCTAssertTrue(signInAgain.label.contains("browser-based sign-in"), "Got: \(signInAgain.label)")
-        XCTAssertTrue(app.buttons["setup.review.sign-in-again"].exists, "Sign In Again is Review's primary action")
+        XCTAssertTrue(app.buttons["setup.review.sign-in-again"].waitForExistence(timeout: 5), "Sign In Again is Review's primary action")
         XCTAssertFalse(app.staticTexts["setup.test.ready"].exists, "Interactive auth must never claim the connection is ready to use")
         let authRow = stageRow(app, "setup.test.stage.authentication")
         XCTAssertTrue(authRow.waitForExistence(timeout: 5))
@@ -156,7 +156,7 @@ final class ConnectionSetupSettingsUITests: XCTestCase {
         app.launch()
 
         openSettings(app)
-        tapVisible(app.buttons[Identity.settingsRow], in: app)
+        openConnectionSetup(app)
 
         let preview = addressPreview(app)
         XCTAssertTrue(preview.waitForExistence(timeout: 5), "Wizard did not open on the staged test. Tree:\n\(app.debugDescription)")
@@ -220,10 +220,21 @@ final class ConnectionSetupSettingsUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(element.isHittable)
-        // Upper part, not the centre: a Settings row scrolled to the bottom
-        // can sit with its centre under the floating tab bar, where a
-        // centre tap selects the tab instead.
-        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        element.tap()
+    }
+
+    /// The Connection Setup row, scrolled to the bottom of Settings, can sit
+    /// with its centre under the floating tab bar, where a centre tap
+    /// selects the tab instead: tap its upper part.
+    private func openConnectionSetup(_ app: XCUIApplication) {
+        let row = app.buttons[Identity.settingsRow]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        for _ in 0..<6 {
+            if row.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(row.isHittable)
+        row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
     }
 
     private func dismissKeyboard(_ app: XCUIApplication) {
