@@ -225,7 +225,8 @@ extension MarkdownLargeDocumentTests {
         for document in hostile {
             let page = HTMLPreviewPage.framed(document, theme: HTMLPreviewTheme(light: true), presentation: .inline)
             guard let policy = page.range(of: policyTag), let script = page.range(of: "<script") else {
-                return XCTFail(page)
+                XCTFail(page)
+                continue
             }
             XCTAssertLessThan(policy.lowerBound, script.lowerBound, page)
         }
