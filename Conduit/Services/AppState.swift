@@ -16862,7 +16862,11 @@ final class AppState: ObservableObject {
         if let sessionRenameOperationsOverride {
             operations = sessionRenameOperationsOverride
         } else {
-            guard let dashboardTicketBridge else { return false }
+            guard let dashboardTicketBridge else {
+                // The connection dropped while title recovery was cancelled.
+                showSessionMutationNotice(AppLocalization.string("Reconnect to Hermes to change this conversation."))
+                return false
+            }
             let activeClient = client
             let runtimeRenameExpected = activeClient != nil
                 && activeSessionId.map { knownIDs.contains($0) } == true
