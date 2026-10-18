@@ -360,10 +360,9 @@ jobs:
         # again). Keychain items outlive an uninstall on the simulator.
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
-          if [ -n "${SIMULATOR_UDID:-}" ]; then
-            xcrun simctl uninstall "$SIMULATOR_UDID" com.milim.relay || true
-          else
-            xcrun simctl uninstall booted com.milim.relay || true
+          # com.milim.relay is project.yml's PRODUCT_BUNDLE_IDENTIFIER for Conduit.
+          if ! xcrun simctl uninstall "${SIMULATOR_UDID:-booted}" com.milim.relay; then
+            echo "::warning::could not remove the app before UI smoke; UI smoke runs on the unit classes' app container"
           fi
 
       - name: Run the curated UI smoke suite
