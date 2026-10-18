@@ -196,18 +196,29 @@ final class SidebarLayoutTests: XCTestCase {
         defer { watch.cancel() }
 
         defaults.set(Data([1, 2, 3]), forKey: "conduit.chatResume.v1")
+        settle()
         XCTAssertEqual(sent, 0, "another key's write redrew the list")
 
-        defaults.set("scheduled", forKey: "list.filter")
-        XCTAssertEqual(sent, 1)
-        defaults.set("scheduled", forKey: "list.filter")
-        XCTAssertEqual(sent, 1, "an unchanged value redrew the list")
+        updates.set("scheduled", forKey: "list.filter")
+        XCTAssertEqual(sent, 1, "the list's own write redraws it at once")
+        settle()
+        XCTAssertEqual(sent, 1, "the write's notification redrew the list again")
+
+        // A write from elsewhere arrives through the notification.
+        defaults.set("all", forKey: "list.filter")
+        settle()
+        XCTAssertEqual(sent, 2)
 
         updates.isShown = false
-        defaults.set("all", forKey: "list.filter")
-        XCTAssertEqual(sent, 1)
-        updates.isShown = true
+        defaults.set("scheduled", forKey: "list.filter")
+        settle()
         XCTAssertEqual(sent, 2)
+        updates.isShown = true
+        XCTAssertEqual(sent, 3)
+    }
+
+    private func settle() {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
     }
 
     @MainActor

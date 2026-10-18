@@ -277,17 +277,17 @@ struct V2ChatsView: View, Equatable {
 
     private var sessionPresentationRaw: String {
         get { updates.defaults.string(forKey: Self.presentationKey) ?? "sessions" }
-        nonmutating set { updates.defaults.set(newValue, forKey: Self.presentationKey) }
+        nonmutating set { updates.set(newValue, forKey: Self.presentationKey) }
     }
 
     private var filterRaw: String {
         get { updates.defaults.string(forKey: Self.filterKey) ?? "all" }
-        nonmutating set { updates.defaults.set(newValue, forKey: Self.filterKey) }
+        nonmutating set { updates.set(newValue, forKey: Self.filterKey) }
     }
 
     private var expandedNestsRaw: String {
         get { updates.defaults.string(forKey: Self.expandedNestsKey) ?? "" }
-        nonmutating set { updates.defaults.set(newValue, forKey: Self.expandedNestsKey) }
+        nonmutating set { updates.set(newValue, forKey: Self.expandedNestsKey) }
     }
 
     private var mainButtonNewChat: Bool {

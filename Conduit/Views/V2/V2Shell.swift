@@ -183,14 +183,15 @@ final class V2ShownUpdates: ObservableObject {
         defaultsSubscription = NotificationCenter.default
             .publisher(for: UserDefaults.didChangeNotification)
             .sink { [weak self] _ in
-                if Thread.isMainThread {
-                    MainActor.assumeIsolated { self?.defaultsChanged() }
-                } else {
-                    DispatchQueue.main.async { [weak self] in
-                        MainActor.assumeIsolated { self?.defaultsChanged() }
-                    }
-                }
+                // A write from elsewhere; the list's own go through `set`.
+                Task { @MainActor [weak self] in self?.defaultsChanged() }
             }
+    }
+
+    /// Saves one of the list's settings and redraws it at once.
+    func set(_ value: Any?, forKey key: String) {
+        defaults.set(value, forKey: key)
+        defaultsChanged()
     }
 
     private func passOn() {

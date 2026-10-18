@@ -311,13 +311,13 @@ final class ChatResumeCoordinatorTests: XCTestCase {
         let harness = makeHarness()
         let key = ChatScrollSessionKey(profile: "default", sessionID: "stored-a")
         let reading = ChatScrollSnapshot(anchorMessageID: "anchor-12", followsLatest: false)
-        var scrolling = true
+        let scroll = ScrollingFlag()
 
-        harness.coordinator.recordViewport(reading, for: key) { scrolling }
+        harness.coordinator.recordViewport(reading, for: key) { scroll.isScrolling }
         try await Task.sleep(for: .milliseconds(900))
         XCTAssertNil(ChatResumeStore(defaults: harness.defaults).snapshot(for: key), "saved mid-scroll")
 
-        scrolling = false
+        scroll.isScrolling = false
         let deadline = Date().addingTimeInterval(5)
         while ChatResumeStore(defaults: harness.defaults).snapshot(for: key) == nil, Date() < deadline {
             try await Task.sleep(for: .milliseconds(50))
@@ -615,4 +615,9 @@ final class ChatResumeCoordinatorTests: XCTestCase {
             lineageRootId: nil
         )
     }
+}
+
+@MainActor
+private final class ScrollingFlag {
+    var isScrolling = true
 }
