@@ -363,6 +363,8 @@ enum HTMLPreviewPage {
     /// keep it, draw. A policy in the file itself only adds limits; it
     /// can't lift these. What it may still load can carry data one way in
     /// the URL; blocking that would break charts drawn with a CDN library.
+    /// WebRTC is outside any policy; closing it would take a script of the
+    /// app's own in the page.
     static let contentSecurityPolicy = "connect-src data: blob:; frame-src 'none'; worker-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'"
 
     /// The app listens for the inline page's height and nothing else.
@@ -405,10 +407,23 @@ enum HTMLPreviewPage {
             withPrelude = prelude + document
         }
         let scripts = bridgeScript(reportsHeight: presentation == .inline)
+        let page: String
         if let bodyClose = withPrelude.range(of: "</body", options: [.caseInsensitive, .backwards]) {
-            return String(withPrelude[..<bodyClose.lowerBound]) + scripts + String(withPrelude[bodyClose.lowerBound...])
+            page = String(withPrelude[..<bodyClose.lowerBound]) + scripts + String(withPrelude[bodyClose.lowerBound...])
+        } else {
+            page = withPrelude + scripts
         }
-        return withPrelude + scripts
+        return withPolicyFirst(page)
+    }
+
+    /// The policy goes before anything of the file's but a leading doctype
+    /// (moving that would change how the page lays out), so no script of
+    /// the file's runs before it. The `<head>` the theme looks for can sit
+    /// after a script, or inside one.
+    private static func withPolicyFirst(_ page: String) -> String {
+        let policy = #"<meta http-equiv="Content-Security-Policy" content="\#(contentSecurityPolicy)">"#
+        guard let doctypeEnd = doctypeEnd(in: page) else { return policy + page }
+        return String(page[..<doctypeEnd]) + policy + String(page[doctypeEnd...])
     }
 
     /// The page fits the phone's width, follows the app's light or dark
@@ -418,7 +433,7 @@ enum HTMLPreviewPage {
         let scheme = theme.light ? "light" : "dark"
         let background = presentation == .inline ? "transparent" : (theme.light ? "#ffffff" : "#000000")
         return """
-        <meta http-equiv="Content-Security-Policy" content="\(contentSecurityPolicy)"><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{color-scheme:\(scheme);--foreground:\(theme.foreground);--muted-foreground:\(theme.mutedForeground);--accent:\(theme.accent);--border:\(theme.border);--card:\(theme.card)}html,body{margin:0;padding:0;background:\(background);color:var(--foreground);font-family:-apple-system,BlinkMacSystemFont,sans-serif;-webkit-text-size-adjust:100%}</style>
+        <meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{color-scheme:\(scheme);--foreground:\(theme.foreground);--muted-foreground:\(theme.mutedForeground);--accent:\(theme.accent);--border:\(theme.border);--card:\(theme.card)}html,body{margin:0;padding:0;background:\(background);color:var(--foreground);font-family:-apple-system,BlinkMacSystemFont,sans-serif;-webkit-text-size-adjust:100%}</style>
         """
     }
 

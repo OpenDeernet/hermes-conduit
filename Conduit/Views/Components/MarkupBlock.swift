@@ -558,12 +558,13 @@ enum MarkupHTML {
     /// Only the hashed files below and KaTeX's fonts, so a reference to
     /// another file or version can't load around the hashes.
     private static let rendererPaths = [mermaidScript, katexScript, katexStylesheet].compactMap { URL(string: $0.url)?.path }
-    private static let rendererFontFolder = "/npm/katex@0.16.22/dist/fonts/"
+    private static let rendererFontFolder = (URL(string: katexStylesheet.url)?.deletingLastPathComponent().path ?? "") + "/fonts/"
 
     /// The renderers' files, pinned by version and by hash: a file the CDN
-    /// serves changed doesn't run. A version bump takes new hashes and the
-    /// font folder above; hash the files in the npm package
-    /// (`openssl dgst -sha384 -binary <file> | base64`).
+    /// serves changed doesn't run. A version bump takes new hashes: hash the
+    /// files in the npm tarball (`openssl dgst -sha384 -binary <file> | base64`)
+    /// after checking the tarball against the registry's `dist.integrity`.
+    /// A wrong hash shows "Couldn't draw" on every diagram or formula.
     static let mermaidScript = Subresource(
         url: "https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js",
         integrity: "sha384-T/0lMUdJpd2S1ZHtRiofG3htU3xPCrFVeAQ1UUE2TJwlEJSV5NUwn30kP28n238E"

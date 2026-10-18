@@ -100,7 +100,8 @@ extension MarkdownLargeDocumentTests {
     func testHTMLPreview_ThemeGoesIntoTheHeadAndScriptsBeforeBodyEnd() {
         let document = "<!DOCTYPE html><html><head><title>t</title></head><body><div>chart</div></body></html>"
         let page = HTMLPreviewPage.framed(document, theme: HTMLPreviewTheme(light: true), presentation: .inline)
-        XCTAssertTrue(page.hasPrefix("<!DOCTYPE html><html><head><meta http-equiv=\"Content-Security-Policy\""), page)
+        XCTAssertTrue(page.hasPrefix("<!DOCTYPE html><meta http-equiv=\"Content-Security-Policy\""), page)
+        XCTAssertTrue(page.contains("<html><head><meta name=\"viewport\""), page)
         XCTAssertTrue(page.contains("--foreground:"))
         XCTAssertTrue(page.contains("color-scheme:light"))
         let scriptRange = page.range(of: HTMLPreviewPage.messageHandlerName)
@@ -207,7 +208,26 @@ extension MarkdownLargeDocumentTests {
         XCTAssertFalse(policy.contains("https:") || policy.contains("http:") || policy.contains("*"))
         for presentation in [HTMLPreviewPage.Presentation.inline, .fullScreen] {
             let page = HTMLPreviewPage.framed("<html><head></head><body>x</body></html>", theme: HTMLPreviewTheme(light: true), presentation: presentation)
-            XCTAssertTrue(page.contains("<meta http-equiv=\"Content-Security-Policy\" content=\"\(policy)\">"))
+            XCTAssertTrue(page.hasPrefix("<meta http-equiv=\"Content-Security-Policy\" content=\"\(policy)\">"))
+        }
+    }
+
+    // A `<head>` after the file's first script, or inside a string or
+    // comment, mustn't let that script run before the policy.
+    func testHTMLPreview_PolicyComesBeforeAnyScriptOfTheFile() {
+        let policyTag = "<meta http-equiv=\"Content-Security-Policy\""
+        let hostile = [
+            "<script>fetch('https://evil.example/')</script><html><head></head><body>chart</body></html>",
+            "<script>var s = \"<head>\";</script><body>chart</body>",
+            "<!-- <head> --><script>1</script><p>chart</p>",
+            "<!doctype html><script>1</script><html><head></head><body>x</body></html>",
+        ]
+        for document in hostile {
+            let page = HTMLPreviewPage.framed(document, theme: HTMLPreviewTheme(light: true), presentation: .inline)
+            guard let policy = page.range(of: policyTag), let script = page.range(of: "<script") else {
+                return XCTFail(page)
+            }
+            XCTAssertLessThan(policy.lowerBound, script.lowerBound, page)
         }
     }
 }
