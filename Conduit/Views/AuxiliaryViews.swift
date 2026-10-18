@@ -3209,10 +3209,18 @@ private struct NotificationsSettingsDetail: View {
                     if appState.notifierPlugin.reports("pairing") {
                         oneTapPairing
                     } else {
-                        Text("Install the Conduit plugin on each dashboard's host, then create a short-lived pairing code here for each Hermes dashboard you want to reach.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        pluginPageLink(AppLocalization.string("Install or update the Conduit plugin"))
+                        // Installed but not running: installing again can't help.
+                        if appState.notifierPlugin.isNotServed {
+                            Text("Installed on this dashboard's host, but the dashboard doesn't run it. Turn it on in Hermes, then restart the gateway and the dashboard.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            pluginPageLink(AppLocalization.string("Open Conduit plugin"))
+                        } else {
+                            Text("Install the Conduit plugin on each dashboard's host, then create a short-lived pairing code here for each Hermes dashboard you want to reach.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            pluginPageLink(AppLocalization.string("Install or update the Conduit plugin"))
+                        }
                         Button {
                             Task {
                                 // Pairings are bound to the active dashboard
