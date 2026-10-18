@@ -644,10 +644,12 @@ struct V2ChatsView: View, Equatable {
 
     private func filterRows(_ selection: V2FilterSelection, searching: Bool) -> [SessionSummary] {
         guard !selection.isEmpty else {
+            // Read once, not once per row.
+            let projectChats = self.projectChats
             return V2ChatsView.allRows(
                 sourceRows(nil),
                 searching: searching,
-                inMainList: mainListShows
+                inMainList: { mainListShows($0, projectChats: projectChats) }
             )
         }
         return selection.rows(
@@ -670,10 +672,10 @@ struct V2ChatsView: View, Equatable {
 
     /// A project's conversations live on its page, not in the main list;
     /// a pinned one stays, since pinning asks for it here, and Settings can
-    /// list the recent ones or all of them too. The catalog carries no
-    /// folder, so this hides the conversations the project tree is known
-    /// to hold.
-    private func mainListShows(_ session: SessionSummary) -> Bool {
+    /// list the recent ones or all of them too, by the row's own activity
+    /// (a nest's newer call doesn't count). The catalog carries no folder,
+    /// so this hides the conversations the project tree is known to hold.
+    private func mainListShows(_ session: SessionSummary, projectChats: ProjectChatsInChats) -> Bool {
         guard appState.supportsProjects else { return true }
         return appState.isSessionPinned(session)
             || appState.knownProjectID(for: session) == nil
