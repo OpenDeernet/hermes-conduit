@@ -616,6 +616,8 @@ final class PushNotificationService: ObservableObject {
     private var awaitingTokenChallenge = false
     private var receivedTokenChallenge: String?
     private var tokenChallengeContinuation: CheckedContinuation<String, Error>?
+    /// Callers waiting for another proof to finish: each nonce works once.
+    private var tokenProofWaiters: [CheckedContinuation<Void, Never>] = []
     private var navigationRetryTask: Task<Void, Never>?
     private var pendingRetryCount = 0
     private let maxNotificationRetriesPerTarget = 1
@@ -1354,13 +1356,18 @@ final class PushNotificationService: ObservableObject {
     }
 
     /// Asks the relay to push a nonce to `deviceToken` and waits for it.
-    private func proveDeviceToken(_ deviceToken: String, timeout: Duration = .seconds(30)) async throws -> String {
-        guard !awaitingTokenChallenge else { throw PushNotificationError.tokenProofPending }
+    private func proveDeviceToken(_ deviceToken: String, timeout: Duration = .seconds(20)) async throws -> String {
+        while awaitingTokenChallenge {
+            await withCheckedContinuation { tokenProofWaiters.append($0) }
+        }
         awaitingTokenChallenge = true
         receivedTokenChallenge = nil
         defer {
             awaitingTokenChallenge = false
             receivedTokenChallenge = nil
+            let waiters = tokenProofWaiters
+            tokenProofWaiters = []
+            waiters.forEach { $0.resume() }
         }
         let body = TokenChallengeRequest(bundleID: bundleID, deviceToken: deviceToken, environment: "production")
         let request = try jsonRequest(path: "/v1/token-challenges", method: "POST", body: body)
@@ -2115,7 +2122,6 @@ private enum PushNotificationError: LocalizedError {
     case tokenTimeout
     case tokenRequestPending
     case tokenProofTimeout
-    case tokenProofPending
     case relay(String)
     var errorDescription: String? {
         switch self {
@@ -2123,7 +2129,6 @@ private enum PushNotificationError: LocalizedError {
         case .tokenTimeout: return AppLocalization.string("Apple didn't return a push token in time. Check your connection and try again.")
         case .tokenRequestPending: return AppLocalization.string("Still waiting for a push token from Apple. Try again in a moment.")
         case .tokenProofTimeout: return AppLocalization.string("The push relay's check didn't reach this iPhone in time. Check your connection and try again.")
-        case .tokenProofPending: return AppLocalization.string("Still checking this iPhone with the push relay. Try again in a moment.")
         case .relay(let message): return message
         }
     }
