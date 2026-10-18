@@ -356,11 +356,12 @@ enum HTMLPreviewPage {
     /// No base URL: the page has no origin of its own, so it can't reach
     /// files on the phone or pass for a site.
     static let baseURL: URL? = nil
-    /// The page can draw anything and load images, styles and scripts from
-    /// anywhere, but can't send data off with fetch, XHR, sockets, beacons
-    /// or forms, or open frames on other sites (#770). A policy in the file
-    /// itself only adds limits; it can't lift these.
-    static let contentSecurityPolicy = "connect-src data: blob:; frame-src data: blob:; form-action 'none'; base-uri 'none'"
+    /// The page can draw anything and load images, media, styles and
+    /// scripts from anywhere, but can't send data off with fetch, XHR,
+    /// sockets, beacons or forms, or open frames or plug-ins on other sites
+    /// (#770). A policy in the file itself only adds limits; it can't lift
+    /// these. Loads it may still make (an image's URL) can carry data one way.
+    static let contentSecurityPolicy = "connect-src data: blob:; frame-src data: blob:; object-src 'none'; form-action 'none'; base-uri 'none'"
 
     /// The app listens for the inline page's height and nothing else.
     static func messageHandlerNames(reportsHeight: Bool) -> [String] {
@@ -445,7 +446,7 @@ enum HTMLPreviewPage {
     /// the user tapped opens in the browser.
     static func navigationDecision(url: URL?, isMainFrame: Bool, userTapped: Bool) -> (allow: Bool, openExternally: URL?) {
         let scheme = url?.scheme?.lowercased()
-        if url == nil || url?.absoluteString == "about:blank" || (scheme == "about" && !isMainFrame) {
+        if url == nil || url?.absoluteString == "about:blank" || (!isMainFrame && url?.absoluteString == "about:srcdoc") {
             return (true, nil)
         }
         if !isMainFrame, scheme == "data" || scheme == "blob" {

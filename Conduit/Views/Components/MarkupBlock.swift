@@ -555,11 +555,14 @@ enum MarkupHTML {
         }
     }
 
-    private static let rendererPathPrefixes = ["/npm/mermaid@", "/npm/katex@"]
+    /// Only the pinned versions' folders, so a reference to another version
+    /// can't load around the hashes below.
+    private static let rendererPathPrefixes = ["/npm/mermaid@11.16.0/", "/npm/katex@0.16.22/"]
 
     /// The renderers' files, pinned by version and by hash: a file the CDN
-    /// serves changed doesn't run. A version bump takes new hashes, from
-    /// the files in the npm package (`openssl dgst -sha384 -binary <file> | base64`).
+    /// serves changed doesn't run. A version bump takes new hashes and the
+    /// folders above; hash the files in the npm package
+    /// (`openssl dgst -sha384 -binary <file> | base64`).
     static let mermaidScript = Subresource(
         url: "https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js",
         integrity: "sha384-T/0lMUdJpd2S1ZHtRiofG3htU3xPCrFVeAQ1UUE2TJwlEJSV5NUwn30kP28n238E"

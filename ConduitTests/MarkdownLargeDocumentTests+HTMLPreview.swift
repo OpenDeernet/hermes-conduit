@@ -153,6 +153,8 @@ extension MarkdownLargeDocumentTests {
         // site can't, so the page can't send what it shows anywhere (#770).
         XCTAssertTrue(HTMLPreviewPage.navigationDecision(url: URL(string: "data:text/html,<p>x</p>"), isMainFrame: false, userTapped: false).allow)
         XCTAssertTrue(HTMLPreviewPage.navigationDecision(url: URL(string: "blob:null/1234"), isMainFrame: false, userTapped: false).allow)
+        XCTAssertTrue(HTMLPreviewPage.navigationDecision(url: URL(string: "about:srcdoc"), isMainFrame: false, userTapped: false).allow)
+        XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: URL(string: "about:srcdoc"), isMainFrame: true, userTapped: false).allow)
         XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: link, isMainFrame: false, userTapped: false).allow)
         XCTAssertFalse(HTMLPreviewPage.navigationDecision(url: URL(string: "http://example.com/"), isMainFrame: false, userTapped: false).allow)
         // A tapped link opens in the browser instead.
@@ -200,6 +202,7 @@ extension MarkdownLargeDocumentTests {
         XCTAssertTrue(policy.contains("connect-src data: blob:"))
         XCTAssertTrue(policy.contains("frame-src data: blob:"))
         XCTAssertTrue(policy.contains("form-action 'none'"))
+        XCTAssertTrue(policy.contains("object-src 'none'"))
         XCTAssertFalse(policy.contains("https:") || policy.contains("http:") || policy.contains("*"))
         for presentation in [HTMLPreviewPage.Presentation.inline, .fullScreen] {
             let page = HTMLPreviewPage.framed("<html><head></head><body>x</body></html>", theme: HTMLPreviewTheme(light: true), presentation: presentation)
