@@ -26,8 +26,8 @@
 //    its first place; a chart keeps the series that fit its labels (one,
 //    never negative, for a pie); a forecast needs a source and something
 //    to show, and drops a day whose low is above its high; a comparison
-//    recommends one option at most; media needs a source, and an image has
-//    no duration or artwork; a contact keeps only a phone and an email
+//    recommends one option at most; media needs a source and https links,
+//    and an image has no duration or artwork; a contact keeps only a phone and an email
 //    that look like one; a live name is kept on the first card of a set
 //    that has it.
 //
@@ -212,6 +212,10 @@ struct RichCardSchema {
         return matches(phonePattern, text) && (3...20).contains(digits)
     }
 
+    private static func isHTTPS(_ value: Any?) -> Bool {
+        (value as? String).map { $0.prefix(8).lowercased() == "https://" } ?? false
+    }
+
     static func isEmail(_ text: String) -> Bool {
         matches(emailPattern, text)
     }
@@ -251,11 +255,15 @@ struct RichCardSchema {
             }
         case "media":
             guard card["source"] != nil else { return nil }
-            card["media"] = (card["media"] as? [[String: Any]] ?? []).map { item in
-                guard item["kind"] as? String == "image" else { return item }
+            // The phone loads media over https only.
+            let media = (card["media"] as? [[String: Any]] ?? []).filter { isHTTPS($0["url"]) }
+            guard !media.isEmpty else { return nil }
+            card["media"] = media.map { item in
                 var item = item
-                item["duration"] = nil
-                item["artwork"] = nil
+                if item["kind"] as? String == "image" || (item["artwork"] != nil && !isHTTPS(item["artwork"])) {
+                    item["artwork"] = nil
+                }
+                if item["kind"] as? String == "image" { item["duration"] = nil }
                 return item
             }
         case "contact":

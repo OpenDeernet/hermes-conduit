@@ -1784,6 +1784,57 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Media keeps only https items and artwork, and is dropped with none left",
+      "input": [
+        {
+          "type": "media",
+          "source": {
+            "name": "Archive"
+          },
+          "media": [
+            {
+              "kind": "audio",
+              "url": "http://example.org/a.mp3",
+              "title": "Plain http"
+            },
+            {
+              "kind": "video",
+              "url": "HTTPS://example.org/b.mp4",
+              "artwork": "http://example.org/b.jpg",
+              "duration": 60
+            }
+          ]
+        },
+        {
+          "type": "media",
+          "source": {
+            "name": "Archive"
+          },
+          "media": [
+            {
+              "kind": "image",
+              "url": "http://example.org/c.jpg"
+            }
+          ]
+        }
+      ],
+      "output": [
+        {
+          "type": "media",
+          "source": {
+            "name": "Archive"
+          },
+          "media": [
+            {
+              "kind": "video",
+              "url": "HTTPS://example.org/b.mp4",
+              "duration": 60
+            }
+          ]
+        }
+      ]
     }
   ]
 }
