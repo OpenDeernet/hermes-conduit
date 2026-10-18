@@ -10680,6 +10680,7 @@ final class AppState: ObservableObject {
             // its old in-memory session. Tear it down before presenting login.
             dashboardTicketBridge?.invalidate()
             dashboardTicketBridge = nil
+            let pluginStateBeforeSignIn = notifierPlugin.state
             notifierPlugin = freshNotifierPluginStatus
             let failure = ConnectionFailureClassifier.classify(error)
             if keepOfflineChatInsteadOfSignIn(failure) { return }
@@ -10688,6 +10689,7 @@ final class AppState: ObservableObject {
             isConnected = false
             showLogin = true
             pendingLoginFailure = .presenting(ConnectionFailureClassifier.classify(error))
+            endLockScreenTurnsForSignIn(plugin: pluginStateBeforeSignIn)
         }
     }
 
@@ -11900,6 +11902,7 @@ final class AppState: ObservableObject {
         lastConnectionFailure = failure
         showLogin = true
         pendingLoginFailure = .presenting(failure)
+        endLockScreenTurnsForSignIn(plugin: notifierPlugin.state)
         return true
     }
 
@@ -12162,11 +12165,16 @@ final class AppState: ObservableObject {
         errorMessage = nil
         showLogin = true
         pendingLoginFailure = pendingFailure
-        // A turn of this dashboard nothing can end now stops counting up on
-        // the Lock Screen.
+        endLockScreenTurnsForSignIn(plugin: pluginStateBeforeSignIn)
+    }
+
+    /// Every path that presents sign-in for the active dashboard: a turn of
+    /// it nothing can end now stops counting up on the Lock Screen.
+    /// `plugin` is the notifier plugin's state before the sign-in reset it.
+    func endLockScreenTurnsForSignIn(plugin: NotifierPluginStatus.State) {
         if let keepingThoseOnRelay = Self.signInEndsLockScreenTurns(
             screenAway: phoneScreenIsAway(),
-            plugin: pluginStateBeforeSignIn
+            plugin: plugin
         ).keepingThoseOnRelay {
             liveTurnActivitiesEndDashboard(activeDashboardID?.uuidString, keepingThoseOnRelay)
         }
