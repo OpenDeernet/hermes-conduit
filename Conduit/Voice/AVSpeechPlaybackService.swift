@@ -73,6 +73,13 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
     /// player→mixer path voice conversations use; any other rate inserts a
     /// pitch-preserving time stretch.
     var playbackRate: Float = 1.0
+    /// Read Aloud's player (#759): every stream gets the time stretch, even
+    /// at 1x, so the speed can change while it plays.
+    var keepsRateAdjustable = false
+    /// The time stretch of the current stream, when it has one.
+    private var timePitch: AVAudioUnitTimePitch?
+    /// What of the current stream has been heard (#759).
+    private var progress = SpeechPlaybackProgress()
     /// Plays silently while set (a live call's speaker mute, #487), across
     /// engine rebuilds. Playback and its drains run as usual.
     var isMuted = false {
@@ -122,7 +129,7 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
         // Effect units render Float32 only, so a stretched stream schedules
         // float buffers (converted in enqueuePCM16) instead of the Int16 ones
         // the direct path plays.
-        let stretched = rate != 1
+        let stretched = rate != 1 || keepsRateAdjustable
         let format = stretched
             ? AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
             : AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: sampleRate, channels: 1, interleaved: true)
@@ -143,6 +150,7 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
                         engine.attach(timePitch)
                         engine.connect(player, to: timePitch, format: format)
                         engine.connect(timePitch, to: engine.mainMixerNode, format: format)
+                        self.timePitch = timePitch
                     } else {
                         engine.connect(player, to: engine.mainMixerNode, format: format)
                     }
@@ -158,6 +166,7 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
             throw error
         }
         player.play()
+        progress = SpeechPlaybackProgress(rate: Double(rate))
         isPlaying = true
     }
 
@@ -207,6 +216,7 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
         // playing again, not just the one that started it.
         isPlaying = true
         scheduledSeconds += Double(frames) / format.sampleRate
+        progress.scheduled(Double(frames) / format.sampleRate)
         let generation = playbackGeneration
         player.scheduleBuffer(
             buffer,
@@ -228,7 +238,7 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
             player.delegate = self
             // AVAudioPlayer supports up to 2x.
             let rate = min(Self.clampedRate(playbackRate), 2)
-            if rate != 1 {
+            if rate != 1 || keepsRateAdjustable {
                 player.enableRate = true
                 player.rate = rate
             }
@@ -240,6 +250,29 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
             releaseOwnership()
             throw error
         }
+    }
+
+    /// Retimes what is playing now (#759). A stream built without the time
+    /// stretch keeps its speed until the next one starts.
+    func changeRate(_ rate: Float) {
+        playbackRate = rate
+        let clamped = Self.clampedRate(rate)
+        if let timePitch {
+            timePitch.rate = clamped
+            progress.setRate(Double(clamped))
+        } else if let encodedPlayer, encodedPlayer.enableRate {
+            encodedPlayer.rate = min(clamped, 2)
+        }
+    }
+
+    var playedSeconds: TimeInterval {
+        if let encodedPlayer { return encodedPlayer.currentTime }
+        return progress.playedSeconds()
+    }
+
+    var receivedSeconds: TimeInterval {
+        if let encodedPlayer { return encodedPlayer.duration }
+        return progress.receivedSeconds
     }
 
     func finish() throws {
@@ -304,6 +337,7 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
         }
         isPaused = true
         pausedAt = .now
+        progress.pause()
         return true
     }
 
@@ -314,6 +348,7 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
         } else {
             player.play()
         }
+        progress.resume()
         endPause()
     }
 
@@ -338,6 +373,8 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
         encodedPlayer?.stop()
         encodedPlayer = nil
         format = nil
+        timePitch = nil
+        progress.reset()
         remainder.removeAll(keepingCapacity: true)
         pendingBuffers = 0
         scheduledSeconds = 0
@@ -483,6 +520,7 @@ final class AVSpeechPlaybackService: NSObject, SpeechPlaybackService {
     func bufferDidDrain(generation: UInt64) {
         guard generation == playbackGeneration, pendingBuffers > 0 else { return }
         pendingBuffers -= 1
+        progress.bufferPlayed()
         guard pendingBuffers == 0 else { return }
         if isFinishing {
             // Terminal: everything queued has rendered. stop() tears the
