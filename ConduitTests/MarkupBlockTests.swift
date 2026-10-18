@@ -149,6 +149,22 @@ extension MarkdownFallbackTests {
         XCTAssertFalse(MarkupHTML.allowsNavigation(to: nil))
     }
 
+    func testRendererFilesArePinnedByHash() {
+        let mermaid = MarkupHTML.page(MarkupDocument(kind: .mermaid, source: "graph TD; A-->B", light: true, fontSize: 17), presentation: .inline)
+        let math = MarkupHTML.page(MarkupDocument(kind: .math, source: "x^2", light: true, fontSize: 17), presentation: .inline)
+        for (page, file) in [(mermaid, MarkupHTML.mermaidScript), (math, MarkupHTML.katexScript), (math, MarkupHTML.katexStylesheet)] {
+            XCTAssertTrue(file.integrity.hasPrefix("sha384-"))
+            XCTAssertTrue(page.contains("\"\(file.url)\" integrity=\"\(file.integrity)\" crossorigin=\"anonymous\""), file.url)
+            XCTAssertTrue(MarkupHTML.allowsNavigation(to: URL(string: file.url)))
+        }
+        // Every CDN file the pages load carries a hash.
+        for page in [mermaid, math] {
+            let loads = page.components(separatedBy: "https://cdn.jsdelivr.net/").count - 1
+            let hashed = page.components(separatedBy: "integrity=\"sha384-").count - 1
+            XCTAssertEqual(loads, hashed)
+        }
+    }
+
     func testAPageThatKeepsLosingItsProcessStopsReloading() {
         var reloads = MarkupReloads()
         for _ in 0..<MarkupReloads.limit {

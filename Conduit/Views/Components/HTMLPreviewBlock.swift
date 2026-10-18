@@ -353,6 +353,19 @@ enum HTMLPreviewPage {
     }
 
     static let messageHandlerName = "conduitPreview"
+    /// No base URL: the page has no origin of its own, so it can't reach
+    /// files on the phone or pass for a site.
+    static let baseURL: URL? = nil
+    /// The page can draw anything and load images, styles and scripts from
+    /// anywhere, but can't send data off with fetch, XHR, sockets, beacons
+    /// or forms, or open frames on other sites (#770). A policy in the file
+    /// itself only adds limits; it can't lift these.
+    static let contentSecurityPolicy = "connect-src data: blob:; frame-src data: blob:; form-action 'none'; base-uri 'none'"
+
+    /// The app listens for the inline page's height and nothing else.
+    static func messageHandlerNames(reportsHeight: Bool) -> [String] {
+        reportsHeight ? [messageHandlerName] : []
+    }
     static let placeholderHeight: CGFloat = 280
     static let minimumInlineHeight: CGFloat = 60
     /// The tallest a page draws in a message; full screen shows the rest.
@@ -402,7 +415,7 @@ enum HTMLPreviewPage {
         let scheme = theme.light ? "light" : "dark"
         let background = presentation == .inline ? "transparent" : (theme.light ? "#ffffff" : "#000000")
         return """
-        <meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{color-scheme:\(scheme);--foreground:\(theme.foreground);--muted-foreground:\(theme.mutedForeground);--accent:\(theme.accent);--border:\(theme.border);--card:\(theme.card)}html,body{margin:0;padding:0;background:\(background);color:var(--foreground);font-family:-apple-system,BlinkMacSystemFont,sans-serif;-webkit-text-size-adjust:100%}</style>
+        <meta http-equiv="Content-Security-Policy" content="\(contentSecurityPolicy)"><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{color-scheme:\(scheme);--foreground:\(theme.foreground);--muted-foreground:\(theme.mutedForeground);--accent:\(theme.accent);--border:\(theme.border);--card:\(theme.card)}html,body{margin:0;padding:0;background:\(background);color:var(--foreground);font-family:-apple-system,BlinkMacSystemFont,sans-serif;-webkit-text-size-adjust:100%}</style>
         """
     }
 
@@ -427,14 +440,15 @@ enum HTMLPreviewPage {
         return range.upperBound
     }
 
-    /// The page itself and what it loads stay; a navigation away from it
-    /// is cancelled, and one the user tapped opens in the browser.
+    /// The page itself and frames drawn from its own data stay; frames on
+    /// other sites and navigations away from it are cancelled, and a link
+    /// the user tapped opens in the browser.
     static func navigationDecision(url: URL?, isMainFrame: Bool, userTapped: Bool) -> (allow: Bool, openExternally: URL?) {
         let scheme = url?.scheme?.lowercased()
         if url == nil || url?.absoluteString == "about:blank" || (scheme == "about" && !isMainFrame) {
             return (true, nil)
         }
-        if !isMainFrame, scheme == "https" || scheme == "http" || scheme == "data" || scheme == "blob" {
+        if !isMainFrame, scheme == "data" || scheme == "blob" {
             return (true, nil)
         }
         if isMainFrame, userTapped, let url, scheme == "https" || scheme == "http" {
@@ -455,17 +469,10 @@ struct HTMLPreviewWebView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.allowsInlineMediaPlayback = true
-        configuration.mediaTypesRequiringUserActionForPlayback = .all
-        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-        if onHeight != nil {
-            configuration.userContentController.add(
-                MarkupMessageProxy(context.coordinator),
-                name: HTMLPreviewPage.messageHandlerName
-            )
-        }
+        let configuration = Self.configuration(
+            reportsHeight: onHeight != nil,
+            handler: MarkupMessageProxy(context.coordinator)
+        )
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.isOpaque = false
         view.backgroundColor = .clear
@@ -478,6 +485,21 @@ struct HTMLPreviewWebView: UIViewRepresentable {
         context.coordinator.onFailed = onFailed
         context.coordinator.load(html, into: view)
         return view
+    }
+
+    /// What keeps an agent's script harmless: nothing stored outlives the
+    /// page, no window opens on its own, and the only message the app takes
+    /// is the height. Tests hold this in place.
+    static func configuration(reportsHeight: Bool, handler: WKScriptMessageHandler) -> WKWebViewConfiguration {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = .all
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        for name in HTMLPreviewPage.messageHandlerNames(reportsHeight: reportsHeight) {
+            configuration.userContentController.add(handler, name: name)
+        }
+        return configuration
     }
 
     func updateUIView(_ view: WKWebView, context: Context) {
@@ -507,7 +529,7 @@ struct HTMLPreviewWebView: UIViewRepresentable {
             guard html != self.html else { return }
             self.html = html
             reloads = MarkupReloads()
-            view.loadHTMLString(html, baseURL: nil)
+            view.loadHTMLString(html, baseURL: HTMLPreviewPage.baseURL)
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -521,7 +543,7 @@ struct HTMLPreviewWebView: UIViewRepresentable {
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             guard !html.isEmpty else { return }
             if reloads.mayReload() {
-                webView.loadHTMLString(html, baseURL: nil)
+                webView.loadHTMLString(html, baseURL: HTMLPreviewPage.baseURL)
             } else {
                 onFailed?()
             }
