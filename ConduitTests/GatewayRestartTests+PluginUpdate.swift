@@ -40,6 +40,7 @@ extension GatewayRestartTests {
         var status = NotifierPluginStatus(state: .predatesCapabilities)
         status.hostCopy = .missing
         XCTAssertTrue(status.offersInstall)
+        XCTAssertTrue(status.updateAvailable)
         XCTAssertEqual(status.noticeOffer(finishSetupOffersInstall: false), .install)
         // Finish setting up offers Install itself: no second call to action.
         XCTAssertEqual(status.noticeOffer(finishSetupOffersInstall: true), .none)
@@ -59,13 +60,52 @@ extension GatewayRestartTests {
         XCTAssertEqual(status.noticeOffer(finishSetupOffersInstall: true), .update)
     }
 
-    func testTheNoticeStaysQuietForANewPluginTheDashboardDoesntServe() {
-        // Turned off, or installed after the dashboard started: neither
-        // Install nor Update fixes it.
+    func testANewPluginTheDashboardDoesntServeIsOfferedNoInstallOrUpdate() {
+        // Turned off, or installed after the dashboard started: Hermes
+        // refuses an install over the copy, and an update doesn't turn it on.
         var status = NotifierPluginStatus(state: .predatesCapabilities)
         status.hostCopy = .notServed
+        XCTAssertTrue(status.isNotServed)
+        XCTAssertFalse(status.offersInstall)
+        XCTAssertFalse(status.updateAvailable)
+        XCTAssertFalse(status.restartPending)
         XCTAssertEqual(status.noticeOffer(finishSetupOffersInstall: false), .none)
         XCTAssertEqual(status.noticeOffer(finishSetupOffersInstall: true), .none)
+        XCTAssertEqual(NotifierPluginSummary.detail(status, update: .idle), "Installed but not running")
+        // Settings and Notifications still point at the plugin's page.
+        XCTAssertTrue(status.needsAttention)
+
+        // Every other copy keeps its offer.
+        for copy in [NotifierPluginStatus.HostCopy.missing, .old, nil] {
+            status.hostCopy = copy
+            XCTAssertFalse(status.isNotServed)
+            XCTAssertTrue(status.updateAvailable, "\(String(describing: copy))")
+            XCTAssertTrue(status.needsAttention)
+            XCTAssertEqual(NotifierPluginSummary.detail(status, update: .idle), "Not installed or out of date")
+        }
+        XCTAssertFalse(NotifierPluginStatus(state: .unknown, hostCopy: .notServed).isNotServed)
+    }
+
+    func testARestartOutcomeStaysWhileTheRoutesDontAnswer() {
+        // Conduit's own install that couldn't restart the dashboard leaves
+        // the copy unserved until someone does.
+        let waiting = NotifierPluginUpdateState.needsDashboardRestart(detail: nil)
+        var status = NotifierPluginStatus(state: .predatesCapabilities)
+        status.hostCopy = .notServed
+        XCTAssertFalse(status.settles(waiting))
+
+        let current = NotifierPluginStatus.recommendedVersion
+        let served = NotifierPluginStatus(
+            state: .reported(version: current, capabilities: Set(NotifierPluginStatus.usedCapabilities)),
+            runtime: NotifierPluginStatus.Runtime(loadedVersion: current, restartNeeded: false, bootID: "b")
+        )
+        XCTAssertTrue(served.settles(waiting))
+        XCTAssertTrue(served.settles(.failed(detail: nil)))
+        XCTAssertFalse(served.settles(.idle))
+        var stillOld = served
+        stillOld.runtime = NotifierPluginStatus.Runtime(loadedVersion: "0.30.0", restartNeeded: true, bootID: "b")
+        XCTAssertFalse(stillOld.settles(waiting))
+        XCTAssertFalse(stillOld.settles(.failed(detail: nil)))
     }
 
     func testTheNoticeOffersNothingBeforeTheHostAnswers() {

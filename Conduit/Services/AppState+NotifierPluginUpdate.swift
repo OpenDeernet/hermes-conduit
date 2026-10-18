@@ -105,16 +105,7 @@ extension AppState {
     /// the offered version is running, e.g. a comeback wait the phone slept
     /// through.
     func clearSettledNotifierPluginUpdateOutcome() {
-        switch activeNotifierPluginUpdate {
-        case .needsDashboardRestart:
-            guard !notifierPlugin.updateAvailable, !notifierPlugin.restartPending else { return }
-        case .failed:
-            guard !notifierPlugin.restartPending,
-                  let running = notifierPlugin.runtime?.loadedVersion,
-                  !NotifierPluginStatus.isOlder(running, than: notifierPlugin.offeredVersion) else { return }
-        default:
-            return
-        }
+        guard notifierPlugin.settles(activeNotifierPluginUpdate) else { return }
         dismissNotifierPluginUpdateOutcome()
     }
 
@@ -236,5 +227,24 @@ extension AppState {
         }
         // The new pairing gets its key right away, before its first push.
         await provisionNotificationEncryption(bridge: bridge)
+    }
+}
+
+extension NotifierPluginStatus {
+    /// Whether this report makes `outcome` stale
+    /// (AppState.clearSettledNotifierPluginUpdateOutcome).
+    func settles(_ outcome: NotifierPluginUpdateState) -> Bool {
+        switch outcome {
+        case .needsDashboardRestart:
+            // Routes that still don't answer are still waiting on that
+            // restart, whatever an update would offer.
+            guard case .reported = state else { return false }
+            return !updateAvailable && !restartPending
+        case .failed:
+            guard !restartPending, let running = runtime?.loadedVersion else { return false }
+            return !Self.isOlder(running, than: offeredVersion)
+        default:
+            return false
+        }
     }
 }

@@ -67,8 +67,10 @@ struct NotifierPluginStatus: Equatable {
         /// capabilities route, so an update brings it.
         case old
         /// Listed at 0.4 or newer, yet its routes don't answer: turned off,
-        /// or installed after the dashboard started. The update notice
-        /// stays quiet; an update wouldn't fix it.
+        /// or installed after the dashboard started. Neither an install
+        /// (Hermes refuses one over an existing copy) nor an update fixes
+        /// it: turning it on and restarting the dashboard does
+        /// (`isNotServed`).
         case notServed
     }
 
@@ -117,10 +119,22 @@ struct NotifierPluginStatus: Equatable {
         }
     }
 
-    /// Installing it is the step: the capabilities route is missing and the
-    /// host's list has no old copy to update.
+    /// Installing it is the step: the capabilities route is missing and
+    /// the host's list has no copy of it, or couldn't be read.
     var offersInstall: Bool {
-        state == .predatesCapabilities && hostCopy != .old
+        state == .predatesCapabilities && (hostCopy == .missing || hostCopy == nil)
+    }
+
+    /// The host has a 0.4+ copy that this dashboard doesn't run: Conduit
+    /// offers no install or update, only the steps that turn it on.
+    var isNotServed: Bool {
+        state == .predatesCapabilities && hostCopy == .notServed
+    }
+
+    /// Settings points at the plugin's page: an update or the install is
+    /// offered, a restart is left, or the copy on the host isn't running.
+    var needsAttention: Bool {
+        updateAvailable || restartPending || isNotServed
     }
 
     /// Worth offering an update: something Conduit uses is missing, or the
@@ -131,7 +145,7 @@ struct NotifierPluginStatus: Equatable {
         case .unknown:
             return false
         case .predatesCapabilities:
-            return true
+            return !isNotServed
         case .reported(let version, _):
             let older = Self.isOlder(version, than: offeredVersion)
             return restartPending ? older : (needsUpdate || older)
@@ -223,7 +237,7 @@ struct NotifierPluginStatus: Equatable {
     /// folder it was cloned into. Nil when the answer has no list.
     static func hostCopy(inPluginsHub response: [String: Any]) -> HostCopy? {
         guard response["plugins"] is [Any] else { return nil }
-        let names: Set<String> = ["conduit_push", repository.split(separator: "/").last.map(String.init) ?? ""]
+        let names: Set<String> = ["conduit_push", "hermes-conduit-notifier"]
         guard let row = AgentPluginRow.list(from: response).first(where: { names.contains($0.name) || names.contains($0.folderName) }) else {
             return .missing
         }
@@ -261,7 +275,7 @@ extension NotifierPluginStatus {
         case .predatesCapabilities:
             switch hostCopy {
             case .old: return .update
-            // Nothing one tap fixes; Settings > Conduit plugin explains.
+            // Nothing one tap fixes; Settings > Conduit plugin has the steps.
             case .notServed: return .none
             case .missing, nil: return finishSetupOffersInstall ? .none : .install
             }
