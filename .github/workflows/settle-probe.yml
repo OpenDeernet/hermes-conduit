@@ -78,13 +78,13 @@ jobs:
             -collect-test-diagnostics never \
             "${args[@]}" > probe.log 2>&1 || echo "probe exited $?"
           echo "===== probe"
-          grep -E -A42 "SETTLE_PROBE|error:|Test Case .*(passed|failed)" probe.log | grep -v "^Test Suite" | head -n 1500 || tail -n 200 probe.log
+          grep -E -A130 "SETTLE_PROBE|error:|Test Case .*(passed|failed)" probe.log | grep -v "^Test Suite" | head -n 6000 || tail -n 200 probe.log
           xcodebuild test-without-building \
             -xctestrun "$XCRUN_FILE" \
             -destination "$DESTINATION" \
             -parallel-testing-enabled NO \
             -collect-test-diagnostics never \
-            -only-testing:ConduitTests/TranscriptInlineImageTests \
+            -only-testing:ConduitTests/MessageNormalizerTests \
             -only-testing:ConduitTests/ChatScrollEngineTests > unit.log 2>&1 || echo "unit exited $?"
           echo "===== unit"
           grep -E "error:|Test Case .*failed|Executed" unit.log | head -n 60

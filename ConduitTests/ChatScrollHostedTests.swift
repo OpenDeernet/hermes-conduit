@@ -683,7 +683,26 @@ final class ChatScrollHostedTests: XCTestCase {
                 y += bandHeight
             }
         }
-        return "SETTLE_PROBE \(label) view: bands \(bands) rows \(rowText)"
+        var tree = ""
+        if !bands.contains("#") {
+            var lines: [String] = []
+            func walk(_ v: UIView, _ depth: Int) {
+                guard lines.count < 60, depth < 4 else { return }
+                let f = v.convert(v.bounds, to: view)
+                lines.append(String(repeating: "  ", count: depth) + String(format: "%@ y %.0f-%.0f h %.0f hidden %d alpha %.2f layers %ld", String(describing: type(of: v)), f.minY, f.maxY, f.height, v.isHidden ? 1 : 0, v.alpha, v.layer.sublayers?.count ?? 0))
+                for sub in v.subviews { walk(sub, depth + 1) }
+            }
+            walk(view, 0)
+            func walkLayers(_ l: CALayer, _ depth: Int) {
+                guard lines.count < 120, depth < 4 else { return }
+                let f = l.convert(l.bounds, to: view.layer)
+                lines.append("L" + String(repeating: "  ", count: depth) + String(format: "%@ y %.0f-%.0f h %.0f hidden %d op %.2f", String(describing: type(of: l)), f.minY, f.maxY, f.height, l.isHidden ? 1 : 0, l.opacity))
+                for sub in l.sublayers ?? [] { walkLayers(sub, depth + 1) }
+            }
+            walkLayers(view.layer, 0)
+            tree = "\n    " + lines.joined(separator: "\n    ")
+        }
+        return "SETTLE_PROBE \(label) view: bands \(bands) rows \(rowText)\(tree)"
     }
 
     private func probeRemount(_ label: String, _ mounted: Mounted) throws -> String {
