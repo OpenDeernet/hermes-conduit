@@ -166,6 +166,11 @@ final class ChatScrollEngine: ObservableObject {
     /// before checking whether they are still at the bottom: the row
     /// animates open with ConduitMotion.response (a 0.34 s spring).
     static let disclosureSettleDelay: TimeInterval = 0.5
+    /// How long after the settled transcript changes the engine checks
+    /// that the latest rows were laid out where the reader is (#887).
+    static let blankViewportCheckDelay: TimeInterval = 0.35
+    /// Reveals one change of the transcript may ask for before giving up.
+    static let maximumBlankViewportReveals = 2
     static let coordinateSpaceName = "chat-transcript-stack"
 
     var onEvent: (@MainActor (ChatScrollEngineEvent) -> Void)?
@@ -202,6 +207,9 @@ final class ChatScrollEngine: ObservableObject {
     /// latest settle check acts. Anything else that changes the mode leaves
     /// browsing, which the check requires.
     private var disclosureGeneration: UInt64 = 0
+    /// Bumped by every settled transcript change, so only the latest blank
+    /// viewport check acts.
+    private var blankViewportCheckGeneration: UInt64 = 0
     private let now: () -> TimeInterval
     private let prefersReducedMotion: @MainActor () -> Bool
     private let schedule: (TimeInterval, @escaping @MainActor () -> Void) -> Void
@@ -563,6 +571,9 @@ final class ChatScrollEngine: ObservableObject {
             // the content-size change that follows pins again.
             pin(surface)
         }
+        if !isInitialSync, surface != nil {
+            scheduleBlankViewportCheck(revealsLeft: Self.maximumBlankViewportReveals)
+        }
     }
 
     // MARK: - Older-page backfill
@@ -877,6 +888,40 @@ final class ChatScrollEngine: ObservableObject {
                   surface.distanceFromBottom < -0.5 else { return }
             self.pin(surface)
             self.refreshJumpButton()
+        }
+    }
+
+    private func scheduleBlankViewportCheck(revealsLeft: Int) {
+        blankViewportCheckGeneration &+= 1
+        let generation = blankViewportCheckGeneration
+        schedule(Self.blankViewportCheckDelay) { [weak self] in
+            guard let self, generation == self.blankViewportCheckGeneration else { return }
+            self.checkForBlankViewport(revealsLeft: revealsLeft)
+        }
+    }
+
+    /// #887: when a turn settled (the streamed reply swapped for the saved
+    /// one, its live rows gone), the lazy stack could leave the latest
+    /// reply unlaid-out under a reader at the bottom: the screen showed
+    /// nothing, the reply sat far above, and only leaving the chat brought
+    /// it back. The offset was right; the stack had not placed the rows
+    /// there. Scrolling to the bottom through SwiftUI makes it lay them out.
+    private func checkForBlankViewport(revealsLeft: Int) {
+        guard mode == .following, !isPaused, !isDragging, !latestAnimationInFlight,
+              let surface, !surface.isTracking, !surface.isDecelerating,
+              let last = targetCache.targets.last,
+              rowFrames[last.id] == nil else { return }
+        let visible = visibleStackRange(of: surface)
+        guard !rowFrames.values.contains(where: { $0.maxY > visible.lowerBound && $0.minY < visible.upperBound }) else {
+            return
+        }
+        ChatViewportTrace.shared.log(String(
+            format: "blank viewport: offset %.1f content %.1f, %ld rows laid out; revealing latest",
+            surface.contentOffsetY, surface.contentHeight, rowFrames.count
+        ))
+        emit(.revealLatest)
+        if revealsLeft > 1 {
+            scheduleBlankViewportCheck(revealsLeft: revealsLeft - 1)
         }
     }
 

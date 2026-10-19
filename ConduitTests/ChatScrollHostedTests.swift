@@ -756,6 +756,9 @@ final class ChatScrollHostedTests: XCTestCase {
         settle(view, seconds: 0.3)
         lines.append(probeGeometry("\(name) nudged", mounted))
         lines.append(probeView("\(name) nudged", mounted))
+        settle(view, seconds: 1.2)
+        lines.append(probeGeometry("\(name) later", mounted))
+        lines.append(probeView("\(name) later", mounted))
         let changes = recorder.dump().split(separator: "\n").suffix(40).joined(separator: "\n    ")
         lines.append("SETTLE_PROBE \(name) changes:\n    \(changes)")
         lines.append("SETTLE_PROBE \(name) engine:\n    \(ChatViewportTrace.shared.dump().split(separator: "\n").suffix(20).joined(separator: "\n    "))")
@@ -781,6 +784,15 @@ final class ChatScrollHostedTests: XCTestCase {
 
     func testSettleProbeSmallDragNoTools() throws {
         try runSettleProbe("smallDragNoTools", reader: .smallDrag, tools: 0, chunks: 30)
+    }
+
+    func testSettleProbeRepeats() throws {
+        for round in 0..<4 {
+            for (name, reader) in [("dragBack", ProbeReader.dragBackToBottom), ("following", .following), ("smallDrag", .smallDrag)] {
+                try runSettleProbe("\(name)#\(round)", reader: reader, tools: 7, chunks: 30)
+                tearDown()
+            }
+        }
     }
 
     func testSettleProbeFarDragNoTools() throws {
