@@ -531,6 +531,8 @@ struct V2Shell: View {
                     .navigationDestination(for: V2Route.self, destination: destination)
             }
             .frame(width: V2SplitLayout.listWidth)
+            // Each column's backdrop stays in its own column.
+            .clipped()
             Rectangle()
                 .fill(Color.primary.opacity(0.08))
                 .frame(width: 1)
@@ -545,8 +547,10 @@ struct V2Shell: View {
                 .onAppear {
                     UIAccessibility.post(notification: .screenChanged, argument: nil)
                 }
+                .clipped()
             } else {
                 V2SplitPlaceholder(offersNewChat: offersNewChat)
+                    .clipped()
             }
         }
     }

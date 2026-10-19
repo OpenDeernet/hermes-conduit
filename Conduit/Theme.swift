@@ -423,6 +423,11 @@ struct ConduitBackdrop: View {
                         )
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)
+                    // The glows reach well past the screen. Clipped, their
+                    // frames do too: beside another column (an iPad's list
+                    // and chat), an overhanging glow read to accessibility
+                    // and UI tests as covering that column.
+                    .clipped()
                 }
             }
 
