@@ -776,10 +776,6 @@ protocol SpeechPlaybackService: AnyObject {
     var keepsRateAdjustable: Bool { get set }
     /// Retimes the audio already playing as well as the next stream.
     func changeRate(_ rate: Float)
-    /// Seconds of the current stream's source audio heard so far, and
-    /// scheduled so far (#759).
-    var playedSeconds: TimeInterval { get }
-    var receivedSeconds: TimeInterval { get }
 }
 
 extension SpeechPlaybackService {
@@ -801,10 +797,6 @@ extension SpeechPlaybackService {
     }
 
     func changeRate(_ rate: Float) { playbackRate = rate }
-
-    /// Services that do not track position report nothing heard.
-    var playedSeconds: TimeInterval { 0 }
-    var receivedSeconds: TimeInterval { 0 }
 }
 
 @MainActor
