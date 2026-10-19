@@ -808,6 +808,27 @@ extension AppStateVoiceCapabilityTests {
         XCTAssertEqual(appState.configuredLiveVoiceEngine(profile: appState.activeProfile), .localLive)
     }
 
+    func testHermesSettingLocalVoiceModeMeansAgentModeAndClassicKeepsHandsFree() throws {
+        let suite = "LocalLiveVoiceMode.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let appState = AppState(defaults: defaults, loadSavedConnection: false)
+        let mode = try XCTUnwrap(appState.agentSettingsCatalog.first { $0.key == "voice.mode" })
+
+        appState.setLocalLiveEnabled(true)
+        XCTAssertEqual(mode.read(), .string("classic"), "the hands-free option is part of Classic")
+        mode.write(.string("classic"))
+        XCTAssertTrue(appState.isLocalLiveEnabled, "choosing Classic keeps its hands-free option")
+
+        mode.write(.string("local"))
+        XCTAssertTrue(appState.isLocalLiveAgent)
+        XCTAssertEqual(mode.read(), .string("local"))
+
+        mode.write(.string("classic"))
+        XCTAssertFalse(appState.isLocalLiveEnabled)
+        XCTAssertEqual(mode.read(), .string("classic"))
+    }
+
     func testLocalLivePreferenceDecodesOffFromOlderBlobs() throws {
         let old = try JSONDecoder().decode(VoiceProfilePreferences.self, from: Data("{}".utf8))
         XCTAssertFalse(old.localLiveEnabled)
