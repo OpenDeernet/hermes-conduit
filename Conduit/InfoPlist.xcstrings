@@ -903,7 +903,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conduit uses Apple speech recognition to turn your voice into text for dictation and voice. It runs on your iPhone when your language supports that; otherwise Apple may process your speech on its servers."
+            "value" : "Conduit uses Apple speech recognition to turn your voice into text for dictation and voice conversations. It runs on your iPhone when your language supports that; otherwise Apple may process your speech on its servers."
           }
         },
         "es" : {
