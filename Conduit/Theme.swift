@@ -659,9 +659,8 @@ private struct OutOfProcessAccentTint: ViewModifier {
 /// Gives the window the chosen accent as its tint, for system screens Conduit
 /// presents but doesn't draw. The colour is resolved, not dynamic: a dynamic
 /// one sent to another process loses the pick (#748). It is set again when
-/// the scheme here turns light or dark, as SwiftUI reports it: the tinting
-/// view itself is never laid out again, so its own trait changes can arrive
-/// late or not at all.
+/// the window turns light or dark: the window's own trait change, since the
+/// tinting view is never laid out again and its changes can arrive late.
 struct WindowAccentTint: UIViewRepresentable {
     let choice: ConduitAccentChoice
 
@@ -669,13 +668,11 @@ struct WindowAccentTint: UIViewRepresentable {
         let view = TintingView()
         view.isUserInteractionEnabled = false
         view.choice = choice
-        view.dark = context.environment.colorScheme == .dark
         return view
     }
 
     func updateUIView(_ view: TintingView, context: Context) {
         view.choice = choice
-        view.dark = context.environment.colorScheme == .dark
     }
 
     final class TintingView: UIView {
@@ -683,17 +680,24 @@ struct WindowAccentTint: UIViewRepresentable {
             didSet { if choice != oldValue { applyTint() } }
         }
 
-        var dark = false {
-            didSet { if dark != oldValue { applyTint() } }
-        }
+        private weak var observedWindow: UIWindow?
+        private var styleRegistration: (any UITraitChangeRegistration)?
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
+            if observedWindow !== window {
+                if let styleRegistration { observedWindow?.unregisterForTraitChanges(styleRegistration) }
+                styleRegistration = window?.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (_: UIWindow, _: UITraitCollection) in
+                    self?.applyTint()
+                }
+                observedWindow = window
+            }
             applyTint()
         }
 
         private func applyTint() {
-            window?.tintColor = choice.color(dark: dark)
+            guard let window else { return }
+            window.tintColor = choice.color(dark: window.traitCollection.userInterfaceStyle == .dark)
         }
     }
 }
