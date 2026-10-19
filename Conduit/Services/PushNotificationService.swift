@@ -1440,7 +1440,14 @@ final class PushNotificationService: ObservableObject {
             clearTokenUpdateError()
             return
         }
-        guard let update = queueRegistrationUpdate(deviceToken: token) else { return }
+        observeTokenUpdate(queueRegistrationUpdate(deviceToken: token))
+    }
+
+    private var tokenUpdateError: String?
+
+    /// A token update that fails shows in Settings until one goes.
+    private func observeTokenUpdate(_ update: Task<Void, Error>?) {
+        guard let update else { return }
         Task { [weak self] in
             guard let self else { return }
             switch await update.result {
@@ -1452,8 +1459,6 @@ final class PushNotificationService: ObservableObject {
             }
         }
     }
-
-    private var tokenUpdateError: String?
 
     /// A token the relay has clears the failure a refresh left, not another.
     private func clearTokenUpdateError() {
@@ -2103,7 +2108,7 @@ final class PushNotificationService: ObservableObject {
         // token.
         if self.voipToken != voipToken || ringingWatchVoIPToken != watchToken || relayLocationToken != locationToken
             || (self.deviceToken.map { $0 != deviceToken } ?? false) {
-            queueRegistrationUpdate()
+            observeTokenUpdate(queueRegistrationUpdate())
         }
     }
 
