@@ -11,6 +11,8 @@ import SwiftUI
 
 extension View {
     /// Keeps the content to `maxWidth`, centered, on a wider window. The
+    /// content fills the space it's offered, so it suits a screen's whole
+    /// content rather than a view with a size of its own. The
     /// margins go into the safe area rather than a frame: a backdrop that
     /// ignores the safe area still fills the window, and a scroll view still
     /// scrolls from its margins with its content inset. Nothing changes on a

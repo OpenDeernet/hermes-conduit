@@ -284,7 +284,8 @@ struct V2Shell: View {
     /// rather than laying the tabs out once as a phone's. The width stays
     /// live, so a window resized across the threshold (Stage Manager, Split
     /// View) switches layout and rebuilds the tab's stacks: the paths, and
-    /// so the open chat, carry over; the list's scroll position doesn't.
+    /// so the open chat, carry over; the tab's own state (the list's scroll
+    /// position, its search) doesn't.
     private var sizedTabs: some View {
         GeometryReader { proxy in
             let split = V2SplitLayout.isSplit(width: proxy.size.width)

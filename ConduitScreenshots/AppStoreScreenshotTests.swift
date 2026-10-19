@@ -194,9 +194,14 @@ final class AppStoreScreenshotTests: XCTestCase {
 
     /// Back to the Chats list. The list and tab bar stay in the hierarchy
     /// under a pushed chat, so the chat's own menu button is the sign a
-    /// chat is still showing.
+    /// chat is still showing. Beside the list on an iPad, the chat's Close.
     private func backToTabs() {
         let chatMenu = app.buttons["conversation.menu"]
+        let close = app.buttons["conversation.close"]
+        if close.exists {
+            close.tap()
+            _ = chatMenu.waitForNonExistence(timeout: 4)
+        }
         for _ in 0..<3 where chatMenu.exists {
             // The V2 conversation's Back: the small round button top left.
             let screen = app.frame
