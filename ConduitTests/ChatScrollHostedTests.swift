@@ -618,6 +618,7 @@ final class ChatScrollHostedTests: XCTestCase {
         case following
         case smallDrag
         case farDrag
+        case midDrag
         case dragBackToBottom
     }
 
@@ -636,6 +637,67 @@ final class ChatScrollHostedTests: XCTestCase {
             view.adjustedContentInset.bottom, String(describing: mounted.engine.mode), lastID,
             frame.map { origin + $0.maxY } ?? .nan, blank, tail
         )
+    }
+
+    /// Rows with a frame inside the viewport, and a band map of the
+    /// viewport as drawn: '#' a 40 pt band with ink, '.' a blank one.
+    private func probeView(_ label: String, _ mounted: Mounted) -> String {
+        let view = mounted.scrollView
+        let origin = mounted.engine.surface?.transcriptOriginY ?? 0
+        let top = view.contentOffset.y + view.adjustedContentInset.top
+        let bottom = view.contentOffset.y + view.bounds.height - view.adjustedContentInset.bottom
+        var rows: [(String, ChatScrollRowFrame)] = []
+        for message in mounted.appState.messages {
+            if let frame = mounted.engine.rowFrame(for: message.id),
+               origin + frame.maxY > top, origin + frame.minY < bottom {
+                rows.append((message.id, frame))
+            }
+        }
+        let rowText = rows.map { String(format: "%@[%.0f-%.0f]", $0.0, origin + $0.1.minY, origin + $0.1.maxY) }
+            .joined(separator: " ")
+        var bands = ""
+        let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
+        let image = renderer.image { _ in
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+        }
+        if let cg = image.cgImage, let data = cg.dataProvider?.data, let bytes = CFDataGetBytePtr(data) {
+            let scale = CGFloat(cg.height) / view.bounds.height
+            let bandHeight: CGFloat = 40
+            var y: CGFloat = 0
+            while y < view.bounds.height {
+                let y0 = Int(y * scale), y1 = min(cg.height, Int((y + bandHeight) * scale))
+                var inked = false
+                let reference = (Int(bytes[y0 * cg.bytesPerRow]), Int(bytes[y0 * cg.bytesPerRow + 1]), Int(bytes[y0 * cg.bytesPerRow + 2]))
+                var row = y0
+                while row < y1, !inked {
+                    var column = Int(30 * scale)
+                    while column < cg.width - Int(30 * scale) {
+                        let index = row * cg.bytesPerRow + column * 4
+                        let delta = abs(Int(bytes[index]) - reference.0) + abs(Int(bytes[index + 1]) - reference.1) + abs(Int(bytes[index + 2]) - reference.2)
+                        if delta > 60 { inked = true; break }
+                        column += 3
+                    }
+                    row += 2
+                }
+                bands += inked ? "#" : "."
+                y += bandHeight
+            }
+        }
+        return "SETTLE_PROBE \(label) view: bands \(bands) rows \(rowText)"
+    }
+
+    private func probeRemount(_ label: String, _ mounted: Mounted) throws -> String {
+        let messages = mounted.appState.messages
+        let lastID = messages.last?.id ?? "-"
+        let before = mounted.engine.rowFrame(for: lastID).map { $0.maxY - $0.minY } ?? .nan
+        let contentBefore = mounted.scrollView.contentSize.height
+        let fresh = try mount(messages)
+        settle(fresh.host.view, seconds: 0.6)
+        let after = fresh.engine.rowFrame(for: lastID).map { $0.maxY - $0.minY } ?? .nan
+        return String(
+            format: "SETTLE_PROBE %@ remount: lastHeight %.1f -> %.1f content %.1f -> %.1f",
+            label, before, after, contentBefore, fresh.scrollView.contentSize.height
+        ) + "\n" + probeView("\(label) remounted", fresh)
     }
 
     private func runSettleProbe(_ name: String, reader: ProbeReader, tools: Int, chunks: Int) throws {
@@ -670,6 +732,8 @@ final class ChatScrollHostedTests: XCTestCase {
                     browse(mounted, to: mounted.scrollView.contentOffset.y - 90)
                 case .farDrag:
                     browse(mounted, to: mounted.scrollView.contentOffset.y - 1600)
+                case .midDrag:
+                    browse(mounted, to: mounted.scrollView.contentOffset.y - 500)
                 case .dragBackToBottom:
                     browse(mounted, to: mounted.scrollView.contentOffset.y - 90)
                     browse(mounted, to: maxOffset(mounted.scrollView))
@@ -686,10 +750,17 @@ final class ChatScrollHostedTests: XCTestCase {
         lines.append(probeGeometry("\(name) complete+0.1", mounted))
         settle(view, seconds: 2.0)
         lines.append(probeGeometry("\(name) settled", mounted))
+        lines.append(probeView("\(name) settled", mounted))
+        // A nudge, as a touch would give.
+        mounted.scrollView.contentOffset.y -= 1
+        settle(view, seconds: 0.3)
+        lines.append(probeGeometry("\(name) nudged", mounted))
+        lines.append(probeView("\(name) nudged", mounted))
         let changes = recorder.dump().split(separator: "\n").suffix(40).joined(separator: "\n    ")
         lines.append("SETTLE_PROBE \(name) changes:\n    \(changes)")
         lines.append("SETTLE_PROBE \(name) engine:\n    \(ChatViewportTrace.shared.dump().split(separator: "\n").suffix(20).joined(separator: "\n    "))")
         print(lines.joined(separator: "\n"))
+        print(try probeRemount(name, mounted))
     }
 
     func testSettleProbeFollowing() throws {
@@ -710,5 +781,13 @@ final class ChatScrollHostedTests: XCTestCase {
 
     func testSettleProbeSmallDragNoTools() throws {
         try runSettleProbe("smallDragNoTools", reader: .smallDrag, tools: 0, chunks: 30)
+    }
+
+    func testSettleProbeFarDragNoTools() throws {
+        try runSettleProbe("farDragNoTools", reader: .farDrag, tools: 0, chunks: 30)
+    }
+
+    func testSettleProbeMidDrag() throws {
+        try runSettleProbe("midDrag", reader: .midDrag, tools: 7, chunks: 30)
     }
 }
