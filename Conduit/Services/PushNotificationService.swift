@@ -2099,8 +2099,10 @@ final class PushNotificationService: ObservableObject {
         preferences = registration!.preferences
         persistRegistration()
         // A PushKit token that came while this was on its way goes next
-        // (at first launch both arrive together).
-        if self.voipToken != voipToken || ringingWatchVoIPToken != watchToken || relayLocationToken != locationToken {
+        // (at first launch both arrive together), and so does a newer push
+        // token.
+        if self.voipToken != voipToken || ringingWatchVoIPToken != watchToken || relayLocationToken != locationToken
+            || (self.deviceToken.map { $0 != deviceToken } ?? false) {
             queueRegistrationUpdate()
         }
     }
@@ -2126,7 +2128,10 @@ final class PushNotificationService: ObservableObject {
         }
         try validate(response: response, data: data)
         self.registration?.preferences = sentPreferences
-        if let token = body.deviceToken { self.registration?.deviceToken = token }
+        if let token = body.deviceToken {
+            self.registration?.deviceToken = token
+            if token == self.deviceToken { clearTokenUpdateError() }
+        }
         let installation = (try? JSONDecoder().decode(UpdateRegistrationResponse.self, from: data))?.installation
         // Another update sent a newer token meanwhile, and this one may
         // have landed after it: the newer token goes again, last.
