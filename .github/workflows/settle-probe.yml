@@ -71,6 +71,7 @@ jobs:
           for t in $(grep -oE "func (testSettleProbe[A-Za-z]*|testTurnCompletion[A-Za-z]*)" ConduitTests/ChatScrollHostedTests.swift | awk '{print $2}'); do
             args+=("-only-testing:ConduitTests/ChatScrollHostedTests/$t")
           done
+          args+=("-only-testing:ConduitTests/TranscriptInlineImageTests")
           xcodebuild test-without-building \
             -xctestrun "$XCRUN_FILE" \
             -destination "$DESTINATION" \
