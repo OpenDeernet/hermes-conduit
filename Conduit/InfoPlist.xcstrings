@@ -897,85 +897,85 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conduit verwendet die Apple-Spracherkennung auf dem Gerät, um deine Sprache in Text umzuwandeln, wenn du „Auf diesem iPhone“ auswählst."
+            "value" : "Conduit verwendet die Apple-Spracherkennung, um deine Sprache beim Diktieren und bei Sprachunterhaltungen in Text umzuwandeln. Sie läuft auf deinem iPhone, wenn deine Sprache das unterstützt; andernfalls kann Apple deine Sprache auf seinen Servern verarbeiten."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conduit uses on-device Apple speech recognition to turn your voice into text when you select On this iPhone."
+            "value" : "Conduit uses Apple speech recognition to turn your voice into text for dictation and voice. It runs on your iPhone when your language supports that; otherwise Apple may process your speech on its servers."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conduit usa el reconocimiento de voz de Apple en el dispositivo para convertir tu voz en texto cuando eliges «En este iPhone»."
+            "value" : "Conduit usa el reconocimiento de voz de Apple para convertir tu voz en texto al dictar y en las conversaciones de voz. Funciona en tu iPhone cuando tu idioma lo admite; si no, Apple puede procesar tu voz en sus servidores."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conduit utilise la reconnaissance vocale d'Apple sur l'appareil pour transformer votre voix en texte lorsque vous sélectionnez Sur cet iPhone."
+            "value" : "Conduit utilise la reconnaissance vocale d'Apple pour transformer votre voix en texte pendant la dictée et les conversations vocales. Elle fonctionne sur votre iPhone lorsque votre langue le permet ; sinon, Apple peut traiter votre voix sur ses serveurs."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conduit menggunakan pengenalan ucapan Apple di perangkat untuk mengubah suara Anda menjadi teks saat Anda memilih Di iPhone ini."
+            "value" : "Conduit menggunakan pengenalan ucapan Apple untuk mengubah suara Anda menjadi teks saat dikte dan percakapan suara. Pengenalan berjalan di iPhone Anda jika bahasa Anda mendukungnya; jika tidak, Apple dapat memproses ucapan Anda di servernya."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conduit usa il riconoscimento vocale di Apple sul dispositivo per trasformare la tua voce in testo quando selezioni Su questo iPhone."
+            "value" : "Conduit usa il riconoscimento vocale di Apple per trasformare la tua voce in testo durante la dettatura e le conversazioni vocali. Funziona sul tuo iPhone quando la tua lingua lo consente; altrimenti Apple può elaborare la tua voce sui propri server."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "「このiPhone上」を選択すると、ConduitはデバイスでAppleの音声認識を使用して、話した内容をテキストに変換します。"
+            "value" : "Conduitは音声入力と音声会話で、Appleの音声認識を使って話した内容をテキストに変換します。言語が対応していればiPhone上で処理され、対応していない場合はAppleのサーバで処理されることがあります。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "‘이 iPhone에서’를 선택하면 Conduit이 기기 내 Apple 음성 인식을 사용해 음성을 텍스트로 변환해요."
+            "value" : "Conduit은 받아쓰기와 음성 대화에서 Apple 음성 인식을 사용해 음성을 텍스트로 변환해요. 언어가 지원하면 iPhone에서 처리되고, 그렇지 않으면 Apple 서버에서 처리될 수 있어요."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conduit używa rozpoznawania mowy Apple na urządzeniu, aby zamieniać Twój głos na tekst, gdy wybierzesz opcję „Na tym iPhonie”."
+            "value" : "Conduit używa rozpoznawania mowy Apple, aby zamieniać Twój głos na tekst podczas dyktowania i rozmów głosowych. Działa ono na Twoim iPhonie, gdy Twój język to obsługuje; w przeciwnym razie Apple może przetwarzać Twoją mowę na swoich serwerach."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "O Conduit usa o reconhecimento de fala da Apple no aparelho para transformar sua voz em texto quando você seleciona Neste iPhone."
+            "value" : "O Conduit usa o reconhecimento de fala da Apple para transformar sua voz em texto no ditado e nas conversas por voz. Ele funciona no seu iPhone quando seu idioma permite; caso contrário, a Apple pode processar sua fala nos servidores dela."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conduit использует распознавание речи Apple на устройстве, чтобы преобразовывать ваш голос в текст, если выбран вариант «На этом iPhone»."
+            "value" : "Conduit использует распознавание речи Apple, чтобы преобразовывать ваш голос в текст при диктовке и в голосовых разговорах. Оно работает на вашем iPhone, если ваш язык это поддерживает; иначе Apple может обрабатывать вашу речь на своих серверах."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conduit, “Bu iPhone'da” seçeneğini seçtiğinizde sesinizi metne dönüştürmek için Apple'ın cihaz üzerinde konuşma tanımasını kullanır."
+            "value" : "Conduit, dikte ve sesli konuşmalarda sesinizi metne dönüştürmek için Apple konuşma tanımayı kullanır. Diliniz destekliyorsa iPhone'unuzda çalışır; aksi takdirde Apple konuşmanızı kendi sunucularında işleyebilir."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "当你选择「在这台 iPhone 上」时，Conduit 使用 Apple 设备端语音识别将你的语音转换为文字。"
+            "value" : "Conduit 在听写和语音对话中使用 Apple 语音识别将你的语音转换为文字。如果你的语言支持，识别会在你的 iPhone 上进行；否则 Apple 可能会在其服务器上处理你的语音。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "當你選擇「在這部 iPhone 上」時，Conduit 會使用裝置上的 Apple 語音辨識，將你的語音轉換為文字。"
+            "value" : "Conduit 在聽寫和語音對話中會使用 Apple 語音辨識，將你的語音轉換為文字。如果你的語言支援，辨識會在你的 iPhone 上進行；否則 Apple 可能會在其伺服器上處理你的語音。"
           }
         }
       }
