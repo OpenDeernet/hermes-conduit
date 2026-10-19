@@ -61,7 +61,8 @@ jobs:
 
       - name: Build errors
         if: failure()
-        run: grep -E "(^|: )error:" ci-lane/build/build.log | head -40 | while read -r line; do echo "::error::$line"; done || true
+        run: |
+          grep -E "(^|: )error:" ci-lane/build/build.log | head -40 | while read -r line; do echo "::error::$line"; done || true
 
       - name: Run the probe
         run: |

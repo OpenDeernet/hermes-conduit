@@ -1278,6 +1278,29 @@ struct UserMessageContent: View, Equatable {
     }
 }
 
+/// A long press on a picture from older history shows what Hermes' vision
+/// saw in it (#887), which Hermes used to save in the message itself.
+private struct ImageDescriptionMenu: ViewModifier {
+    let description: String?
+
+    func body(content: Content) -> some View {
+        if let description {
+            content.contextMenu {
+                Section("Description") {
+                    Text(description)
+                }
+                Button {
+                    UIPasteboard.general.string = description
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+
 /// Offers its content no more width than the content would take
 /// unbounded: a view that fills whatever it's offered, as Markdown text
 /// does, takes only its natural width when that is narrower.
@@ -1415,6 +1438,8 @@ private struct UserImageAttachmentPreview: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .background(Color.white.opacity(0.13), in: Capsule())
+                .modifier(ImageDescriptionMenu(description: attachment.imageDescription))
+                .accessibilityHint(Text(verbatim: attachment.imageDescription ?? ""))
             }
         }
         .task(id: "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.imageCacheKey(for: attachment) ?? "")") {
@@ -1554,7 +1579,8 @@ private struct UserImageAttachmentPreview: View {
                     openTask = nil
                     opening = false
                 }
-                .accessibilityLabel("Attached image: \(attachment.name)")
+                .modifier(ImageDescriptionMenu(description: attachment.imageDescription))
+                .accessibilityLabel("Attached image: \(attachment.imageDescription ?? attachment.name)")
     }
 
     /// Opens the full-resolution original: the local file when the photo
