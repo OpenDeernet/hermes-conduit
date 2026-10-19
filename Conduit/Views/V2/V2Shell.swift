@@ -551,6 +551,10 @@ struct V2Shell: View {
             } else {
                 V2SplitPlaceholder(offersNewChat: offersNewChat)
                     .clipped()
+                    // A chat closed beside the list: VoiceOver leaves it.
+                    .onAppear {
+                        UIAccessibility.post(notification: .screenChanged, argument: nil)
+                    }
             }
         }
     }

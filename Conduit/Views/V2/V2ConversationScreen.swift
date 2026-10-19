@@ -47,6 +47,7 @@ struct V2ComposerTypingKey: PreferenceKey {
 struct V2ConversationScreen: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.v2Shell) private var shell
     @State private var composerExpanded = false
     @State private var chatTitlePendingRename: SessionSummary?
     @State private var chatTitlePendingDeletion: SessionSummary?
@@ -106,6 +107,25 @@ struct V2ConversationScreen: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
+            // Beside the list on a wide window there is no Back: this
+            // closes the chat, as Back does on a phone, and the column goes
+            // back to offering a new one.
+            if shell.isSplit {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        Haptics.light()
+                        appState.showSidebar = true
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color.primary)
+                            .frame(width: 40, height: 40)
+                            .modifier(V2PreGlassToolbarControl())
+                    }
+                    .accessibilityLabel(AppLocalization.string("Close"))
+                    .accessibilityIdentifier("conversation.close")
+                }
+            }
             // Session-only controls: an open room owns the title and actions.
             if appState.activeRoomSurface == nil {
                 ToolbarItem(placement: .principal) {
