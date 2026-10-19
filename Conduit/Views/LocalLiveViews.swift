@@ -30,7 +30,7 @@ struct LocalLiveSettingsSection: View {
 
     var body: some View {
         ConduitSettingsSection(
-            title: agent ? AppLocalization.string("Local") : AppLocalization.string("Hands-free on your speech server"),
+            title: agent ? AppLocalization.string("Local") : AppLocalization.string("Your speech server"),
             symbol: "server.rack",
             tint: .conduitAccent
         ) {

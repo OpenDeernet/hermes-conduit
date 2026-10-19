@@ -221,7 +221,10 @@ final class LocalLiveSession: GeminiLiveSessionControlling {
     /// A tool answer the fast model stopped waiting for: said the way a
     /// typed turn is, so the model reports it.
     private func sayLateAnswer(_ callID: String) {
-        guard let answer = toolAnswers.removeValue(forKey: callID) else { return }
+        guard let answer = toolAnswers.removeValue(forKey: callID) else {
+            localLiveLogger.notice("No answer kept for late tool call \(callID, privacy: .public)")
+            return
+        }
         toolAnswerOrder.removeAll { $0 == callID }
         let text = LocalLiveProtocol.lateResultText(name: answer.name, result: answer.result)
         send(.textTurn(text), onSent: nil, onFailure: nil)
