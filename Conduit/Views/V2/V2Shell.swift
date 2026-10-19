@@ -102,6 +102,8 @@ struct V2ShellContext: Equatable {
         /// True on a wide iPad window, where Chats and Bots show their list
         /// beside the open chat (`V2SplitLayout`).
         var isSplit = false
+        /// Split, with a chat open beside this tab's list.
+        var hasChatBeside = false
     }
 
     var pickProfile: (String) -> Void = { _ in }
@@ -134,6 +136,11 @@ struct V2ShellContext: Equatable {
         set { values.isSplit = newValue }
     }
 
+    var hasChatBeside: Bool {
+        get { values.hasChatBeside }
+        set { values.hasChatBeside = newValue }
+    }
+
     static func == (lhs: V2ShellContext, rhs: V2ShellContext) -> Bool {
         lhs.values == rhs.values
     }
@@ -155,7 +162,9 @@ extension EnvironmentValues {
 /// walks the whole catalog to draw (the default profile holds nearly every
 /// cron run), so a list kept under a pushed chat cost the chat frames on
 /// every update. Hidden, the list waits; shown again, it draws once with
-/// everything it missed.
+/// everything it missed. Beside a chat (a wide iPad), the list shows but
+/// draws at most a few times a second, so a streaming reply's publishes
+/// don't each redraw it.
 @MainActor
 final class V2ShownUpdates: ObservableObject {
     let objectWillChange = ObservableObjectPublisher()
@@ -163,7 +172,12 @@ final class V2ShownUpdates: ObservableObject {
     var isShown = true {
         didSet { if isShown, !oldValue, missedUpdate { missedUpdate = false; objectWillChange.send() } }
     }
+    /// Set by the list: a chat is open beside it.
+    var coalesces = false
+    /// How long the list beside a chat waits to draw the publishes since.
+    var coalescingDelay: TimeInterval = 0.5
     private var missedUpdate = false
+    private var drawScheduled = false
     private var subscription: AnyCancellable?
     private var defaultsSubscription: AnyCancellable?
     /// The list's saved settings, read through here rather than
@@ -199,18 +213,30 @@ final class V2ShownUpdates: ObservableObject {
     /// Saves one of the list's settings and redraws it at once.
     func set(_ value: Any?, forKey key: String) {
         defaults.set(value, forKey: key)
-        defaultsChanged()
+        defaultsChanged(atOnce: true)
     }
 
     private func passOn() {
-        if isShown { objectWillChange.send() } else { missedUpdate = true }
+        guard isShown else { missedUpdate = true; return }
+        guard coalesces else { objectWillChange.send(); return }
+        guard !drawScheduled else { return }
+        drawScheduled = true
+        let delay = coalescingDelay
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self else { return }
+            drawScheduled = false
+            // Covered meanwhile, it waits for the list to show again.
+            if isShown { objectWillChange.send() } else { missedUpdate = true }
+        }
     }
 
-    private func defaultsChanged() {
+    /// At once for the list's own write: a tap beside a chat doesn't wait.
+    private func defaultsChanged(atOnce: Bool = false) {
         let values = Self.values(of: defaultsKeys, in: defaults)
         guard values != defaultsValues else { return }
         defaultsValues = values
-        passOn()
+        if atOnce, isShown { objectWillChange.send() } else { passOn() }
     }
 
     /// Property-list values, compared by `isEqual:`.
@@ -261,13 +287,16 @@ struct V2Shell: View {
     /// Whether a screen is pushed over the tab's root. Split, the chat
     /// sits beside the list rather than over it.
     private func isRootCovered(_ tab: V2Tab, split: Bool) -> Bool {
-        let path: [V2Route]
-        switch tab {
-        case .chats: path = chatsPath
-        case .bots: path = botsPath
-        case .tasks, .settings: return false
-        }
+        let path = path(of: tab)
         return split ? path.contains { $0 != .conversation } : !path.isEmpty
+    }
+
+    private func path(of tab: V2Tab) -> [V2Route] {
+        switch tab {
+        case .chats: chatsPath
+        case .bots: botsPath
+        case .tasks, .settings: []
+        }
     }
 
     /// What the voice button starts: on a project's page, a chat in its
@@ -402,10 +431,12 @@ struct V2Shell: View {
                 if visitedTabs.contains(tab) || selectedTab == tab {
                     let isSelected = selectedTab == tab
                     let rootCovered = isRootCovered(tab, split: split)
+                    let chatBeside = split && path(of: tab).contains(.conversation)
                     tabRoot(tab, split: split)
                         .transformEnvironment(\.v2Shell) {
                             $0.isTabActive = isSelected
                             $0.isRootCovered = rootCovered
+                            $0.hasChatBeside = chatBeside
                         }
                         // The opened tab shows at once and the one left
                         // hides at once. A fade read as slow, and a slide
