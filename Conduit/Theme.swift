@@ -423,11 +423,6 @@ struct ConduitBackdrop: View {
                         )
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)
-                    // The glows reach well past the screen. Clipped, their
-                    // frames do too: beside another column (an iPad's list
-                    // and chat), an overhanging glow read to accessibility
-                    // and UI tests as covering that column.
-                    .clipped()
                 }
             }
 
@@ -446,6 +441,11 @@ struct ConduitBackdrop: View {
             motionClock.setAnimating(isAnimating, at: ProcessInfo.processInfo.systemUptime)
         }
         .ignoresSafeArea()
+        // The glows' frames reach well past the backdrop's. Accessibility
+        // took the backdrop for that whole area, so beside another column
+        // (an iPad's list and chat) it read as covering that column to
+        // VoiceOver and UI tests. Represented by its own frame instead.
+        .accessibilityRepresentation { Color.clear }
         .accessibilityHidden(true)
     }
 

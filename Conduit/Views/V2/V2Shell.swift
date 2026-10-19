@@ -279,11 +279,12 @@ struct V2Shell: View {
         return .home
     }
 
-    /// The tabs, one column or split by the window's width. Known at the
-    /// first layout, so a wide iPad opens split rather than laying the tabs
-    /// out once as a phone's. A window resized across the threshold (Stage
-    /// Manager, Split View) switches layout and rebuilds the tab's stacks;
-    /// the paths, and so the open chat, carry over.
+    /// The tabs, one column or split by the window's width, which the
+    /// reader already has at the first layout: a wide iPad opens split
+    /// rather than laying the tabs out once as a phone's. The width stays
+    /// live, so a window resized across the threshold (Stage Manager, Split
+    /// View) switches layout and rebuilds the tab's stacks: the paths, and
+    /// so the open chat, carry over; the list's scroll position doesn't.
     private var sizedTabs: some View {
         GeometryReader { proxy in
             let split = V2SplitLayout.isSplit(width: proxy.size.width)
@@ -542,19 +543,18 @@ struct V2Shell: View {
                 NavigationStack {
                     V2ConversationScreen()
                 }
-                // Pushed on a phone, VoiceOver moves to the chat; beside the
-                // list it says so itself.
+                // Pushed or popped on a phone, VoiceOver follows; beside
+                // the list the column says so itself, opening or closing.
                 .onAppear {
+                    UIAccessibility.post(notification: .screenChanged, argument: nil)
+                }
+                .onDisappear {
                     UIAccessibility.post(notification: .screenChanged, argument: nil)
                 }
                 .clipped()
             } else {
                 V2SplitPlaceholder(offersNewChat: offersNewChat)
                     .clipped()
-                    // A chat closed beside the list: VoiceOver leaves it.
-                    .onAppear {
-                        UIAccessibility.post(notification: .screenChanged, argument: nil)
-                    }
             }
         }
     }
