@@ -57,6 +57,9 @@ enum ChatScrollEngineEvent: Equatable {
     /// No surface is attached yet; the view falls back to ScrollViewProxy.
     case revealLatest
     case revealTop
+    /// The lazy stack laid out no row where the reader is: the view builds
+    /// the transcript's scroll view again, as reopening the chat would.
+    case rebuildTranscript
 }
 
 /// The viewport values ChatView renders from. Published only when one of
@@ -166,6 +169,9 @@ final class ChatScrollEngine: ObservableObject {
     /// before checking whether they are still at the bottom: the row
     /// animates open with ConduitMotion.response (a 0.34 s spring).
     static let disclosureSettleDelay: TimeInterval = 0.5
+    /// How long after the settled transcript changes the engine checks
+    /// that rows were laid out where the reader is (#887).
+    static let blankViewportCheckDelay: TimeInterval = 0.35
     static let coordinateSpaceName = "chat-transcript-stack"
 
     var onEvent: (@MainActor (ChatScrollEngineEvent) -> Void)?
@@ -202,6 +208,9 @@ final class ChatScrollEngine: ObservableObject {
     /// latest settle check acts. Anything else that changes the mode leaves
     /// browsing, which the check requires.
     private var disclosureGeneration: UInt64 = 0
+    /// Bumped by every settled transcript change, so only the latest blank
+    /// viewport check acts.
+    private var blankViewportCheckGeneration: UInt64 = 0
     private let now: () -> TimeInterval
     private let prefersReducedMotion: @MainActor () -> Bool
     private let schedule: (TimeInterval, @escaping @MainActor () -> Void) -> Void
@@ -563,6 +572,9 @@ final class ChatScrollEngine: ObservableObject {
             // the content-size change that follows pins again.
             pin(surface)
         }
+        if !isInitialSync, surface != nil {
+            scheduleBlankViewportCheck(rebuildsLeft: 1)
+        }
     }
 
     // MARK: - Older-page backfill
@@ -878,6 +890,44 @@ final class ChatScrollEngine: ObservableObject {
             self.pin(surface)
             self.refreshJumpButton()
         }
+    }
+
+    private func scheduleBlankViewportCheck(rebuildsLeft: Int) {
+        blankViewportCheckGeneration &+= 1
+        let generation = blankViewportCheckGeneration
+        schedule(Self.blankViewportCheckDelay) { [weak self] in
+            guard let self, generation == self.blankViewportCheckGeneration else { return }
+            self.checkForBlankViewport(rebuildsLeft: rebuildsLeft)
+        }
+    }
+
+    /// #887: after a turn settled, the lazy stack could lay out no row at
+    /// all under a reader at the bottom. The offset and content size were
+    /// right, but the screen stayed blank with the reply far above it, until
+    /// the chat was reopened; scrolling to a row through SwiftUI, or building
+    /// the stack again inside the same scroll view, did not bring it back.
+    /// So the scroll view is built again, as reopening the chat would. The
+    /// latest row having no frame while no row covers the screen is the
+    /// sign: a run of steps collapsed into its first row, or the live rows
+    /// (which report no frame) on screen, each leave a framed row in view or
+    /// keep the latest row's frame.
+    private func checkForBlankViewport(rebuildsLeft: Int) {
+        guard mode == .following, !isPaused, !isDragging, !latestAnimationInFlight,
+              let surface, !surface.isTracking, !surface.isDecelerating,
+              let last = targetCache.targets.last,
+              rowFrames[last.id] == nil else { return }
+        let visible = visibleStackRange(of: surface)
+        guard !rowFrames.values.contains(where: { $0.maxY > visible.lowerBound && $0.minY < visible.upperBound }) else {
+            return
+        }
+        ChatViewportTrace.shared.log(String(
+            format: "blank viewport: offset %.1f content %.1f, %ld rows laid out%@",
+            surface.contentOffsetY, surface.contentHeight, rowFrames.count,
+            rebuildsLeft > 0 ? "; rebuilding the scroll view" : ""
+        ))
+        guard rebuildsLeft > 0 else { return }
+        emit(.rebuildTranscript)
+        scheduleBlankViewportCheck(rebuildsLeft: rebuildsLeft - 1)
     }
 
     /// A reader whose content shrank under them (a row closing, a turn's

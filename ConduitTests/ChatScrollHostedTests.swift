@@ -37,8 +37,13 @@ final class ChatScrollHostedTests: XCTestCase {
     private struct Mounted {
         let appState: AppState
         let host: UIViewController
-        let scrollView: UIScrollView
+        let mountedScrollView: UIScrollView
         let engine: ChatScrollEngine
+
+        /// The scroll view the engine drives now: a rebuild replaces it.
+        var scrollView: UIScrollView {
+            (engine.surface as? UIScrollViewChatSurface)?.scrollView ?? mountedScrollView
+        }
     }
 
     private static func transcript(_ range: Range<Int>) -> [ChatMessage] {
@@ -101,7 +106,7 @@ final class ChatScrollHostedTests: XCTestCase {
         let scrollView = try XCTUnwrap(found.surface?.scrollView)
         let engine = try XCTUnwrap(found.engine)
         settle(host.view)
-        return Mounted(appState: appState, host: host, scrollView: scrollView, engine: engine)
+        return Mounted(appState: appState, host: host, mountedScrollView: scrollView, engine: engine)
     }
 
     private static func find<T: UIView>(_ type: T.Type, in view: UIView) -> T? {
