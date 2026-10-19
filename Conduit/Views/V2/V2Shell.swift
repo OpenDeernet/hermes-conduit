@@ -279,9 +279,11 @@ struct V2Shell: View {
         return .home
     }
 
-    /// The tabs, one column or split by the window's width. Read at the
+    /// The tabs, one column or split by the window's width. Known at the
     /// first layout, so a wide iPad opens split rather than laying the tabs
-    /// out once as a phone's.
+    /// out once as a phone's. A window resized across the threshold (Stage
+    /// Manager, Split View) switches layout and rebuilds the tab's stacks;
+    /// the paths, and so the open chat, carry over.
     private var sizedTabs: some View {
         GeometryReader { proxy in
             let split = V2SplitLayout.isSplit(width: proxy.size.width)
@@ -538,6 +540,11 @@ struct V2Shell: View {
                 NavigationStack {
                     V2ConversationScreen()
                 }
+                // Pushed on a phone, VoiceOver moves to the chat; beside the
+                // list it says so itself.
+                .onAppear {
+                    UIAccessibility.post(notification: .screenChanged, argument: nil)
+                }
             } else {
                 V2SplitPlaceholder(offersNewChat: offersNewChat)
             }
@@ -748,6 +755,8 @@ private struct V2SplitPlaceholder: View {
             }
             .padding(24)
         }
+        // Bots' has nothing to act on.
+        .accessibilityHidden(!offersNewChat)
     }
 }
 

@@ -46,6 +46,9 @@ private struct ReadableContentWidth: ViewModifier {
         GeometryReader { proxy in
             content
                 .safeAreaPadding(.horizontal, ReadableWidth.margin(available: proxy.size.width, maxWidth: maxWidth))
+                // Centered for content narrower than the window too; the
+                // reader alone would put it at the leading edge.
+                .frame(width: proxy.size.width, height: proxy.size.height)
         }
     }
 }

@@ -18,8 +18,8 @@ extension SidebarLayoutTests {
         for width: CGFloat in [375, 440, 669, 744, 805] {
             XCTAssertFalse(V2SplitLayout.isSplit(width: width), "\(width) pt keeps one column.")
         }
-        // iPad Air and Pro portrait, landscape.
-        for width: CGFloat in [820, 834, 1032, 1180, 1376] {
+        // The threshold itself, iPad Air and Pro portrait, landscape.
+        for width: CGFloat in [806, 820, 834, 1032, 1180, 1376] {
             XCTAssertTrue(V2SplitLayout.isSplit(width: width), "\(width) pt splits.")
         }
     }
