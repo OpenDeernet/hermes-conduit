@@ -211,6 +211,9 @@ final class ChatScrollEngine: ObservableObject {
     /// Bumped by every settled transcript change, so only the latest blank
     /// viewport check acts.
     private var blankViewportCheckGeneration: UInt64 = 0
+    /// Whether rows that report no frame (the running turn's live rows, a
+    /// send waiting on screen) sit below the latest row.
+    var liveTailShowing: @MainActor () -> Bool = { false }
     private let now: () -> TimeInterval
     private let prefersReducedMotion: @MainActor () -> Bool
     private let schedule: (TimeInterval, @escaping @MainActor () -> Void) -> Void
@@ -906,19 +909,22 @@ final class ChatScrollEngine: ObservableObject {
     /// right, but the screen stayed blank with the reply far above it, until
     /// the chat was reopened; scrolling to a row through SwiftUI, or building
     /// the stack again inside the same scroll view, did not bring it back.
-    /// So the scroll view is built again, as reopening the chat would. The
-    /// latest row having no frame while no row covers the screen is the
-    /// sign: a run of steps collapsed into its first row, or the live rows
-    /// (which report no frame) on screen, each leave a framed row in view or
-    /// keep the latest row's frame.
+    /// So the scroll view is built again, as reopening the chat would. No
+    /// row covering the screen is the sign, when either the latest row has
+    /// no frame or it ends above the screen with no live rows below it: a
+    /// run of steps collapsed into its first row leaves a framed row in view,
+    /// and live rows (which report no frame) fill the space under the latest
+    /// row while a turn runs.
     private func checkForBlankViewport(rebuildsLeft: Int) {
         guard mode == .following, !isPaused, !isDragging, !latestAnimationInFlight,
               let surface, !surface.isTracking, !surface.isDecelerating,
-              let last = targetCache.targets.last,
-              rowFrames[last.id] == nil else { return }
+              let last = targetCache.targets.last else { return }
         let visible = visibleStackRange(of: surface)
         guard !rowFrames.values.contains(where: { $0.maxY > visible.lowerBound && $0.minY < visible.upperBound }) else {
             return
+        }
+        if let lastFrame = rowFrames[last.id] {
+            guard lastFrame.maxY <= visible.lowerBound, !liveTailShowing() else { return }
         }
         ChatViewportTrace.shared.log(String(
             format: "blank viewport: offset %.1f content %.1f, %ld rows laid out%@",

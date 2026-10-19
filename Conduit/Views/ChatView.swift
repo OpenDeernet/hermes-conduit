@@ -709,6 +709,13 @@ struct ChatView: View {
         }
         router.proxy = proxy
         router.rebuildTranscript = { transcriptScrollID &+= 1 }
+        scrollEngine.liveTailShowing = { [weak appState = appState] in
+            guard let appState else { return false }
+            let live = appState.liveTurn
+            return appState.isBusy || appState.activeChatRepliesElsewhere
+                || !live.streamingText.isEmpty || live.reasoningSegment != nil
+                || appState.pendingComposerSendOnScreen != nil
+        }
         scrollEngine.onEvent = { [weak engine = scrollEngine, weak router] event in
             // Requests made while handling a UIKit callback can land in the
             // middle of a SwiftUI update; they run on the next turn.
