@@ -75,9 +75,6 @@ targets:
       # Answers the agent's on-demand locate while Conduit isn't running
       # (designs/location-awareness.md section 12).
       - target: ConduitLocationPush
-      # Share text, links, pictures and files from other apps into a
-      # Conduit draft (#812).
-      - target: ConduitShareExtension
     postBuildScripts:
       # A draft language (Info.plist ConduitDraftLanguages) is compiled from
       # the String Catalogs like any other; drop its lproj so it never ships.
