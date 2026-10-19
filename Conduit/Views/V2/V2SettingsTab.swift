@@ -85,8 +85,5 @@ struct V2SettingsTab: View {
         )
         // Pushed pages keep the home page's profile glow.
         .environment(\.settingsGlowTint, appState.profileGlowTint(appState.activeProfile))
-        // On a wide window every page keeps to a readable column: the
-        // margin reaches the pages SettingsView's stack pushes.
-        .readableContentWidth(ReadableWidth.settings)
     }
 }
