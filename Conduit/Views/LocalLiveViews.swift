@@ -204,6 +204,8 @@ struct LocalLiveFrontModelSettingsView: View {
         isSaving = true
         defer { isSaving = false }
         saveError = nil
+        // A typed key left in the field would come back on the next Save.
+        keyDraft = ""
         _ = await save("", for: Self.apiKeyKey)
         apply(await service.speechServerVoiceStatus())
     }
