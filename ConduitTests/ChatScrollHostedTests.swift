@@ -54,11 +54,26 @@ final class ChatScrollHostedTests: XCTestCase {
         }
     }
 
-    private func mount(_ messages: [ChatMessage]) throws -> Mounted {
+    private func mount(_ messages: [ChatMessage], sessionID: String? = nil) throws -> Mounted {
         let suiteName = "chat-scroll-hosted"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         let appState = AppState(defaults: defaults, loadSavedConnection: false)
+        if let sessionID {
+            appState.sessions = [SessionSummary(
+                id: sessionID,
+                alternateIds: [],
+                title: sessionID,
+                model: "Hermes",
+                updatedLabel: "now",
+                profile: "default",
+                source: .chat,
+                isActive: false,
+                isArchived: false,
+                lineageRootId: nil
+            )]
+            appState.activeSessionId = sessionID
+        }
         appState.messages = messages
 
         let host = UIHostingController(
@@ -595,5 +610,105 @@ final class ChatScrollHostedTests: XCTestCase {
         let moves = recorder.offsetChanges(since: mark).filter { $0.distance > 1 }
         print("[ChatScrollHostedTests] idle trace:\n\(recorder.dump())")
         XCTAssertTrue(moves.isEmpty, "the transcript moved on its own:\n\(recorder.dump(since: mark))")
+    }
+
+    // MARK: - Settle probe (temporary, #887 item 5)
+
+    private enum ProbeReader {
+        case following
+        case smallDrag
+        case farDrag
+        case dragBackToBottom
+    }
+
+    private func probeGeometry(_ label: String, _ mounted: Mounted) -> String {
+        let view = mounted.scrollView
+        let lastID = mounted.appState.messages.last?.id ?? "-"
+        let origin = mounted.engine.surface?.transcriptOriginY ?? .nan
+        let frame = mounted.engine.rowFrame(for: lastID)
+        let viewportBottom = view.contentOffset.y + view.bounds.height - view.adjustedContentInset.bottom
+        let blank = frame.map { viewportBottom - (origin + $0.maxY) } ?? .nan
+        let tail = frame.map { view.contentSize.height - (origin + $0.maxY) } ?? .nan
+        return String(
+            format: "SETTLE_PROBE %@: offset %.1f max %.1f dist %.1f content %.1f bounds %.1f insets %.1f/%.1f mode %@ last %@ lastMaxY %.1f blankBelowLast %.1f contentBelowLast %.1f",
+            label, view.contentOffset.y, maxOffset(view), maxOffset(view) - view.contentOffset.y,
+            view.contentSize.height, view.bounds.height, view.adjustedContentInset.top,
+            view.adjustedContentInset.bottom, String(describing: mounted.engine.mode), lastID,
+            frame.map { origin + $0.maxY } ?? .nan, blank, tail
+        )
+    }
+
+    private func runSettleProbe(_ name: String, reader: ProbeReader, tools: Int, chunks: Int) throws {
+        let session = "probe-session"
+        let mounted = try mount(Self.uneven(0..<40), sessionID: session)
+        let appState = mounted.appState
+        let view = mounted.host.view!
+        settle(view, seconds: 0.4)
+        var lines: [String] = [probeGeometry("\(name) mounted", mounted)]
+
+        appState.messages.append(ChatMessage(id: "probe-user", role: .user, content: "Run the task and explain.", timestamp: "2026-01-01T00:00:00Z"))
+        appState.handleStreamEvent(.messageStart(sessionId: session))
+        settle(view, seconds: 0.2)
+        for index in 0..<tools {
+            appState.handleStreamEvent(.toolStart(sessionId: session, toolName: "web_search", toolInput: #"{"query": "q\#(index)"}"#, toolID: "probe-tool-\(index)"))
+            settle(view, seconds: 0.08)
+            appState.handleStreamEvent(.toolComplete(sessionId: session, toolName: "web_search", toolOutput: "ok", toolID: "probe-tool-\(index)"))
+            settle(view, seconds: 0.08)
+        }
+        lines.append(probeGeometry("\(name) after tools", mounted))
+        for chunk in 0..<chunks {
+            appState.handleStreamEvent(.messageDelta(
+                sessionId: session,
+                text: "Paragraph \(chunk) of the streamed answer goes on for a while with ordinary words in it. " + String(repeating: "More words. ", count: 12) + "\n\n"
+            ))
+            settle(view, seconds: 0.06)
+            if chunk == chunks - 3 {
+                switch reader {
+                case .following:
+                    break
+                case .smallDrag:
+                    browse(mounted, to: mounted.scrollView.contentOffset.y - 90)
+                case .farDrag:
+                    browse(mounted, to: mounted.scrollView.contentOffset.y - 1600)
+                case .dragBackToBottom:
+                    browse(mounted, to: mounted.scrollView.contentOffset.y - 90)
+                    browse(mounted, to: maxOffset(mounted.scrollView))
+                }
+                lines.append(probeGeometry("\(name) after reader", mounted))
+            }
+        }
+        settle(view, seconds: 0.3)
+        lines.append(probeGeometry("\(name) before complete", mounted))
+        let recorder = ScrollRecorder(mounted.scrollView)
+        ChatViewportTrace.shared.reset()
+        appState.handleStreamEvent(.messageComplete(sessionId: session, messageId: "probe-final", content: nil, reasoning: nil))
+        settle(view, seconds: 0.1)
+        lines.append(probeGeometry("\(name) complete+0.1", mounted))
+        settle(view, seconds: 2.0)
+        lines.append(probeGeometry("\(name) settled", mounted))
+        let changes = recorder.dump().split(separator: "\n").suffix(40).joined(separator: "\n    ")
+        lines.append("SETTLE_PROBE \(name) changes:\n    \(changes)")
+        lines.append("SETTLE_PROBE \(name) engine:\n    \(ChatViewportTrace.shared.dump().split(separator: "\n").suffix(20).joined(separator: "\n    "))")
+        print(lines.joined(separator: "\n"))
+    }
+
+    func testSettleProbeFollowing() throws {
+        try runSettleProbe("following", reader: .following, tools: 7, chunks: 30)
+    }
+
+    func testSettleProbeSmallDrag() throws {
+        try runSettleProbe("smallDrag", reader: .smallDrag, tools: 7, chunks: 30)
+    }
+
+    func testSettleProbeFarDrag() throws {
+        try runSettleProbe("farDrag", reader: .farDrag, tools: 7, chunks: 30)
+    }
+
+    func testSettleProbeDragBack() throws {
+        try runSettleProbe("dragBack", reader: .dragBackToBottom, tools: 7, chunks: 30)
+    }
+
+    func testSettleProbeSmallDragNoTools() throws {
+        try runSettleProbe("smallDragNoTools", reader: .smallDrag, tools: 0, chunks: 30)
     }
 }

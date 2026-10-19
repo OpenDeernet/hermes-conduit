@@ -1,0 +1,80 @@
+name: Settle probe
+
+# Temporary diagnostic for #887 item 5 (blank after streaming): runs only the
+# ChatScrollHostedTests settle probe tests and repeats their SETTLE_PROBE
+# lines at the end of the log. Removed before merge.
+
+on:
+  push:
+    branches: [claude/project-thread-sv5u6k]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: settle-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SIMULATOR_NAME: "iPhone 17 Pro"
+  DERIVED_DATA_PATH: "${{ github.workspace }}/ci-derived-data"
+  BUILD_TIMEOUT_SECS: "1200"
+
+jobs:
+  probe:
+    name: Settle probe
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Pick the build cache
+        id: cache-key
+        run: |
+          set -euo pipefail
+          xcode=$(xcodebuild -version | awk 'NR==1 {v=$2} /Build version/ {b=$3} END {print v "-" b}')
+          echo "prefix=dd-v1-slim-$xcode-${ImageVersion:-image}" >> "$GITHUB_OUTPUT"
+          echo "xcode-prefix=dd-v1-slim-$xcode" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the build cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ci-derived-data
+            !ci-derived-data/Logs
+          key: ${{ steps.cache-key.outputs.prefix }}-${{ github.sha }}
+          restore-keys: |
+            ${{ steps.cache-key.outputs.prefix }}-
+            ${{ steps.cache-key.outputs.xcode-prefix }}-
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project-tests.yml
+
+      - name: Build and boot the simulator in parallel
+        run: bash scripts/ci-hosted-build.sh
+
+      - name: Build errors
+        if: failure()
+        run: grep -E "(^|: )error:" ci-lane/build/build.log | head -40 | while read -r line; do echo "::error::$line"; done || true
+
+      - name: Run the probe
+        run: |
+          set -uo pipefail
+          args=()
+          for t in $(grep -oE "func (testSettleProbe[A-Za-z]*|testTurnCompletion[A-Za-z]*)" ConduitTests/ChatScrollHostedTests.swift | awk '{print $2}'); do
+            args+=("-only-testing:ConduitTests/ChatScrollHostedTests/$t")
+          done
+          xcodebuild test-without-building \
+            -xctestrun "$XCRUN_FILE" \
+            -destination "$DESTINATION" \
+            -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
+            "${args[@]}" > probe.log 2>&1 || echo "probe exited $?"
+          echo "===== probe"
+          grep -E -A42 "SETTLE_PROBE|error:|Test Case .*(passed|failed)" probe.log | grep -v "^Test Suite" | head -n 1500 || tail -n 200 probe.log
