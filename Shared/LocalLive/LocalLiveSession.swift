@@ -214,7 +214,9 @@ final class LocalLiveSession: GeminiLiveSessionControlling {
         if toolAnswers[id] == nil { toolAnswerOrder.append(id) }
         toolAnswers[id] = (name, result)
         while toolAnswerOrder.count > 16 {
-            toolAnswers.removeValue(forKey: toolAnswerOrder.removeFirst())
+            let dropped = toolAnswerOrder.removeFirst()
+            toolAnswers.removeValue(forKey: dropped)
+            localLiveLogger.notice("Dropped the kept answer for tool call \(dropped, privacy: .public)")
         }
     }
 

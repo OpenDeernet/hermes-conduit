@@ -3298,8 +3298,8 @@ final class AppState: ObservableObject {
         objectWillChange.send()
         preferences.localLiveAgent = agent
         saveVoiceProfilePreferences(preferences, profile: activeProfile)
-        // A running call keeps the mode it connected with: the next one
-        // picks this up.
+        // A running call keeps its mode until it next connects: a new call,
+        // or a reconnect after the socket drops, picks this up.
         CarPlayVoiceCoordinator.shared.voiceModeChanged(in: self)
     }
 
