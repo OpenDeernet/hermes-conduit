@@ -300,9 +300,10 @@ struct V2Shell: View {
     }
 
     /// What the voice button starts: on a project's page, a chat in its
-    /// folder; anywhere else in the tabs, a new call.
+    /// folder; anywhere else in the tabs, a new call. The list's own top
+    /// screen decides, so a chat open beside a project's page keeps it.
     private var voiceContext: V2VoiceContext {
-        if selectedTab == .chats, case .project(let project)? = chatsPath.last {
+        if selectedTab == .chats, case .project(let project)? = V2SplitLayout.listRoutes(chatsPath).last {
             return .project(project)
         }
         return .home
