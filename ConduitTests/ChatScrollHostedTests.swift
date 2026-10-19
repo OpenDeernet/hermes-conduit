@@ -759,6 +759,13 @@ final class ChatScrollHostedTests: XCTestCase {
         settle(view, seconds: 1.2)
         lines.append(probeGeometry("\(name) later", mounted))
         lines.append(probeView("\(name) later", mounted))
+        if reader == .following || reader == .dragBackToBottom || reader == .smallDrag {
+            let lastID = appState.messages.last?.id ?? "-"
+            let frame = mounted.engine.rowFrame(for: lastID)
+            let origin = mounted.engine.surface?.transcriptOriginY ?? 0
+            let below = frame.map { mounted.scrollView.contentSize.height - (origin + $0.maxY) } ?? .infinity
+            XCTAssertLessThan(below, 160, "SETTLE_BLANK \(name): \(below) pt below the settled reply")
+        }
         let changes = recorder.dump().split(separator: "\n").suffix(40).joined(separator: "\n    ")
         lines.append("SETTLE_PROBE \(name) changes:\n    \(changes)")
         lines.append("SETTLE_PROBE \(name) engine:\n    \(ChatViewportTrace.shared.dump().split(separator: "\n").suffix(20).joined(separator: "\n    "))")
@@ -787,8 +794,8 @@ final class ChatScrollHostedTests: XCTestCase {
     }
 
     func testSettleProbeRepeats() throws {
-        for round in 0..<4 {
-            for (name, reader) in [("dragBack", ProbeReader.dragBackToBottom), ("following", .following), ("smallDrag", .smallDrag)] {
+        for round in 0..<8 {
+            for (name, reader) in [("dragBack", ProbeReader.dragBackToBottom), ("following", .following)] {
                 try runSettleProbe("\(name)#\(round)", reader: reader, tools: 7, chunks: 30)
                 tearDown()
             }

@@ -44,9 +44,6 @@ struct ChatView: View {
     @State private var rowDisclosure = ChatRowDisclosure()
     /// A run of steps opened or closed: its rows join or leave the stack.
     @State private var stepToggleRevision: UInt64 = 0
-    /// The transcript stack's identity; changing it lays the stack out from
-    /// scratch (ChatScrollEngineEvent.rebuildTranscript).
-    @State private var transcriptStackID = 0
     /// Carries the engine's requests to AppState and ScrollViewProxy. Holds
     /// both weakly, so the engine never retains this view.
     @State private var scrollEventRouter = ChatScrollEventRouter()
@@ -437,31 +434,39 @@ struct ChatView: View {
                         }
                 }
 
-                // The running turn's live tail observes only the live
-                // projection, so a streaming tick re-renders these rows and
-                // never this body, the composer, or an open sheet.
-                ChatLiveTurnRows(
-                    projection: appState.liveTurn,
-                    isBusy: appState.isBusy,
-                    author: appState.activeProfile,
-                    currentToolName: runningToolName,
-                    turnStartedAt: turnStartedAt,
-                    repliesElsewhere: appState.activeChatRepliesElsewhere
-                )
+                // The tail is ONE row of the lazy stack, whatever it holds.
+                // Its live rows come and go on the projection's own updates,
+                // and as rows of the lazy stack themselves, the one that went
+                // when a turn settled could keep its space: a blank as tall
+                // as the streamed reply under the saved one, until the chat
+                // was reopened (#887). A row that only changes height is
+                // measured again like any other.
+                VStack(spacing: ChatStepStyle.transcriptRowSpacing) {
+                    // The running turn's live tail observes only the live
+                    // projection, so a streaming tick re-renders these rows
+                    // and never this body, the composer, or an open sheet.
+                    ChatLiveTurnRows(
+                        projection: appState.liveTurn,
+                        isBusy: appState.isBusy,
+                        author: appState.activeProfile,
+                        currentToolName: runningToolName,
+                        turnStartedAt: turnStartedAt,
+                        repliesElsewhere: appState.activeChatRepliesElsewhere
+                    )
 
-                if let pending = livePendingComposerSend {
-                    PendingComposerSendBubble(pending: pending)
+                    if let pending = livePendingComposerSend {
+                        PendingComposerSendBubble(pending: pending)
+                    }
+
+                    // Fallback target for ScrollViewProxy before the engine
+                    // has found the scroll view.
+                    Color.clear
+                        .frame(height: 1)
+                        .padding(.bottom, 126)
+                        .id(bottomAnchor)
                 }
-
-                // Fallback target for ScrollViewProxy before the engine has
-                // found the scroll view.
-                Color.clear
-                    .frame(height: 1)
-                    .padding(.bottom, 126)
-                    .id(bottomAnchor)
             }
             .coordinateSpace(.named(ChatScrollEngine.coordinateSpaceName))
-            .id(transcriptStackID)
             .environment(\.chatRowDisclosure, rowDisclosure)
             .onReceive(rowDisclosure.groupToggles.$revision) { stepToggleRevision = $0 }
             .background {
@@ -708,7 +713,6 @@ struct ChatView: View {
             appState?.activeChatScrollSessionIdentity ?? .none
         }
         router.proxy = proxy
-        router.rebuildTranscript = { transcriptStackID &+= 1 }
         scrollEngine.onEvent = { [weak engine = scrollEngine, weak router] event in
             // Requests made while handling a UIKit callback can land in the
             // middle of a SwiftUI update; they run on the next turn.
@@ -730,8 +734,6 @@ private final class ChatScrollEventRouter {
     weak var appState: AppState?
     weak var engine: ChatScrollEngine?
     var proxy: ScrollViewProxy?
-    /// Builds the transcript's stack again (ChatView's `transcriptStackID`).
-    var rebuildTranscript: (@MainActor () -> Void)?
 
     func handle(_ event: ChatScrollEngineEvent) {
         guard let appState else { return }
@@ -758,10 +760,6 @@ private final class ChatScrollEventRouter {
                 for: ChatView.activeOrFallbackScrollSessionKey(in: appState)
             )
             scrollWithoutAnimation { $0.scrollTo(anchor, anchor: .top) }
-        case .revealLatestRow(let id):
-            scrollWithoutAnimation { $0.scrollTo(id, anchor: .bottom) }
-        case .rebuildTranscript:
-            rebuildTranscript?()
         }
     }
 
