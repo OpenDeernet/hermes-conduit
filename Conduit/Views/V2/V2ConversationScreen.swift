@@ -61,37 +61,45 @@ struct V2ConversationScreen: View {
         return appState.nestingParent(of: session)
     }
 
+    @ViewBuilder private var conversation: some View {
+        if appState.activeRoomSurface != nil {
+            // Keyed by room: another room starts with its own draft.
+            GroupChatView()
+                .id(appState.activeRoomSurface?.room.roomID)
+                .environment(\.v2ComposerRests, true)
+        } else {
+            ChatView()
+                .environment(\.v2ComposerRests, true)
+        }
+    }
+
     var body: some View {
         ZStack {
             V2Backdrop()
-            if appState.activeRoomSurface != nil {
-                // Keyed by room: another room starts with its own draft.
-                GroupChatView()
-                    .id(appState.activeRoomSurface?.room.roomID)
-                    .environment(\.v2ComposerRests, true)
-            } else {
-                ChatView()
-                    .environment(\.v2ComposerRests, true)
-            }
+            conversation
+                .overlay(alignment: .bottomTrailing) {
+                    if appState.activeRoomSurface == nil {
+                        // Beside the resting composer; it slides aside,
+                        // shrinks and fades while the composer is expanded.
+                        V2VoiceButton(context: .conversation, isHidden: composerExpanded)
+                            .scaleEffect(composerExpanded && !reduceMotion ? 0.4 : 1)
+                            .offset(x: composerExpanded && !reduceMotion ? 30 : 0)
+                            .opacity(composerExpanded ? 0 : 1)
+                            .allowsHitTesting(!composerExpanded)
+                            .accessibilityHidden(composerExpanded)
+                            .padding(.trailing, 16)
+                            .padding(.bottom, 10)
+                            .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: composerExpanded)
+                    }
+                }
+                // On a wide window the transcript, the composer and the
+                // voice button beside it keep to a readable column; the
+                // backdrop still fills the window.
+                .readableContentWidth(ReadableWidth.chat)
         }
         .modifier(V2FadingBarBackdrop())
         .onPreferenceChange(V2ComposerExpandedKey.self) { expanded in
             composerExpanded = expanded
-        }
-        .overlay(alignment: .bottomTrailing) {
-            if appState.activeRoomSurface == nil {
-                // Beside the resting composer; it slides aside, shrinks and
-                // fades while the composer is expanded.
-                V2VoiceButton(context: .conversation, isHidden: composerExpanded)
-                    .scaleEffect(composerExpanded && !reduceMotion ? 0.4 : 1)
-                    .offset(x: composerExpanded && !reduceMotion ? 30 : 0)
-                    .opacity(composerExpanded ? 0 : 1)
-                    .allowsHitTesting(!composerExpanded)
-                    .accessibilityHidden(composerExpanded)
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 10)
-                    .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: composerExpanded)
-            }
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
