@@ -264,7 +264,16 @@ final class AppStoreScreenshotTests: XCTestCase {
         let notNow = app.buttons["finish-setup.not-now"]
         if notNow.waitForExistence(timeout: 10) {
             snap("debug-finish-setup")
-            notNow.tap()
+            // Beside the empty chat column on an iPad, accessibility's hit
+            // test misses the button though a touch lands; tap its point.
+            if notNow.isHittable {
+                notNow.tap()
+            } else {
+                notNow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            }
+            if !notNow.waitForNonExistence(timeout: 5) {
+                snap("debug-finish-setup-stayed")
+            }
         }
         settle()
     }
