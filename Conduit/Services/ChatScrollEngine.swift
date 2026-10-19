@@ -57,6 +57,12 @@ enum ChatScrollEngineEvent: Equatable {
     /// No surface is attached yet; the view falls back to ScrollViewProxy.
     case revealLatest
     case revealTop
+    /// The latest row was never laid out under a reader at the bottom: the
+    /// view scrolls to it through SwiftUI so the stack lays it out.
+    case revealLatestRow(id: String)
+    /// That did not help either: the view builds the transcript's stack
+    /// again, as leaving and reopening the chat would.
+    case rebuildTranscript
 }
 
 /// The viewport values ChatView renders from. Published only when one of
@@ -169,8 +175,9 @@ final class ChatScrollEngine: ObservableObject {
     /// How long after the settled transcript changes the engine checks
     /// that the latest rows were laid out where the reader is (#887).
     static let blankViewportCheckDelay: TimeInterval = 0.35
-    /// Reveals one change of the transcript may ask for before giving up.
-    static let maximumBlankViewportReveals = 2
+    /// Repairs one change of the transcript may ask for: a reveal of the
+    /// latest row, then a rebuild of the stack.
+    static let maximumBlankViewportRepairs = 2
     static let coordinateSpaceName = "chat-transcript-stack"
 
     var onEvent: (@MainActor (ChatScrollEngineEvent) -> Void)?
@@ -572,7 +579,7 @@ final class ChatScrollEngine: ObservableObject {
             pin(surface)
         }
         if !isInitialSync, surface != nil {
-            scheduleBlankViewportCheck(revealsLeft: Self.maximumBlankViewportReveals)
+            scheduleBlankViewportCheck(attempt: 0)
         }
     }
 
@@ -891,23 +898,25 @@ final class ChatScrollEngine: ObservableObject {
         }
     }
 
-    private func scheduleBlankViewportCheck(revealsLeft: Int) {
+    private func scheduleBlankViewportCheck(attempt: Int) {
         blankViewportCheckGeneration &+= 1
         let generation = blankViewportCheckGeneration
         schedule(Self.blankViewportCheckDelay) { [weak self] in
             guard let self, generation == self.blankViewportCheckGeneration else { return }
-            self.checkForBlankViewport(revealsLeft: revealsLeft)
+            self.checkForBlankViewport(attempt: attempt)
         }
     }
 
     /// #887: when a turn settled (the streamed reply swapped for the saved
-    /// one, its live rows gone), the lazy stack could leave the latest
-    /// reply unlaid-out under a reader at the bottom: the screen showed
-    /// nothing, the reply sat far above, and only leaving the chat brought
-    /// it back. The offset was right; the stack had not placed the rows
-    /// there. Scrolling to the bottom through SwiftUI makes it lay them out.
-    private func checkForBlankViewport(revealsLeft: Int) {
-        guard mode == .following, !isPaused, !isDragging, !latestAnimationInFlight,
+    /// one, its live rows gone), the lazy stack could leave nothing laid out
+    /// under a reader at the bottom: the screen stayed blank, the reply sat
+    /// far above, and only leaving the chat brought it back. The offset was
+    /// right; the stack had not placed any row there. A scroll to the
+    /// latest row through SwiftUI makes it lay that row out; if even that
+    /// leaves the screen blank, the stack is built again.
+    private func checkForBlankViewport(attempt: Int) {
+        guard attempt < Self.maximumBlankViewportRepairs,
+              mode == .following, !isPaused, !isDragging, !latestAnimationInFlight,
               let surface, !surface.isTracking, !surface.isDecelerating,
               let last = targetCache.targets.last,
               rowFrames[last.id] == nil else { return }
@@ -916,13 +925,12 @@ final class ChatScrollEngine: ObservableObject {
             return
         }
         ChatViewportTrace.shared.log(String(
-            format: "blank viewport: offset %.1f content %.1f, %ld rows laid out; revealing latest",
-            surface.contentOffsetY, surface.contentHeight, rowFrames.count
+            format: "blank viewport: offset %.1f content %.1f, %ld rows laid out; %@",
+            surface.contentOffsetY, surface.contentHeight, rowFrames.count,
+            attempt == 0 ? "revealing the latest row" : "rebuilding the stack"
         ))
-        emit(.revealLatest)
-        if revealsLeft > 1 {
-            scheduleBlankViewportCheck(revealsLeft: revealsLeft - 1)
-        }
+        emit(attempt == 0 ? .revealLatestRow(id: last.id) : .rebuildTranscript)
+        scheduleBlankViewportCheck(attempt: attempt + 1)
     }
 
     /// A reader whose content shrank under them (a row closing, a turn's

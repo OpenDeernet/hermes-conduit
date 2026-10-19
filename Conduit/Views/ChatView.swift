@@ -44,6 +44,9 @@ struct ChatView: View {
     @State private var rowDisclosure = ChatRowDisclosure()
     /// A run of steps opened or closed: its rows join or leave the stack.
     @State private var stepToggleRevision: UInt64 = 0
+    /// The transcript stack's identity; changing it lays the stack out from
+    /// scratch (ChatScrollEngineEvent.rebuildTranscript).
+    @State private var transcriptStackID = 0
     /// Carries the engine's requests to AppState and ScrollViewProxy. Holds
     /// both weakly, so the engine never retains this view.
     @State private var scrollEventRouter = ChatScrollEventRouter()
@@ -458,6 +461,7 @@ struct ChatView: View {
                     .id(bottomAnchor)
             }
             .coordinateSpace(.named(ChatScrollEngine.coordinateSpaceName))
+            .id(transcriptStackID)
             .environment(\.chatRowDisclosure, rowDisclosure)
             .onReceive(rowDisclosure.groupToggles.$revision) { stepToggleRevision = $0 }
             .background {
@@ -704,6 +708,7 @@ struct ChatView: View {
             appState?.activeChatScrollSessionIdentity ?? .none
         }
         router.proxy = proxy
+        router.rebuildTranscript = { transcriptStackID &+= 1 }
         scrollEngine.onEvent = { [weak engine = scrollEngine, weak router] event in
             // Requests made while handling a UIKit callback can land in the
             // middle of a SwiftUI update; they run on the next turn.
@@ -725,6 +730,8 @@ private final class ChatScrollEventRouter {
     weak var appState: AppState?
     weak var engine: ChatScrollEngine?
     var proxy: ScrollViewProxy?
+    /// Builds the transcript's stack again (ChatView's `transcriptStackID`).
+    var rebuildTranscript: (@MainActor () -> Void)?
 
     func handle(_ event: ChatScrollEngineEvent) {
         guard let appState else { return }
@@ -751,6 +758,10 @@ private final class ChatScrollEventRouter {
                 for: ChatView.activeOrFallbackScrollSessionKey(in: appState)
             )
             scrollWithoutAnimation { $0.scrollTo(anchor, anchor: .top) }
+        case .revealLatestRow(let id):
+            scrollWithoutAnimation { $0.scrollTo(id, anchor: .bottom) }
+        case .rebuildTranscript:
+            rebuildTranscript?()
         }
     }
 

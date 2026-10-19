@@ -71,7 +71,6 @@ jobs:
           for t in $(grep -oE "func (testSettleProbe[A-Za-z]*|testTurnCompletion[A-Za-z]*)" ConduitTests/ChatScrollHostedTests.swift | awk '{print $2}'); do
             args+=("-only-testing:ConduitTests/ChatScrollHostedTests/$t")
           done
-          args+=("-only-testing:ConduitTests/TranscriptInlineImageTests")
           xcodebuild test-without-building \
             -xctestrun "$XCRUN_FILE" \
             -destination "$DESTINATION" \
@@ -80,3 +79,12 @@ jobs:
             "${args[@]}" > probe.log 2>&1 || echo "probe exited $?"
           echo "===== probe"
           grep -E -A42 "SETTLE_PROBE|error:|Test Case .*(passed|failed)" probe.log | grep -v "^Test Suite" | head -n 1500 || tail -n 200 probe.log
+          xcodebuild test-without-building \
+            -xctestrun "$XCRUN_FILE" \
+            -destination "$DESTINATION" \
+            -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
+            -only-testing:ConduitTests/TranscriptInlineImageTests \
+            -only-testing:ConduitTests/ChatScrollEngineTests > unit.log 2>&1 || echo "unit exited $?"
+          echo "===== unit"
+          grep -E "error:|Test Case .*failed|Executed" unit.log | head -n 60
