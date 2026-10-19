@@ -41,7 +41,7 @@ final class ChatScrollHostedTests: XCTestCase {
         let engine: ChatScrollEngine
 
         /// The scroll view the engine drives now: a rebuild replaces it.
-        var scrollView: UIScrollView {
+        @MainActor var scrollView: UIScrollView {
             (engine.surface as? UIScrollViewChatSurface)?.scrollView ?? mountedScrollView
         }
     }
