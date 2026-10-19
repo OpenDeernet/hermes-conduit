@@ -268,7 +268,7 @@ struct RichCardSchema {
             }
         case "contact":
             card["people"] = (card["people"] as? [[String: Any]] ?? []).map { person in
-                var person = person
+                var person = dropNonHTTPSPhoto(person)
                 if let phone = person["phone"] as? String, !isPhone(phone) { person["phone"] = nil }
                 if let email = person["email"] as? String, !isEmail(email) { person["email"] = nil }
                 return person
@@ -279,13 +279,19 @@ struct RichCardSchema {
         return card
     }
 
+    /// A place's or person's photo is kept only when its url is https.
+    private static func dropNonHTTPSPhoto(_ item: [String: Any]) -> [String: Any] {
+        guard let photo = item["photo"] as? [String: Any], !isHTTPS(photo["url"]) else { return item }
+        var item = item
+        item["photo"] = nil
+        return item
+    }
+
     private static func placeRules(_ card: inout [String: Any], raw: [String: Any]) {
         let type = card["type"] as? String
-        var places = card["places"] as? [Any] ?? []
-        if type == "place" {
-            places = Array(places.prefix(1))
-            card["places"] = places
-        }
+        var places = (card["places"] as? [Any] ?? []).map { ($0 as? [String: Any]).map(dropNonHTTPSPhoto) ?? $0 }
+        if type == "place" { places = Array(places.prefix(1)) }
+        card["places"] = places
         guard let route = card.removeValue(forKey: "route") as? [String: Any], type == "map" else { return }
         let survived = (raw["places"] as? [Any])?.count == places.count
         guard survived, let to = route["to"] as? Int, to < places.count else { return }
