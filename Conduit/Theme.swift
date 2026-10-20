@@ -735,7 +735,9 @@ struct WindowAccentTint: UIViewRepresentable {
             // editor) inherit their traits from the window, not from the
             // root's environment, so without this their accent colours
             // resolve the default amber (#920).
-            if window.traitOverrides.conduitAccent != choice {
+            // Reading an override that was never set throws, so ask first.
+            let overrides = window.traitOverrides
+            if !overrides.contains(ConduitAccentTrait.self) || overrides.conduitAccent != choice {
                 window.traitOverrides.conduitAccent = choice
             }
             window.tintColor = choice.color(dark: window.traitCollection.userInterfaceStyle == .dark)
