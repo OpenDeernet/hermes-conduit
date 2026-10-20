@@ -22066,7 +22066,8 @@ final class AppState: ObservableObject {
     /// Which plugin versions the update notice asks for (Settings >
     /// Conduit plugin > Update notices).
     @Published private(set) var notifierPluginNoticeChannel: NotifierPluginNoticeChannel
-    /// Where this copy of Conduit came from, read again each launch.
+    /// Where this copy of Conduit came from, read again each launch until
+    /// the App Store's signature verifies it.
     @Published private(set) var appInstallSource: AppInstallSource
     private var appInstallSourceRead = false
     private var notifierPluginFollowsMain: Bool {
@@ -22187,8 +22188,13 @@ final class AppState: ObservableObject {
     private func refreshLatestNotifierPluginVersion() async {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         if !appInstallSourceRead {
-            appInstallSourceRead = true
-            appInstallSource = await AppInstallSource.detect(defaults: defaults)
+            if let verified = await AppInstallSource.detect(defaults: defaults) {
+                appInstallSourceRead = true
+                appInstallSource = verified
+            } else {
+                // Asked again on the next refresh.
+                appInstallSource = AppInstallSource.unverified()
+            }
             applyNotifierPluginNoticeChannel()
         }
         if latestNotifierPluginVersion == nil, let saved = NotifierPluginLatestVersion.cached(in: defaults) {

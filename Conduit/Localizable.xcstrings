@@ -300107,7 +300107,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Update-Hinweis bei"
+            "value" : "Update-Hinweise für"
           }
         },
         "en" : {
@@ -300155,7 +300155,7 @@
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Proś o aktualizację przy"
+            "value" : "Prośby o aktualizację"
           }
         },
         "pt-BR" : {
@@ -300167,7 +300167,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Просить обновить при"
+            "value" : "Предлагать обновления"
           }
         },
         "tr" : {
@@ -300195,7 +300195,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Jeder neuen Version"
+            "value" : "Jede neue Version"
           }
         },
         "en" : {
@@ -300243,7 +300243,7 @@
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Każdej nowej wersji"
+            "value" : "Każda nowa wersja"
           }
         },
         "pt-BR" : {
@@ -300255,13 +300255,13 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Каждой новой версии"
+            "value" : "Каждая новая версия"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Her yeni sürümde"
+            "value" : "Her yeni sürüm"
           }
         },
         "zh-Hans" : {
@@ -300283,7 +300283,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nur stabilen Versionen"
+            "value" : "Nur stabile Versionen"
           }
         },
         "en" : {
@@ -300331,7 +300331,7 @@
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tylko wersjach stabilnych"
+            "value" : "Tylko stabilne wersje"
           }
         },
         "pt-BR" : {
@@ -300343,13 +300343,13 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Только стабильных версиях"
+            "value" : "Только стабильные версии"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Yalnızca kararlı sürümlerde"
+            "value" : "Yalnızca kararlı sürümler"
           }
         },
         "zh-Hans" : {

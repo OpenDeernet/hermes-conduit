@@ -51,28 +51,33 @@ enum AppInstallSource: String {
 
     /// Reads the source on every launch, since a TestFlight install can be
     /// replaced by the App Store's and keep its settings. StoreKit keeps the
-    /// app transaction, but the first read can need the network; until it
-    /// verifies, the sandbox receipt tells TestFlight apart, and anything
-    /// unknown counts as the App Store, so the worst case is fewer notices,
-    /// never more.
-    static func detect(defaults: UserDefaults) async -> AppInstallSource {
+    /// app transaction, but the first read can need the network: nil until
+    /// Apple's signature verifies it, so a later refresh asks again.
+    static func detect(defaults: UserDefaults) async -> AppInstallSource? {
         #if DEBUG
         return .xcode
         #else
-        if case .verified(let transaction)? = try? await AppTransaction.shared {
-            let source: AppInstallSource
-            switch transaction.environment {
-            case .production: source = .appStore
-            case .sandbox: source = .testFlight
-            case .xcode: source = .xcode
-            default: source = .appStore
-            }
-            defaults.set(source.rawValue, forKey: key)
-            return source
+        guard case .verified(let transaction)? = try? await AppTransaction.shared else { return nil }
+        let source: AppInstallSource
+        switch transaction.environment {
+        case .production: source = .appStore
+        case .sandbox: source = .testFlight
+        case .xcode: source = .xcode
+        default: source = .appStore
         }
-        let source: AppInstallSource = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" ? .testFlight : .appStore
         defaults.set(source.rawValue, forKey: key)
         return source
+        #endif
+    }
+
+    /// Until `detect` verifies: the sandbox receipt tells TestFlight apart,
+    /// and anything unknown counts as the App Store, so the worst case is
+    /// fewer notices, never more.
+    static func unverified() -> AppInstallSource {
+        #if DEBUG
+        return .xcode
+        #else
+        return Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" ? .testFlight : .appStore
         #endif
     }
 }
