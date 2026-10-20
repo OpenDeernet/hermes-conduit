@@ -6940,7 +6940,7 @@ final class AppState: ObservableObject {
             // A bot's own chat opens through the bot that owns it, as it
             // does from a link for another profile. A Live Activity's card
             // knows the chat's other ids too.
-            if let owner = botOwnership.botProfileName(owningAny: Set([id] + LiveTurnActivities.sessionIDs(linkedTo: id))) {
+            if let owner = botOwnership.botProfileName(owningAny: Set([id] + LiveTurnActivities.sessionIDs(linkedTo: id, profile: activeProfile, dashboardID: activeDashboardID?.uuidString))) {
                 openLinkedBotChat(owner)
                 return
             }
@@ -7111,7 +7111,7 @@ final class AppState: ObservableObject {
     private func linkedSessionTarget(_ id: String) -> String? {
         let rows = sessions + cronSessions
         let durable = conversationIdentityIndex.durableID(forRuntime: id, profile: activeProfile)
-        let candidates = [id] + [durable].compactMap { $0 } + LiveTurnActivities.sessionIDs(linkedTo: id)
+        let candidates = [id] + [durable].compactMap { $0 } + LiveTurnActivities.sessionIDs(linkedTo: id, profile: activeProfile, dashboardID: activeDashboardID?.uuidString)
         var seen = Set<String>()
         for candidate in candidates where !candidate.isEmpty && seen.insert(candidate).inserted {
             if let target = Self.linkedSessionTarget(candidate, rows: rows, aliases: voiceSessionAliases) {

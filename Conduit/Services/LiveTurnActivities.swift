@@ -472,16 +472,20 @@ final class LiveTurnActivities {
     }
 
     /// Every id the chat behind a card linking to `id` answers to, so a
-    /// tap still finds a chat whose linked id Hermes no longer knows.
-    nonisolated static func sessionIDs(linkedTo id: String) -> [String] {
-        sessionIDs(linkedTo: id, in: Activity<HermesTurnAttributes>.activities.map(\.attributes))
+    /// tap still finds a chat whose linked id Hermes no longer knows. Only
+    /// cards of `profile` on `dashboardID` count (one naming neither is
+    /// from an older build): ids from another workspace say nothing here.
+    nonisolated static func sessionIDs(linkedTo id: String, profile: String, dashboardID: String?) -> [String] {
+        sessionIDs(linkedTo: id, profile: profile, dashboardID: dashboardID, in: Activity<HermesTurnAttributes>.activities.map(\.attributes))
     }
 
-    nonisolated static func sessionIDs(linkedTo id: String, in cards: [HermesTurnAttributes]) -> [String] {
+    nonisolated static func sessionIDs(linkedTo id: String, profile: String, dashboardID: String?, in cards: [HermesTurnAttributes]) -> [String] {
         guard !id.isEmpty else { return [] }
         return cards.filter { card in
-            guard case .session(let linked, _, _)? = ConduitAppLink(url: card.link) else { return false }
-            return linked == id
+            guard case .session(let linked, let own, _)? = ConduitAppLink(url: card.link), linked == id else { return false }
+            if let own, own != profile { return false }
+            if let owner = card.dashboardID, owner != dashboardID { return false }
+            return true
         }.flatMap { $0.sessionIDs.filter { $0 != id } }
     }
 

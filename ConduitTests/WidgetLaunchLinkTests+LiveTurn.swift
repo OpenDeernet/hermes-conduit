@@ -244,11 +244,17 @@ extension WidgetLaunchLinkTests {
     /// carries find the chat once the list no longer knows that runtime.
     func testLiveTurnCardOffersItsOtherIDsForAReapedRuntime() throws {
         let link = try XCTUnwrap(URL(string: "conduit://session/rt?profile=default"))
-        let card = HermesTurnAttributes(chatTitle: "Chat", startedAt: now, language: "system", link: link, sessionIDs: ["rt", "stored"])
+        let card = HermesTurnAttributes(chatTitle: "Chat", startedAt: now, language: "system", link: link, sessionIDs: ["rt", "stored"], dashboardID: "D1")
         let other = HermesTurnAttributes(chatTitle: "Other", startedAt: now, language: "system", link: try XCTUnwrap(URL(string: "conduit://session/x")), sessionIDs: ["x", "y"])
-        XCTAssertEqual(LiveTurnActivities.sessionIDs(linkedTo: "rt", in: [other, card]), ["stored"])
-        XCTAssertEqual(LiveTurnActivities.sessionIDs(linkedTo: "nope", in: [other, card]), [])
-        XCTAssertEqual(LiveTurnActivities.sessionIDs(linkedTo: "", in: [card]), [])
+        func ids(_ id: String, profile: String = "default", dashboard: String? = "D1", in cards: [HermesTurnAttributes]) -> [String] {
+            LiveTurnActivities.sessionIDs(linkedTo: id, profile: profile, dashboardID: dashboard, in: cards)
+        }
+        XCTAssertEqual(ids("rt", in: [other, card]), ["stored"])
+        XCTAssertEqual(ids("nope", in: [other, card]), [])
+        XCTAssertEqual(ids("", in: [card]), [])
+        XCTAssertEqual(ids("rt", dashboard: "D2", in: [card]), [], "Another dashboard's card says nothing here")
+        XCTAssertEqual(ids("rt", profile: "work", in: [card]), [], "Nor another profile's")
+        XCTAssertEqual(ids("x", profile: "work", dashboard: nil, in: [other]), ["y"], "An older card naming neither counts")
         // The reaped runtime is in no row; its stored id is.
         let row = SessionSummary(
             id: "stored", alternateIds: [], title: "Chat", model: "Hermes", updatedLabel: "now",
