@@ -131,7 +131,7 @@ enum PhoneChangeConfirmation {
             agreeing.formUnion(alarmVerbs)
             verbs.formUnion(alarmVerbs)
         }
-        // "supprime-le", "lösch's": the pronoun hangs off the verb.
+        // "supprime-le", "apaga-o": the pronoun hangs off the verb.
         let pointsByPronoun = lowered.range(of: #"\p{L}-(le|la|les|lo|o|a)\b"#, options: .regularExpression) != nil
         return (1...8).contains(said.count) && said.allSatisfy(agreeing.contains) && said.contains(where: verbs.contains)
             && (pointsByPronoun || said.contains(where: Self.pointing.contains))
@@ -163,8 +163,9 @@ enum PhoneChangeConfirmation {
     private static func compiled(verbs: String) -> [(NSRegularExpression, [String])] {
         let japanese = "^(?<yes>\(japaneseYes))?(?<point>\(japanesePointing))?(?:\(verbs))(?:\(japaneseEndings))?$"
         let chinese = "^(?<yes>\(chineseYes))?(?<point>把?(?:\(chinesePointing)))?(?:\(verbs))(?<after>\(chinesePointing))?(?:\(chineseEndings))?$"
-        return [(japanese, ["yes", "point"]), (chinese, ["yes", "point", "after"])].compactMap { pattern, groups in
-            (try? NSRegularExpression(pattern: pattern)).map { ($0, groups) }
+        // Constant patterns: one that doesn't compile fails every test of it.
+        return [(japanese, ["yes", "point"]), (chinese, ["yes", "point", "after"])].map { pattern, groups in
+            (try! NSRegularExpression(pattern: pattern), groups)
         }
     }
 

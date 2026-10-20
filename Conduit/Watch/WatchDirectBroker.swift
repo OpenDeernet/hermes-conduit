@@ -1359,9 +1359,10 @@ final class WatchDirectBroker {
     }
 
     /// A Watch call's user turn as an id, the same for every tool call it
-    /// leads to.
+    /// leads to. The turn comes off the wire: kept to the 12 hex digits
+    /// the last group holds, so the id always reads.
     static func userTurnID(call: UInt32, turn: Int) -> UUID {
-        UUID(uuidString: String(format: "%08X-0000-4000-8000-%012llX", call, UInt64(max(0, turn))))!
+        UUID(uuidString: String(format: "%08X-0000-4000-8000-%012llX", call, UInt64(max(0, turn)) & 0xFFFF_FFFF_FFFF))!
     }
 
     /// A start's tries: with the phone's own tools, then without.

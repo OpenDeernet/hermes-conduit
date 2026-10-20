@@ -1015,6 +1015,7 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertNotEqual(WatchDirectBroker.userTurnID(call: 7, turn: 4), WatchDirectBroker.userTurnID(call: 7, turn: 6))
         XCTAssertNotEqual(WatchDirectBroker.userTurnID(call: 7, turn: 4), WatchDirectBroker.userTurnID(call: 8, turn: 4))
         XCTAssertEqual(WatchDirectBroker.userTurnID(call: .max, turn: -1), WatchDirectBroker.userTurnID(call: .max, turn: 0))
+        _ = WatchDirectBroker.userTurnID(call: 7, turn: .max)  // a turn too big for the id still makes one
     }
 
     func testWatchTranscriptCapKeepsTheNewestTurns() {
