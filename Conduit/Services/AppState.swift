@@ -22067,7 +22067,7 @@ final class AppState: ObservableObject {
     /// Conduit plugin > Update notices).
     @Published private(set) var notifierPluginNoticeChannel: NotifierPluginNoticeChannel
     /// Where this copy of Conduit came from, read again each launch.
-    private(set) var appInstallSource: AppInstallSource
+    @Published private(set) var appInstallSource: AppInstallSource
     private var appInstallSourceRead = false
     private var notifierPluginFollowsMain: Bool {
         notifierPluginNoticeChannel.followsMain(installedFrom: appInstallSource)
