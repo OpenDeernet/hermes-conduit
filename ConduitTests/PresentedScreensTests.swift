@@ -55,6 +55,25 @@ extension AppStateVoiceCapabilityTests {
         XCTAssertTrue(prompt.isConfirmed(by: "yes"))
     }
 
+    func testPresentedConfirmARefusalAnywhereInTheWordsNeverConfirms() {
+        // Not at the start, or said only through the verb: still a no.
+        let refusals = ["send it, no wait", "send it. wait", "send it later, not now", "please cancel",
+                        "raczej nie", "chyba nie", "şimdi gönderme", "нет, не отправляй",
+                        "지금 보내지 마", "보내지마세요", "보내지 않을래요", "그건 하지 말아요",
+                        "我不想发", "先别发", "現在別發", "送らないで", "送信しないでください", "やっぱりやめて"]
+        for refusal in refusals {
+            let listed = PresentedConfirm(id: "p1", title: "Send to Mei?", preview: "", actionLabel: "Send",
+                                          spokenYes: [refusal])
+            XCTAssertFalse(listed.isConfirmed(by: refusal), refusal)
+        }
+        // A phrase in any shipped language that says yes still confirms.
+        for yes in ["send it", "envíalo", "wyślij", "gönder", "보내 줘", "发吧", "送って"] {
+            let listed = PresentedConfirm(id: "p1", title: "Send to Mei?", preview: "", actionLabel: "Send",
+                                          spokenYes: [yes])
+            XCTAssertTrue(listed.isConfirmed(by: yes), yes)
+        }
+    }
+
     func testAVoiceConfirmNeedsWordsFromAfterThePanelAndYieldsToATap() async throws {
         let suite = "present-tests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

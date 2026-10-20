@@ -2989,6 +2989,41 @@ enum VoiceThreadRouting {
         return negates(words) || words.contains { answerBareNos.contains($0) }
     }
 
+    /// Whether a no or a not yet is said anywhere in the words, not only
+    /// at the start: "send it, no wait", "raczej nie", "şimdi gönderme",
+    /// "지금 보내지 마", "我不想发", "送らないで". Stricter than
+    /// `heldRequestAnswer`, so a phrase the agent supplied as a yes can't
+    /// carry one. A yes that starts with a no ("no problem") is the
+    /// caller's to accept first.
+    static func containsRefusal(_ answer: String) -> Bool {
+        if containsNegation(answer) { return true }
+        let folded = fold(answer)
+        let words = folded
+            .split(whereSeparator: { !($0.isLetter || $0.isNumber || $0 == "'") })
+            .map(String.init)
+            .filter { !fillers.contains($0) }
+        if answerRefusalPhraseWords.contains(where: { phrase in
+            words.indices.contains { words[$0...].starts(with: phrase) }
+        }) { return true }
+        if words.contains(where: koreanNegates) { return true }
+        return cjkRefusals.contains { folded.contains($0) }
+    }
+
+    private static let answerRefusalPhraseWords = (answerNoLeads + answerNotYetLeads)
+        .map { $0.split(separator: " ").map(String.init) }
+
+    /// Korean says no in the verb: "보내지 마(세요)", "보내지마", "하지 말아요",
+    /// "보내지 않을래요".
+    private static func koreanNegates(_ word: String) -> Bool {
+        word.contains("않") || word.contains("말아") || ["마", "마요", "마세요", "말고", "말라"].contains(word)
+            || ["지마", "지마요", "지마세요"].contains { word.hasSuffix($0) }
+    }
+
+    /// Chinese and Japanese have no word breaks: a no or negation anywhere
+    /// in them ("我不想发", "先别发", "送らないで", "やめて").
+    private static let cjkRefusals = cjkAnswerNoLeads + cjkAnswerNotYetLeads
+        + ["不", "别", "別", "没", "沒", "ない", "ません", "やめ", "だめ", "ダメ", "嫌"]
+
     static func heldRequestAnswer(_ answer: String) -> HeldRequestAnswer {
         let spoken = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         if let cjk = cjkHeldRequestAnswer(spoken) { return cjk }
