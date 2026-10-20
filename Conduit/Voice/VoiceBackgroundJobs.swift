@@ -2997,6 +2997,12 @@ enum VoiceThreadRouting {
     /// caller's to accept first.
     static func containsRefusal(_ answer: String) -> Bool {
         if containsNegation(answer) { return true }
+        // A no or a wait as the lead ("不", "Momento", "Sebentar"), as
+        // `heldRequestAnswer` reads it.
+        switch heldRequestAnswer(answer) {
+        case .no, .notYet: return true
+        default: break
+        }
         let folded = fold(answer)
         let words = folded
             .split(whereSeparator: { !($0.isLetter || $0.isNumber || $0 == "'") })

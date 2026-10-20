@@ -57,7 +57,7 @@ extension AppStateVoiceCapabilityTests {
 
     func testPresentedConfirmARefusalAnywhereInTheWordsNeverConfirms() {
         // Not at the start, or said only through the verb: still a no.
-        let refusals = ["send it, no wait", "yes, send it, no wait", "send it. wait", "send it later, not now", "please cancel",
+        let refusals = ["不", "不不不", "Momento", "Sekunde", "Sebentar", "send it, no wait", "yes, send it, no wait", "send it. wait", "send it later, not now", "please cancel",
                         "raczej nie", "chyba nie", "şimdi gönderme", "нет, не отправляй",
                         "지금 보내지 마", "보내지마세요", "보내지 않을래요", "그건 하지 말아요",
                         "我不想发", "先别发", "現在別發", "送らないで", "送信しないでください", "やっぱりやめて"]
