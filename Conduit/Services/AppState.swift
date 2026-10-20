@@ -18512,8 +18512,9 @@ final class AppState: ObservableObject {
               let delay = catalogChangeSignal.delayUntilDue(now: now), delay > 0 else { return }
         catalogChangeReadTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(delay))
-            guard let self, !Task.isCancelled else { return }
+            guard let self else { return }
             self.catalogChangeReadTask = nil
+            guard !Task.isCancelled else { return }
             self.readPendingCatalogChange()
         }
     }
@@ -18591,7 +18592,11 @@ final class AppState: ObservableObject {
             }
             // The chat or its turn changed since the snapshot: nothing to do.
             guard self.activeSessionId == sessionID, self.reconciliation == nil,
-                  self.turnState == (expectsRunning ? .running : .idle) else { return }
+                  self.turnState == (expectsRunning ? .running : .idle) else {
+                // New rows still unread: the next check asks again.
+                if !expectsRunning, self.activeSessionId == sessionID { self.openChatSync.readCalledOff() }
+                return
+            }
             await read(self)
         }
     }

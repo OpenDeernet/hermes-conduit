@@ -373,6 +373,18 @@ final class ChatSyncTests: XCTestCase {
                        "Read even with the count unchanged")
     }
 
+    func testACalledOffStoredCountReadAsksAgain() {
+        var sync = OpenChatSync()
+        let local = turn(running: false)
+        _ = sync.checkDue(local, now: at(0))
+        _ = sync.observeCatalog(messageCount: 4, local: local, now: at(10), chatVisible: true)
+        XCTAssertEqual(sync.observeCatalog(messageCount: 6, local: local, now: at(20), chatVisible: true), .readNewRows)
+        sync.readCalledOff()
+        XCTAssertEqual(sync.observeCatalog(messageCount: 6, local: local, now: at(25), chatVisible: true), .readNewRows,
+                       "Same count, still unread")
+        XCTAssertEqual(sync.observeCatalog(messageCount: 6, local: local, now: at(40), chatVisible: true), .none)
+    }
+
     func testCatalogChangesAreReadFiveSecondsApartAndNotDuringATurnHere() {
         var signal = CatalogChangeSignal()
         XCTAssertNil(signal.delayUntilDue(now: at(0)))

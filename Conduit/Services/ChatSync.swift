@@ -189,6 +189,9 @@ struct OpenChatSync {
     /// tell a turn the registry never saw (#1026).
     private var catalogCountBaseline: Int?
     private var sentHereSinceCatalogBaseline = false
+    /// A read a moved stored count asked for was called off: the next
+    /// catalog read asks again, whatever the count.
+    private var catalogReadPending = false
 
     /// This device sent something in the open chat: the registry's count
     /// moving next is its own doing.
@@ -218,6 +221,7 @@ struct OpenChatSync {
     /// resume): the next idle snapshot asks again.
     mutating func readCalledOff() {
         sawRunElsewhere = true
+        catalogReadPending = true
         lastReadAt = nil
     }
 
@@ -295,11 +299,12 @@ struct OpenChatSync {
             catalogCountBaseline = count
             return .none
         }
-        guard count != catalogCountBaseline else { return .none }
+        guard count != catalogCountBaseline || catalogReadPending else { return .none }
         // Off screen, the change waits like the registry's: the baseline
         // keeps it due for the next read while the chat shows.
         guard chatVisible, readAllowed(now) else { return .none }
         catalogCountBaseline = count
+        catalogReadPending = false
         sawRunElsewhere = false
         lastReadAt = now
         return .readNewRows
