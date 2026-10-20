@@ -69,7 +69,7 @@ extension AppStateVoiceCapabilityTests {
         // A phrase in any shipped language that says yes still confirms.
         // A negating character or a length of time inside a yes isn't a no.
         for yes in ["send it", "envíalo", "wyślij", "gönder", "보내 줘", "发吧", "送って", "the second one",
-                    "沒問題", "不错，发吧", "問題ありません", "すみません、送って"] {
+                    "沒問題", "没有问题", "特别好，发吧", "发给别人", "不错，发吧", "問題ありません", "すみません、送って"] {
             let listed = PresentedConfirm(id: "p1", title: "Send to Mei?", preview: "", actionLabel: "Send",
                                           spokenYes: [yes])
             XCTAssertTrue(listed.isConfirmed(by: yes), yes)

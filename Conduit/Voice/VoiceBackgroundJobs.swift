@@ -3006,6 +3006,10 @@ enum VoiceThreadRouting {
             words.indices.contains { words[$0...].starts(with: phrase) }
         }) { return true }
         if words.contains(where: koreanNegates) { return true }
+        // "别" / "別" says don't when it opens a clause or comes with the
+        // verb; inside "别人" or "特別" it doesn't.
+        let clauses = folded.split(whereSeparator: { !($0.isLetter || $0.isNumber) })
+        if clauses.contains(where: { $0.hasPrefix("别") || $0.hasPrefix("別") }) { return true }
         return cjkRefusals.contains { folded.contains($0) }
     }
 
@@ -3026,8 +3030,8 @@ enum VoiceThreadRouting {
     /// Korean says no in the verb: "보내지 마(세요)", "보내지마", "하지 말아요",
     /// "보내지 않을래요".
     private static func koreanNegates(_ word: String) -> Bool {
-        word.contains("않") || word.contains("말아") || ["마", "마요", "마세요", "말고", "말라"].contains(word)
-            || ["지마", "지마요", "지마세요"].contains { word.hasSuffix($0) }
+        word.contains("않") || ["마", "마요", "마세요", "말아", "말아요", "말고", "말라"].contains(word)
+            || ["지마", "지마요", "지마세요", "지말아", "지말아요"].contains { word.hasSuffix($0) }
     }
 
     /// Chinese and Japanese have no word breaks: a no or negation anywhere
@@ -3035,7 +3039,7 @@ enum VoiceThreadRouting {
     /// verb forms, not the bare characters, so "不错", "不好意思",
     /// "問題ありません" and "すみません" stay a yes.
     private static let cjkRefusals = cjkAnswerNoLeads + cjkAnswerNotYetLeads.filter { $0 != "ちょっと" } + [
-        "不想", "不要", "不用", "不必", "不发", "不發", "不送", "别", "別", "没有", "沒有", "不需", "先不",
+        "不想", "不要", "不用", "不必", "不发", "不發", "不送", "别发", "別發", "别送", "別送", "没有", "沒有", "不需", "先不",
         "ないで", "なくて", "しない", "らない", "しません", "送りません", "いりません", "要りません",
         "できません", "やめ", "だめ", "ダメ", "嫌",
     ]
@@ -3135,7 +3139,7 @@ enum VoiceThreadRouting {
     ]
     static let cjkAnswerYesLeads = [
         "はい", "うん", "ええ", "お願いします", "オッケー", "オーケー", "どうぞ", "送って", "送信して", "そうして",
-        "好的", "好啊", "好呀", "好吧", "行吧", "行啊", "是的", "对的", "当然", "没问题", "沒問題", "发吧", "发送吧",
+        "好的", "好啊", "好呀", "好吧", "行吧", "行啊", "是的", "对的", "当然", "没有问题", "沒有問題", "没问题", "沒問題", "发吧", "发送吧",
     ]
     /// Answers that count only as a clause of their own, since requests
     /// start with them too: "好，改成四个人" and "可以，发吧" are a yes,
@@ -3145,7 +3149,7 @@ enum VoiceThreadRouting {
     /// Words that add nothing to an answer ("好的，谢谢", "はい、お願いします").
     static let cjkAnswerFillers = [
         "ありがとうございます", "ありがとう", "お願いします", "お願い", "ください", "どうも", "です", "ます", "ね", "よ",
-        "送って", "没问题", "沒問題", "谢谢", "谢了", "发吧", "发送", "请", "吧", "了", "啊", "呀", "呢", "的",
+        "送って", "没有问题", "沒有問題", "没问题", "沒問題", "谢谢", "谢了", "发吧", "发送", "请", "吧", "了", "啊", "呀", "呢", "的",
     ].sorted { $0.count > $1.count }
     /// After a yes, these turn it around or question it ("好，但是…",
     /// "嗯，让我想想", "はい、でも…"): asked again.
