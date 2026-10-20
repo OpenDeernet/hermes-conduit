@@ -242,6 +242,7 @@ extension WidgetLaunchLinkTests {
 
     /// A card an older build left up names the runtime id; the other ids it
     /// carries find the chat once the list no longer knows that runtime.
+    @MainActor
     func testLiveTurnCardOffersItsOtherIDsForAReapedRuntime() throws {
         let link = try XCTUnwrap(URL(string: "conduit://session/rt?profile=default"))
         let card = HermesTurnAttributes(chatTitle: "Chat", startedAt: now, language: "system", link: link, sessionIDs: ["rt", "stored"], dashboardID: "D1")
