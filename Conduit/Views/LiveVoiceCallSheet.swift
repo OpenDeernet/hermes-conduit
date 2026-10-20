@@ -233,7 +233,7 @@ struct LiveVoiceCallSheet: View {
                             profile: appState.profileDisplayName(appState.activeProfile),
                             onOpenChat: openAttachedChat
                         )
-                    } else if modeSwitch == nil {
+                    } else {
                         Text(verbatim: title)
                             .font(.headline)
                             .lineLimit(1)

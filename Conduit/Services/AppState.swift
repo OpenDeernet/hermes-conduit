@@ -30565,6 +30565,9 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// A mode switch from a call screen is under way.
+    private var isSwitchingVoiceMode = false
+
     /// How long a voice screen takes to slide away, so the next mode's
     /// screen isn't presented while the last one is still on its way out.
     static let voiceModeSwitchSheetHandoff: Duration = .milliseconds(450)
@@ -30574,6 +30577,11 @@ final class AppState: ObservableObject {
     /// call hangs up and starts again in the new mode, in the chat it was
     /// working in.
     func switchVoiceMode(to choice: VoiceModeChoice) async {
+        // A second pick while the first screen slides away waits its turn
+        // out: two switches interleaving could save one mode and open another.
+        guard !isSwitchingVoiceMode else { return }
+        isSwitchingVoiceMode = true
+        defer { isSwitchingVoiceMode = false }
         // Classic voice works in the open chat; a live call in its attached one.
         let classicWasOpen = showVoiceSheet
         let thread = classicWasOpen ? liveVoiceThreadForOpenChat() : voiceBackgroundJobSupervisor.liveThread
@@ -30581,8 +30589,16 @@ final class AppState: ObservableObject {
         if classicWasOpen || voiceConversationController.hasLiveVoiceSession { closeVoiceConversation() }
         endLiveVoiceCall()
         applyVoiceMode(choice)
-        guard isConnected else { return }
-        if sheetWasShown { try? await Task.sleep(for: Self.voiceModeSwitchSheetHandoff) }
+        guard isConnected else {
+            errorMessage = AppLocalization.string("Reconnect to Hermes to start voice.")
+            return
+        }
+        if sheetWasShown {
+            // Cancelled (a boundary tore the app's state down): nothing starts.
+            do { try await Task.sleep(for: Self.voiceModeSwitchSheetHandoff) } catch { return }
+            // Something else started voice meanwhile (Siri, a call from Hermes).
+            guard isConnected, !isVoiceInUse, minimisedLiveVoice == nil else { return }
+        }
         switch choice.engine {
         case .geminiLive: openGeminiLiveConversation(attachingTo: thread)
         case .gptLive: openGPTLiveConversation(attachingTo: thread)

@@ -113,4 +113,15 @@ extension AppStateVoiceCapabilityTests {
 
         appState.closeGeminiLiveConversation()
     }
+
+    func testSwitchingWhileDisconnectedSavesTheModeAndSaysWhyNothingStarted() async {
+        let appState = makeModeSwitchAppState()
+        appState.isConnected = false
+
+        await appState.switchVoiceMode(to: .grok)
+
+        XCTAssertTrue(appState.isGrokLiveEnabled, "the pick is still saved")
+        XCTAssertFalse(appState.showGrokLiveSheet)
+        XCTAssertEqual(appState.errorMessage, AppLocalization.string("Reconnect to Hermes to start voice."))
+    }
 }
