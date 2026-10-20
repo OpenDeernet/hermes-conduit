@@ -303529,7 +303529,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Suivre"
+            "value" : "Ajouter une étoile"
           }
         },
         "id" : {
@@ -303611,7 +303611,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ne plus suivre"
+            "value" : "Retirer l'étoile"
           }
         },
         "id" : {
@@ -303693,7 +303693,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Suivis"
+            "value" : "Avec étoile"
           }
         },
         "id" : {
@@ -303775,7 +303775,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aucune conversation suivie"
+            "value" : "Aucune conversation avec étoile"
           }
         },
         "id" : {
@@ -303857,7 +303857,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Balayez une conversation ou touchez-la longuement pour la suivre."
+            "value" : "Balayez une conversation ou touchez-la longuement pour lui ajouter une étoile."
           }
         },
         "id" : {
