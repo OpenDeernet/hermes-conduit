@@ -46,7 +46,7 @@ enum PhoneChangeConfirmation {
 
     /// Verbs of the change itself, among them the forms that carry their
     /// own "it" ("bórralo", "cancellalo"), which count as pointing too.
-    static let verbs: Set<String> = [
+    static let verbs: Set<String> = Set([
         "delete", "remove", "change", "move", "update", "rename", "reschedule", "mark", "complete",
         "lösche", "lösch", "löschen", "losche", "losch", "entferne", "entfernen", "ändere", "änder", "ändern",
         "andere", "verschiebe", "verschieb", "verschieben", "aktualisiere", "aktualisieren", "benenne",
@@ -72,7 +72,7 @@ enum PhoneChangeConfirmation {
         "삭제해", "삭제해요", "삭제해줘", "지워", "지워요", "지워줘", "없애", "없애줘", "바꿔", "바꿔요", "바꿔줘",
         "변경해", "변경해요", "변경해줘", "옮겨", "옮겨요", "옮겨줘", "업데이트해", "업데이트해줘", "완료해",
         "완료해요", "완료해줘", "표시해", "표시해줘", "체크해", "체크해줘",
-    ].union(verbsWithIt)
+    ]).union(verbsWithIt)
 
     /// Imperatives that carry their own object: "delete it" in one word.
     static let verbsWithIt: Set<String> = [
@@ -145,26 +145,32 @@ enum PhoneChangeConfirmation {
     /// "それを消してください", "好的，删掉吧", "把它删了"). A "don't"
     /// ("しないで", "不要", "别") matches nothing.
     private static func confirmsWithoutSpaces(_ lowered: String, cancelsAlarm: Bool) -> Bool {
-        let text = String(lowered.unicodeScalars.filter { CharacterSet.letters.contains($0) }.map(Character.init))
+        let text = String(String.UnicodeScalarView(lowered.unicodeScalars.filter { CharacterSet.letters.contains($0) }))
         guard !text.isEmpty, text.unicodeScalars.contains(where: { (0x3040...0x9FFF).contains($0.value) }) else { return false }
-        let verbs = cancelsAlarm ? cjkVerbs + "|" + cjkAlarmVerbs : cjkVerbs
-        let japanese = "^(?<yes>\(japaneseYes))?(?<point>\(japanesePointing))?(?:\(verbs))(?:\(japaneseEndings))?$"
-        let chinese = "^(?<yes>\(chineseYes))?(?<point>把?(?:\(chinesePointing)))?(?:\(verbs))(?<after>\(chinesePointing))?(?:\(chineseEndings))?$"
-        for pattern in [japanese, chinese] {
-            guard let regex = try? NSRegularExpression(pattern: pattern),
-                  let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else { continue }
-            let found = ["yes", "point", "after"].contains { name in
-                guard pattern.contains("<\(name)>") else { return false }
-                return match.range(withName: name).location != NSNotFound
-            }
-            if found { return true }
+        let range = NSRange(text.startIndex..., in: text)
+        for (regex, groups) in cancelsAlarm ? alarmPatterns : patterns {
+            guard let match = regex.firstMatch(in: text, range: range) else { continue }
+            if groups.contains(where: { match.range(withName: $0).location != NSNotFound }) { return true }
         }
         return false
     }
 
+    /// Japanese, then Chinese, each with the groups that hold a yes or a
+    /// pointer: compiled once.
+    private static let patterns = compiled(verbs: cjkVerbs)
+    private static let alarmPatterns = compiled(verbs: cjkVerbs + "|" + cjkAlarmVerbs)
+
+    private static func compiled(verbs: String) -> [(NSRegularExpression, [String])] {
+        let japanese = "^(?<yes>\(japaneseYes))?(?<point>\(japanesePointing))?(?:\(verbs))(?:\(japaneseEndings))?$"
+        let chinese = "^(?<yes>\(chineseYes))?(?<point>把?(?:\(chinesePointing)))?(?:\(verbs))(?<after>\(chinesePointing))?(?:\(chineseEndings))?$"
+        return [(japanese, ["yes", "point"]), (chinese, ["yes", "point", "after"])].compactMap { pattern, groups in
+            (try? NSRegularExpression(pattern: pattern)).map { ($0, groups) }
+        }
+    }
+
     private static let japaneseYes = "はい|ええ|うん|お願いします|おねがいします|いいよ|いいです|オーケー"
     private static let japanesePointing = "(?:それ|これ|あれ|両方|全部|二つとも)(?:を|も)?"
-    private static let japaneseEndings = "ください|下さい|くれ|お願いします|おねがいします|ちょうだい"
+    private static let japaneseEndings = "ください|下さい|くれ|お願いします|おねがいします|ちょうだい|ね|よ"
     private static let chineseYes = "是的|是|好的|好|对|對|可以|行|嗯"
     private static let chinesePointing = "它|这个|這個|那个|那個|这些|這些|都|两个都|兩個都"
     private static let chineseEndings = "吧|了|掉|吧了"

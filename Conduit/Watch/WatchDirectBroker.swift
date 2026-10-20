@@ -288,6 +288,7 @@ final class WatchDirectBroker {
         lateOutgoing = []
         hostTools = []
         hostToolsMode = nil
+        appState.watchCallUserTurn = nil
         lastHeardAt = Date()
         // Lets transport recovery run with the phone locked, as for a
         // CarPlay call.
@@ -408,6 +409,7 @@ final class WatchDirectBroker {
         lateOutgoing = []
         hostTools = []
         hostToolsMode = nil
+        appState.watchCallUserTurn = nil
         lastHeardAt = Date()
         appState.setWatchVoiceCallActive(true)
         let startedAt = Date()
@@ -516,6 +518,7 @@ final class WatchDirectBroker {
         lateOutgoing = []
         hostTools = []
         hostToolsMode = nil
+        appState.watchCallUserTurn = nil
         lastHeardAt = Date()
         appState.setWatchVoiceCallActive(true)
         appState.voiceBackgroundJobSupervisor.readsRepliesWhenSettling = true
@@ -638,6 +641,7 @@ final class WatchDirectBroker {
         lateOutgoing = []
         hostTools = []
         hostToolsMode = nil
+        appState.watchCallUserTurn = nil
         lastHeardAt = Date()
         appState.setWatchVoiceCallActive(true)
         let startedAt = Date()
