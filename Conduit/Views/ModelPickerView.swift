@@ -391,6 +391,7 @@ struct ModelPickerView: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.conduitAccent)
                         .frame(width: 20)
+                        .accessibilityHidden(true)
                     Text(provider.name)
                         .font(.subheadline.weight(.semibold))
                     Spacer(minLength: 12)
@@ -400,6 +401,7 @@ struct ModelPickerView: View {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
                 .padding(.horizontal, 16)
                 .frame(minHeight: 50)
@@ -407,6 +409,7 @@ struct ModelPickerView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? Text("Expanded") : Text("Collapsed"))
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if isExpanded {
@@ -431,7 +434,7 @@ struct ModelPickerView: View {
         // the same model id.
         let isSelected = selectedModel == model.id && provider.matches(selectedProvider)
         return Button {
-            Haptics.selectionChanged(selectedModel != model.id || selectedProvider != provider.name)
+            Haptics.selectionChanged(selectedModel != model.id || !provider.matches(selectedProvider))
             selectedModel = model.id
             selectedProvider = provider.name
         } label: {

@@ -84,24 +84,27 @@ struct ContextSheet: View {
     }
 
     /// The breakdown's categories with the color each takes in the bar and
-    /// beside its row. Hermes often names one color for every category, so
-    /// then they take the palette in turn instead of all coming out amber.
+    /// beside its row. Hermes's own colors only when each is one Conduit
+    /// knows and no two share one; otherwise (it often names one for all,
+    /// or names Conduit doesn't map) they take the palette in turn, so the
+    /// categories never all come out amber.
     private var segments: [ContextWindowBar.Segment] {
         guard let categories = breakdown?.categories else { return [] }
-        let oneColor = Set(categories.map { $0.color.lowercased() }).count <= 1
+        let named = categories.map { colorFor($0.color) }
+        let useNamed = named.allSatisfy { $0 != nil }
+            && Set(categories.map { $0.color.lowercased() }).count == categories.count
         return categories.enumerated().map { index, category in
             ContextWindowBar.Segment(
                 id: category.id,
                 label: category.label,
                 tokens: category.tokens,
-                color: oneColor
-                    ? ContextWindowBar.palette[index % ContextWindowBar.palette.count]
-                    : colorFor(category.color)
+                color: (useNamed ? named[index] : nil)
+                    ?? ContextWindowBar.palette[index % ContextWindowBar.palette.count]
             )
         }
     }
 
-    private func colorFor(_ name: String) -> Color {
+    private func colorFor(_ name: String) -> Color? {
         switch name.lowercased() {
         case "blue": return .blue
         case "green": return .green
@@ -111,7 +114,7 @@ struct ContextSheet: View {
         case "pink": return .pink
         case "cyan": return .cyan
         case "amber", "yellow": return .yellow
-        default: return .conduitAccent
+        default: return nil
         }
     }
 }
