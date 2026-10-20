@@ -291,7 +291,7 @@ final class AVAudioCaptureService: NSObject, AudioCaptureService {
             rebuild: { rebuildEngine() },
             reassert: { try coordinator.reassert() },
             start: { try startEngine() },
-            switchMicrophone: { try microphoneFallback.engage() }
+            switchMicrophone: { try self.microphoneFallback.engage() }
         )
     }
 

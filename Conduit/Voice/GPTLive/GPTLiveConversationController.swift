@@ -306,6 +306,9 @@ final class GPTLiveConversationController: ObservableObject {
     /// the user's entries it was about. Cleared once they go.
     private var sendClaim: (at: Date, entries: Set<UUID>)?
     private var sendClaimTask: Task<Void, Never>?
+    /// When Conduit last sent words the model only said it sent: the
+    /// model's own delegation on them, a moment late, is no new request.
+    private var conduitSentAt: Date?
 
     init(
         makeSession: @escaping @MainActor () -> GPTLiveSessionControlling,
@@ -751,6 +754,13 @@ final class GPTLiveConversationController: ObservableObject {
             delegationWords[id] = Set(transcript.filter { $0.speaker == .user && !delegatedEntries.contains($0.id) }.map(\.id))
         }
         let parts = delegationRequest(itemText: text)
+        if parts.request.isEmpty, !id.hasPrefix(Self.conduitDelegationPrefix),
+           let conduitSentAt, now().timeIntervalSince(conduitSentAt) < Self.lateDelegationWindow {
+            // The model doing what it said, after Conduit already did it.
+            self.conduitSentAt = nil
+            _ = appendContext(Self.alreadySentForModel, channel: .commentary, delegationID: id)
+            return
+        }
         // "End call:" (or, on an API-key call whose delegations carry no
         // text, the user's words asking to end): close once the
         // goodbye has played, unless the user emptied their end
@@ -808,21 +818,29 @@ final class GPTLiveConversationController: ObservableObject {
     /// been quiet for `sendClaimGrace` and still no delegation took them.
     func checkSendClaim() {
         guard let claim = sendClaim else { return }
-        guard isActive, endRequestedAt == nil, session?.isReady == true,
-              // Approvals and answers to a call from Hermes go only on a
-              // marker the model sends, never on Conduit's guess.
-              supervisor.callWaitsOn == nil,
+        guard isActive, endRequestedAt == nil,
               !claim.entries.isDisjoint(with: undelegatedUserEntries) else {
             sendClaim = nil
             return
         }
+        // Held, not dropped: approvals and answers to a call from Hermes go
+        // only on a marker the model sends, never on Conduit's guess, and a
+        // session not ready yet takes nothing.
+        guard session?.isReady == true, supervisor.callWaitsOn == nil else { return }
         let current = now()
         guard current.timeIntervalSince(claim.at) >= Self.sendClaimGrace,
               !modelTurnActive, userTurnEntries.isEmpty,
               lastUserSpeechAt.map({ current.timeIntervalSince($0) >= Self.sendClaimGrace }) ?? true else { return }
         sendClaim = nil
+        conduitSentAt = current
         takeDelegation(id: Self.conduitDelegationPrefix + UUID().uuidString, text: "")
     }
+
+    /// How long after Conduit sent the words a model delegation with none
+    /// of its own is taken as the same send.
+    static let lateDelegationWindow: TimeInterval = 15
+    /// Not UI copy.
+    static let alreadySentForModel = "Conduit already sent the user's words to Hermes; its reply follows. Don't send them again."
 
     /// Marks a delegation Conduit made itself. GPT-Live never made it, so
     /// what answers it goes as session context.

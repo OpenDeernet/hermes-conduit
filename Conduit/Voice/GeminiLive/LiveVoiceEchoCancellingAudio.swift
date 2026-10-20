@@ -302,7 +302,7 @@ final class EchoCancellingLiveVoiceAudio: NSObject {
             rebuild: { tearDownEngine() },
             reassert: { try coordinator.reassert() },
             start: { try startEngine() },
-            switchMicrophone: { try microphoneFallback.engage() }
+            switchMicrophone: { try self.microphoneFallback.engage() }
         )
     }
 

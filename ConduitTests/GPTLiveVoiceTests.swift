@@ -1130,6 +1130,12 @@ extension VoiceConversationControllerTests {
         controller.checkSendClaim()
         await settle(40)
         XCTAssertEqual(fake.created, 1)
+
+        // The model's own delegation, late, is that same send.
+        session.onEvent?(.delegation(id: "del_late", text: ""))
+        await settle(40)
+        XCTAssertEqual(fake.created, 1)
+        XCTAssertEqual(session.appended.last { $0.delegationID == "del_late" }?.text, GPTLiveConversationController.alreadySentForModel)
         controller.stop()
     }
 

@@ -117,7 +117,17 @@ enum VoiceAudioEngineRecovery {
             do {
                 try start()
             } catch where isRecoverable(error) {
-                guard let switchMicrophone, try switchMicrophone() else { throw error }
+                guard let switchMicrophone else { throw error }
+                // A microphone that can't be switched to reports the graph
+                // failure that asked for it, not its own.
+                let switched: Bool
+                do {
+                    switched = try switchMicrophone()
+                } catch let switchError {
+                    engineRecoveryLogger.error("Could not prefer the built-in microphone: \(LogRedaction.message(switchError), privacy: .public)")
+                    throw error
+                }
+                guard switched else { throw error }
                 engineRecoveryLogger.notice("Audio engine still failed on the headset microphone; starting on the built-in microphone")
                 rebuild()
                 try start()
