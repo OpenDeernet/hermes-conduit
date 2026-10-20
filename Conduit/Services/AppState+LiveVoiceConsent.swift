@@ -14,10 +14,15 @@ import Foundation
 extension AppState {
     /// The mode itself while its provider still needs the user's OK, nil
     /// once a call may connect. A call the phone isn't showing leaves the
-    /// question for the phone's consent sheet.
+    /// question for the phone's consent sheet; one it shows asks in place.
     func requestLiveVoiceConsentIfMissing(_ mode: LiveVoiceModeName) -> LiveVoiceModeName? {
         guard let missing = LiveVoiceProviderConsent.missing(mode) else { return nil }
-        if !isLiveVoiceSheetShown(mode) { liveVoiceConsentRequest = missing }
+        if !isLiveVoiceSheetShown(mode) {
+            liveVoiceConsentRequest = missing
+        } else if liveVoiceConsentRequest == missing {
+            // The call screen asks now: one question, not two.
+            liveVoiceConsentRequest = nil
+        }
         return missing
     }
 
