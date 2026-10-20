@@ -25,53 +25,48 @@ struct ContextSheet: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                ConduitBackdrop()
-                ScrollView {
-                    VStack(spacing: 14) {
-                        ConduitSettingsSection(title: AppLocalization.string("Context"), symbol: "circle.dotted.circle", tint: .conduitAura) {
-                            SettingsMetricRow(label: AppLocalization.string("Used"), value: AppLocalization.string("\(Int(appState.runtime.contextUsed)) tokens"))
-                            SettingsMetricRow(label: AppLocalization.string("Capacity"), value: AppLocalization.string("\(Int(appState.runtime.contextMax)) tokens"))
-                            VStack(alignment: .leading, spacing: 7) {
-                                HStack {
-                                    Text("Window usage")
-                                        .font(.caption.weight(.medium))
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                    Text("\(String(Int(appState.runtime.contextPercent.rounded())))%")
-                                        .font(.caption.monospacedDigit().weight(.semibold))
-                                }
-                                ProgressView(value: appState.runtime.contextPercent, total: 100)
-                                    .tint(.conduitAccent)
-                            }
-                            .padding(.top, 4)
+            // V2: laid out as a settings page, its cards on the profile's
+            // glow and fading under the bar; compact to fit the half sheet.
+            SettingsDetailContainer(compact: true) {
+                ConduitSettingsSection(title: AppLocalization.string("Context"), symbol: "circle.dotted.circle", tint: .conduitAura) {
+                    SettingsMetricRow(label: AppLocalization.string("Used"), value: AppLocalization.string("\(Int(appState.runtime.contextUsed)) tokens"))
+                    SettingsMetricRow(label: AppLocalization.string("Capacity"), value: AppLocalization.string("\(Int(appState.runtime.contextMax)) tokens"))
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack {
+                            Text("Window usage")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(String(Int(appState.runtime.contextPercent.rounded())))%")
+                                .font(.caption.monospacedDigit().weight(.semibold))
                         }
+                        ProgressView(value: appState.runtime.contextPercent, total: 100)
+                            .tint(.conduitAccent)
+                    }
+                    .padding(.top, 4)
+                }
 
-                        if let breakdown {
-                            ConduitSettingsSection(title: AppLocalization.string("Breakdown"), symbol: "chart.pie", tint: .conduitAccent) {
-                                ForEach(breakdown.categories, id: \.id) { category in
-                                    HStack(spacing: 10) {
-                                        Circle()
-                                            .fill(colorFor(category.color))
-                                            .frame(width: 9, height: 9)
-                                        Text(category.label)
-                                        Spacer()
-                                        Text("\(category.tokens)")
-                                            .font(.caption.monospacedDigit())
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding(.vertical, 3)
-                                }
+                if let breakdown {
+                    ConduitSettingsSection(title: AppLocalization.string("Breakdown"), symbol: "chart.pie", tint: .conduitAccent) {
+                        ForEach(breakdown.categories, id: \.id) { category in
+                            HStack(spacing: 10) {
+                                Circle()
+                                    .fill(colorFor(category.color))
+                                    .frame(width: 9, height: 9)
+                                Text(category.label)
+                                Spacer()
+                                Text("\(category.tokens)")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
                             }
+                            .padding(.vertical, 3)
                         }
                     }
-                    .padding(16)
                 }
             }
             .navigationTitle("Context")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
         }
+        .environment(\.settingsGlowTint, appState.profileGlowTint(appState.activeProfile))
         .task { await loadBreakdown() }
     }
 

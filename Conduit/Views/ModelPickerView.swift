@@ -256,10 +256,12 @@ struct ModelPickerView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                ConduitBackdrop()
+                // V2: a settings page's layout, each group's name over a
+                // quiet card on the profile's glow.
+                ConduitBackdrop(glowTint: appState.profileGlowTint(appState.activeProfile))
 
                 ScrollView {
-                    VStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 24) {
                         if editingVisibility {
                             visibilityEditor
                         } else {
@@ -271,10 +273,13 @@ struct ModelPickerView: View {
                             applyButton
                         }
                     }
-                    .padding(16)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
                 }
                 .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
+                .modifier(V2SoftTopScrollEdge(isOn: true))
             }
             .navigationTitle("Model")
             .navigationBarTitleDisplayMode(.inline)
@@ -344,19 +349,25 @@ struct ModelPickerView: View {
     }
 
     private var modelSection: some View {
-        ModelPickerSection(title: AppLocalization.string("Model"), symbol: "cpu", tint: .conduitAccent) {
+        ModelPickerSection(title: AppLocalization.string("Model"), symbol: "cpu", tint: .conduitAccent, flush: true) {
             if providers.isEmpty {
                 Text("No models are available from this gateway.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .padding(16)
             } else {
-                ForEach(visibleProviders, id: \.name) { provider in
+                let shown = visibleProviders
+                ForEach(shown, id: \.name) { provider in
                     providerCard(provider)
+                    if provider.name != shown.last?.name {
+                        Divider().overlay(rowStroke).padding(.leading, 46)
+                    }
                 }
-                if visibleProviders.isEmpty {
+                if shown.isEmpty {
                     Text("All providers are hidden. Tap Edit to restore one.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .padding(16)
                 }
             }
         }
@@ -386,7 +397,7 @@ struct ModelPickerView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 16)
                 .frame(minHeight: 50)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -397,22 +408,17 @@ struct ModelPickerView: View {
             if isExpanded {
                 Divider()
                     .overlay(rowStroke)
-                    .padding(.horizontal, 14)
+                    .padding(.leading, 46)
 
                 ForEach(provider.models, id: \.id) { model in
                     modelRow(model, providerName: provider.name)
                     if model.id != provider.models.last?.id {
                         Divider()
                             .overlay(rowStroke)
-                            .padding(.leading, 48)
+                            .padding(.leading, 46)
                     }
                 }
             }
-        }
-        .background(rowFoundation, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(rowStroke, lineWidth: 1)
         }
     }
 
@@ -440,7 +446,9 @@ struct ModelPickerView: View {
                         .foregroundStyle(.conduitAccent)
                 }
             }
-            .padding(.horizontal, 14)
+            // Under the provider's name.
+            .padding(.leading, 42)
+            .padding(.trailing, 12)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -493,28 +501,36 @@ struct ModelPickerView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+    /// V2: the picked level is Settings' gold capsule (dark text on the
+    /// dark-mode gold, white on the light-mode brown), the rest quiet.
     private func reasoningPillLabel(_ title: String, isSelected: Bool) -> some View {
         Text(title)
             .font(.subheadline.weight(isSelected ? .semibold : .regular))
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .foregroundStyle(isSelected ? selectedPillText : Color.primary)
             .padding(.horizontal, 14)
             .frame(minHeight: 36)
             .background(
-                isSelected ? AnyShapeStyle(Color.conduitAura) : AnyShapeStyle(rowFoundation),
+                isSelected ? Color.conduitAccent : rowFoundation,
                 in: Capsule()
             )
             .overlay {
-                Capsule().strokeBorder(isSelected ? Color.clear : rowStroke, lineWidth: 1)
+                Capsule().strokeBorder(isSelected ? Color.clear : rowStroke, lineWidth: 0.5)
             }
             .contentShape(Capsule())
+    }
+
+    private var selectedPillText: Color {
+        colorScheme == .dark ? Color.black.opacity(0.85) : .white
     }
 
     private var runSettingsSection: some View {
         ModelPickerSection(title: AppLocalization.string("Run settings"), symbol: "slider.horizontal.3", tint: .conduitAccent) {
             Toggle("Fast mode", isOn: $fastEnabled)
+                .tint(.conduitAccent)
             if globalYoloFloor {
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle("YOLO mode", isOn: $yoloEnabled)
+                        .tint(.conduitAccent)
                         .disabled(true)
                     Text(yoloHelpText)
                         .font(.footnote)
@@ -526,6 +542,7 @@ struct ModelPickerView: View {
                 .accessibilityElement(children: .combine)
             } else {
                 Toggle("YOLO mode", isOn: $yoloEnabled)
+                    .tint(.conduitAccent)
                 Text(yoloHelpText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -557,21 +574,24 @@ struct ModelPickerView: View {
     }
 
     private var visibilityEditor: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ModelPickerSection(title: AppLocalization.string("Model visibility"), symbol: "line.3.horizontal.decrease.circle", tint: .conduitAccent) {
+        ModelPickerSection(title: AppLocalization.string("Model visibility"), symbol: "line.3.horizontal.decrease.circle", tint: .conduitAccent, flush: true) {
+            VStack(alignment: .leading, spacing: 10) {
                 TextField("Search providers or models", text: $visibilityQuery)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .padding(11)
-                    .background(rowFoundation, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(rowFoundation, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 Text("Hiding a provider preserves its individual model choices. These filters stay on this device.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+            .padding(16)
 
-                ForEach(visibilityProviders, id: \.name) { provider in
-                    visibilityProviderCard(provider)
-                }
+            let shown = visibilityProviders
+            ForEach(shown, id: \.name) { provider in
+                Divider().overlay(rowStroke).padding(.leading, provider.name == shown.first?.name ? 0 : 16)
+                visibilityProviderCard(provider)
             }
         }
     }
@@ -616,10 +636,14 @@ struct ModelPickerView: View {
                 }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(providerHidden ? Color.secondary : Color.green)
-                .padding(.horizontal, 10).padding(.vertical, 7)
-                .conduitGlassControl(cornerRadius: 11, tint: providerHidden ? .secondary.opacity(0.08) : .green.opacity(0.10))
+                .padding(.horizontal, 12).frame(minHeight: 30)
+                .background(providerHidden ? Color.secondary.opacity(0.12) : Color.green.opacity(0.12), in: Capsule())
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+                .buttonStyle(.plain)
             }
-            .padding(12)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
 
             if expanded {
                 Divider().overlay(rowStroke)
@@ -629,7 +653,7 @@ struct ModelPickerView: View {
                     Button("Hide all") { setAllModels(in: provider, visible: false) }
                 }
                 .font(.caption.weight(.semibold)).tint(.conduitAccent)
-                .padding(.horizontal, 12).padding(.vertical, 8)
+                .padding(.horizontal, 16).padding(.vertical, 8)
 
                 ForEach(shownModels, id: \.id) { model in
                     let key = modelVisibilityKey(provider: provider.name, model: model.id)
@@ -644,10 +668,10 @@ struct ModelPickerView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(hidden ? Color.secondary : Color.green)
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .padding(.leading, 36).padding(.trailing, 16).padding(.vertical, 10)
                     }
                     .buttonStyle(.plain)
-                    if model.id != shownModels.last?.id { Divider().overlay(rowStroke).padding(.leading, 12) }
+                    if model.id != shownModels.last?.id { Divider().overlay(rowStroke).padding(.leading, 36) }
                 }
                 if models.count > shownModels.count {
                     Button("Show \(models.count - shownModels.count) more") { showAllModelsFor.insert(provider.name) }
@@ -656,8 +680,6 @@ struct ModelPickerView: View {
                 }
             }
         }
-        .background(rowFoundation, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(rowStroke, lineWidth: 1) }
     }
 
     private func matchingModels(in provider: ProviderInfo) -> [ModelInfo] {
@@ -704,18 +726,16 @@ struct ModelPickerView: View {
                 Group {
                     if isApplying {
                         ProgressView()
-                            .tint(.white)
+                            .tint(selectedPillText)
                             .accessibilityLabel(AppLocalization.string("Applying configuration"))
                     } else {
                         Label("Apply configuration", systemImage: "checkmark")
                     }
                 }
-                .font(.headline)
-                .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 6).frame(minHeight: 46)
+                .frame(minHeight: 46)
             }
-            .conduitGlassControl(cornerRadius: 17, tint: .conduitAccent, prominent: true)
+            .buttonStyle(.settingsPrimary)
             .disabled(isApplying || isApplyingReasoning)
         }
     }
@@ -730,11 +750,11 @@ struct ModelPickerView: View {
     }
 
     private var rowFoundation: Color {
-        colorScheme == .dark ? Color.white.opacity(0.055) : Color.black.opacity(0.035)
+        Color.primary.opacity(0.05)
     }
 
     private var rowStroke: Color {
-        colorScheme == .dark ? Color.white.opacity(0.11) : Color.black.opacity(0.075)
+        Color.primary.opacity(0.07)
     }
 
     private func loadModels() async {
@@ -879,45 +899,33 @@ struct ModelPickerView: View {
     }
 }
 
-/// Picker sheets use a stable standard surface rather than a large glass pane.
-/// Native glass remains on compact controls, where it does not change the
-/// readability of rows as the presentation moves between detents.
+/// V2: a group's name over a quiet card, as on a settings page. `flush`
+/// drops the card's padding for a list of rows that run edge to edge.
 private struct ModelPickerSection<Content: View>: View {
     let title: String
     let symbol: String
     let tint: Color
+    var flush = false
     private let content: Content
-    @Environment(\.colorScheme) private var colorScheme
 
-    init(title: String, symbol: String, tint: Color, @ViewBuilder content: () -> Content) {
+    init(title: String, symbol: String, tint: Color, flush: Bool = false, @ViewBuilder content: () -> Content) {
         self.title = title
         self.symbol = symbol
         self.tint = tint
+        self.flush = flush
         self.content = content()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label(title, systemImage: symbol)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(tint)
-            content
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsSectionHeader(title: title, symbol: symbol, tint: tint)
+            VStack(alignment: .leading, spacing: flush ? 0 : 14) {
+                content
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(flush ? 0 : 16)
+            .settingsCard()
         }
-        .padding(16)
-        .background(sectionFoundation, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(sectionStroke, lineWidth: 1)
-        }
-    }
-
-    private var sectionFoundation: Color {
-        colorScheme == .dark
-            ? Color(red: 0.072, green: 0.080, blue: 0.106).opacity(0.96)
-            : Color.white.opacity(0.94)
-    }
-
-    private var sectionStroke: Color {
-        colorScheme == .dark ? Color.white.opacity(0.14) : Color.black.opacity(0.08)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
