@@ -52,6 +52,20 @@ class FixedTextSizeTests(unittest.TestCase):
             .font(.system(size: 8))
         """), [])
 
+    def test_blank_and_comment_lines_keep_the_chain(self):
+        self.assertEqual(len(problems("""
+        Text("Title")
+
+            // The label.
+            .font(.system(size: 11))
+        """)), 1)
+
+    def test_a_text_argument_does_not_own_the_chain(self):
+        self.assertEqual(problems("""
+        Image(systemName: "plus").accessibilityLabel(Text("Add"))
+            .font(.system(size: 16))
+        """), [])
+
     def test_a_stated_reason_exempts_the_text(self):
         self.assertEqual(problems("""
         // Fixed size: it sits inside the fixed 32 pt ring.

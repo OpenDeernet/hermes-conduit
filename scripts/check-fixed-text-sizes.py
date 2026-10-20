@@ -30,19 +30,35 @@ FIXED_SIZE = re.compile(r"\.system\(size:\s*\d")
 EXEMPTION = "// Fixed size:"
 
 
+def owning_text(line):
+    """Where the first Text( that owns its modifier chain starts, or None.
+    A Text passed as an argument, `.accessibilityLabel(Text("Add"))`, owns
+    nothing after the closing parenthesis."""
+    for match in TEXT_START.finditer(line):
+        before = line[:match.start()].rstrip()
+        if not before.endswith(("(", ",")):
+            return match.start()
+    return None
+
+
 def find_problems(sources):
     """sources: {path: text}. Returns ["path:line: ..."] for each fixed text size."""
     problems = []
     for path, text in sorted(sources.items()):
         lines = text.splitlines()
         for index, line in enumerate(lines):
-            if not TEXT_START.search(line):
+            start = owning_text(line)
+            if start is None:
                 continue
             exempt = index > 0 and EXEMPTION in lines[index - 1]
-            chain = [(index, line[TEXT_START.search(line).start():])]
+            chain = [(index, line[start:])]
             follow = index + 1
-            while follow < len(lines) and lines[follow].lstrip().startswith("."):
-                chain.append((follow, lines[follow]))
+            while follow < len(lines):
+                stripped = lines[follow].strip()
+                if stripped.startswith("."):
+                    chain.append((follow, lines[follow]))
+                elif stripped and not stripped.startswith("//"):
+                    break
                 follow += 1
             for number, part in chain:
                 if FIXED_SIZE.search(part) and not exempt:

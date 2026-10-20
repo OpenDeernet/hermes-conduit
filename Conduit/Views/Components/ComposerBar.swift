@@ -1589,20 +1589,24 @@ struct ComposerBar: View, Equatable {
         )
         .accessibilityShowsLargeContentViewer {
             Label {
-                isCapturing ? Text("Stop dictation") : Text("Dictate")
+                dictateTitle(isCapturing: isCapturing)
             } icon: {
                 Image(systemName: isCapturing ? "mic.fill" : "mic")
             }
         }
-        .accessibilityLabel(isCapturing
-            ? Text("Stop dictation")
-            : (dictation.isStarting ? Text("Cancel dictation")
-                : (dictation.isTranscribing ? Text("Transcribing") : Text("Dictate"))))
+        .accessibilityLabel(dictateTitle(isCapturing: isCapturing))
         .accessibilityHint(isCapturing
             ? AppLocalization.string("Stops dictating; the words stay in the message")
             : (dictation.isStarting || dictation.isTranscribing ? "" : (appState.isVoiceInUse
                 ? AppLocalization.string("Dictation is unavailable while a voice conversation has the microphone")
                 : AppLocalization.string("Types what you say into the message"))))
+    }
+
+    private func dictateTitle(isCapturing: Bool) -> Text {
+        if isCapturing { return Text("Stop dictation") }
+        if dictation.isStarting { return Text("Cancel dictation") }
+        if dictation.isTranscribing { return Text("Transcribing") }
+        return Text("Dictate")
     }
 
     private func openVoiceFromComposer() {
