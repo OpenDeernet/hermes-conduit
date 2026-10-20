@@ -910,26 +910,24 @@ final class ChatScrollEngine: ObservableObject {
     /// the chat was reopened; scrolling to a row through SwiftUI, or building
     /// the stack again inside the same scroll view, did not bring it back.
     /// So the scroll view is built again, as reopening the chat would. No
-    /// row covering the screen is the sign, when either the latest row has
-    /// no frame or it ends above the screen with no live rows below it: a
-    /// run of steps collapsed into its first row leaves a framed row in view,
-    /// and live rows (which report no frame) fill the space under the latest
-    /// row while a turn runs.
+    /// row covering the screen is the sign, when the latest row has no frame
+    /// or ends above the screen; a run of steps collapsed into its first row
+    /// leaves a framed row in view. Live rows report no frame, so nothing is
+    /// rebuilt while they show: a long reply streaming at the bottom leaves
+    /// the rows above it unlaid without the screen being blank.
     private func checkForBlankViewport(rebuildsLeft: Int) {
         guard mode == .following, !isPaused, !isDragging, !latestAnimationInFlight,
               let surface, !surface.isTracking, !surface.isDecelerating,
-              let last = targetCache.targets.last else { return }
+              let last = targetCache.targets.last, !liveTailShowing() else { return }
         let visible = visibleStackRange(of: surface)
         guard !rowFrames.values.contains(where: { $0.maxY > visible.lowerBound && $0.minY < visible.upperBound }) else {
             return
         }
-        if let lastFrame = rowFrames[last.id] {
-            guard lastFrame.maxY <= visible.lowerBound, !liveTailShowing() else { return }
-        }
+        if let lastFrame = rowFrames[last.id], lastFrame.maxY > visible.lowerBound { return }
         ChatViewportTrace.shared.log(String(
-            format: "blank viewport: offset %.1f content %.1f, %ld rows laid out%@",
+            format: "blank viewport: offset %.1f content %.1f, %ld rows laid out; %@",
             surface.contentOffsetY, surface.contentHeight, rowFrames.count,
-            rebuildsLeft > 0 ? "; rebuilding the scroll view" : ""
+            rebuildsLeft > 0 ? "rebuilding the scroll view" : "still blank after a rebuild"
         ))
         guard rebuildsLeft > 0 else { return }
         emit(.rebuildTranscript)

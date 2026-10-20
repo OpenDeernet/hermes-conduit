@@ -173,6 +173,15 @@ final class ChatScrollEngineTests: XCTestCase {
         withExtendedLifetime(surface) {}
     }
 
+    func testLiveRowsUnderAnUnlaidLatestRowAreNotABlankViewport() {
+        let (_, surface) = settleTurn(
+            frames: ["m3": ChatScrollRowFrame(minY: 900, maxY: 1100, order: 3)],
+            liveTail: true
+        )
+        XCTAssertFalse(events.contains(.rebuildTranscript))
+        withExtendedLifetime(surface) {}
+    }
+
     func testARowOnScreenIsNotABlankViewport() {
         let (_, surface) = settleTurn(frames: ["m10": ChatScrollRowFrame(minY: 3000, maxY: 3700, order: 10)])
         XCTAssertFalse(events.contains(.rebuildTranscript))

@@ -531,6 +531,7 @@ struct ChatView: View {
                 // Reinstalled on appear; late events go nowhere meanwhile.
                 scrollEngine.onEvent = nil
                 scrollEventRouter.proxy = nil
+                scrollEventRouter.rebuildTranscript = nil
                 backfillViewportTask?.cancel()
                 latestAnimationTask?.cancel()
                 appState.removeChatViewportSnapshotProvider(id: viewportSnapshotProviderID)
@@ -1455,7 +1456,7 @@ private struct UserImageAttachmentPreview: View {
                 .padding(.vertical, 7)
                 .background(Color.white.opacity(0.13), in: Capsule())
                 .modifier(ImageDescriptionMenu(description: attachment.imageDescription))
-                .accessibilityHint(Text(verbatim: attachment.imageDescription ?? ""))
+                .modifier(OptionalAccessibilityHint(hint: attachment.imageDescription))
             }
         }
         .task(id: "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.imageCacheKey(for: attachment) ?? "")") {
@@ -1597,6 +1598,7 @@ private struct UserImageAttachmentPreview: View {
                 }
                 .modifier(ImageDescriptionMenu(description: attachment.imageDescription))
                 .accessibilityLabel("Attached image: \(attachment.imageDescription ?? attachment.name)")
+                .accessibilityAddTraits(.isImage)
     }
 
     /// Opens the full-resolution original: the local file when the photo
