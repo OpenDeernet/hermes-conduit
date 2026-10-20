@@ -37,13 +37,8 @@ final class ChatScrollHostedTests: XCTestCase {
     private struct Mounted {
         let appState: AppState
         let host: UIViewController
-        let mountedScrollView: UIScrollView
+        let scrollView: UIScrollView
         let engine: ChatScrollEngine
-
-        /// The scroll view the engine drives now: a rebuild replaces it.
-        @MainActor var scrollView: UIScrollView {
-            (engine.surface as? UIScrollViewChatSurface)?.scrollView ?? mountedScrollView
-        }
     }
 
     private static func transcript(_ range: Range<Int>) -> [ChatMessage] {
@@ -59,26 +54,11 @@ final class ChatScrollHostedTests: XCTestCase {
         }
     }
 
-    private func mount(_ messages: [ChatMessage], sessionID: String? = nil) throws -> Mounted {
+    private func mount(_ messages: [ChatMessage]) throws -> Mounted {
         let suiteName = "chat-scroll-hosted"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         let appState = AppState(defaults: defaults, loadSavedConnection: false)
-        if let sessionID {
-            appState.sessions = [SessionSummary(
-                id: sessionID,
-                alternateIds: [],
-                title: sessionID,
-                model: "Hermes",
-                updatedLabel: "now",
-                profile: "default",
-                source: .chat,
-                isActive: false,
-                isArchived: false,
-                lineageRootId: nil
-            )]
-            appState.activeSessionId = sessionID
-        }
         appState.messages = messages
 
         let host = UIHostingController(
@@ -106,7 +86,7 @@ final class ChatScrollHostedTests: XCTestCase {
         let scrollView = try XCTUnwrap(found.surface?.scrollView)
         let engine = try XCTUnwrap(found.engine)
         settle(host.view)
-        return Mounted(appState: appState, host: host, mountedScrollView: scrollView, engine: engine)
+        return Mounted(appState: appState, host: host, scrollView: scrollView, engine: engine)
     }
 
     private static func find<T: UIView>(_ type: T.Type, in view: UIView) -> T? {
@@ -615,222 +595,5 @@ final class ChatScrollHostedTests: XCTestCase {
         let moves = recorder.offsetChanges(since: mark).filter { $0.distance > 1 }
         print("[ChatScrollHostedTests] idle trace:\n\(recorder.dump())")
         XCTAssertTrue(moves.isEmpty, "the transcript moved on its own:\n\(recorder.dump(since: mark))")
-    }
-
-    // MARK: - Settle probe (temporary, #887 item 5)
-
-    private enum ProbeReader {
-        case following
-        case smallDrag
-        case farDrag
-        case midDrag
-        case dragBackToBottom
-    }
-
-    private func probeGeometry(_ label: String, _ mounted: Mounted) -> String {
-        let view = mounted.scrollView
-        let lastID = mounted.appState.messages.last?.id ?? "-"
-        let origin = mounted.engine.surface?.transcriptOriginY ?? .nan
-        let frame = mounted.engine.rowFrame(for: lastID)
-        let viewportBottom = view.contentOffset.y + view.bounds.height - view.adjustedContentInset.bottom
-        let blank = frame.map { viewportBottom - (origin + $0.maxY) } ?? .nan
-        let tail = frame.map { view.contentSize.height - (origin + $0.maxY) } ?? .nan
-        return String(
-            format: "SETTLE_PROBE %@: offset %.1f max %.1f dist %.1f content %.1f bounds %.1f insets %.1f/%.1f mode %@ last %@ lastMaxY %.1f blankBelowLast %.1f contentBelowLast %.1f",
-            label, view.contentOffset.y, maxOffset(view), maxOffset(view) - view.contentOffset.y,
-            view.contentSize.height, view.bounds.height, view.adjustedContentInset.top,
-            view.adjustedContentInset.bottom, String(describing: mounted.engine.mode), lastID,
-            frame.map { origin + $0.maxY } ?? .nan, blank, tail
-        )
-    }
-
-    /// Rows with a frame inside the viewport, and a band map of the
-    /// viewport as drawn: '#' a 40 pt band with ink, '.' a blank one.
-    private func probeView(_ label: String, _ mounted: Mounted) -> String {
-        let view = mounted.scrollView
-        let origin = mounted.engine.surface?.transcriptOriginY ?? 0
-        let top = view.contentOffset.y + view.adjustedContentInset.top
-        let bottom = view.contentOffset.y + view.bounds.height - view.adjustedContentInset.bottom
-        var rows: [(String, ChatScrollRowFrame)] = []
-        for message in mounted.appState.messages {
-            if let frame = mounted.engine.rowFrame(for: message.id),
-               origin + frame.maxY > top, origin + frame.minY < bottom {
-                rows.append((message.id, frame))
-            }
-        }
-        let rowText = rows.map { String(format: "%@[%.0f-%.0f]", $0.0, origin + $0.1.minY, origin + $0.1.maxY) }
-            .joined(separator: " ")
-        var bands = ""
-        let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
-        let image = renderer.image { _ in
-            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
-        }
-        if let cg = image.cgImage, let data = cg.dataProvider?.data, let bytes = CFDataGetBytePtr(data) {
-            let scale = CGFloat(cg.height) / view.bounds.height
-            let bandHeight: CGFloat = 40
-            var y: CGFloat = 0
-            while y < view.bounds.height {
-                let y0 = Int(y * scale), y1 = min(cg.height, Int((y + bandHeight) * scale))
-                var inked = false
-                let reference = (Int(bytes[y0 * cg.bytesPerRow]), Int(bytes[y0 * cg.bytesPerRow + 1]), Int(bytes[y0 * cg.bytesPerRow + 2]))
-                var row = y0
-                while row < y1, !inked {
-                    var column = Int(30 * scale)
-                    while column < cg.width - Int(30 * scale) {
-                        let index = row * cg.bytesPerRow + column * 4
-                        let delta = abs(Int(bytes[index]) - reference.0) + abs(Int(bytes[index + 1]) - reference.1) + abs(Int(bytes[index + 2]) - reference.2)
-                        if delta > 60 { inked = true; break }
-                        column += 3
-                    }
-                    row += 2
-                }
-                bands += inked ? "#" : "."
-                y += bandHeight
-            }
-        }
-        var tree = ""
-        if !bands.contains("#") {
-            var lines: [String] = []
-            func walk(_ v: UIView, _ depth: Int) {
-                guard lines.count < 60, depth < 4 else { return }
-                let f = v.convert(v.bounds, to: view)
-                lines.append(String(repeating: "  ", count: depth) + String(format: "%@ y %.0f-%.0f h %.0f hidden %d alpha %.2f layers %ld", String(describing: type(of: v)), f.minY, f.maxY, f.height, v.isHidden ? 1 : 0, v.alpha, v.layer.sublayers?.count ?? 0))
-                for sub in v.subviews { walk(sub, depth + 1) }
-            }
-            walk(view, 0)
-            func walkLayers(_ l: CALayer, _ depth: Int) {
-                guard lines.count < 120, depth < 4 else { return }
-                let f = l.convert(l.bounds, to: view.layer)
-                lines.append("L" + String(repeating: "  ", count: depth) + String(format: "%@ y %.0f-%.0f h %.0f hidden %d op %.2f", String(describing: type(of: l)), f.minY, f.maxY, f.height, l.isHidden ? 1 : 0, l.opacity))
-                for sub in l.sublayers ?? [] { walkLayers(sub, depth + 1) }
-            }
-            walkLayers(view.layer, 0)
-            tree = "\n    " + lines.joined(separator: "\n    ")
-        }
-        return "SETTLE_PROBE \(label) view: bands \(bands) rows \(rowText)\(tree)"
-    }
-
-    private func probeRemount(_ label: String, _ mounted: Mounted) throws -> String {
-        let messages = mounted.appState.messages
-        let lastID = messages.last?.id ?? "-"
-        let before = mounted.engine.rowFrame(for: lastID).map { $0.maxY - $0.minY } ?? .nan
-        let contentBefore = mounted.scrollView.contentSize.height
-        let fresh = try mount(messages)
-        settle(fresh.host.view, seconds: 0.6)
-        let after = fresh.engine.rowFrame(for: lastID).map { $0.maxY - $0.minY } ?? .nan
-        return String(
-            format: "SETTLE_PROBE %@ remount: lastHeight %.1f -> %.1f content %.1f -> %.1f",
-            label, before, after, contentBefore, fresh.scrollView.contentSize.height
-        ) + "\n" + probeView("\(label) remounted", fresh)
-    }
-
-    private func runSettleProbe(_ name: String, reader: ProbeReader, tools: Int, chunks: Int) throws {
-        let session = "probe-session"
-        let mounted = try mount(Self.uneven(0..<40), sessionID: session)
-        let appState = mounted.appState
-        let view = mounted.host.view!
-        settle(view, seconds: 0.4)
-        var lines: [String] = [probeGeometry("\(name) mounted", mounted)]
-
-        appState.messages.append(ChatMessage(id: "probe-user", role: .user, content: "Run the task and explain.", timestamp: "2026-01-01T00:00:00Z"))
-        appState.handleStreamEvent(.messageStart(sessionId: session))
-        settle(view, seconds: 0.2)
-        for index in 0..<tools {
-            appState.handleStreamEvent(.toolStart(sessionId: session, toolName: "web_search", toolInput: #"{"query": "q\#(index)"}"#, toolID: "probe-tool-\(index)"))
-            settle(view, seconds: 0.08)
-            appState.handleStreamEvent(.toolComplete(sessionId: session, toolName: "web_search", toolOutput: "ok", toolID: "probe-tool-\(index)"))
-            settle(view, seconds: 0.08)
-        }
-        lines.append(probeGeometry("\(name) after tools", mounted))
-        for chunk in 0..<chunks {
-            appState.handleStreamEvent(.messageDelta(
-                sessionId: session,
-                text: "Paragraph \(chunk) of the streamed answer goes on for a while with ordinary words in it. " + String(repeating: "More words. ", count: 12) + "\n\n"
-            ))
-            settle(view, seconds: 0.06)
-            if chunk == chunks - 3 {
-                switch reader {
-                case .following:
-                    break
-                case .smallDrag:
-                    browse(mounted, to: mounted.scrollView.contentOffset.y - 90)
-                case .farDrag:
-                    browse(mounted, to: mounted.scrollView.contentOffset.y - 1600)
-                case .midDrag:
-                    browse(mounted, to: mounted.scrollView.contentOffset.y - 500)
-                case .dragBackToBottom:
-                    browse(mounted, to: mounted.scrollView.contentOffset.y - 90)
-                    browse(mounted, to: maxOffset(mounted.scrollView))
-                }
-                lines.append(probeGeometry("\(name) after reader", mounted))
-            }
-        }
-        settle(view, seconds: 0.3)
-        lines.append(probeGeometry("\(name) before complete", mounted))
-        let recorder = ScrollRecorder(mounted.scrollView)
-        ChatViewportTrace.shared.reset()
-        appState.handleStreamEvent(.messageComplete(sessionId: session, messageId: "probe-final", content: nil, reasoning: nil))
-        settle(view, seconds: 0.1)
-        lines.append(probeGeometry("\(name) complete+0.1", mounted))
-        settle(view, seconds: 2.0)
-        lines.append(probeGeometry("\(name) settled", mounted))
-        lines.append(probeView("\(name) settled", mounted))
-        // A nudge, as a touch would give.
-        mounted.scrollView.contentOffset.y -= 1
-        settle(view, seconds: 0.3)
-        lines.append(probeGeometry("\(name) nudged", mounted))
-        lines.append(probeView("\(name) nudged", mounted))
-        settle(view, seconds: 1.2)
-        lines.append(probeGeometry("\(name) later", mounted))
-        lines.append(probeView("\(name) later", mounted))
-        if reader == .following || reader == .dragBackToBottom || reader == .smallDrag {
-            let lastID = appState.messages.last?.id ?? "-"
-            let frame = mounted.engine.rowFrame(for: lastID)
-            let origin = mounted.engine.surface?.transcriptOriginY ?? 0
-            let below = frame.map { mounted.scrollView.contentSize.height - (origin + $0.maxY) } ?? .infinity
-            XCTAssertLessThan(below, 160, "SETTLE_BLANK \(name): \(below) pt below the settled reply")
-        }
-        let changes = recorder.dump().split(separator: "\n").suffix(40).joined(separator: "\n    ")
-        lines.append("SETTLE_PROBE \(name) changes:\n    \(changes)")
-        lines.append("SETTLE_PROBE \(name) engine:\n    \(ChatViewportTrace.shared.dump().split(separator: "\n").suffix(20).joined(separator: "\n    "))")
-        print(lines.joined(separator: "\n"))
-        print(try probeRemount(name, mounted))
-    }
-
-    func testSettleProbeFollowing() throws {
-        try runSettleProbe("following", reader: .following, tools: 7, chunks: 30)
-    }
-
-    func testSettleProbeSmallDrag() throws {
-        try runSettleProbe("smallDrag", reader: .smallDrag, tools: 7, chunks: 30)
-    }
-
-    func testSettleProbeFarDrag() throws {
-        try runSettleProbe("farDrag", reader: .farDrag, tools: 7, chunks: 30)
-    }
-
-    func testSettleProbeDragBack() throws {
-        try runSettleProbe("dragBack", reader: .dragBackToBottom, tools: 7, chunks: 30)
-    }
-
-    func testSettleProbeSmallDragNoTools() throws {
-        try runSettleProbe("smallDragNoTools", reader: .smallDrag, tools: 0, chunks: 30)
-    }
-
-    func testSettleProbeRepeats() throws {
-        for round in 0..<8 {
-            for (name, reader) in [("dragBack", ProbeReader.dragBackToBottom), ("following", .following)] {
-                try runSettleProbe("\(name)#\(round)", reader: reader, tools: 7, chunks: 30)
-                tearDown()
-            }
-        }
-    }
-
-    func testSettleProbeFarDragNoTools() throws {
-        try runSettleProbe("farDragNoTools", reader: .farDrag, tools: 0, chunks: 30)
-    }
-
-    func testSettleProbeMidDrag() throws {
-        try runSettleProbe("midDrag", reader: .midDrag, tools: 7, chunks: 30)
     }
 }
