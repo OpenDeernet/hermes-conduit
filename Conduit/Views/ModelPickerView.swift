@@ -306,8 +306,9 @@ struct ModelPickerView: View {
             // Seeded here, not after the catalog loads, so a failed catalog
             // fetch still shows the real level.
             reasoningEffort = appState.runtime.reasoningEffort.isEmpty ? "none" : appState.runtime.reasoningEffort
-            // Also seeded here: after a failed catalog fetch, Edit then Done
-            // would otherwise save an empty filter over the saved one.
+            // Seeded here, not after the catalog loads: a failed fetch would
+            // leave it empty for Done to save, and a late one would replace
+            // edits already made.
             visibility = appState.modelVisibility
             refreshYoloToggle(force: false)
         }
@@ -777,7 +778,6 @@ struct ModelPickerView: View {
         do {
             let (_, _, provs) = try await client.modelOptions(sessionId: appState.activeSessionId)
             providers = provs ?? []
-            visibility = appState.modelVisibility
             selectedModel = appState.runtime.model
             selectedProvider = appState.runtime.provider
             fastEnabled = appState.runtime.fast
