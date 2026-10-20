@@ -1100,6 +1100,7 @@ struct V2ChatsView: View, Equatable {
                 time: row.session?.updatedLabel ?? "",
                 snippet: row.hit.snippet,
                 isUnread: row.session.map { appState.isSessionUnread($0) } ?? false,
+                isStarred: row.session.map { appState.isSessionStarred($0) } ?? false,
                 isSelected: row.openID == appState.activeSessionId
             )
         }

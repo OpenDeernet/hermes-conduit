@@ -293,6 +293,7 @@ struct V2ContentMatchRow: View {
     let time: String
     let snippet: SessionSearchSnippet
     var isUnread = false
+    var isStarred = false
     var isSelected = false
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -317,6 +318,12 @@ struct V2ContentMatchRow: View {
                         .foregroundStyle(.primary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                     Spacer(minLength: 4)
+                    if isStarred {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                            .foregroundStyle(Color.conduitAccent)
+                            .accessibilityHidden(true)
+                    }
                     Text(time)
                         .font(.footnote)
                         .foregroundStyle(Color.primary.opacity(0.45))
@@ -349,6 +356,7 @@ struct V2ContentMatchRow: View {
     private var accessibilityValue: String {
         [
             isUnread ? AppLocalization.string("Unread") : nil,
+            isStarred ? AppLocalization.string("Starred") : nil,
             snippet.plainText.isEmpty ? nil : snippet.plainText,
             time.isEmpty ? nil : time
         ]
