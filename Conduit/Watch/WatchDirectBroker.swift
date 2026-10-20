@@ -143,6 +143,10 @@ final class WatchDirectBroker {
                 answer(.callRefused(callID: id, reason: WatchVoiceStartFailure.versionMismatch))
                 return
             }
+            if let refusal = consentRefusal(.geminiLive) {
+                answer(.callRefused(callID: id, reason: refusal))
+                return
+            }
             let end = Self.beginBackgroundTask("conduit.watchDirect.start")
             // Asked again while preparing (the Watch's request timed out):
             // the same answer.
@@ -168,6 +172,10 @@ final class WatchDirectBroker {
                 answer(.callRefused(callID: id, reason: WatchVoiceStartFailure.versionMismatch))
                 return
             }
+            if let refusal = consentRefusal(.gptLive) {
+                answer(.callRefused(callID: id, reason: refusal))
+                return
+            }
             let end = Self.beginBackgroundTask("conduit.watchBridge.start")
             let task: Task<WatchVoiceWire.Message, Never>
             if let preparing, preparing.callID == id {
@@ -185,6 +193,10 @@ final class WatchDirectBroker {
         case .grokStart(let id, let version, let ring):
             guard version == WatchVoiceWire.version else {
                 answer(.callRefused(callID: id, reason: WatchVoiceStartFailure.versionMismatch))
+                return
+            }
+            if let refusal = consentRefusal(.grokLive) {
+                answer(.callRefused(callID: id, reason: refusal))
                 return
             }
             let end = Self.beginBackgroundTask("conduit.watchGrok.start")
@@ -224,6 +236,12 @@ final class WatchDirectBroker {
             heard(id)
             guard onCallsConnection(id) else {
                 answer(.callRefused(callID: id, reason: WatchVoiceStartFailure.connectionChanged))
+                return
+            }
+            // The Watch's own Gemini session gets no credential without the
+            // user's OK either.
+            if let refusal = consentRefusal(.geminiLive) {
+                answer(.callRefused(callID: id, reason: refusal))
                 return
             }
             adoptIfKnown(id)
@@ -280,6 +298,12 @@ final class WatchDirectBroker {
     }
 
     // MARK: Start
+
+    /// Why a call can't start until the user allows its provider to hear
+    /// them (#827), or nil. The phone asks on its own sheet meanwhile.
+    private func consentRefusal(_ mode: LiveVoiceModeName) -> String? {
+        appState.missingLiveVoiceConsent(mode).map { VoiceSetupIssue.providerConsentNeeded($0).message }
+    }
 
     private func prepare(_ id: UInt32, ring: String? = nil) async -> WatchVoiceWire.Message {
         let appState = self.appState

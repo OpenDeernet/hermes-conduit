@@ -87,6 +87,7 @@ struct GeminiLiveSettingsSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             LiveVoiceSetupLink(mode: .gemini)
+            LiveVoiceConsentRow(mode: .geminiLive)
             if enabled {
                 HStack(spacing: 10) {
                     Circle()
@@ -269,7 +270,13 @@ struct GeminiLiveVoiceSheet: View {
             onEnd: onClose,
             onRetry: onRetry,
             // A call still waiting on Hermes has no mode to move yet.
-            modeSwitch: isWaiting ? nil : appState.voiceModeSwitch(for: engine.callEngine)
+            modeSwitch: isWaiting ? nil : appState.voiceModeSwitch(for: engine.callEngine),
+            consent: isWaiting ? nil : controller.awaitingConsent,
+            onAllowConsent: {
+                guard let mode = controller.awaitingConsent else { return }
+                appState.setLiveVoiceConsent(true, for: mode)
+                onRetry()
+            }
         )
         // The status and new turns change without focus moving.
         .onChange(of: controller.phase) { _, _ in
