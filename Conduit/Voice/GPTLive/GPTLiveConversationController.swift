@@ -371,6 +371,10 @@ final class GPTLiveConversationController: ObservableObject {
         lastModelOutputAt = nil
         lastModelTurnEndedAt = nil
         delegatedEntries = []
+        sendClaimTask?.cancel()
+        sendClaimTask = nil
+        sendClaim = nil
+        conduitSentAt = nil
         settledEntries = []
         delegationWords = [:]
         userEntryNumbers = [:]
@@ -807,10 +811,11 @@ final class GPTLiveConversationController: ObservableObject {
         }
     }
 
-    /// The user's words no delegation has taken and Conduit didn't handle.
+    /// The user's words no delegation has taken, Conduit didn't handle, and
+    /// no request settled.
     private var undelegatedUserEntries: Set<UUID> {
         Set(transcript.lazy
-            .filter { $0.speaker == .user && !self.delegatedEntries.contains($0.id) && !self.handledHere.contains($0.id) }
+            .filter { $0.speaker == .user && !self.delegatedEntries.contains($0.id) && !self.handledHere.contains($0.id) && !self.settledEntries.contains($0.id) }
             .map(\.id))
     }
 
