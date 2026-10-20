@@ -384,24 +384,43 @@ struct DelegateAgentsSheet: View {
 
 private struct DelegateAgentCard: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
+    @EnvironmentObject private var appState: AppState
     let agent: DelegateAgentActivity
     @State private var expanded = true
+    @State private var steering = false
+    @State private var steerText = ""
+    @State private var confirmingStop = false
+    @State private var showingTail = false
+    @State private var working = false
+    @State private var note: (text: String, isError: Bool)?
+
+    /// Hermes takes Steer, Stop and live output only for an agent it named
+    /// and still runs (#820).
+    private var controllable: Bool { agent.status == .running && agent.hasGatewayID && !agent.sessionId.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Button { withAnimation { expanded.toggle() } } label: {
-                HStack(spacing: 10) {
-                    Circle().fill(statusColor).frame(width: 9, height: 9)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(agent.goal.isEmpty ? AppLocalization.string("Delegate agent") : agent.goal).font(.subheadline.weight(.semibold)).lineLimit(2)
-                        Text([agent.model, agent.currentTool, agent.status.label].compactMap { $0 }.joined(separator: " · "))
-                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            HStack(spacing: 10) {
+                Button { withAnimation { expanded.toggle() } } label: {
+                    HStack(spacing: 10) {
+                        Circle().fill(statusColor).frame(width: 9, height: 9)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(agent.goal.isEmpty ? AppLocalization.string("Delegate agent") : agent.goal).font(.subheadline.weight(.semibold)).lineLimit(2)
+                            Text([agent.model, agent.currentTool, agent.status.label].compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        Spacer()
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(.secondary)
                     }
-                    Spacer()
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption).foregroundStyle(.secondary)
+                }
+                .tint(.primary)
+                if controllable {
+                    controlsMenu
                 }
             }
-            .tint(.primary)
+            if let note {
+                Text(note.text).font(.caption).foregroundStyle(note.isError ? .red : .secondary)
+            }
             if expanded {
                 if agent.stream.isEmpty {
                     Text(agent.summary ?? (agent.status.isActive ? AppLocalization.string("Waiting for activity…") : AppLocalization.string("No stream output returned.")))
@@ -418,6 +437,75 @@ private struct DelegateAgentCard: View {
         }
         .padding(14)
         .conduitGlassSurface(cornerRadius: 20, tint: statusColor.opacity(0.06))
+        .alert("Steer this agent", isPresented: $steering) {
+            TextField("What should it do differently?", text: $steerText, axis: .vertical)
+            Button("Send") { sendSteer() }
+                .disabled(steerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Cancel", role: .cancel) { steerText = "" }
+        } message: {
+            Text("The agent reads this at its next step.")
+        }
+        .confirmationDialog("Stop this agent?", isPresented: $confirmingStop, titleVisibility: .visible) {
+            Button("Stop agent", role: .destructive) { stop() }
+        } message: {
+            Text("The agent stops where it is. The chat carries on without its result.")
+        }
+        .sheet(isPresented: $showingTail) {
+            DelegateAgentTailSheet(
+                title: agent.goal.isEmpty ? AppLocalization.string("Delegate agent") : agent.goal,
+                isRunning: { appState.delegateAgents.first(where: { $0.id == agent.id && $0.sessionId == agent.sessionId })?.status.isActive ?? false },
+                load: { await appState.tailDelegateAgent(agent) }
+            )
+        }
+    }
+
+    private var controlsMenu: some View {
+        Menu {
+            Button { steerText = ""; steering = true } label: { Label("Steer…", systemImage: "arrow.triangle.turn.up.right.circle") }
+            Button { showingTail = true } label: { Label("Live output", systemImage: "text.alignleft") }
+            Button(role: .destructive) { confirmingStop = true } label: { Label("Stop agent", systemImage: "stop.circle") }
+        } label: {
+            Group {
+                if working {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "ellipsis.circle").font(.body).foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 32, height: 32)
+            .contentShape(Rectangle())
+        }
+        .disabled(working)
+        .accessibilityLabel(AppLocalization.string("Agent actions"))
+        .accessibilityIdentifier("delegateAgent.actions")
+    }
+
+    private func sendSteer() {
+        let text = steerText
+        steerText = ""
+        Task {
+            working = true
+            let result = await appState.steerDelegateAgent(agent, text: text)
+            working = false
+            switch result {
+            case .done: note = (AppLocalization.string("Sent. The agent reads it at its next step."), false)
+            case .notRunning: note = (AppLocalization.string("This agent has already finished."), true)
+            case .failed: note = (AppLocalization.string("Couldn't reach this agent."), true)
+            }
+        }
+    }
+
+    private func stop() {
+        Task {
+            working = true
+            let result = await appState.interruptDelegateAgent(agent)
+            working = false
+            switch result {
+            case .done: note = nil
+            case .notRunning: note = (AppLocalization.string("This agent has already finished."), true)
+            case .failed: note = (AppLocalization.string("Couldn't reach this agent."), true)
+            }
+        }
     }
 
     private var statusColor: Color {
@@ -427,6 +515,71 @@ private struct DelegateAgentCard: View {
         case .completed: return .green
         case .failed: return .red
         case .interrupted: return .secondary
+        }
+    }
+}
+
+/// The end of one delegate agent's live transcript, read again every two
+/// seconds while the agent runs (#820).
+private struct DelegateAgentTailSheet: View {
+    @ObservedObject var appLanguage = AppLanguageStore.shared
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let isRunning: () -> Bool
+    let load: () async -> SubagentTail?
+    @State private var tail: SubagentTail?
+    @State private var loaded = false
+    @State private var failed = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                ConduitBackdrop()
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if let tail, tail.available, !tail.text.isEmpty {
+                                if tail.truncated {
+                                    Text("Showing the latest output only.").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Text(verbatim: tail.text)
+                                    .font(.caption.monospaced())
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else if !loaded {
+                                ProgressView().frame(maxWidth: .infinity).padding(.top, 44)
+                            } else {
+                                ContentUnavailableView(
+                                    failed ? AppLocalization.string("Couldn't load output") : AppLocalization.string("No output yet"),
+                                    systemImage: "text.alignleft",
+                                    description: Text(failed ? AppLocalization.string("Hermes didn't send this agent's output.") : AppLocalization.string("Output appears here once the agent writes some."))
+                                )
+                                .padding(.top, 44)
+                            }
+                            Color.clear.frame(height: 1).id("end")
+                        }
+                        .padding(16)
+                    }
+                    .onChange(of: tail) { _, _ in proxy.scrollTo("end", anchor: .bottom) }
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                let next = await load()
+                failed = next == nil
+                if let next { tail = next }
+                loaded = true
+                guard isRunning() else { break }
+                try? await Task.sleep(for: .seconds(2))
+            }
         }
     }
 }
