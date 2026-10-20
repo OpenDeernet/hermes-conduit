@@ -817,11 +817,21 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(resent.compactMap(\.absoluteDate), [oldDue])
         XCTAssertEqual(resent.count, 2)
 
-        // An offset of 0 already follows the due date: no second alarm.
-        let atDue = EKAlarm(relativeOffset: 0)
-        let following = EventKitPhoneSource.dueAlarms([atDue], oldDue: oldDue, newDue: newDue)
-        XCTAssertEqual(following.count, 1)
-        XCTAssertTrue(following.first === atDue)
+        // An offset counts from the start date, which may not be the due
+        // date: it stays, and the new due time still gets its alarm.
+        let atStart = EKAlarm(relativeOffset: 0)
+        let following = EventKitPhoneSource.dueAlarms([atStart], oldDue: oldDue, newDue: newDue)
+        XCTAssertEqual(following.count, 2)
+        XCTAssertIdentical(following.first, atStart)
+        XCTAssertEqual(following.last?.absoluteDate, newDue)
+
+        // Only one alarm is the due alarm: the user's second one half a
+        // minute later stays.
+        let halfMinute = EKAlarm(absoluteDate: oldDue.addingTimeInterval(30))
+        let pair = EventKitPhoneSource.dueAlarms([halfMinute, dueAlarm], oldDue: oldDue, newDue: newDue)
+        XCTAssertFalse(pair.contains { $0 === dueAlarm })
+        XCTAssertTrue(pair.contains { $0 === halfMinute })
+        XCTAssertEqual(pair.count, 2)
 
         // A reminder with no due time before: the user's alarm at that
         // moment is theirs, and the new due time gets its own alarm.

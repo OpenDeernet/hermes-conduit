@@ -443,14 +443,17 @@ final class EventKitPhoneSource: PhoneCalendarSource, @unchecked Sendable {
             var calendar = Calendar(identifier: .gregorian)
             calendar.timeZone = .current
             let oldDue = Self.timedDue(reminder.dueDateComponents, calendar: calendar)
+            var newDue: Date?
             if allDay {
                 reminder.dueDateComponents = calendar.dateComponents([.year, .month, .day], from: due)
             } else {
                 var parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: due)
                 parts.timeZone = calendar.timeZone
                 reminder.dueDateComponents = parts
+                // On the minute, as the due date is kept.
+                newDue = calendar.date(from: parts) ?? due
             }
-            let alarms = Self.dueAlarms(reminder.alarms ?? [], oldDue: oldDue, newDue: allDay ? nil : due)
+            let alarms = Self.dueAlarms(reminder.alarms ?? [], oldDue: oldDue, newDue: newDue)
             reminder.alarms = alarms.isEmpty ? nil : alarms
         }
     }
@@ -464,23 +467,27 @@ final class EventKitPhoneSource: PhoneCalendarSource, @unchecked Sendable {
     }
 
     /// A reminder's alarms after its due date moves. Only the due alarm
-    /// (the one ringing at the old due time, as the Reminders app and
-    /// Conduit both set it) moves with it; the user's own alarms (a place,
-    /// another time, an offset) stay. A timed due date rings from the
-    /// Reminders app, host or not, so it gets a due alarm unless one already
-    /// rings then; a date-only one gets none.
+    /// (the one alarm at the old due time, as the Reminders app and Conduit
+    /// both set it) moves with it; the user's own alarms (a place, another
+    /// time, an offset, a second one near the due time) stay. A timed due
+    /// date rings from the Reminders app, host or not, so it gets a due
+    /// alarm unless one is already set for then; a date-only one gets none.
+    /// Offsets count in neither check: EventKit measures them from a start
+    /// date the reminder need not share with its due date.
     static func dueAlarms(_ alarms: [EKAlarm], oldDue: Date?, newDue: Date?) -> [EKAlarm] {
-        func rings(_ alarm: EKAlarm, at date: Date) -> Bool {
-            guard alarm.structuredLocation == nil else { return false }
-            if let at = alarm.absoluteDate { return abs(at.timeIntervalSince(date)) < 60 }
-            return alarm.relativeOffset == 0
+        // How far a time alarm is from a due time, within the minute the
+        // due components keep; nil for any other alarm.
+        func gap(_ alarm: EKAlarm, _ date: Date) -> TimeInterval? {
+            guard alarm.structuredLocation == nil, let at = alarm.absoluteDate else { return nil }
+            let gap = abs(at.timeIntervalSince(date))
+            return gap < 60 ? gap : nil
         }
         var kept = alarms
         if let oldDue {
-            // An offset of 0 follows the due date by itself: it stays.
-            kept.removeAll { $0.absoluteDate != nil && rings($0, at: oldDue) }
+            let near = kept.indices.compactMap { index in gap(kept[index], oldDue).map { (index, $0) } }
+            if let due = near.min(by: { $0.1 < $1.1 }) { kept.remove(at: due.0) }
         }
-        if let newDue, !kept.contains(where: { rings($0, at: newDue) }) {
+        if let newDue, !kept.contains(where: { gap($0, newDue) != nil }) {
             kept.append(EKAlarm(absoluteDate: newDue))
         }
         return kept
