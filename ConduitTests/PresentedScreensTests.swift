@@ -57,7 +57,7 @@ extension AppStateVoiceCapabilityTests {
 
     func testPresentedConfirmARefusalAnywhereInTheWordsNeverConfirms() {
         // Not at the start, or said only through the verb: still a no.
-        let refusals = ["send it, no wait", "send it. wait", "send it later, not now", "please cancel",
+        let refusals = ["send it, no wait", "yes, send it, no wait", "send it. wait", "send it later, not now", "please cancel",
                         "raczej nie", "chyba nie", "şimdi gönderme", "нет, не отправляй",
                         "지금 보내지 마", "보내지마세요", "보내지 않을래요", "그건 하지 말아요",
                         "我不想发", "先别发", "現在別發", "送らないで", "送信しないでください", "やっぱりやめて"]
@@ -67,7 +67,9 @@ extension AppStateVoiceCapabilityTests {
             XCTAssertFalse(listed.isConfirmed(by: refusal), refusal)
         }
         // A phrase in any shipped language that says yes still confirms.
-        for yes in ["send it", "envíalo", "wyślij", "gönder", "보내 줘", "发吧", "送って"] {
+        // A negating character or a length of time inside a yes isn't a no.
+        for yes in ["send it", "envíalo", "wyślij", "gönder", "보내 줘", "发吧", "送って", "the second one",
+                    "沒問題", "不错，发吧", "問題ありません", "すみません、送って"] {
             let listed = PresentedConfirm(id: "p1", title: "Send to Mei?", preview: "", actionLabel: "Send",
                                           spokenYes: [yes])
             XCTAssertTrue(listed.isConfirmed(by: yes), yes)
