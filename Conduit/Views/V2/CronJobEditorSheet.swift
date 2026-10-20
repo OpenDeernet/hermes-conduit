@@ -209,6 +209,8 @@ private struct CronScheduleEditor: View {
                     Text(verbatim: String(schedule.intervalValue))
                         .monospacedDigit()
                 }
+                // "Every 2 hours" rather than a bare "2".
+                .accessibilityValue(Text(preview))
                 Picker(AppLocalization.string("Unit"), selection: $schedule.intervalUnit) {
                     Text(AppLocalization.string("Minutes")).tag(CronScheduleDraft.IntervalUnit.minutes)
                     Text(AppLocalization.string("Hours")).tag(CronScheduleDraft.IntervalUnit.hours)
@@ -216,7 +218,9 @@ private struct CronScheduleEditor: View {
                 }
                 .pickerStyle(.segmented)
             case .once:
-                DatePicker(AppLocalization.string("Runs at"), selection: $schedule.runAt, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                // A run that already passed stays as it was instead of
+                // clamping to now on the first touch.
+                DatePicker(AppLocalization.string("Runs at"), selection: $schedule.runAt, in: min(schedule.runAt, Date())..., displayedComponents: [.date, .hourAndMinute])
             case .custom:
                 TextField(AppLocalization.string("0 9 * * 1 or every monday 9am"), text: $schedule.custom)
                     .font(.callout.monospaced())
@@ -297,6 +301,7 @@ struct CronBlueprintGallerySheet: View {
     @State private var blueprints: [CronBlueprint] = []
     @State private var targets: [CronDeliveryTarget] = []
     @State private var loading = true
+    @State private var loadInFlight = false
     @State private var error: String?
 
     private var categories: [String] {
@@ -383,9 +388,15 @@ struct CronBlueprintGallerySheet: View {
     }
 
     private func load() async {
+        // Try Again tapped twice runs one load.
+        guard !loadInFlight else { return }
+        loadInFlight = true
         loading = true
         error = nil
-        defer { loading = false }
+        defer {
+            loading = false
+            loadInFlight = false
+        }
         do {
             blueprints = try await appState.loadCronBlueprints()
             // Only widens the delivery choices; the blueprint's own stay.
