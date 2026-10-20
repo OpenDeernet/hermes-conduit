@@ -18724,6 +18724,7 @@ final class AppState: ObservableObject {
         }
 
         let profile = activeProfile
+        let dashboardID = activeDashboardID
         let owner = currentDashboardRuntimeOwner()
         sessionMutationID = session.id
         defer { sessionMutationID = nil }
@@ -18736,11 +18737,17 @@ final class AppState: ObservableObject {
                 showSessionMutationNotice(AppLocalization.string("Reconnect to Hermes to change this conversation."))
                 return false
             }
-            guard sessionMutationResultIsCurrent(profile: profile, owner: owner) else { return false }
             let deletedSessionIDs = Set(session.nestingIDs)
+            // Hermes deleted it: its saved copy leaves the phone even if the
+            // screen has since moved to another dashboard or profile, or a
+            // later visit there would open to it (#1040).
+            if let dashboardID {
+                offlineChatCache.removeTranscripts(sessionIDs: deletedSessionIDs, dashboardID: dashboardID, profile: profile)
+            }
+            guard sessionMutationResultIsCurrent(profile: profile, owner: owner) else { return false }
             sessionYoloStore.clearOverride(
                 for: profile,
-                sessionIDs: [session.id] + session.alternateIds
+                sessionIDs: Array(deletedSessionIDs)
             )
             revokeDeletedConversationIdentity(
                 sessionIDs: deletedSessionIDs,
@@ -18808,10 +18815,8 @@ final class AppState: ObservableObject {
             profile: profile,
             sessionIDs: Array(sessionIDs)
         )
-        // Its saved copy too, or the next launch would open to it (#1040).
-        if let dashboardID = activeDashboardID {
-            offlineChatCache.removeTranscripts(sessionIDs: sessionIDs, dashboardID: dashboardID, profile: profile)
-        }
+        // A saved copy of it on screen goes too; deleteSession removes the
+        // copy's files.
         if let copy = offlineChatPresentation, copy.profile == profile,
            !copy.chatSessionIDs.isDisjoint(with: sessionIDs) {
             dismissOfflineChatPresentation()

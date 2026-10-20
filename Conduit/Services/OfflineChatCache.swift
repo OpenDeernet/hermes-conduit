@@ -547,10 +547,13 @@ final class OfflineChatCacheStore {
         if var list = loadChatList(dashboardID: dashboardID, profile: profile) {
             let isDeleted: (SessionSummary) -> Bool = { !ids.isDisjoint(with: $0.nestingIDs) }
             guard list.sessions.contains(where: isDeleted) || list.cronSessions.contains(where: isDeleted) else { return }
-            let removedRowIDs = Set((list.sessions + list.cronSessions).filter(isDeleted).map(\.id))
+            let removedRows = (list.sessions + list.cronSessions).filter(isDeleted)
+            let removedRowIDs = Set(removedRows.map(\.id))
+            let removedNestingIDs = Set(removedRows.flatMap(\.nestingIDs))
             list.sessions.removeAll(where: isDeleted)
             list.cronSessions.removeAll(where: isDeleted)
             list.pinnedRowIDs.removeAll { removedRowIDs.contains($0) }
+            list.voiceTags = list.voiceTags.filter { !removedNestingIDs.contains($0.key) }
             recordChatList(list, dashboardID: dashboardID, profile: profile)
         }
     }

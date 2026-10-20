@@ -871,14 +871,21 @@ final class OfflineChatCacheTests: XCTestCase {
 
     /// Deleting a chat takes its saved copy off the phone and off the
     /// screen, so the next launch can't show it as the saved copy (#1040).
-    func testDeletingAChatRemovesItsSavedCopy() throws {
+    func testDeletingAChatRemovesItsSavedCopy() async throws {
         let (appState, store, dashboard) = makeAppState()
         seedCopy(store, dashboard: dashboard)
         appState.presentOfflineChatIfAvailable(dashboardID: dashboard)
         XCTAssertEqual(appState.offlineChatPresentation?.displayedSessionID, "stored-a")
 
-        appState.revokeDeletedConversationIdentity(sessionIDs: ["stored-a"], profile: "default")
+        appState.widgetSessionMutationRequestOverride = { _, method, _ in
+            method == "GET" ? ["runtime_revision": 3, "runtime_generation": 1] : ["ok": true]
+        }
+        var deleted = session("runtime-a")
+        deleted.storedSessionId = "stored-a"
 
+        let removed = await appState.deleteSession(deleted)
+
+        XCTAssertTrue(removed)
         XCTAssertNil(appState.offlineChatPresentation)
         XCTAssertNil(store.loadTranscript("stored-a", dashboardID: dashboard, profile: "default"))
         appState.presentOfflineChatIfAvailable(dashboardID: dashboard)
