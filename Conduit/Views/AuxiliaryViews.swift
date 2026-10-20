@@ -2285,8 +2285,9 @@ private struct DelegationPauseSettings: View {
     }
 
     private func change(to next: Bool) {
+        guard !saving else { return }
+        saving = true
         Task {
-            saving = true
             error = nil
             if let state = await save(next) {
                 paused = state

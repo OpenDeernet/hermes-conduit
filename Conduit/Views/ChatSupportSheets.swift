@@ -461,7 +461,7 @@ private struct DelegateAgentCard: View {
 
     private var controlsMenu: some View {
         Menu {
-            Button { steerText = ""; steering = true } label: { Label("Steer…", systemImage: "arrow.triangle.turn.up.right.circle") }
+            Button { steering = true } label: { Label("Steer…", systemImage: "arrow.triangle.turn.up.right.circle") }
             Button { showingTail = true } label: { Label("Live output", systemImage: "text.alignleft") }
             Button(role: .destructive) { confirmingStop = true } label: { Label("Stop agent", systemImage: "stop.circle") }
         } label: {
@@ -491,7 +491,10 @@ private struct DelegateAgentCard: View {
             switch result {
             case .done: note = (AppLocalization.string("Sent. The agent reads it at its next step."), false)
             case .notRunning: note = (AppLocalization.string("This agent has already finished."), true)
-            case .failed: note = (AppLocalization.string("Couldn't reach this agent."), true)
+            case .failed:
+                // Kept for Steer… again, so a dropped send isn't retyped.
+                steerText = text
+                note = (AppLocalization.string("Couldn't reach this agent."), true)
             }
         }
     }
@@ -532,6 +535,8 @@ private struct DelegateAgentTailSheet: View {
     @State private var tail: SubagentTail?
     @State private var loaded = false
     @State private var failed = false
+    /// New output scrolls into view until the reader drags; Latest resumes.
+    @State private var following = true
 
     var body: some View {
         NavigationStack {
@@ -563,7 +568,23 @@ private struct DelegateAgentTailSheet: View {
                         }
                         .padding(16)
                     }
-                    .onChange(of: tail) { _, _ in proxy.scrollTo("end", anchor: .bottom) }
+                    .simultaneousGesture(DragGesture().onChanged { _ in following = false })
+                    .onChange(of: tail) { _, _ in
+                        if following { proxy.scrollTo("end", anchor: .bottom) }
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            if !following {
+                                Button {
+                                    following = true
+                                    withAnimation { proxy.scrollTo("end", anchor: .bottom) }
+                                } label: {
+                                    Label("Latest", systemImage: "arrow.down.to.line")
+                                }
+                                .accessibilityLabel(AppLocalization.string("Jump to latest activity"))
+                            }
+                        }
+                    }
                 }
             }
             .navigationTitle(title)
