@@ -20125,20 +20125,6 @@ final class AppState: ObservableObject {
     /// The bot profile an in-flight or active conversation belongs to, when
     /// that conversation is a canonical Bot Chat. Nil for ordinary sessions —
     /// the ordinary dashboard scope applies.
-    /// The store a conversation's persisted rows are read from: a Bot
-    /// Chat's bot profile, resolved like the resume's scope (this process's
-    /// registry, then the roster, then the durable reference), else the
-    /// workspace. The registry alone is empty after a relaunch or a server
-    /// boundary; the read then asked the workspace's store, got 404, took
-    /// it for a Hermes without the history route and resumed with the
-    /// whole transcript, which on a long Bot Chat outgrew the socket and
-    /// dropped the connection after every send.
-    private func persistedTailProfile(for sessionID: String) -> String {
-        botConversationProfile(for: sessionID)
-            ?? botScopeProfile(forSessionIDs: [sessionID], workspaceProfile: activeProfile)
-            ?? activeProfile
-    }
-
     private func botConversationProfile(for sessionID: String) -> String? {
         // Normalized like the KEYS `noteBotChatSession` writes and like
         // `botScopeProfile`'s fast path: a padded id must not resolve in one
@@ -20148,6 +20134,17 @@ final class AppState: ObservableObject {
             return nil
         }
         return botChatSessionProfiles[normalized]
+    }
+
+    /// The store a conversation's persisted rows are read from: a Bot
+    /// Chat's bot profile, resolved exactly like the resume's scope
+    /// (`botScopeProfile`), else the workspace. The registry alone is empty
+    /// after a relaunch or a server boundary; the read then asked the
+    /// workspace's store, got 404, took it for a Hermes without the history
+    /// route and resumed with the whole transcript, which on a long Bot
+    /// Chat outgrew the socket and dropped the connection after every send.
+    private func persistedTailProfile(for sessionID: String) -> String {
+        botScopeProfile(forSessionIDs: [sessionID], workspaceProfile: activeProfile) ?? activeProfile
     }
 
     /// The presentation-cache namespace for a conversation. Canonical Bot
@@ -24147,7 +24144,9 @@ final class AppState: ObservableObject {
             // identity, and the recovery resume must ride the BOT profile —
             // otherwise the re-resume would address the dashboard store and
             // never find the session.
-            let botScope = botConversationProfile(for: sessionID)
+            // Resolved like the resume's scope: the registry alone is empty
+            // after a relaunch or a server boundary.
+            let botScope = botScopeProfile(forSessionIDs: [sessionID], workspaceProfile: activeProfile)
             let storedSessionID: String
             let acceptedIDs: Set<String>
             let recoveryProfile: String?
