@@ -7123,14 +7123,26 @@ final class AppState: ObservableObject {
         let durable = conversationIdentityIndex.durableID(forRuntime: id, profile: activeProfile)
         // Positively known ids first: the raw id may be a runtime Hermes
         // has since given another chat.
-        let candidates = [durable].compactMap { $0 } + LiveTurnActivities.sessionIDs(linkedTo: id, profile: activeProfile, dashboardID: activeDashboardID?.uuidString) + [id]
-        var seen = Set<String>()
-        for candidate in candidates where !candidate.isEmpty && seen.insert(candidate).inserted {
+        let candidates = Self.linkedSessionCandidates(
+            [durable].compactMap { $0 } + LiveTurnActivities.sessionIDs(linkedTo: id, profile: activeProfile, dashboardID: activeDashboardID?.uuidString) + [id],
+            rows: rows
+        )
+        for candidate in candidates {
             if let target = Self.linkedSessionTarget(candidate, rows: rows, aliases: voiceSessionAliases) {
                 return Self.linkedResumeID(target, matching: candidate, rows: rows)
             }
         }
         return nil
+    }
+
+    /// `ids` de-duplicated, with any that is a row's stored id first: a
+    /// stored id names one chat for good, while a card's runtime ids can
+    /// since belong to another chat.
+    static func linkedSessionCandidates(_ ids: [String], rows: [SessionSummary]) -> [String] {
+        var seen = Set<String>()
+        let unique = ids.filter { !$0.isEmpty && seen.insert($0).inserted }
+        let stored = Set(rows.compactMap { $0.storedSessionId?.trimmingCharacters(in: .whitespacesAndNewlines) })
+        return unique.filter { stored.contains($0) } + unique.filter { !stored.contains($0) }
     }
 
     /// The stored id of the row `target` names that carries `candidate`

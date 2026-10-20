@@ -282,5 +282,9 @@ extension WidgetLaunchLinkTests {
             lineageRootId: nil
         )
         XCTAssertEqual(AppState.linkedResumeID("rt", matching: "stored", rows: [foreignRow, stale]), "stored")
+        // A card's runtime id Hermes has since given another chat loses to
+        // the link's stored id.
+        XCTAssertEqual(AppState.linkedSessionCandidates(["rt", "stored", "rt", ""], rows: [foreignRow, stale]), ["stored", "rt"])
+        XCTAssertEqual(AppState.linkedSessionCandidates(["rt", "stored"], rows: []), ["rt", "stored"], "No row to tell them apart keeps the order")
     }
 }
