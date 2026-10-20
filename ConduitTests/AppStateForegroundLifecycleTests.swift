@@ -167,6 +167,135 @@ final class AppStateForegroundLifecycleTests: XCTestCase {
         box.client.disconnect()
     }
 
+    /// Operations for a chat Hermes Desktop holds until the takeover route
+    /// answers (#1061): every send before it is refused.
+    private func desktopHeldChatOperations(
+        sends: @escaping (String) -> Void,
+        takenOver: @escaping () -> Bool
+    ) -> ChatResumeLifecycleOperations {
+        ChatResumeLifecycleOperations(
+            loadCatalog: { _, _ in [self.session("stored-a")] },
+            openSession: { _, _, _ in
+                SessionResumeResult(sessionId: "runtime-a", storedSessionId: "stored-a",
+                    messages: [], snapshot: SessionRuntimeSnapshot(object: ["running": .bool(false)]))
+            },
+            refreshContext: { _, _ in },
+            sendPrompt: { _, _, text in
+                sends(text)
+                guard takenOver() else {
+                    throw RpcError(
+                        code: 4090,
+                        message: "This chat is open in another Hermes window/terminal. Use it there, or start a new chat here.\nDetails: session stored-a opened by desktop 3m ago.",
+                        reason: "SESSION_NOT_OWNED"
+                    )
+                }
+                return .accepted
+            },
+            verifyTransportHealth: { _ in }
+        )
+    }
+
+    func testCallRequestRefusedByDesktopIsSentAgainAfterTakeover() async {
+        // #1061: a call's first request in a chat Desktop still holds was
+        // refused, the chat was taken over, and the request was lost. With
+        // Take over automatically on, the call takes the chat over and sends
+        // the same request once more.
+        let defaults = UserDefaults.standard
+        let savedAutomatic = defaults.object(forKey: ChatTakeoverPreference.automaticKey)
+        defaults.set(true, forKey: ChatTakeoverPreference.automaticKey)
+        defer { defaults.set(savedAutomatic, forKey: ChatTakeoverPreference.automaticKey) }
+        var sent: [String] = []
+        var takenOver = false
+        var takeoverBodies: [[String: Any]] = []
+        let harness = makeHarness(lifecycleOperations: desktopHeldChatOperations(
+            sends: { sent.append($0) }, takenOver: { takenOver }
+        ))
+        harness.appState.chatTakeoverClient = ChatTakeoverClient(request: { path, method, body in
+            XCTAssertTrue(path.hasPrefix(ChatTakeoverClient.path))
+            XCTAssertEqual(method, "POST")
+            takeoverBodies.append(body ?? [:])
+            takenOver = true
+            return ["ok": true, "status": "taken_over"]
+        })
+        let box = await installConnectedClient(into: harness)
+        harness.appState.sessions = [session("stored-a", alternateIDs: ["runtime-a"])]
+        let opened = await harness.appState.openSession("stored-a")
+        XCTAssertTrue(opened)
+
+        let submitted = await harness.appState.submitComposerForCall(text: "What's on my calendar")
+
+        XCTAssertTrue(submitted, "The call's request goes through after the takeover")
+        XCTAssertEqual(sent, ["What's on my calendar", "What's on my calendar"])
+        XCTAssertEqual(takeoverBodies.count, 1)
+        let ids = takeoverBodies.first?["session_ids"] as? [String] ?? []
+        XCTAssertTrue(ids.contains("runtime-a") && ids.contains("stored-a"))
+        XCTAssertNil(harness.appState.chatTakeover, "No notice is left for the composer to resend")
+        XCTAssertNil(harness.appState.errorMessage)
+        box.client.disconnect()
+    }
+
+    func testCallRequestRefusedByDesktopWithoutAutomaticTakeoverSaysWhy() async {
+        // Take over automatically off: the chat isn't taken from Desktop.
+        // The call says the chat is open there, and the composer keeps the
+        // offer for later.
+        let defaults = UserDefaults.standard
+        let savedAutomatic = defaults.object(forKey: ChatTakeoverPreference.automaticKey)
+        defaults.set(false, forKey: ChatTakeoverPreference.automaticKey)
+        defer { defaults.set(savedAutomatic, forKey: ChatTakeoverPreference.automaticKey) }
+        var sent: [String] = []
+        var takeovers = 0
+        let harness = makeHarness(lifecycleOperations: desktopHeldChatOperations(
+            sends: { sent.append($0) }, takenOver: { false }
+        ))
+        harness.appState.chatTakeoverClient = ChatTakeoverClient(request: { _, _, _ in
+            takeovers += 1
+            return ["ok": true, "status": "taken_over"]
+        })
+        let box = await installConnectedClient(into: harness)
+        harness.appState.sessions = [session("stored-a", alternateIDs: ["runtime-a"])]
+        let opened = await harness.appState.openSession("stored-a")
+        XCTAssertTrue(opened)
+
+        let submitted = await harness.appState.submitComposerForCall(text: "What's on my calendar")
+
+        XCTAssertFalse(submitted)
+        XCTAssertEqual(sent, ["What's on my calendar"])
+        XCTAssertEqual(takeovers, 0)
+        XCTAssertEqual(harness.appState.chatTakeover?.phase, .offered)
+        XCTAssertEqual(
+            harness.appState.callRefusalMessageForOpenChat(),
+            AppLocalization.string("This chat is open in Hermes Desktop. Take it over to send from here.")
+        )
+        box.client.disconnect()
+    }
+
+    func testCallRequestToAChatOffScreenIsSentAgainAfterTakeover() async throws {
+        // The same for a call attached to a chat that isn't on screen.
+        let defaults = UserDefaults.standard
+        let savedAutomatic = defaults.object(forKey: ChatTakeoverPreference.automaticKey)
+        defaults.set(true, forKey: ChatTakeoverPreference.automaticKey)
+        defer { defaults.set(savedAutomatic, forKey: ChatTakeoverPreference.automaticKey) }
+        let harness = makeHarness()
+        var takeoverIDs: [String] = []
+        harness.appState.chatTakeoverClient = ChatTakeoverClient(request: { _, _, body in
+            takeoverIDs = body?["session_ids"] as? [String] ?? []
+            return ["ok": true, "status": "taken_over"]
+        })
+        var sends = 0
+        let outcome = try await harness.appState.sendCallPromptTakingOver(
+            runtimeID: "runtime-b", otherSessionIDs: ["stored-b"], profile: nil
+        ) {
+            sends += 1
+            if sends == 1 {
+                throw RpcError(code: 4090, message: "Details: session stored-b opened by desktop 1m ago.", reason: "SESSION_NOT_OWNED")
+            }
+            return .accepted
+        }
+        XCTAssertEqual(outcome, .accepted)
+        XCTAssertEqual(sends, 2)
+        XCTAssertEqual(takeoverIDs, ["runtime-b", "stored-b"])
+    }
+
     func testComposerSubmissionSurvivesLegitimateRuntimeRotationDuringRecovery() async {
         // Hermes legitimately rotates stored-a: runtime-old → runtime-new
         // during the second send's freshness recovery. The in-flight
