@@ -42,6 +42,7 @@ struct ContextSheet: View {
                         }
                         ProgressView(value: appState.runtime.contextPercent, total: 100)
                             .tint(.conduitAccent)
+                            .accessibilityLabel(Text("Window usage"))
                     }
                     .padding(.top, 4)
                 }

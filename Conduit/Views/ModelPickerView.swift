@@ -306,6 +306,9 @@ struct ModelPickerView: View {
             // Seeded here, not after the catalog loads, so a failed catalog
             // fetch still shows the real level.
             reasoningEffort = appState.runtime.reasoningEffort.isEmpty ? "none" : appState.runtime.reasoningEffort
+            // Also seeded here: after a failed catalog fetch, Edit then Done
+            // would otherwise save an empty filter over the saved one.
+            visibility = appState.modelVisibility
             refreshYoloToggle(force: false)
         }
         .onChange(of: appState.runtime.approvalsMode) { oldMode, newMode in
@@ -411,7 +414,7 @@ struct ModelPickerView: View {
                     .padding(.leading, 46)
 
                 ForEach(provider.models, id: \.id) { model in
-                    modelRow(model, providerName: provider.name)
+                    modelRow(model, provider: provider)
                     if model.id != provider.models.last?.id {
                         Divider()
                             .overlay(rowStroke)
@@ -422,12 +425,14 @@ struct ModelPickerView: View {
         }
     }
 
-    private func modelRow(_ model: ModelInfo, providerName: String) -> some View {
-        let isSelected = selectedModel == model.id
+    private func modelRow(_ model: ModelInfo, provider: ProviderInfo) -> some View {
+        // The provider too, by any of its spellings: two providers can list
+        // the same model id.
+        let isSelected = selectedModel == model.id && provider.matches(selectedProvider)
         return Button {
-            Haptics.selectionChanged(selectedModel != model.id || selectedProvider != providerName)
+            Haptics.selectionChanged(selectedModel != model.id || selectedProvider != provider.name)
             selectedModel = model.id
-            selectedProvider = providerName
+            selectedProvider = provider.name
         } label: {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -574,7 +579,11 @@ struct ModelPickerView: View {
         providers.map { provider in
             ProviderInfo(
                 name: provider.name,
-                models: provider.models.filter { !visibility.hiddenModels.contains(modelVisibilityKey(provider: provider.name, model: $0.id)) }
+                models: provider.models.filter { !visibility.hiddenModels.contains(modelVisibilityKey(provider: provider.name, model: $0.id)) },
+                // Kept so a saved provider spelled by alias still matches.
+                displayName: provider.displayName,
+                aliases: provider.aliases,
+                isCurrent: provider.isCurrent
             )
         }.filter { !visibility.hiddenProviders.contains($0.name) }
     }
