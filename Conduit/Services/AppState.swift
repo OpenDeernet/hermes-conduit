@@ -24542,7 +24542,7 @@ final class AppState: ObservableObject {
         // A bot chat's post-compress rehydration must read the BOT's store
         // and stamp the window with the bot scope, exactly like the initial
         // hydration did.
-        let profile = botConversationProfile(for: requestedSessionID) ?? activeProfile
+        let profile = persistedTailProfile(for: requestedSessionID)
         let outcome = await persistedTranscriptOutcome(
             sessionId: requestedSessionID,
             profile: profile,
@@ -26001,7 +26001,7 @@ final class AppState: ObservableObject {
         return PersistedTranscriptWindow.ownershipHolds(
             window: window,
             conversationSessionIds: [activeId],
-            profile: botConversationProfile(for: activeId) ?? activeProfile,
+            profile: persistedTailProfile(for: activeId),
             windowAliasIds: catalogAliasIDs(for: window.trustedSessionIDs),
             conversationAliasIds: knownSessionIDs(for: activeId)
         )
