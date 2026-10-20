@@ -707,20 +707,27 @@ final class AppStateForegroundLifecycleTests: XCTestCase {
         box.client.disconnect()
     }
 
-    /// The same with no live runtime of the chat on this gateway: nothing to
-    /// probe, so the idle chat is resumed, which takes no stream from anyone.
-    func testATurnTheRegistryNeverSawResumesAChatWithNoLiveRuntime() async {
+    /// The same with no live runtime of the chat on this gateway: the TUI's
+    /// turn may still be running in its own process, out of this registry's
+    /// sight, so the rows are read and the chat is never resumed (a resume
+    /// could take it from that process).
+    func testATurnTheRegistryNeverSawIsReadWithoutResumingAChatWithNoLiveRuntime() async {
         let server = TwoDeviceServer()
         server.catalogCount = 1
         let harness = twoDeviceHarness(server)
         let box = await openTwoDeviceChat(harness)
         let appState = harness.appState
         let resumesAtOpen = server.resumes
+        let readsAtOpen = server.transcriptReads
         await tick(appState, after: 0, server)
         server.now += 10
         appState.handleStreamEvent(.sessionsChanged)
         await appState.leaveCatalogRefreshTask?.value
 
+        server.rows += [
+            ["id": "2", "role": "user", "content": "Sent from the TUI", "timestamp": "2"],
+            ["id": "3", "role": "assistant", "content": "PAPAYA", "timestamp": "3"],
+        ]
         server.catalogCount = 3
         server.now += 10
         appState.handleStreamEvent(.sessionsChanged)
@@ -728,7 +735,9 @@ final class AppStateForegroundLifecycleTests: XCTestCase {
         await appState.openChatCatalogCheck?.value
         await appState.openChatSyncRead?.value
 
-        XCTAssertEqual(server.resumes, resumesAtOpen + 1)
+        XCTAssertEqual(server.transcriptReads, readsAtOpen + 1)
+        XCTAssertEqual(server.resumes, resumesAtOpen, "Never resumed")
+        XCTAssertEqual(appState.messages.map(\.content), ["Question", "Sent from the TUI", "PAPAYA"])
         XCTAssertEqual(appState.turnState, .idle)
         box.client.disconnect()
     }

@@ -18452,18 +18452,25 @@ final class AppState: ObservableObject {
     /// chat, which sits idle here. `rows` are the chat's registry rows.
     private func readOpenChatRowsFromElsewhere(sessionID: String, rows: [LiveSessionStatus]) {
         guard let row = rows.first(where: { !$0.isRunning }) ?? rows.first else {
-            // No live runtime of the chat on this gateway (the turn ran in
-            // another process): a resume reads the stored rows, and with
-            // nothing running here it takes no stream from anyone.
+            // No live runtime of the chat on this gateway: the turn ran in
+            // another process (the TUI), and may still be running there,
+            // where this registry can't see it. Only the read-only tail read:
+            // a resume could take the chat from that process mid-turn.
             lifecycleLog.notice(
-                "Open chat: stored rows moved elsewhere, no live runtime here → resume session=\(sessionID, privacy: .private(mask: .hash))"
+                "Open chat: stored rows moved elsewhere, no live runtime here → read its rows session=\(sessionID, privacy: .private(mask: .hash))"
             )
+            let probe = LiveSessionStatus(runtimeSessionId: sessionID, storedSessionId: sessionID, status: "idle")
             startOpenChatSyncRead(sessionID: sessionID, expectsRunning: false) { appState in
-                guard await appState.openChatIsIdleOnServer(sessionID) else {
-                    appState.openChatSync.readCalledOff()
-                    return
-                }
-                await appState.syncSession(purpose: .preserveCurrent, using: nil, automaticWorkToken: nil)
+                let token = appState.beginReconciliation()
+                let read = await appState.reconcileForegroundCrossSurfaceActivity(
+                    livenessIsRunning: false,
+                    requestedSessionID: sessionID,
+                    probeRow: probe,
+                    reconciliationToken: token,
+                    automaticWorkToken: nil,
+                    resumeFallbackAllowed: { false }
+                )
+                if !read { appState.openChatSync.readCalledOff() }
             }
             return
         }

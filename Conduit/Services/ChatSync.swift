@@ -296,6 +296,8 @@ struct OpenChatSync {
         let idleLongEnough = idleSince.map { now.timeIntervalSince($0) >= Self.localIdleGrace } ?? false
         if local.isRunning || !idleLongEnough || sentHereSinceCatalogBaseline || catalogCountBaseline == nil {
             if !local.isRunning { sentHereSinceCatalogBaseline = false }
+            // A turn here brings the chat current (its send reads first).
+            if local.isRunning { catalogReadPending = false }
             catalogCountBaseline = count
             return .none
         }
