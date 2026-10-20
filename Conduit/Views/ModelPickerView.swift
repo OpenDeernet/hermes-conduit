@@ -423,7 +423,8 @@ struct ModelPickerView: View {
     }
 
     private func modelRow(_ model: ModelInfo, providerName: String) -> some View {
-        Button {
+        let isSelected = selectedModel == model.id
+        return Button {
             Haptics.selectionChanged(selectedModel != model.id || selectedProvider != providerName)
             selectedModel = model.id
             selectedProvider = providerName
@@ -441,9 +442,10 @@ struct ModelPickerView: View {
                     }
                 }
                 Spacer(minLength: 12)
-                if selectedModel == model.id {
+                if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.conduitAccent)
+                        .accessibilityHidden(true)
                 }
             }
             // Under the provider's name.
@@ -452,17 +454,20 @@ struct ModelPickerView: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                selectedModel == model.id ? Color.conduitAccent.opacity(colorScheme == .dark ? 0.14 : 0.08) : .clear,
+                isSelected ? Color.conduitAccent.opacity(colorScheme == .dark ? 0.14 : 0.08) : .clear,
                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
             .padding(.horizontal, 4)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var reasoningSection: some View {
-        ModelPickerSection(title: AppLocalization.string("Reasoning"), symbol: "brain.head.profile", tint: .conduitAura) {
+        // Flush, so the pills scroll to the card's edge rather than being
+        // cut off inside its padding.
+        ModelPickerSection(title: AppLocalization.string("Reasoning"), symbol: "brain.head.profile", tint: .conduitAura, flush: true) {
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
                     // A level Hermes reports that Conduit doesn't offer still
@@ -475,7 +480,7 @@ struct ModelPickerView: View {
                         reasoningPill(level)
                     }
                 }
-                .padding(.vertical, 1)
+                .padding(16)
             }
             .scrollIndicators(.hidden)
 
@@ -484,6 +489,7 @@ struct ModelPickerView: View {
                     .font(.footnote)
                     .foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding([.horizontal, .bottom], 16)
             }
         }
     }
