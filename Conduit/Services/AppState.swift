@@ -7367,11 +7367,25 @@ final class AppState: ObservableObject {
         // so this is the app's screen giving way under it (to sign-in, while
         // Conduit reconnects): its launch still opens the call when it can.
         if let waiting = waitingCall, waiting.engine == engine, !waiting.opened { return }
+        // Another mode's screen took over (a mode switch from the call):
+        // this call closed when it did, and closing it again would let go
+        // of the chat the new call is attached to.
+        if !isLiveVoiceCallActive(engine), isVoiceScreenShown(otherThan: engine) { return }
         if isLiveVoiceCallActive(engine) {
             minimisedLiveVoice = engine
         } else {
             closeLiveVoiceConversation(engine)
         }
+    }
+
+    /// Whether a voice screen other than `engine`'s is up: classic voice's,
+    /// or another live mode's.
+    func isVoiceScreenShown(otherThan engine: VoiceCallEngine) -> Bool {
+        showVoiceSheet
+            || (engine != .geminiLive && showGeminiLiveSheet)
+            || (engine != .gptLive && showGPTLiveSheet)
+            || (engine != .grokLive && showGrokLiveSheet)
+            || (engine != .localLive && showLocalLiveSheet)
     }
 
     /// Brings the minimised call's sheet back.
@@ -30539,6 +30553,79 @@ final class AppState: ObservableObject {
         if preferences.grokLiveEnabled { return .grokLive }
         if preferences.localLiveEnabled { return .localLive }
         return nil
+    }
+
+    /// The mode a voice screen's call is in, for its mode menu: the engine
+    /// it runs on (nil for classic voice).
+    func voiceModeSwitch(for engine: VoiceCallEngine?) -> VoiceModeSwitch {
+        // Read only for Local Live: the call screens ask on every redraw.
+        let localAgent = engine == .localLive ? isLocalLiveAgent : true
+        return VoiceModeSwitch(current: VoiceModeChoice(engine: engine, localAgent: localAgent)) { [weak self] choice in
+            Task { @MainActor in await self?.switchVoiceMode(to: choice) }
+        }
+    }
+
+    /// How long a voice screen takes to slide away, so the next mode's
+    /// screen isn't presented while the last one is still on its way out.
+    static let voiceModeSwitchSheetHandoff: Duration = .milliseconds(450)
+
+    /// Picks another voice mode from a call screen. It is saved as the
+    /// profile's mode, as Settings > Voice > Voice mode saves it, and the
+    /// call hangs up and starts again in the new mode, in the chat it was
+    /// working in.
+    func switchVoiceMode(to choice: VoiceModeChoice) async {
+        // Classic voice works in the open chat; a live call in its attached one.
+        let classicWasOpen = showVoiceSheet
+        let thread = classicWasOpen ? liveVoiceThreadForOpenChat() : voiceBackgroundJobSupervisor.liveThread
+        let sheetWasShown = classicWasOpen || showGeminiLiveSheet || showGPTLiveSheet || showGrokLiveSheet || showLocalLiveSheet
+        if classicWasOpen || voiceConversationController.hasLiveVoiceSession { closeVoiceConversation() }
+        endLiveVoiceCall()
+        applyVoiceMode(choice)
+        guard isConnected else { return }
+        if sheetWasShown { try? await Task.sleep(for: Self.voiceModeSwitchSheetHandoff) }
+        switch choice.engine {
+        case .geminiLive: openGeminiLiveConversation(attachingTo: thread)
+        case .gptLive: openGPTLiveConversation(attachingTo: thread)
+        case .grokLive: openGrokLiveConversation(attachingTo: thread)
+        case .localLive: openLocalLiveConversation(attachingTo: thread)
+        case nil:
+            // Classic voice talks in the open chat: the call's chat opens
+            // first. A call with no chat, or one in a Bot Chat off screen,
+            // starts a new conversation, as a new call does.
+            var inChat = thread.map { isOpenChat($0) } ?? false
+            if let thread, !inChat, thread.profile == nil {
+                switch await openSessionOutcome(thread.storedSessionID ?? thread.runtimeSessionID) {
+                case .opened: inChat = true
+                case .superseded: return
+                case .failed:
+                    errorMessage = AppLocalization.string("Couldn't open that chat for voice.")
+                    return
+                }
+            }
+            await openVoiceConversation(PendingVoiceIntent(
+                profile: activeProfile,
+                startsFreshConversation: !inChat,
+                source: inChat ? .composer : .newCall
+            ))
+        }
+    }
+
+    /// Saves `choice` as the profile's voice mode. Turning one live mode on
+    /// turns the others off; Classic is every live mode off.
+    func applyVoiceMode(_ choice: VoiceModeChoice) {
+        switch choice {
+        case .classic:
+            setGeminiLiveEnabled(false)
+            setGPTLiveEnabled(false)
+            setGrokLiveEnabled(false)
+            setLocalLiveEnabled(false)
+        case .gemini: setGeminiLiveEnabled(true)
+        case .gpt: setGPTLiveEnabled(true)
+        case .grok: setGrokLiveEnabled(true)
+        case .local:
+            setLocalLiveAgent(true)
+            setLocalLiveEnabled(true)
+        }
     }
 
     @discardableResult
