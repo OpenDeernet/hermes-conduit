@@ -18737,7 +18737,7 @@ final class AppState: ObservableObject {
                 return false
             }
             guard sessionMutationResultIsCurrent(profile: profile, owner: owner) else { return false }
-            let deletedSessionIDs = Set([session.id] + session.alternateIds)
+            let deletedSessionIDs = Set(session.nestingIDs)
             sessionYoloStore.clearOverride(
                 for: profile,
                 sessionIDs: [session.id] + session.alternateIds
@@ -18808,6 +18808,14 @@ final class AppState: ObservableObject {
             profile: profile,
             sessionIDs: Array(sessionIDs)
         )
+        // Its saved copy too, or the next launch would open to it (#1040).
+        if let dashboardID = activeDashboardID {
+            offlineChatCache.removeTranscripts(sessionIDs: sessionIDs, dashboardID: dashboardID, profile: profile)
+        }
+        if let copy = offlineChatPresentation, copy.profile == profile,
+           !copy.chatSessionIDs.isDisjoint(with: sessionIDs) {
+            dismissOfflineChatPresentation()
+        }
     }
 
     private func encodedSessionID(_ sessionID: String) -> String {
