@@ -7107,11 +7107,14 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// The row a linked id opens as. A Live Activity's card from an older
-    /// build names the chat's runtime id, which Hermes forgets once that
-    /// runtime is reaped (Conduit was away a while): the stored id learned
-    /// for it, or another id the card carries, still finds the chat's row.
-    /// Nil when no row knows any of them.
+    /// The id a linked chat is resumed by. A Live Activity's card from an
+    /// older build names the chat's runtime id, which Hermes forgets once
+    /// that runtime is reaped (Conduit was away a while): the stored id
+    /// learned for it, or another id the card carries, still finds the
+    /// chat's row. A row's stored id is resumed over its runtime id, as a
+    /// notification's open and a refresh resume it: a list read before the
+    /// reaping still names the dead runtime. Nil when nothing here knows
+    /// any of the ids (a voice alias with no row still answers).
     private func linkedSessionTarget(_ id: String) -> String? {
         let rows = sessions + cronSessions
         let durable = conversationIdentityIndex.durableID(forRuntime: id, profile: activeProfile)
@@ -7119,10 +7122,18 @@ final class AppState: ObservableObject {
         var seen = Set<String>()
         for candidate in candidates where !candidate.isEmpty && seen.insert(candidate).inserted {
             if let target = Self.linkedSessionTarget(candidate, rows: rows, aliases: voiceSessionAliases) {
-                return target
+                return Self.linkedResumeID(target, rows: rows)
             }
         }
         return nil
+    }
+
+    /// The stored id of the row `target` names, when it has one; else
+    /// `target` itself.
+    static func linkedResumeID(_ target: String, rows: [SessionSummary]) -> String {
+        guard let stored = rows.first(where: { $0.id == target })?.storedSessionId?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !stored.isEmpty else { return target }
+        return stored
     }
 
     /// The id a Live Activity's card opens its chat by: the durable one,

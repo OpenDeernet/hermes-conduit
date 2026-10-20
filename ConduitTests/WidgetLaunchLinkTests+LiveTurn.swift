@@ -263,5 +263,16 @@ extension WidgetLaunchLinkTests {
         )
         XCTAssertNil(AppState.linkedSessionTarget("rt", rows: [row], aliases: VoiceSessionAliases()))
         XCTAssertEqual(AppState.linkedSessionTarget("stored", rows: [row], aliases: VoiceSessionAliases()), "stored")
+        // A list read before the reaping still names the dead runtime: the
+        // open resumes the row's stored id, which Hermes always knows.
+        let stale = SessionSummary(
+            id: "rt", storedSessionId: "stored", alternateIds: ["stored"], title: "Chat", model: "Hermes",
+            updatedLabel: "now", profile: "default", source: .chat, isActive: true, isArchived: false,
+            lineageRootId: nil
+        )
+        let target = try XCTUnwrap(AppState.linkedSessionTarget("stored", rows: [stale], aliases: VoiceSessionAliases()))
+        XCTAssertEqual(target, "rt")
+        XCTAssertEqual(AppState.linkedResumeID(target, rows: [stale]), "stored")
+        XCTAssertEqual(AppState.linkedResumeID("stored", rows: [row]), "stored", "A row without a stored id resumes by its own")
     }
 }

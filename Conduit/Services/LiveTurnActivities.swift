@@ -276,7 +276,7 @@ final class LiveTurnActivities {
             chatTitle: title,
             startedAt: Date(),
             language: AppLanguageStore.shared.selection.rawValue,
-            link: ConduitAppLink.session(id: linkID ?? primaryID, profile: profile, dashboard: dashboardID).url,
+            link: ConduitAppLink.session(id: linkID.flatMap { $0.isEmpty ? nil : $0 } ?? primaryID, profile: profile, dashboard: dashboardID).url,
             sessionIDs: Array(sessionIDs).sorted(),
             profileName: profileName,
             glowHex: glowHex,
