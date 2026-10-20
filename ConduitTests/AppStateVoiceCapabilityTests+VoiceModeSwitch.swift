@@ -138,4 +138,39 @@ extension AppStateVoiceCapabilityTests {
         XCTAssertFalse(appState.showGrokLiveSheet)
         XCTAssertEqual(appState.errorMessage, AppLocalization.string("Reconnect to Hermes to start voice."))
     }
+
+    /// Waits until `condition` holds, failing after a few seconds.
+    private func waitUntil(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !condition(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(condition(), "timed out", file: file, line: line)
+    }
+
+    func testTheOldScreensDismissalDoesNotTouchANewCallOnTheSameEngine() async {
+        // A hands-free Local Live call moving to Local restarts the same
+        // engine; GPT-Live stands in for it here, with fakes.
+        let appState = makeModeSwitchAppState()
+        appState.setGPTLiveEnabled(true)
+        let (gptController, gptSession) = installModeSwitchFakeGPTLive(in: appState)
+        let thread = VoiceThreadTarget(runtimeSessionID: "runtime-2", storedSessionID: "stored-2", title: "Trip")
+        appState.voiceBackgroundJobSupervisor.attachLiveThread(thread)
+        appState.showGPTLiveSheet = true
+        await gptController.start()
+        gptSession.becomeReady()
+
+        let switching = Task { await appState.switchVoiceMode(to: .gpt) }
+        await waitUntil { appState.voiceModeSwitchDismissing == .gptLive }
+        // The old screen's dismissal lands while the switch waits for it.
+        appState.liveVoiceSheetDismissed(.gptLive)
+        await switching.value
+
+        XCTAssertNil(appState.voiceModeSwitchDismissing)
+        XCTAssertTrue(appState.showGPTLiveSheet, "the new call's screen is up")
+        XCTAssertNil(appState.minimisedLiveVoice, "and not minimised by the old one going")
+        XCTAssertEqual(appState.voiceBackgroundJobSupervisor.liveThread, thread)
+
+        appState.closeGPTLiveConversation()
+    }
 }

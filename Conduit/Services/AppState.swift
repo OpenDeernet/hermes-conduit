@@ -7367,6 +7367,12 @@ final class AppState: ObservableObject {
         // so this is the app's screen giving way under it (to sign-in, while
         // Conduit reconnects): its launch still opens the call when it can.
         if let waiting = waitingCall, waiting.engine == engine, !waiting.opened { return }
+        // A mode switch's own screen going: its call is closed already, and
+        // the one replacing it may run on this engine.
+        if voiceModeSwitchDismissing == engine {
+            voiceModeSwitchDismissing = nil
+            return
+        }
         // Another mode's screen took over (a mode switch from the call):
         // this call closed when it did, and closing it again would let go
         // of the chat the new call is attached to.
@@ -30569,37 +30575,76 @@ final class AppState: ObservableObject {
     /// A mode switch from a call screen is under way.
     private var isSwitchingVoiceMode = false
 
+    /// The live call screen a mode switch is waiting on to slide away. Its
+    /// dismissal is the switch's own: it must neither close nor minimise
+    /// the call that replaces it, which can be on the same engine (a
+    /// hands-free Local Live call moving to Local).
+    private(set) var voiceModeSwitchDismissing: VoiceCallEngine?
+
     /// How long a voice screen takes to slide away, so the next mode's
     /// screen isn't presented while the last one is still on its way out.
     static let voiceModeSwitchSheetHandoff: Duration = .milliseconds(450)
+    /// The longest a switch waits for a live screen's dismissal to land.
+    static let voiceModeSwitchDismissalTimeout: Duration = .milliseconds(1500)
+
+    private enum VoiceModeHandoff {
+        /// Open the new mode, in this chat.
+        case proceed(VoiceThreadTarget?)
+        case stop
+    }
+
+    /// The first half of a mode switch: the call hangs up, the mode is
+    /// saved, and its screen slides away. A second pick meanwhile is
+    /// dropped: two switches interleaving could save one mode and open
+    /// another. A pick on the new mode's screen is a switch of its own.
+    private func handOffVoiceMode(to choice: VoiceModeChoice) async -> VoiceModeHandoff {
+        guard !isSwitchingVoiceMode else { return .stop }
+        isSwitchingVoiceMode = true
+        defer {
+            isSwitchingVoiceMode = false
+            voiceModeSwitchDismissing = nil
+        }
+        // Classic voice works in the open chat; a live call in its attached one.
+        let classicWasOpen = showVoiceSheet
+        let thread = classicWasOpen ? liveVoiceThreadForOpenChat() : voiceBackgroundJobSupervisor.liveThread
+        let shownLiveScreen: VoiceCallEngine? = showGeminiLiveSheet ? .geminiLive
+            : showGPTLiveSheet ? .gptLive
+            : showGrokLiveSheet ? .grokLive
+            : showLocalLiveSheet ? .localLive
+            : nil
+        voiceModeSwitchDismissing = shownLiveScreen
+        if classicWasOpen || voiceConversationController.hasLiveVoiceSession { closeVoiceConversation() }
+        endLiveVoiceCall()
+        applyVoiceMode(choice)
+        guard isConnected else {
+            errorMessage = AppLocalization.string("Reconnect to Hermes to start voice.")
+            return .stop
+        }
+        // Cancelled (a boundary tore the app's state down): nothing starts.
+        do {
+            if shownLiveScreen != nil {
+                // Until the live screen's dismissal lands, with a ceiling.
+                let deadline = ContinuousClock.now + Self.voiceModeSwitchDismissalTimeout
+                while voiceModeSwitchDismissing != nil, ContinuousClock.now < deadline {
+                    try await Task.sleep(for: .milliseconds(50))
+                }
+            } else if classicWasOpen {
+                try await Task.sleep(for: Self.voiceModeSwitchSheetHandoff)
+            }
+        } catch {
+            return .stop
+        }
+        // Something else started voice meanwhile (Siri, a call from Hermes).
+        guard isConnected, !isVoiceInUse, minimisedLiveVoice == nil else { return .stop }
+        return .proceed(thread)
+    }
 
     /// Picks another voice mode from a call screen. It is saved as the
     /// profile's mode, as Settings > Voice > Voice mode saves it, and the
     /// call hangs up and starts again in the new mode, in the chat it was
     /// working in.
     func switchVoiceMode(to choice: VoiceModeChoice) async {
-        // A second pick while the first screen slides away waits its turn
-        // out: two switches interleaving could save one mode and open another.
-        guard !isSwitchingVoiceMode else { return }
-        isSwitchingVoiceMode = true
-        defer { isSwitchingVoiceMode = false }
-        // Classic voice works in the open chat; a live call in its attached one.
-        let classicWasOpen = showVoiceSheet
-        let thread = classicWasOpen ? liveVoiceThreadForOpenChat() : voiceBackgroundJobSupervisor.liveThread
-        let sheetWasShown = classicWasOpen || showGeminiLiveSheet || showGPTLiveSheet || showGrokLiveSheet || showLocalLiveSheet
-        if classicWasOpen || voiceConversationController.hasLiveVoiceSession { closeVoiceConversation() }
-        endLiveVoiceCall()
-        applyVoiceMode(choice)
-        guard isConnected else {
-            errorMessage = AppLocalization.string("Reconnect to Hermes to start voice.")
-            return
-        }
-        if sheetWasShown {
-            // Cancelled (a boundary tore the app's state down): nothing starts.
-            do { try await Task.sleep(for: Self.voiceModeSwitchSheetHandoff) } catch { return }
-            // Something else started voice meanwhile (Siri, a call from Hermes).
-            guard isConnected, !isVoiceInUse, minimisedLiveVoice == nil else { return }
-        }
+        guard case .proceed(let thread) = await handOffVoiceMode(to: choice) else { return }
         switch choice.engine {
         case .geminiLive: openGeminiLiveConversation(attachingTo: thread)
         case .gptLive: openGPTLiveConversation(attachingTo: thread)
@@ -30619,11 +30664,15 @@ final class AppState: ObservableObject {
                     return
                 }
             }
-            await openVoiceConversation(PendingVoiceIntent(
+            let started = await openVoiceConversation(PendingVoiceIntent(
                 profile: activeProfile,
                 startsFreshConversation: !inChat,
                 source: inChat ? .composer : .newCall
             ))
+            // Hermes dropped while the chat opened: say so, not nothing.
+            if !started, !isVoiceInUse, errorMessage == nil {
+                errorMessage = AppLocalization.string("Reconnect to Hermes to start voice.")
+            }
         }
     }
 
