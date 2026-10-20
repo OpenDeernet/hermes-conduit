@@ -57,10 +57,7 @@ final class AppStoreScreenshotTests: XCTestCase {
         if openChat("Q3 spending summary", waitingFor: "Dining out") { snap("02-chat-steps") }
         backToTabs()
 
-        if openChat("Weekend trip to Big Sur", waitingFor: "Sierra Mar") {
-            snap("03-chat-trip")
-            snapComposerSheets()
-        }
+        if openChat("Weekend trip to Big Sur", waitingFor: "Sierra Mar") { snap("03-chat-trip") }
         backToTabs()
 
         if openChat("Fix the flaky upload test", waitingFor: "50 runs") { snap("04-chat-code") }
@@ -103,43 +100,6 @@ final class AppStoreScreenshotTests: XCTestCase {
             settle(5)
             snap(String(format: "%02d-voice-%@", number, state))
         }
-    }
-
-    /// TEMPORARY (V2 sheet check): the composer's Context and Model sheets.
-    private func snapComposerSheets() {
-        let composer = app.textViews.firstMatch.exists ? app.textViews.firstMatch : app.textFields.firstMatch
-        composer.tap()
-        settle(1.5)
-        let ring = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Context usage'")).firstMatch
-        guard ring.waitForExistence(timeout: 5) else {
-            snap("zz-no-ring")
-            return
-        }
-        let attach = app.buttons["Attach"]
-        let row = ring.frame
-        ring.tap()
-        settle(3)
-        snap("zz-context")
-        app.swipeDown(velocity: .fast)
-        settle(2)
-        let model = app.buttons.allElementsBoundByIndex.first { b in
-            let f = b.frame
-            return abs(f.midY - row.midY) < 12 && f.minX > (attach.exists ? attach.frame.maxX - 1 : 0) && f.maxX < row.minX + 1 && f.width > 30
-        }
-        guard let model else {
-            snap("zz-no-model")
-            return
-        }
-        model.tap()
-        settle(4)
-        snap("zz-model-medium")
-        app.swipeUp(velocity: .slow)
-        settle(2)
-        snap("zz-model-large")
-        app.swipeDown(velocity: .fast)
-        app.swipeDown(velocity: .fast)
-        settle(2)
-        if app.keyboards.firstMatch.exists { app.swipeDown(velocity: .fast) }
     }
 
     /// Waits for the board, then scrolls it past the empty Triage column:
