@@ -1604,6 +1604,7 @@ private struct V2ChatsRow: View {
     private func childRow(_ session: SessionSummary, depth: Int, parentTitle: String) -> some View {
         let status = appState.v2RowStatus(for: session)
         let isUnread = appState.isSessionUnread(session)
+        let isStarred = appState.isSessionStarred(session)
         return Button {
             Haptics.light()
             appState.dismissSidebarDrawer()
@@ -1621,6 +1622,12 @@ private struct V2ChatsRow: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                 Spacer(minLength: 6)
+                if isStarred {
+                    Image(systemName: "star.fill")
+                        .font(.caption2)
+                        .foregroundStyle(Color.conduitAccent)
+                        .accessibilityHidden(true)
+                }
                 Text(status.actionWord ?? session.updatedLabel)
                     .font(.footnote)
                     .foregroundStyle(status.actionWord == nil ? Color.primary.opacity(0.45) : status.color)
@@ -1637,6 +1644,7 @@ private struct V2ChatsRow: View {
         .accessibilityValue(Text([
             AppLocalization.string("From \(parentTitle)"),
             isUnread ? AppLocalization.string("Unread") : nil,
+            isStarred ? AppLocalization.string("Starred") : nil,
             status.accessibilityWord,
             session.updatedLabel
         ].compactMap { $0 }.joined(separator: ", ")))
@@ -1649,7 +1657,7 @@ private struct V2ChatsRow: View {
 
 extension View {
     /// The conversation actions every V2 session row carries: the context
-    /// menu (Rename, Pin, Read, Move to Project, Archive, Delete) and the
+    /// menu (Rename, Pin, Star, Read, Move to Project, Archive, Delete) and the
     /// drawer's swipes. A saved row (the list as it showed last time, up
     /// while Conduit connects) takes none: they would act on a list Hermes
     /// hasn't sent yet.

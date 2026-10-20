@@ -300811,7 +300811,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Markieren"
+            "value" : "Stern setzen"
           }
         },
         "es" : {
@@ -300893,7 +300893,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Markierung entfernen"
+            "value" : "Stern entfernen"
           }
         },
         "es" : {
@@ -300975,7 +300975,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Markiert"
+            "value" : "Mit Stern"
           }
         },
         "es" : {
@@ -301057,7 +301057,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Keine markierten Chats"
+            "value" : "Keine Chats mit Stern"
           }
         },
         "es" : {
@@ -301139,7 +301139,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wische über einen Chat oder halte ihn gedrückt, um ihn zu markieren."
+            "value" : "Wische über einen Chat oder halte ihn gedrückt, um ihm einen Stern zu geben."
           }
         },
         "es" : {

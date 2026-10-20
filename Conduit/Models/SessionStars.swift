@@ -38,7 +38,7 @@ struct SessionStars: Equatable {
     }
 
     func isStarred(_ session: SessionSummary, profile: String) -> Bool {
-        guard let ids = idsByProfile[profile], !ids.isEmpty else { return false }
+        guard let ids = idsByProfile[profile] else { return false }
         let sessionIDs = SessionPinSync.pinIDs(for: session)
         return ids.contains { sessionIDs.contains($0) }
     }

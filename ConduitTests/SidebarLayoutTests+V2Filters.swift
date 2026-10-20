@@ -147,7 +147,7 @@ extension SidebarLayoutTests {
         XCTAssertEqual(selection.facet(.voice), V2FilterSelection(filters: [.unread, .starred, .voice]))
     }
 
-    func testSessionStarsFollowTheConversationPerProfile() {
+    func testSessionStarsFollowTheConversationPerProfile() throws {
         let compacted = SessionSummary(
             id: "chat-2", alternateIds: ["chat-1"], title: "chat", model: "Hermes", updatedLabel: "now",
             lastActivityAt: nil, profile: "default", source: .chat, isActive: false, isArchived: false,
@@ -168,7 +168,7 @@ extension SidebarLayoutTests {
         XCTAssertTrue(stars.idsByProfile.isEmpty)
 
         let suite = "SessionStarsTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         stars.set(original, starred: true, profile: "work")
         stars.save(to: defaults)
