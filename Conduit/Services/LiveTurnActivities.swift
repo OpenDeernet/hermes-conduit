@@ -261,7 +261,9 @@ final class LiveTurnActivities {
 
     /// A prompt Conduit sent was accepted: the turn gets an activity, and an
     /// older one for the same chat ends.
-    func turnStarted(sessionIDs: Set<String>, primaryID: String, title: String, profile: String?, profileName: String? = nil, glowHex: String? = nil, dashboardID: String? = nil) {
+    /// `linkID` is the id the card's tap opens the chat by (its durable
+    /// one); the runtime `primaryID` stops resolving once Hermes reaps it.
+    func turnStarted(sessionIDs: Set<String>, primaryID: String, linkID: String? = nil, title: String, profile: String?, profileName: String? = nil, glowHex: String? = nil, dashboardID: String? = nil) {
         adoptExisting()
         let held = early.first { !$0.sessionIDs.isDisjoint(with: sessionIDs) }
             .map { LiveTurnProgress.newTurnEvents($0.events) } ?? []
@@ -274,7 +276,7 @@ final class LiveTurnActivities {
             chatTitle: title,
             startedAt: Date(),
             language: AppLanguageStore.shared.selection.rawValue,
-            link: ConduitAppLink.session(id: primaryID, profile: profile, dashboard: dashboardID).url,
+            link: ConduitAppLink.session(id: linkID ?? primaryID, profile: profile, dashboard: dashboardID).url,
             sessionIDs: Array(sessionIDs).sorted(),
             profileName: profileName,
             glowHex: glowHex,
@@ -467,6 +469,20 @@ final class LiveTurnActivities {
         for activity in Activity<HermesTurnAttributes>.activities where !tracked.contains(activity.id) {
             Task { await activity.end(nil, dismissalPolicy: .immediate) }
         }
+    }
+
+    /// Every id the chat behind a card linking to `id` answers to, so a
+    /// tap still finds a chat whose linked id Hermes no longer knows.
+    nonisolated static func sessionIDs(linkedTo id: String) -> [String] {
+        sessionIDs(linkedTo: id, in: Activity<HermesTurnAttributes>.activities.map(\.attributes))
+    }
+
+    nonisolated static func sessionIDs(linkedTo id: String, in cards: [HermesTurnAttributes]) -> [String] {
+        guard !id.isEmpty else { return [] }
+        return cards.filter { card in
+            guard case .session(let linked, _, _)? = ConduitAppLink(url: card.link) else { return false }
+            return linked == id
+        }.flatMap { $0.sessionIDs.filter { $0 != id } }
     }
 
     /// Activities a previous run of Conduit started are taken over, so the
