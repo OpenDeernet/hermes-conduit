@@ -286,6 +286,7 @@ extension WidgetLaunchLinkTests {
         // the link's stored id.
         XCTAssertEqual(AppState.linkedSessionCandidates(["rt", "stored", "rt", ""], rows: [foreignRow, stale]), ["stored", "rt"])
         XCTAssertEqual(AppState.linkedSessionCandidates(["rt", "stored"], rows: []), ["rt", "stored"], "No row to tell them apart keeps the order")
+        XCTAssertEqual(AppState.linkedSessionCandidates(["rt", "stored"], rows: [row]), ["stored", "rt"], "A row without a stored id is durable by its own")
         // A voice alias found the row: its stored id still resumes it.
         let aliasedRow = SessionSummary(
             id: "rt2", storedSessionId: "stored", alternateIds: [], title: "Chat", model: "Hermes",

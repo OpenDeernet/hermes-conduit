@@ -7137,13 +7137,13 @@ final class AppState: ObservableObject {
         return nil
     }
 
-    /// `ids` de-duplicated, with any that is a row's stored id first: a
-    /// stored id names one chat for good, while a card's runtime ids can
-    /// since belong to another chat.
+    /// `ids` de-duplicated, with any that is a row's durable id (its stored
+    /// id, else its own) first: that names one chat for good, while a
+    /// card's runtime ids can since belong to another chat.
     static func linkedSessionCandidates(_ ids: [String], rows: [SessionSummary]) -> [String] {
         var seen = Set<String>()
         let unique = ids.filter { !$0.isEmpty && seen.insert($0).inserted }
-        let stored = Set(rows.compactMap { $0.storedSessionId?.trimmingCharacters(in: .whitespacesAndNewlines) })
+        let stored = Set(rows.map { ($0.storedSessionId ?? $0.id).trimmingCharacters(in: .whitespacesAndNewlines) })
         return unique.filter { stored.contains($0) } + unique.filter { !stored.contains($0) }
     }
 
