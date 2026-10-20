@@ -2266,15 +2266,22 @@ private struct DelegationPauseSettings: View {
             } else if loaded {
                 Text("This Hermes can't pause delegation, or Conduit isn't connected.")
                     .font(.footnote).foregroundStyle(.secondary)
+                Button { Task { await reload() } } label: {
+                    Label("Try again", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.settings)
             } else {
                 ProgressView().controlSize(.small)
             }
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
         }
-        .task {
-            paused = await load()
-            loaded = true
-        }
+        .task { await reload() }
+    }
+
+    private func reload() async {
+        loaded = false
+        paused = await load()
+        loaded = true
     }
 
     private func change(to next: Bool) {

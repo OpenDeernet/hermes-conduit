@@ -481,10 +481,11 @@ private struct DelegateAgentCard: View {
     }
 
     private func sendSteer() {
+        guard !working else { return }
         let text = steerText
         steerText = ""
+        working = true
         Task {
-            working = true
             let result = await appState.steerDelegateAgent(agent, text: text)
             working = false
             switch result {
@@ -496,8 +497,9 @@ private struct DelegateAgentCard: View {
     }
 
     private func stop() {
+        guard !working else { return }
+        working = true
         Task {
-            working = true
             let result = await appState.interruptDelegateAgent(agent)
             working = false
             switch result {

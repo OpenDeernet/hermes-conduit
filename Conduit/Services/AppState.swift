@@ -28931,6 +28931,8 @@ final class AppState: ObservableObject {
         } catch {
             return .failed
         }
+        // A client swapped during the call answered for another connection.
+        guard self.client === client else { return .failed }
         guard found else {
             await refreshDelegateAgents()
             return .notRunning
