@@ -1139,6 +1139,29 @@ extension VoiceConversationControllerTests {
         controller.stop()
     }
 
+    /// #945: a user turn whose turn.done never came holds the send only
+    /// until it goes stale, as it holds job updates.
+    func testGPTLiveClaimedSendGoesPastAUserTurnThatNeverFinished() async {
+        var current = Date(timeIntervalSince1970: 1_000)
+        let (controller, session, _, fake) = makeGPTController(clock: { current })
+        await controller.start()
+        session.becomeReady()
+        session.onEvent?(.turnDone(role: "user", transcript: "Can you check whether the build passed?"))
+        session.onEvent?(.turnDone(role: "assistant", transcript: "On it. I'll send that to Hermes now."))
+        current += 1
+        session.onEvent?(.inputTranscript("and um"))
+        current += GPTLiveConversationController.sendClaimGrace + 1
+        controller.checkSendClaim()
+        await settle(40)
+        XCTAssertEqual(fake.created, 0, "the user is still talking")
+
+        current += GPTLiveConversationController.userTurnStaleInterval
+        controller.checkSendClaim()
+        await settle(40)
+        XCTAssertEqual(fake.created, 1)
+        controller.stop()
+    }
+
     /// #945: a delegation that comes late, within the grace, is the send.
     func testGPTLiveSaidItWasSendingAndThenDelegatesSendsOnce() async {
         var current = Date(timeIntervalSince1970: 1_000)

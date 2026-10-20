@@ -833,8 +833,12 @@ final class GPTLiveConversationController: ObservableObject {
         // session not ready yet takes nothing.
         guard session?.isReady == true, supervisor.callWaitsOn == nil else { return }
         let current = now()
+        // An open turn whose turn.done never came stops holding it, as it
+        // stops holding job updates.
+        let userTurnOpen = !userTurnEntries.isEmpty
+            && (lastUserSpeechAt.map { current.timeIntervalSince($0) < Self.userTurnStaleInterval } ?? true)
         guard current.timeIntervalSince(claim.at) >= Self.sendClaimGrace,
-              !modelTurnActive, userTurnEntries.isEmpty,
+              !modelTurnActive, !userTurnOpen,
               lastUserSpeechAt.map({ current.timeIntervalSince($0) >= Self.sendClaimGrace }) ?? true else { return }
         sendClaim = nil
         conduitSentAt = current
