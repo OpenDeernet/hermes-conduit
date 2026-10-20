@@ -27,10 +27,20 @@ extension AppState {
     }
 
     /// The user allowed (or took back) the mode's provider hearing them.
+    /// Taking it back also hangs up that mode's running call: nothing more
+    /// goes to the provider.
     func setLiveVoiceConsent(_ granted: Bool, for mode: LiveVoiceModeName) {
-        objectWillChange.send()
         LiveVoiceProviderConsent.setGranted(granted, for: mode)
-        if granted, liveVoiceConsentRequest == mode { liveVoiceConsentRequest = nil }
+        if granted {
+            if liveVoiceConsentRequest == mode { liveVoiceConsentRequest = nil }
+            return
+        }
+        switch mode {
+        case .geminiLive: if isGeminiLiveActive { closeGeminiLiveConversation() }
+        case .gptLive: if isGPTLiveActive { closeGPTLiveConversation() }
+        case .grokLive: if isGrokLiveActive { closeGrokLiveConversation() }
+        case .localLive: break
+        }
     }
 
     func isLiveVoiceSheetShown(_ mode: LiveVoiceModeName) -> Bool {

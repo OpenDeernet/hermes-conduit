@@ -81,6 +81,7 @@ struct LiveVoiceConsentSheet: View {
 /// In a live mode's Voice settings: who hears the call, and whether the
 /// user has allowed it, with the way to take it back.
 struct LiveVoiceConsentRow: View {
+    @EnvironmentObject private var appState: AppState
     let mode: LiveVoiceModeName
     @State private var granted: Bool
 
@@ -102,7 +103,7 @@ struct LiveVoiceConsentRow: View {
             Spacer(minLength: 8)
             if granted {
                 Button(AppLocalization.string("Take back")) {
-                    LiveVoiceProviderConsent.setGranted(false, for: mode)
+                    appState.setLiveVoiceConsent(false, for: mode)
                 }
                 .buttonStyle(.settings)
                 .accessibilityHint(AppLocalization.string("The next call asks again"))
