@@ -6939,8 +6939,10 @@ final class AppState: ObservableObject {
             }
             // A bot's own chat opens through the bot that owns it, as it
             // does from a link for another profile. A Live Activity's card
-            // knows the chat's other ids too.
-            if let owner = botOwnership.botProfileName(owningAny: Set([id] + LiveTurnActivities.sessionIDs(linkedTo: id, profile: activeProfile, dashboardID: activeDashboardID?.uuidString))) {
+            // names the chat's own ids, which outrank a runtime id Hermes
+            // may since have given another chat.
+            let cardIDs = LiveTurnActivities.sessionIDs(linkedTo: id, profile: activeProfile, dashboardID: activeDashboardID?.uuidString)
+            if let owner = botOwnership.botProfileName(owningAny: cardIDs.isEmpty ? [id] : Set(cardIDs)) {
                 openLinkedBotChat(owner)
                 return
             }
@@ -7118,7 +7120,9 @@ final class AppState: ObservableObject {
     private func linkedSessionTarget(_ id: String) -> String? {
         let rows = sessions + cronSessions
         let durable = conversationIdentityIndex.durableID(forRuntime: id, profile: activeProfile)
-        let candidates = [id] + [durable].compactMap { $0 } + LiveTurnActivities.sessionIDs(linkedTo: id, profile: activeProfile, dashboardID: activeDashboardID?.uuidString)
+        // Positively known ids first: the raw id may be a runtime Hermes
+        // has since given another chat.
+        let candidates = [durable].compactMap { $0 } + LiveTurnActivities.sessionIDs(linkedTo: id, profile: activeProfile, dashboardID: activeDashboardID?.uuidString) + [id]
         var seen = Set<String>()
         for candidate in candidates where !candidate.isEmpty && seen.insert(candidate).inserted {
             if let target = Self.linkedSessionTarget(candidate, rows: rows, aliases: voiceSessionAliases) {
