@@ -13,8 +13,14 @@ Text-level, like check-sheet-environment.py: a `Text(` whose modifier chain
 from a scaled metric or a frame (`size * 0.42`) passes.
 
 Text that really must keep its size, such as the small and large "A" around
-the chat text size slider, says why on the line above:
+the chat text size slider, says why in the comment lines just above:
 `// Fixed size: <reason>`.
+
+It reads line shapes, not Swift, so it misses a Text whose argument spans
+lines (`Text(\n"Title"\n).font(...)`) and one that is itself an argument
+(`.overlay(Text("x").font(...))`). It can also fail closed: a modifier line
+after a comment is counted as the Text's, so a glyph's font there needs the
+exemption.
 
 Usage: check-fixed-text-sizes.py [--repo-root DIR]
 """
@@ -41,6 +47,16 @@ def owning_text(line):
     return None
 
 
+def stated_reason(lines, index):
+    """Whether the comment lines just above line `index` say why."""
+    above = index - 1
+    while above >= 0 and lines[above].strip().startswith("//"):
+        if EXEMPTION in lines[above]:
+            return True
+        above -= 1
+    return False
+
+
 def find_problems(sources):
     """sources: {path: text}. Returns ["path:line: ..."] for each fixed text size."""
     problems = []
@@ -50,7 +66,7 @@ def find_problems(sources):
             start = owning_text(line)
             if start is None:
                 continue
-            exempt = index > 0 and EXEMPTION in lines[index - 1]
+            exempt = stated_reason(lines, index)
             chain = [(index, line[start:])]
             follow = index + 1
             while follow < len(lines):

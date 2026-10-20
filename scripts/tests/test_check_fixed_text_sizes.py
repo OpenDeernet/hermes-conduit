@@ -66,6 +66,14 @@ class FixedTextSizeTests(unittest.TestCase):
             .font(.system(size: 16))
         """), [])
 
+    def test_a_reason_over_two_comment_lines_exempts_the_text(self):
+        self.assertEqual(problems("""
+        // Fixed size: it sits inside the fixed 32 pt ring,
+        // which the text must not outgrow.
+        Text(percent)
+            .font(.system(size: 9, weight: .semibold))
+        """), [])
+
     def test_a_stated_reason_exempts_the_text(self):
         self.assertEqual(problems("""
         // Fixed size: it sits inside the fixed 32 pt ring.
