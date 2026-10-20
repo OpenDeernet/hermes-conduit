@@ -2477,7 +2477,8 @@ final class AppState: ObservableObject {
                 await hostTools
                 return status
             },
-            missingConsent: { [weak self] in self?.missingLiveVoiceConsent(.geminiLive) },
+            // Fails closed: without the app state, the stored answer decides.
+            missingConsent: { [weak self] in self?.requestLiveVoiceConsentIfMissing(.geminiLive) ?? LiveVoiceProviderConsent.missing(.geminiLive) },
             tools: GeminiLiveToolBridge(supervisor: self.voiceBackgroundJobSupervisor, webSearch: tokens, memory: tokens),
             input: audio.input,
             output: audio.output,
@@ -2857,7 +2858,8 @@ final class AppState: ObservableObject {
                 }
                 return status
             },
-            missingConsent: { [weak self] in self?.missingLiveVoiceConsent(.gptLive) },
+            // Fails closed: without the app state, the stored answer decides.
+            missingConsent: { [weak self] in self?.requestLiveVoiceConsentIfMissing(.gptLive) ?? LiveVoiceProviderConsent.missing(.gptLive) },
             briefing: { [weak self] in
                 GPTLiveConversationController.briefing(
                     memory: self?.gptLiveMemoryContext,
@@ -3175,7 +3177,8 @@ final class AppState: ObservableObject {
                 self.grokLiveVoice = voice
                 return .available(model: model)
             },
-            missingConsent: { [weak self] in self?.missingLiveVoiceConsent(.grokLive) },
+            // Fails closed: without the app state, the stored answer decides.
+            missingConsent: { [weak self] in self?.requestLiveVoiceConsentIfMissing(.grokLive) ?? LiveVoiceProviderConsent.missing(.grokLive) },
             // xAI has no non-blocking calls: start_job is answered once the
             // job runs, and its outcome follows as a text update.
             tools: GeminiLiveToolBridge(supervisor: self.voiceBackgroundJobSupervisor, webSearch: hostContext, memory: hostContext, holdsJobCalls: false),

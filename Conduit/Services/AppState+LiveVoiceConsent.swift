@@ -15,7 +15,7 @@ extension AppState {
     /// The mode itself while its provider still needs the user's OK, nil
     /// once a call may connect. A call the phone isn't showing leaves the
     /// question for the phone's consent sheet.
-    func missingLiveVoiceConsent(_ mode: LiveVoiceModeName) -> LiveVoiceModeName? {
+    func requestLiveVoiceConsentIfMissing(_ mode: LiveVoiceModeName) -> LiveVoiceModeName? {
         guard let missing = LiveVoiceProviderConsent.missing(mode) else { return nil }
         if !isLiveVoiceSheetShown(mode) { liveVoiceConsentRequest = missing }
         return missing

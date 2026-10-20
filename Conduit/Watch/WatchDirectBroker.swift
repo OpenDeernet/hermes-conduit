@@ -302,7 +302,7 @@ final class WatchDirectBroker {
     /// Why a call can't start until the user allows its provider to hear
     /// them (#827), or nil. The phone asks on its own sheet meanwhile.
     private func consentRefusal(_ mode: LiveVoiceModeName) -> String? {
-        appState.missingLiveVoiceConsent(mode).map { VoiceSetupIssue.providerConsentNeeded($0).message }
+        appState.requestLiveVoiceConsentIfMissing(mode).map { VoiceSetupIssue.providerConsentNeeded($0).message }
     }
 
     private func prepare(_ id: UInt32, ring: String? = nil) async -> WatchVoiceWire.Message {
