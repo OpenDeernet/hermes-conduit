@@ -28446,7 +28446,7 @@ final class AppState: ObservableObject {
         // profile; ordinary sessions keep the dashboard lookup. Try the
         // conversation's own scope first, then the dashboard scope as a
         // fallback so a pre-existing mapping is never orphaned.
-        let scopeProfile = botConversationProfile(for: sessionId) ?? activeProfile
+        let scopeProfile = persistedTailProfile(for: sessionId)
         if let durable = conversationIdentityIndex.durableID(
             forRuntime: sessionId,
             profile: scopeProfile
