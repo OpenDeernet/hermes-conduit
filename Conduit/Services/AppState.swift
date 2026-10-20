@@ -7123,9 +7123,12 @@ final class AppState: ObservableObject {
     }
 
     /// The id a Live Activity's card opens its chat by: the durable one,
-    /// which outlives the runtime id the turn was sent on.
+    /// which outlives the runtime id the turn was sent on. A Bot Chat's is
+    /// read in its bot's scope, as a refresh reads it: a dashboard row with
+    /// the same runtime id says nothing about the Bot Chat.
     func liveActivityLinkSessionID(for sessionID: String) -> String {
-        captureConversationIdentity(for: sessionID)?.durableSessionID ?? sessionID
+        let botProfile = botScopeProfile(forSessionIDs: [sessionID], workspaceProfile: activeProfile)
+        return captureConversationIdentity(for: sessionID, scopeProfile: botProfile)?.durableSessionID ?? sessionID
     }
 
     /// The row a linked id opens as: the row that carries it (or the stored

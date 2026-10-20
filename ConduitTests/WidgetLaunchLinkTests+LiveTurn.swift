@@ -254,6 +254,7 @@ extension WidgetLaunchLinkTests {
         XCTAssertEqual(ids("", in: [card]), [])
         XCTAssertEqual(ids("rt", dashboard: "D2", in: [card]), [], "Another dashboard's card says nothing here")
         XCTAssertEqual(ids("rt", profile: "work", in: [card]), [], "Nor another profile's")
+        XCTAssertEqual(ids("rt", profile: "Default ", in: [card]), ["stored"], "Profiles match as they do elsewhere")
         XCTAssertEqual(ids("x", profile: "work", dashboard: nil, in: [other]), ["y"], "An older card naming neither counts")
         // The reaped runtime is in no row; its stored id is.
         let row = SessionSummary(

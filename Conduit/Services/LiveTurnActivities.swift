@@ -483,7 +483,8 @@ final class LiveTurnActivities {
         guard !id.isEmpty else { return [] }
         return cards.filter { card in
             guard case .session(let linked, let own, _)? = ConduitAppLink(url: card.link), linked == id else { return false }
-            if let own, own != profile { return false }
+            if let own, own.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(profile.trimmingCharacters(in: .whitespacesAndNewlines)) != .orderedSame { return false }
             if let owner = card.dashboardID, owner != dashboardID { return false }
             return true
         }.flatMap { $0.sessionIDs.filter { $0 != id } }
