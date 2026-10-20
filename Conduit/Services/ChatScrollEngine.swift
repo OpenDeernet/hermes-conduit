@@ -934,6 +934,7 @@ final class ChatScrollEngine: ObservableObject {
         guard rebuildsLeft > 0 else { return }
         // The old layout's frames would answer the follow-up check.
         rowFrames = [:]
+        refreshTrackedMessageVisibility()
         emit(.rebuildTranscript)
         scheduleBlankViewportCheck(rebuildsLeft: rebuildsLeft - 1)
     }

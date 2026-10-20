@@ -1442,9 +1442,13 @@ private struct UserImageAttachmentPreview: View {
                 imagePreview(image)
             } else if loadsFromHermes && localFileURL == nil && !gatewayLoadFailed {
                 loadingPlaceholder
+                    .modifier(ImageDescriptionMenu(description: attachment.imageDescription))
+                    .modifier(OptionalAccessibilityHint(hint: attachment.imageDescription))
             } else if localFileURL != nil && !localPreviewFailed {
                 // Local file decoding off-main on a cache miss.
                 loadingPlaceholder
+                    .modifier(ImageDescriptionMenu(description: attachment.imageDescription))
+                    .modifier(OptionalAccessibilityHint(hint: attachment.imageDescription))
             } else {
                 Label(
                     (gatewayLoadFailed || localPreviewFailed) ? AppLocalization.string("Image unavailable") : AppLocalization.string("Image attached"),
