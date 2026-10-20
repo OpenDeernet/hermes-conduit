@@ -52,5 +52,14 @@ enum VoiceModeChoice: String, CaseIterable, Identifiable {
 /// another does.
 struct VoiceModeSwitch {
     let current: VoiceModeChoice
+    /// The call runs on another engine than `current` names (Local Live's
+    /// hands-free option, listed as Classic), so picking `current` still
+    /// moves it.
+    var movesOnCurrent = false
     let select: (VoiceModeChoice) -> Void
+
+    /// Whether picking `choice` moves the call.
+    func moves(to choice: VoiceModeChoice) -> Bool {
+        choice != current || movesOnCurrent
+    }
 }

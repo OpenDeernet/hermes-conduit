@@ -63,6 +63,20 @@ extension AppStateVoiceCapabilityTests {
                        "Local Live outside agent mode is Classic's hands-free option, as Settings lists it")
     }
 
+    func testAHandsFreeLocalCallCanMoveToClassic() {
+        let appState = makeModeSwitchAppState()
+        appState.setLocalLiveEnabled(true)
+        appState.setLocalLiveAgent(false)
+
+        let handsFree = appState.voiceModeSwitch(for: .localLive)
+        XCTAssertEqual(handsFree.current, .classic, "listed as Settings lists it")
+        XCTAssertTrue(handsFree.moves(to: .classic), "the call isn't classic voice yet")
+
+        let classic = appState.voiceModeSwitch(for: nil)
+        XCTAssertFalse(classic.moves(to: .classic), "a classic call stays as it is")
+        XCTAssertTrue(classic.moves(to: .gpt))
+    }
+
     func testApplyingAVoiceModeSavesItAsSettingsDoes() {
         let appState = makeModeSwitchAppState()
 

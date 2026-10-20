@@ -466,7 +466,7 @@ extension VoiceConversationSheet {
                         .font(.headline)
                         .lineLimit(1)
                         // VoiceOver hears the profile and mode, not the clock.
-                        .accessibilityValue(Text(verbatim: "\(profileDisplayName), \(AppLocalization.string("Classic voice"))"))
+                        .accessibilityValue(Text(verbatim: "\(profileDisplayName), \(modeSwitch?.current.title ?? AppLocalization.string("Classic voice"))"))
                     TimelineView(.animation(minimumInterval: 1)) { context in
                         Text(verbatim: v2Subtitle(at: context.date))
                             .font(.footnote.monospacedDigit())

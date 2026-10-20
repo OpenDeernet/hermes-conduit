@@ -30560,7 +30560,8 @@ final class AppState: ObservableObject {
     func voiceModeSwitch(for engine: VoiceCallEngine?) -> VoiceModeSwitch {
         // Read only for Local Live: the call screens ask on every redraw.
         let localAgent = engine == .localLive ? isLocalLiveAgent : true
-        return VoiceModeSwitch(current: VoiceModeChoice(engine: engine, localAgent: localAgent)) { [weak self] choice in
+        let current = VoiceModeChoice(engine: engine, localAgent: localAgent)
+        return VoiceModeSwitch(current: current, movesOnCurrent: current.engine != engine) { [weak self] choice in
             Task { @MainActor in await self?.switchVoiceMode(to: choice) }
         }
     }

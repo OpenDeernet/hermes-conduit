@@ -19,7 +19,7 @@ struct VoiceModeMenu<Face: View>: View {
                 ForEach(VoiceModeChoice.allCases) { choice in
                     Button {
                         // The call's own mode carries on as it is.
-                        guard choice != modeSwitch.current else { return }
+                        guard modeSwitch.moves(to: choice) else { return }
                         modeSwitch.select(choice)
                     } label: {
                         if choice == modeSwitch.current {
