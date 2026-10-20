@@ -758,7 +758,10 @@ final class GPTLiveConversationController: ObservableObject {
             delegationWords[id] = Set(transcript.filter { $0.speaker == .user && !delegatedEntries.contains($0.id) }.map(\.id))
         }
         let parts = delegationRequest(itemText: text)
-        if parts.request.isEmpty, !id.hasPrefix(Self.conduitDelegationPrefix),
+        // Nothing new from the user, whatever text the model wrote, and
+        // not one of the bridge's own commands.
+        if parts.userWords.isEmpty, !id.hasPrefix(Self.conduitDelegationPrefix),
+           !Self.isConduitMarkerDelegation(text),
            let conduitSentAt, now().timeIntervalSince(conduitSentAt) < Self.lateDelegationWindow {
             // The model doing what it said, after Conduit already did it.
             self.conduitSentAt = nil
@@ -789,6 +792,26 @@ final class GPTLiveConversationController: ObservableObject {
     }
 
     // MARK: Sends the model only said it made (#945)
+
+    /// A delegation that is one of Conduit's commands ("Look up:", "Job 2:",
+    /// "End call:" and the rest), not words passed on to Hermes.
+    static func isConduitMarkerDelegation(_ text: String) -> Bool {
+        let own = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !own.isEmpty else { return false }
+        typealias Bridge = GPTLiveDelegationBridge
+        return Bridge.lookUpMarker(in: own) != nil
+            || Bridge.jobMarker(in: own) != nil
+            || Bridge.findChatMarker(in: own) != nil
+            || Bridge.openChatMarker(in: own) != nil
+            || Bridge.readChatMarker(in: own) != nil
+            || Bridge.modeMarker(in: own) != nil
+            || Bridge.isReadBackMarker(own)
+            || Bridge.isSendMarker(own)
+            || Bridge.callMeMarker(in: own) != nil
+            || Bridge.decisionMarker(in: own) != nil
+            || Bridge.newJobMarker(in: own) != nil
+            || VoiceSpokenCommands.isEndCallMarker(own)
+    }
 
     /// The model's finished turn says it is sending the user's words to
     /// Hermes while no delegation has taken them: wait for one.

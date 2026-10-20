@@ -1139,6 +1139,37 @@ extension VoiceConversationControllerTests {
         controller.stop()
     }
 
+    /// #945: the model's late delegation that writes out the words itself
+    /// is still the send Conduit already made, not a second job.
+    func testGPTLiveLateDelegationWithItsOwnTextIsTheSendConduitMade() async {
+        var current = Date(timeIntervalSince1970: 1_000)
+        let (controller, session, _, fake) = makeGPTController(clock: { current })
+        await controller.start()
+        session.becomeReady()
+        session.onEvent?(.turnDone(role: "user", transcript: "Can you check whether the build passed?"))
+        session.onEvent?(.turnDone(role: "assistant", transcript: "On it. I'll send that to Hermes now."))
+        current += GPTLiveConversationController.sendClaimGrace + 1
+        controller.checkSendClaim()
+        await settle(40)
+        XCTAssertEqual(fake.created, 1)
+
+        session.onEvent?(.delegation(id: "del_late", text: "check whether the build passed"))
+        await settle(40)
+        XCTAssertEqual(fake.created, 1, "no second job for the same words")
+        XCTAssertEqual(session.appended.last { $0.delegationID == "del_late" }?.text, GPTLiveConversationController.alreadySentForModel)
+        controller.stop()
+    }
+
+    func testGPTLiveConduitCommandsAreNotMistakenForALateSend() {
+        typealias C = GPTLiveConversationController
+        XCTAssertTrue(C.isConduitMarkerDelegation("Look up: weather in Boston"))
+        XCTAssertTrue(C.isConduitMarkerDelegation("Job 2: what's the status"))
+        XCTAssertTrue(C.isConduitMarkerDelegation("Send: the draft"))
+        XCTAssertTrue(C.isConduitMarkerDelegation("Mode: ask first"))
+        XCTAssertFalse(C.isConduitMarkerDelegation("check whether the build passed"))
+        XCTAssertFalse(C.isConduitMarkerDelegation(""))
+    }
+
     /// #945: a user turn whose turn.done never came holds the send only
     /// until it goes stale, as it holds job updates.
     func testGPTLiveClaimedSendGoesPastAUserTurnThatNeverFinished() async {
