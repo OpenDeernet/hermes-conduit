@@ -17660,7 +17660,7 @@ final class AppState: ObservableObject {
         )
         // A bot chat's persisted tail lives in the BOT's store; the scope
         // must follow the active conversation, not the dashboard default.
-        let profile = botConversationProfile(for: requestedSessionID) ?? activeProfile
+        let profile = persistedTailProfile(for: requestedSessionID)
         let outcome = await foregroundPersistedTailOutcome(
             sessionId: requestedSessionID,
             profile: profile,
@@ -19991,6 +19991,10 @@ final class AppState: ObservableObject {
         botConversationProfile(for: sessionID)
     }
 
+    func persistedTailProfileForTesting(_ sessionID: String) -> String {
+        persistedTailProfile(for: sessionID)
+    }
+
     /// The ids a chat's voice call cards and Resume Call match it by.
     func chatOwnSessionIDsForTesting(_ sessionID: String) -> Set<String> {
         chatOwnSessionIDs(for: sessionID)
@@ -20121,6 +20125,20 @@ final class AppState: ObservableObject {
     /// The bot profile an in-flight or active conversation belongs to, when
     /// that conversation is a canonical Bot Chat. Nil for ordinary sessions —
     /// the ordinary dashboard scope applies.
+    /// The store a conversation's persisted rows are read from: a Bot
+    /// Chat's bot profile, resolved like the resume's scope (this process's
+    /// registry, then the roster, then the durable reference), else the
+    /// workspace. The registry alone is empty after a relaunch or a server
+    /// boundary; the read then asked the workspace's store, got 404, took
+    /// it for a Hermes without the history route and resumed with the
+    /// whole transcript, which on a long Bot Chat outgrew the socket and
+    /// dropped the connection after every send.
+    private func persistedTailProfile(for sessionID: String) -> String {
+        botConversationProfile(for: sessionID)
+            ?? botScopeProfile(forSessionIDs: [sessionID], workspaceProfile: activeProfile)
+            ?? activeProfile
+    }
+
     private func botConversationProfile(for sessionID: String) -> String? {
         // Normalized like the KEYS `noteBotChatSession` writes and like
         // `botScopeProfile`'s fast path: a padded id must not resolve in one
@@ -21774,7 +21792,7 @@ final class AppState: ObservableObject {
         }
         // A bot chat's persisted tail lives in the BOT's store (see the
         // cross-surface freshness path); scope to the active conversation.
-        let profile = botConversationProfile(for: sessionId) ?? activeProfile
+        let profile = persistedTailProfile(for: sessionId)
         let bridge = dashboardTicketBridge
         let localFrontier = durablePersistedRowIDs
         let localMessageIDs = Set(messages.map { $0.id })
