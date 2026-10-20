@@ -499,6 +499,7 @@ final class ChatScrollEngine: ObservableObject {
         prependAnchor = nil
         latestAnimationUntil = nil
         cancelDisclosureSettle()
+        blankViewportCheckGeneration &+= 1
         topVisibleMessageID = nil
         rowFrames = [:]
         refreshTrackedMessageVisibility()
@@ -914,7 +915,8 @@ final class ChatScrollEngine: ObservableObject {
     /// or ends above the screen; a run of steps collapsed into its first row
     /// leaves a framed row in view. Live rows report no frame, so nothing is
     /// rebuilt while they show: a long reply streaming at the bottom leaves
-    /// the rows above it unlaid without the screen being blank.
+    /// the rows above it unlaid without the screen being blank. The next
+    /// settled change, such as the reply landing, checks again.
     private func checkForBlankViewport(rebuildsLeft: Int) {
         guard mode == .following, !isPaused, !isDragging, !latestAnimationInFlight,
               let surface, !surface.isTracking, !surface.isDecelerating,
@@ -930,6 +932,8 @@ final class ChatScrollEngine: ObservableObject {
             rebuildsLeft > 0 ? "rebuilding the scroll view" : "still blank after a rebuild"
         ))
         guard rebuildsLeft > 0 else { return }
+        // The old layout's frames would answer the follow-up check.
+        rowFrames = [:]
         emit(.rebuildTranscript)
         scheduleBlankViewportCheck(rebuildsLeft: rebuildsLeft - 1)
     }

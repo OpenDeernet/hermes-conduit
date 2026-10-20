@@ -188,6 +188,26 @@ final class ChatScrollEngineTests: XCTestCase {
         withExtendedLifetime(surface) {}
     }
 
+    func testASessionSwitchCancelsAPendingBlankCheck() {
+        let (engine, surface) = makeEngine()
+        engine.transcriptChanged(
+            messages: Self.messages(0..<11),
+            transcriptRevision: 2,
+            viewportTransitionGeneration: 1,
+            isInitialSync: false
+        )
+        engine.renderedSessionChanged(
+            to: keyB,
+            identity: identity("b"),
+            viaNotification: false,
+            viewportTransitionGeneration: 2
+        )
+        events = []
+        scheduled.forEach { $0() }
+        XCTAssertFalse(events.contains(.rebuildTranscript))
+        withExtendedLifetime(surface) {}
+    }
+
     func testABrowsingReaderIsNotRebuiltUnder() {
         let (engine, surface) = makeEngine()
         surface.userScroll(to: 1000)
