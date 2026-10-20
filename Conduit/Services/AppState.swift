@@ -6940,9 +6940,10 @@ final class AppState: ObservableObject {
             // A bot's own chat opens through the bot that owns it, as it
             // does from a link for another profile. A Live Activity's card
             // names the chat's own ids, which outrank a runtime id Hermes
-            // may since have given another chat.
+            // may since have given another chat; the link's id still counts
+            // when they name no bot (a Bot Chat's link can be its only one).
             let cardIDs = LiveTurnActivities.sessionIDs(linkedTo: id, profile: activeProfile, dashboardID: activeDashboardID?.uuidString)
-            if let owner = botOwnership.botProfileName(owningAny: cardIDs.isEmpty ? [id] : Set(cardIDs)) {
+            if let owner = botOwnership.botProfileName(owningAny: Set(cardIDs)) ?? botOwnership.botProfileName(owningAny: [id]) {
                 openLinkedBotChat(owner)
                 return
             }
@@ -7126,16 +7127,16 @@ final class AppState: ObservableObject {
         var seen = Set<String>()
         for candidate in candidates where !candidate.isEmpty && seen.insert(candidate).inserted {
             if let target = Self.linkedSessionTarget(candidate, rows: rows, aliases: voiceSessionAliases) {
-                return Self.linkedResumeID(target, rows: rows)
+                return Self.linkedResumeID(target, matching: candidate, rows: rows)
             }
         }
         return nil
     }
 
-    /// The stored id of the row `target` names, when it has one; else
-    /// `target` itself.
-    static func linkedResumeID(_ target: String, rows: [SessionSummary]) -> String {
-        guard let stored = rows.first(where: { $0.id == target })?.storedSessionId?
+    /// The stored id of the row `target` names that carries `candidate`
+    /// (two rows can share a runtime id), when it has one; else `target`.
+    static func linkedResumeID(_ target: String, matching candidate: String, rows: [SessionSummary]) -> String {
+        guard let stored = rows.first(where: { $0.id == target && $0.nestingIDs.contains(candidate) })?.storedSessionId?
             .trimmingCharacters(in: .whitespacesAndNewlines), !stored.isEmpty else { return target }
         return stored
     }

@@ -273,7 +273,14 @@ extension WidgetLaunchLinkTests {
         )
         let target = try XCTUnwrap(AppState.linkedSessionTarget("stored", rows: [stale], aliases: VoiceSessionAliases()))
         XCTAssertEqual(target, "rt")
-        XCTAssertEqual(AppState.linkedResumeID(target, rows: [stale]), "stored")
-        XCTAssertEqual(AppState.linkedResumeID("stored", rows: [row]), "stored", "A row without a stored id resumes by its own")
+        XCTAssertEqual(AppState.linkedResumeID(target, matching: "stored", rows: [stale]), "stored")
+        XCTAssertEqual(AppState.linkedResumeID("stored", matching: "stored", rows: [row]), "stored", "A row without a stored id resumes by its own")
+        // Another profile's row with the same runtime id doesn't lend its stored id.
+        let other = SessionSummary(
+            id: "rt", storedSessionId: "elsewhere", alternateIds: [], title: "Other", model: "Hermes",
+            updatedLabel: "now", profile: "work", source: .chat, isActive: true, isArchived: false,
+            lineageRootId: nil
+        )
+        XCTAssertEqual(AppState.linkedResumeID("rt", matching: "stored", rows: [other, stale]), "stored")
     }
 }
