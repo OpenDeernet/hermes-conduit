@@ -2660,7 +2660,12 @@ final class HermesClient: ObservableObject {
             "subagent_id": subagentId,
             "text": text
         ])
-        return result.objectValue?["status"]?.stringValue == "queued"
+        switch result.objectValue?["status"]?.stringValue {
+        case "queued": return true
+        case "rejected": return false
+        // Only an explicit rejection may end the card.
+        default: throw HermesError.invalidResponse
+        }
     }
 
     /// Stops one running delegate agent (`subagent.interrupt`). False when
@@ -2670,7 +2675,9 @@ final class HermesClient: ObservableObject {
             "session_id": sessionId,
             "subagent_id": subagentId
         ])
-        return result.objectValue?["found"]?.boolValue ?? false
+        // A reply without `found` must not end a card that may still run.
+        guard let found = result.objectValue?["found"]?.boolValue else { throw HermesError.invalidResponse }
+        return found
     }
 
     /// The end of one delegate agent's live transcript (`subagent.tail`,

@@ -414,6 +414,7 @@ private struct DelegateAgentCard: View {
                     }
                 }
                 .tint(.primary)
+                .accessibilityValue(expanded ? AppLocalization.string("Expanded") : AppLocalization.string("Collapsed"))
                 if controllable {
                     controlsMenu
                 }

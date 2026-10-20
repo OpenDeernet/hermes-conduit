@@ -876,6 +876,13 @@ final class HermesClientTests: XCTestCase {
             try await $0.steerSubagent(sessionId: "s1", subagentId: "sa-1", text: "x")
         }
         XCTAssertFalse(rejected, "A rejected steer means the agent isn't running")
+
+        do {
+            _ = try await capturedCall(result: ["status": "delivered"]) {
+                try await $0.steerSubagent(sessionId: "s1", subagentId: "sa-1", text: "x")
+            }
+            XCTFail("An unknown status must not read as a rejection")
+        } catch HermesError.invalidResponse {}
     }
 
     func testInterruptSubagentReportsWhetherHermesFoundIt() async throws {
@@ -892,6 +899,13 @@ final class HermesClientTests: XCTestCase {
             try await $0.interruptSubagent(sessionId: "s1", subagentId: "sa-1")
         }
         XCTAssertFalse(missing)
+
+        do {
+            _ = try await capturedCall(result: ["subagent_id": "sa-1"]) {
+                try await $0.interruptSubagent(sessionId: "s1", subagentId: "sa-1")
+            }
+            XCTFail("A reply without found must not read as not found")
+        } catch HermesError.invalidResponse {}
     }
 
     func testTailSubagentDecodesTheTranscriptEnd() async throws {
