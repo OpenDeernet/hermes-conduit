@@ -71,6 +71,8 @@ final class WatchDirectBroker {
 
     private unowned let link: WatchVoiceLink
     private var callID: UInt32?
+    /// The running call's voice mode; nil for one adopted after a restart.
+    private var callMode: LiveVoiceModeName?
     /// Ends a bridge call whose Watch went quiet once its grant is over.
     private var grantWatchdog: Task<Void, Never>?
     private var bridge: GeminiLiveToolBridge?
@@ -309,6 +311,7 @@ final class WatchDirectBroker {
         let appState = self.appState
         if let active = callID, active != id { endCall() }
         callID = id
+        callMode = .geminiLive
         bridge = nil
         lateOutgoing = []
         hostTools = []
@@ -430,6 +433,7 @@ final class WatchDirectBroker {
         let appState = self.appState
         if let active = callID, active != id { endCall() }
         callID = id
+        callMode = .gptLive
         bridge = nil
         lateOutgoing = []
         hostTools = []
@@ -539,6 +543,7 @@ final class WatchDirectBroker {
         let appState = self.appState
         if let active = callID, active != id { endCall() }
         callID = id
+        callMode = .grokLive
         bridge = nil
         lateOutgoing = []
         hostTools = []
@@ -662,6 +667,7 @@ final class WatchDirectBroker {
         let appState = self.appState
         if let active = callID, active != id { endCall() }
         callID = id
+        callMode = .localLive
         bridge = nil
         lateOutgoing = []
         hostTools = []
@@ -1317,6 +1323,16 @@ final class WatchDirectBroker {
         endCall()
     }
 
+    /// The user took back their OK for `mode`'s provider (#827): its running
+    /// call ends here, and revoking its grants closes the host's audio
+    /// bridge (GPT-Live, Grok Live) and the Watch's lookups; a Gemini call
+    /// gets no new token. A call of unknown mode ends too.
+    func consentWithdrawn(for mode: LiveVoiceModeName) {
+        guard callID != nil, callMode == nil || callMode == mode else { return }
+        link.log.note("watchDirectConsentWithdrawn", ["callID": Int(callID ?? 0), "mode": mode.storageID])
+        endCall()
+    }
+
     /// Unspoken job news goes back to the jobs, which report it as usual.
     private func endCall(keepRecovery: Bool = false) {
         grantWatchdog?.cancel()
@@ -1333,6 +1349,7 @@ final class WatchDirectBroker {
         lateOutgoing = []
         hostTools = []
         hostToolsMode = nil
+        callMode = nil
         appState.watchCallUserTurn = nil
         revokeGrants()
         appState.voiceBackgroundJobSupervisor.readsRepliesWhenSettling = false

@@ -70,6 +70,7 @@ struct LiveVoiceConsentSheet: View {
             VStack(spacing: 0) {
                 Text(verbatim: mode.displayName)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.top, 20)
                 LiveVoiceConsentPanel(mode: mode, onAllow: { onAnswer(true) }, onNotNow: { onAnswer(false) })
             }
@@ -106,7 +107,7 @@ struct LiveVoiceConsentRow: View {
                     appState.setLiveVoiceConsent(false, for: mode)
                 }
                 .buttonStyle(.settings)
-                .accessibilityHint(AppLocalization.string("The next call asks again"))
+                .accessibilityHint(AppLocalization.string("Ends a running call. The next call asks again."))
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: LiveVoiceProviderConsent.didChange)) { _ in

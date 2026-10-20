@@ -27,8 +27,8 @@ extension AppState {
     }
 
     /// The user allowed (or took back) the mode's provider hearing them.
-    /// Taking it back also hangs up that mode's running call: nothing more
-    /// goes to the provider.
+    /// Taking it back also hangs up that mode's running call, the phone's
+    /// or the Watch's.
     func setLiveVoiceConsent(_ granted: Bool, for mode: LiveVoiceModeName) {
         LiveVoiceProviderConsent.setGranted(granted, for: mode)
         if granted {
@@ -41,6 +41,7 @@ extension AppState {
         case .grokLive: if isGrokLiveActive { closeGrokLiveConversation() }
         case .localLive: break
         }
+        WatchVoiceLink.shared.direct.consentWithdrawn(for: mode)
     }
 
     func isLiveVoiceSheetShown(_ mode: LiveVoiceModeName) -> Bool {
