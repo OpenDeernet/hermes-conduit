@@ -18521,9 +18521,11 @@ final class AppState: ObservableObject {
     /// Hermes announced a user message in a chat (`user.message`). Every
     /// client of the chat hears it, this one's own sends included: one
     /// arriving with a turn running here, already shown here by its row id,
-    /// or matching the latest user message here is this device's.
+    /// or matching the latest user message here is this device's (so is
+    /// the same text resent elsewhere; its stored count still reads it).
     private func noteUserMessageElsewhere(sessionId: String, rowId: Int?, text: String) {
         if eventBelongsToActiveSession(sessionId), !turnState.isRunning,
+           openChatSync.sessionID == activeSessionId,
            rowId.map({ id in !messages.contains(where: { $0.rowId == id }) }) ?? true {
             let latestHere = messages.last(where: { $0.role == .user })?.content ?? ""
             if OpenChatSync.squashed(latestHere) != OpenChatSync.squashed(text) {
@@ -18539,7 +18541,7 @@ final class AppState: ObservableObject {
         guard let local = openChatLocalTurn(),
               openChatSyncRead == nil, reconciliation == nil, !isChatRefreshing else { return }
         let accepted = acceptedIdentitySessionIDs(forRequested: local.sessionID)
-        let listed = sessions.first { session in
+        let listed = (sessions + cronSessions).first { session in
             accepted.contains(session.id)
                 || session.storedSessionId.map { accepted.contains($0) } == true
                 || !accepted.isDisjoint(with: session.alternateIds)
@@ -18552,11 +18554,14 @@ final class AppState: ObservableObject {
         )
         guard action == .readNewRows else { return }
         let sessionID = local.sessionID
+        // A newer check replaces this one: it would only read the rows again.
+        openChatCatalogCheck?.cancel()
         openChatCatalogCheck = Task { @MainActor [weak self] in
             guard let self else { return }
             if self.freshActiveListSnapshot(maxAge: 5) == nil {
                 await self.refreshLiveSessionStatuses()
             }
+            guard !Task.isCancelled else { return }
             let rows = self.freshActiveListSnapshot(maxAge: 5)
                 .map { self.openChatRegistryRows($0.rows, sessionID: sessionID) } ?? []
             guard self.activeSessionId == sessionID, self.openChatSyncRead == nil,
