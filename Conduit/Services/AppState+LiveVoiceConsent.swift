@@ -27,8 +27,8 @@ extension AppState {
     }
 
     /// The user allowed (or took back) the mode's provider hearing them.
-    /// Taking it back also hangs up that mode's running call, the phone's
-    /// or the Watch's.
+    /// Taking it back also hangs up that mode's running call on the phone,
+    /// and ends the Watch's on the phone side (`consentWithdrawn`).
     func setLiveVoiceConsent(_ granted: Bool, for mode: LiveVoiceModeName) {
         LiveVoiceProviderConsent.setGranted(granted, for: mode)
         if granted {

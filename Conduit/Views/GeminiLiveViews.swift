@@ -280,7 +280,9 @@ struct GeminiLiveVoiceSheet: View {
         )
         // The status and new turns change without focus moving.
         .onChange(of: controller.phase) { _, _ in
-            AccessibilityNotification.Announcement(statusText).post()
+            // A consent stop shows the question, not the Watch's wording.
+            let consentQuestion = controller.awaitingConsent.map { AppLocalization.string("Send your voice to \($0.company)?") }
+            AccessibilityNotification.Announcement(consentQuestion ?? statusText).post()
         }
         // Said outright: the status only mentions the mute while listening.
         .onChange(of: controller.isMicrophoneMuted) { _, muted in

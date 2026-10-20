@@ -107,7 +107,7 @@ struct LiveVoiceConsentRow: View {
                     appState.setLiveVoiceConsent(false, for: mode)
                 }
                 .buttonStyle(.settings)
-                .accessibilityHint(AppLocalization.string("Ends a running call. The next call asks again."))
+                .accessibilityHint(AppLocalization.string("Ends a running call on this iPhone. The next call asks again."))
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: LiveVoiceProviderConsent.didChange)) { _ in

@@ -307220,84 +307220,84 @@
         }
       }
     },
-    "Ends a running call. The next call asks again." : {
+    "Ends a running call on this iPhone. The next call asks again." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Beendet einen laufenden Anruf. Der nächste Anruf fragt erneut."
+            "value" : "Beendet einen laufenden Anruf auf diesem iPhone. Der nächste Anruf fragt erneut."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Termina una llamada en curso. La próxima llamada volverá a preguntar."
+            "value" : "Termina una llamada en curso en este iPhone. La próxima llamada volverá a preguntar."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Met fin à un appel en cours. Le prochain appel redemandera."
+            "value" : "Met fin à un appel en cours sur cet iPhone. Le prochain appel redemandera."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mengakhiri panggilan yang sedang berlangsung. Panggilan berikutnya akan bertanya lagi."
+            "value" : "Mengakhiri panggilan yang sedang berlangsung di iPhone ini. Panggilan berikutnya akan bertanya lagi."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Termina una chiamata in corso. La prossima chiamata chiederà di nuovo."
+            "value" : "Termina una chiamata in corso su questo iPhone. La prossima chiamata chiederà di nuovo."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "進行中の通話を終了します。次回の通話で再度確認します。"
+            "value" : "このiPhoneで進行中の通話を終了します。次回の通話で再度確認します。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "진행 중인 통화를 종료해요. 다음 통화에서 다시 물어봐요."
+            "value" : "이 iPhone에서 진행 중인 통화를 종료해요. 다음 통화에서 다시 물어봐요."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kończy trwającą rozmowę. Następna rozmowa zapyta ponownie."
+            "value" : "Kończy trwającą rozmowę na tym iPhonie. Następna rozmowa zapyta ponownie."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Encerra uma chamada em andamento. A próxima chamada vai perguntar de novo."
+            "value" : "Encerra uma chamada em andamento neste iPhone. A próxima chamada vai perguntar de novo."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Завершает текущий звонок. Следующий звонок спросит снова."
+            "value" : "Завершает текущий звонок на этом iPhone. Следующий звонок спросит снова."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Devam eden aramayı sonlandırır. Sonraki arama yeniden sorar."
+            "value" : "Bu iPhone’da devam eden aramayı sonlandırır. Sonraki arama yeniden sorar."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "会结束正在进行的通话。下次通话会再次询问。"
+            "value" : "会结束此 iPhone 上正在进行的通话。下次通话会再次询问。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "會結束正在進行的通話。下次通話會再次詢問。"
+            "value" : "會結束此 iPhone 上正在進行的通話。下次通話會再次詢問。"
           }
         }
       }

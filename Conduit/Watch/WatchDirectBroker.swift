@@ -1325,8 +1325,10 @@ final class WatchDirectBroker {
 
     /// The user took back their OK for `mode`'s provider (#827): its running
     /// call ends here, and revoking its grants closes the host's audio
-    /// bridge (GPT-Live, Grok Live) and the Watch's lookups; a Gemini call
-    /// gets no new token. A call of unknown mode ends too.
+    /// bridge (GPT-Live, Grok Live) and the Watch's lookups. A Gemini call's
+    /// socket is the Watch's own: it loses its tools and gets no new token,
+    /// but its audio stops only when the Watch hangs up (no wire message
+    /// ends it from here). A call of unknown mode ends too.
     func consentWithdrawn(for mode: LiveVoiceModeName) {
         guard callID != nil, callMode == nil || callMode == mode else { return }
         link.log.note("watchDirectConsentWithdrawn", ["callID": Int(callID ?? 0), "mode": mode.storageID])
