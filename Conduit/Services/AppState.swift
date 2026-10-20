@@ -7088,7 +7088,10 @@ final class AppState: ObservableObject {
             }
             // Only this open's own "not found" may be reworded.
             self.reconciliationSessionWasNotFound = false
-            let opened = await self.requestOpenSession(target ?? id) { [weak self] in
+            // Still no row: the stored id learned for a reaped runtime
+            // resumes where the runtime id can't.
+            let fallback = self.conversationIdentityIndex.durableID(forRuntime: id, profile: self.activeProfile)
+            let opened = await self.requestOpenSession(target ?? fallback ?? id) { [weak self] in
                 // A failed resume says "session not found"; the link's own
                 // words say what's missing. Other refusals keep their text.
                 guard let self, self.errorMessage == nil || self.reconciliationSessionWasNotFound else { return }
@@ -7104,10 +7107,11 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// What a linked id opens as. A Live Activity's card from an older build
-    /// names the chat's runtime id, which Hermes forgets once that runtime
-    /// is reaped (Conduit was away a while): the stored id learned for it,
-    /// or another id the card carries, still finds the chat's row.
+    /// The row a linked id opens as. A Live Activity's card from an older
+    /// build names the chat's runtime id, which Hermes forgets once that
+    /// runtime is reaped (Conduit was away a while): the stored id learned
+    /// for it, or another id the card carries, still finds the chat's row.
+    /// Nil when no row knows any of them.
     private func linkedSessionTarget(_ id: String) -> String? {
         let rows = sessions + cronSessions
         let durable = conversationIdentityIndex.durableID(forRuntime: id, profile: activeProfile)
@@ -7118,8 +7122,7 @@ final class AppState: ObservableObject {
                 return target
             }
         }
-        // No row yet: the stored id resumes where a reaped runtime id can't.
-        return durable
+        return nil
     }
 
     /// The id a Live Activity's card opens its chat by: the durable one,
