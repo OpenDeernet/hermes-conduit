@@ -7129,7 +7129,9 @@ final class AppState: ObservableObject {
         )
         for candidate in candidates {
             if let target = Self.linkedSessionTarget(candidate, rows: rows, aliases: voiceSessionAliases) {
-                return Self.linkedResumeID(target, matching: candidate, rows: rows)
+                // A voice alias can be how the row was found.
+                let aliased = voiceSessionAliases.storedID(forRuntime: candidate) ?? candidate
+                return Self.linkedResumeID(target, matching: candidate, aliased, rows: rows)
             }
         }
         return nil
@@ -7145,21 +7147,28 @@ final class AppState: ObservableObject {
         return unique.filter { stored.contains($0) } + unique.filter { !stored.contains($0) }
     }
 
-    /// The stored id of the row `target` names that carries `candidate`
-    /// (two rows can share a runtime id), when it has one; else `target`.
-    static func linkedResumeID(_ target: String, matching candidate: String, rows: [SessionSummary]) -> String {
-        guard let stored = rows.first(where: { $0.id == target && $0.nestingIDs.contains(candidate) })?.storedSessionId?
-            .trimmingCharacters(in: .whitespacesAndNewlines), !stored.isEmpty else { return target }
+    /// The stored id of the row `target` names that carries one of
+    /// `candidates` (two rows can share a runtime id), when it has one;
+    /// else `target`.
+    static func linkedResumeID(_ target: String, matching candidates: String..., rows: [SessionSummary]) -> String {
+        let row = rows.first { row in
+            row.id == target && candidates.contains(where: row.nestingIDs.contains)
+        }
+        guard let stored = row?.storedSessionId?.trimmingCharacters(in: .whitespacesAndNewlines), !stored.isEmpty else { return target }
         return stored
     }
 
     /// The id a Live Activity's card opens its chat by: the durable one,
     /// which outlives the runtime id the turn was sent on. A Bot Chat's is
     /// read in its bot's scope, as a refresh reads it: a dashboard row with
-    /// the same runtime id says nothing about the Bot Chat.
+    /// the same runtime id says nothing about the Bot Chat. The tap comes
+    /// back through `ConduitAppLink(externalURL:)`, so an id that isn't a
+    /// plain token keeps the runtime id.
     func liveActivityLinkSessionID(for sessionID: String) -> String {
         let botProfile = botScopeProfile(forSessionIDs: [sessionID], workspaceProfile: activeProfile)
-        return captureConversationIdentity(for: sessionID, scopeProfile: botProfile)?.durableSessionID ?? sessionID
+        guard let durable = captureConversationIdentity(for: sessionID, scopeProfile: botProfile)?.durableSessionID,
+              ConduitAppLink.isPlainToken(durable) else { return sessionID }
+        return durable
     }
 
     /// The row a linked id opens as: the row that carries it (or the stored
