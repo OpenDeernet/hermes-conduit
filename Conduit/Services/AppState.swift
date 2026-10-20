@@ -28098,13 +28098,13 @@ final class AppState: ObservableObject {
     /// (interrupt), so Settings never shows a mode Hermes doesn't use.
     private func loadBusyInputMode(using client: HermesClient) async {
         let key = busyInputModeCacheKey
+        // Shown while Hermes answers, and kept if it can't.
+        busyInputMode = defaults.string(forKey: key).flatMap(BusyInputMode.init(rawValue:)) ?? .interrupt
         do {
             let mode = try await client.busyInputMode()
             busyInputMode = mode
             defaults.set(mode.rawValue, forKey: key)
-        } catch {
-            busyInputMode = defaults.string(forKey: key).flatMap(BusyInputMode.init(rawValue:)) ?? .interrupt
-        }
+        } catch {}
     }
 
     /// The busy mode last read from or saved to Hermes, per server and profile.
@@ -28118,6 +28118,8 @@ final class AppState: ObservableObject {
     func setBusyInputMode(_ mode: BusyInputMode) async -> Bool {
         guard let client else { return false }
         let previous = busyInputMode
+        // The profile that takes the write, captured before it.
+        let key = busyInputModeCacheKey
         busyInputMode = mode
         do {
             if let setBusyInputMode = chatResumeLifecycleOperations.setBusyInputMode {
@@ -28125,7 +28127,7 @@ final class AppState: ObservableObject {
             } else {
                 try await client.setBusyInputMode(mode)
             }
-            defaults.set(mode.rawValue, forKey: busyInputModeCacheKey)
+            defaults.set(mode.rawValue, forKey: key)
             return true
         } catch {
             busyInputMode = previous
