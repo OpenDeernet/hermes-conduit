@@ -40,19 +40,24 @@ struct ContextSheet: View {
                             Text("\(String(Int(appState.runtime.contextPercent.rounded())))%")
                                 .font(.caption.monospacedDigit().weight(.semibold))
                         }
-                        ProgressView(value: appState.runtime.contextPercent, total: 100)
-                            .tint(.conduitAccent)
-                            .accessibilityLabel(Text("Window usage"))
+                        ContextWindowBar(
+                            segments: segments,
+                            capacity: Double(max(Int(appState.runtime.contextMax), breakdown?.contextMax ?? 0)),
+                            fallbackFraction: appState.runtime.contextPercent / 100
+                        )
+                        .accessibilityElement()
+                        .accessibilityLabel(Text("Window usage"))
+                        .accessibilityValue(Text("\(String(Int(appState.runtime.contextPercent.rounded())))%"))
                     }
                     .padding(.top, 4)
                 }
 
-                if let breakdown {
+                if breakdown != nil {
                     ConduitSettingsSection(title: AppLocalization.string("Breakdown"), symbol: "chart.pie", tint: .conduitAccent) {
-                        ForEach(breakdown.categories, id: \.id) { category in
+                        ForEach(segments) { category in
                             HStack(spacing: 10) {
                                 Circle()
-                                    .fill(colorFor(category.color))
+                                    .fill(category.color)
                                     .frame(width: 9, height: 9)
                                 Text(category.label)
                                 Spacer()
@@ -78,6 +83,24 @@ struct ContextSheet: View {
         breakdown = loaded
     }
 
+    /// The breakdown's categories with the color each takes in the bar and
+    /// beside its row. Hermes often names one color for every category, so
+    /// then they take the palette in turn instead of all coming out amber.
+    private var segments: [ContextWindowBar.Segment] {
+        guard let categories = breakdown?.categories else { return [] }
+        let oneColor = Set(categories.map { $0.color.lowercased() }).count <= 1
+        return categories.enumerated().map { index, category in
+            ContextWindowBar.Segment(
+                id: category.id,
+                label: category.label,
+                tokens: category.tokens,
+                color: oneColor
+                    ? ContextWindowBar.palette[index % ContextWindowBar.palette.count]
+                    : colorFor(category.color)
+            )
+        }
+    }
+
     private func colorFor(_ name: String) -> Color {
         switch name.lowercased() {
         case "blue": return .blue
@@ -90,6 +113,51 @@ struct ContextSheet: View {
         case "amber", "yellow": return .yellow
         default: return .conduitAccent
         }
+    }
+}
+
+/// The context window as one bar: a segment per category, sized by its
+/// share of the capacity, on a quiet track for what is still free. Before
+/// the breakdown loads, one gold segment for the used share.
+struct ContextWindowBar: View {
+    struct Segment: Identifiable {
+        let id: String
+        let label: String
+        let tokens: Int
+        let color: Color
+    }
+
+    static let palette: [Color] = [.conduitAccent, .conduitAura, .teal, .pink, .blue, .green, .orange, .purple]
+
+    let segments: [Segment]
+    let capacity: Double
+    let fallbackFraction: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            let shown = segments.filter { $0.tokens > 0 }
+            let total = max(capacity, Double(shown.reduce(0) { $0 + $1.tokens }), 1)
+            HStack(spacing: 2) {
+                if shown.isEmpty {
+                    Rectangle()
+                        .fill(Color.conduitAccent)
+                        .frame(width: proxy.size.width * min(max(fallbackFraction, 0), 1))
+                } else {
+                    ForEach(shown) { segment in
+                        Rectangle()
+                            .fill(segment.color)
+                            // A sliver stays visible however small its share.
+                            .frame(width: max(3, (proxy.size.width - CGFloat(shown.count) * 2) * Double(segment.tokens) / total))
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.08))
+            .clipShape(Capsule())
+        }
+        .frame(height: 10)
+        .animation(.easeOut(duration: 0.25), value: segments.map(\.tokens))
     }
 }
 
