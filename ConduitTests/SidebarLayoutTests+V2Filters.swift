@@ -130,6 +130,11 @@ extension SidebarLayoutTests {
         )
         XCTAssertEqual(filterIDs(V2FilterSelection(filters: [.starred, .source(.chat)]), starred: starred), ["chat-old"])
         XCTAssertEqual(filterIDs(V2FilterSelection(filters: [.starred])), [])
+        // A starred run shows under Starred alone, not only under Scheduled.
+        XCTAssertEqual(
+            filterIDs(V2FilterSelection(filters: [.starred]), starred: ["run-old", "chat-new", "run-archived"]),
+            ["chat-new", "run-old"]
+        )
     }
 
     func testV2StarredFlattensSavesAndCountsWithinTheRest() {

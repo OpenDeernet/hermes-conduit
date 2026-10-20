@@ -19405,6 +19405,8 @@ final class AppState: ObservableObject {
             return AppLocalization.string("Could not delete \(bot.displayLabel): \(UserFacingError.message(for: error))")
         }
         guard dashboardTicketBridge === bridge else { return nil }
+        sessionStars.forget(profile: bot.name)
+        sessionStars.save(to: defaults)
         if let sessionId = activeSessionId,
            let owner = botChatSessionProfiles[sessionId],
            owner.caseInsensitiveCompare(bot.name) == .orderedSame {

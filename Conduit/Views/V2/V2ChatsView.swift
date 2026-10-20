@@ -220,8 +220,15 @@ struct V2FilterSelection: Equatable {
         hasStatus: (V2SessionFilter, SessionSummary) -> Bool
     ) -> [SessionSummary] {
         let kinds = Set(sources.compactMap(\.sessionSource))
+        let scopes = self.scopes
         let listed: [SessionSummary]
-        if kinds.isEmpty {
+        if kinds.isEmpty, !scopes.isEmpty {
+            // A run starred under Scheduled is listed under Starred alone
+            // too, not only once it is pinned.
+            let rows = everything()
+            let ids = Set(rows.map(\.id))
+            listed = Self.mergedByRecency(rows, cronSessions.filter { !$0.isArchived && !ids.contains($0.id) })
+        } else if kinds.isEmpty {
             listed = everything()
         } else {
             // Cron runs come only from their own list, as under Scheduled.
@@ -235,7 +242,6 @@ struct V2FilterSelection: Equatable {
                 : chats
         }
         let wanted = statuses
-        let scopes = self.scopes
         guard !wanted.isEmpty || !scopes.isEmpty else { return listed }
         return listed.filter { session in
             (wanted.isEmpty || wanted.contains { hasStatus($0, session) })
