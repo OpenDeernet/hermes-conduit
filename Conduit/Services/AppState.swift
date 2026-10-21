@@ -5581,6 +5581,7 @@ final class AppState: ObservableObject {
         self.savedDashboardRegistry = initialRegistry
         self.profileAppearanceStore = profileAppearanceStore ?? ProfileAppearanceStore(defaults: defaults)
         self.sessionPresentationCache = sessionPresentationCache
+        sessionPresentationCache.prewarm()
         self.offlineChatCache = offlineChatCache ?? Self.makeDefaultOfflineChatCache()
         self.sessionYoloStore = sessionYoloStore ?? SessionYoloStore(defaults: defaults)
         self.conversationIdentityIndex = conversationIdentityIndex ?? ConversationIdentityIndex()
@@ -25798,8 +25799,8 @@ final class AppState: ObservableObject {
             }
             return .hydrated(PersistedSessionTranscript(
                 resolvedSessionId: Self.resolvedSessionId(in: response),
-                messages: MessageNormalizer.normalizeMessages(
-                    rawMessages.map(AnyCodable.from),
+                messages: await Self.normalizeTranscriptRows(
+                    rawMessages,
                     imageScope: Self.transcriptImageScope(in: response, sessionId: sessionId, profile: profile)
                 ),
                 page: page,
@@ -25874,8 +25875,8 @@ final class AppState: ObservableObject {
                     }
                     return .hydrated(PersistedSessionTranscript(
                         resolvedSessionId: Self.resolvedSessionId(in: fullResponse) ?? Self.resolvedSessionId(in: response),
-                        messages: MessageNormalizer.normalizeMessages(
-                            fullRows.map(AnyCodable.from),
+                        messages: await Self.normalizeTranscriptRows(
+                            fullRows,
                             imageScope: Self.transcriptImageScope(in: fullResponse, sessionId: sessionId, profile: profile)
                         ),
                         page: nil
@@ -25901,8 +25902,8 @@ final class AppState: ObservableObject {
             // returns `data`, so accept both public Hermes response shapes.
             return .hydrated(PersistedSessionTranscript(
                 resolvedSessionId: Self.resolvedSessionId(in: response),
-                messages: MessageNormalizer.normalizeMessages(
-                    rawMessages.map(AnyCodable.from),
+                messages: await Self.normalizeTranscriptRows(
+                    rawMessages,
                     imageScope: Self.transcriptImageScope(in: response, sessionId: sessionId, profile: profile)
                 ),
                 page: page,
@@ -25949,6 +25950,16 @@ final class AppState: ObservableObject {
             sessionId: echoed.flatMap { $0.isEmpty ? nil : $0 } ?? sessionId,
             profile: profile
         )
+    }
+
+    /// Normalizes a transcript page off the main actor: a long chat's
+    /// rows take tens of milliseconds, and the launch sync runs while the
+    /// Chats list is drawing its first frames.
+    nonisolated private static func normalizeTranscriptRows(
+        _ rows: [Any],
+        imageScope: TranscriptImageScope?
+    ) async -> [ChatMessage] {
+        MessageNormalizer.normalizeMessages(rows.map(AnyCodable.from), imageScope: imageScope)
     }
 
     /// The dashboard server returns `messages`; the API-server variant

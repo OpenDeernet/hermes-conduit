@@ -1255,6 +1255,17 @@ final class SessionPresentationCache {
         }
     }
 
+    /// Decodes the stored chats into memory off the main thread, so the
+    /// first read at launch (the sync after unlock) finds them decoded
+    /// instead of decoding the whole store while the Chats list draws.
+    func prewarm() {
+        guard writeQueue != nil else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            _ = load()
+            _ = loadPendingTools()
+        }
+    }
+
     private func load() -> [String: CachedSession] {
         memoryLock.lock()
         defer { memoryLock.unlock() }
