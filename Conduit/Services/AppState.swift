@@ -11154,6 +11154,46 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: Relay gateways each dashboard's host reported
+
+    private static let relayGatewayIDsByDashboardKey = "conduit.relayGatewayIDsByDashboard"
+    /// Enough for every profile of one host, with room for re-pairings.
+    private static let relayGatewayIDsPerDashboardLimit = 32
+
+    /// The relay gateway ids the active dashboard's host said its profiles
+    /// pair this iPhone through. A push stamped with one of them came from
+    /// that host, whatever dashboard its pairing was bound to.
+    var activeDashboardRelayGatewayIDs: Set<String> {
+        guard let activeDashboardID else { return [] }
+        return relayGatewayIDs(of: activeDashboardID)
+    }
+
+    func relayGatewayIDs(of dashboardID: UUID) -> Set<String> {
+        let stored = defaults.dictionary(forKey: Self.relayGatewayIDsByDashboardKey) as? [String: [String]] ?? [:]
+        return Set(stored[dashboardID.uuidString] ?? [])
+    }
+
+    /// Remembers that `dashboardID`'s host pairs a profile with this iPhone
+    /// through `gatewayID`, as that host said over its signed-in connection.
+    func recordRelayGatewayID(_ gatewayID: String, for dashboardID: UUID) {
+        let gatewayID = gatewayID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !gatewayID.isEmpty, gatewayID.count <= 80 else { return }
+        var stored = defaults.dictionary(forKey: Self.relayGatewayIDsByDashboardKey) as? [String: [String]] ?? [:]
+        var ids = stored[dashboardID.uuidString] ?? []
+        guard ids.last != gatewayID else { return }
+        // Newest last, so the oldest pairing is the one dropped.
+        ids.removeAll { $0 == gatewayID }
+        ids.append(gatewayID)
+        stored[dashboardID.uuidString] = Array(ids.suffix(Self.relayGatewayIDsPerDashboardLimit))
+        defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
+    }
+
+    func forgetRelayGatewayIDs(of dashboardID: UUID) {
+        var stored = defaults.dictionary(forKey: Self.relayGatewayIDsByDashboardKey) as? [String: [String]] ?? [:]
+        guard stored.removeValue(forKey: dashboardID.uuidString) != nil else { return }
+        defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
+    }
+
     /// The All pill stays fixed; the remaining session categories are local UI preference.
     func moveSessionFilters(fromOffsets: IndexSet, toOffset: Int) {
         sessionFilterOrder.move(fromOffsets: fromOffsets, toOffset: toOffset)
@@ -12487,6 +12527,7 @@ final class AppState: ObservableObject {
         savedDashboardRegistry = registry
         SavedDashboardRegistryStore.save(registry)
         removeDashboardScopedPresentation(id)
+        forgetRelayGatewayIDs(of: id)
         if wasActive {
             showLogin = true
         }
@@ -20988,11 +21029,17 @@ final class AppState: ObservableObject {
             targetDashboardID: target.dashboardID,
             hasMalformedDashboardID: target.hasMalformedDashboardID,
             activeDashboardID: activeDashboardID,
-            savedDashboardIDs: savedDashboardRegistry.dashboards.map(\.id)
+            savedDashboardIDs: savedDashboardRegistry.dashboards.map(\.id),
+            targetGatewayID: target.relayGatewayID,
+            activeDashboardGatewayIDs: activeDashboardRelayGatewayIDs
         ) {
         case .route:
-            guard connection != nil else { return .retry }
+            guard connection != nil else {
+                traceStage = "dashboard check (not connected)"
+                return .retry
+            }
         case .switchFirst(let dashboardID):
+            traceStage = "dashboard check (switching to another saved dashboard)"
             // A chat link routed before a call started can reach here after
             // it did: switching dashboards would tear that call down.
             if target.isChatLink, isVoiceCallInProgress {
@@ -21019,8 +21066,10 @@ final class AppState: ObservableObject {
         case .failClosed(let failure):
             switch failure {
             case .unrecognizedDashboard:
+                traceStage = "dashboard check (unrecognized dashboard)"
                 errorMessage = AppLocalization.string("This notification belongs to a dashboard this device doesn't recognize. Add that dashboard again to continue.")
             case .unscopedPush:
+                traceStage = "dashboard check (unscoped push)"
                 errorMessage = AppLocalization.string("This notification predates multi-dashboard pairing. Update the notifier on the sending gateway and pair it again to continue.")
             }
             return .failed
