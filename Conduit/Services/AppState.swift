@@ -7632,6 +7632,12 @@ final class AppState: ObservableObject {
     /// runtime `liveVoiceThreadRuntime` already resolved.
     private func submitLiveVoiceThreadTurn(_ thread: VoiceThreadTarget, runtimeID: String, text: String) async throws -> String {
         guard let client else { throw HermesError.notConnected }
+        // Wanted only while the call that asked is still on: a hang-up
+        // during a takeover wait neither takes the chat nor sends it.
+        let call = voiceBackgroundJobSupervisor.liveCallID
+        let stillWanted: () -> Bool = { [weak self] in
+            call != nil && self?.voiceBackgroundJobSupervisor.liveCallID == call
+        }
         if isOpenChat(thread), let sessionID = activeSessionId {
             // A turn found running, here or by the composer's own stale-idle
             // probe, is waited for: never steered or interrupted.
@@ -7639,7 +7645,7 @@ final class AppState: ObservableObject {
             if !foundBusy {
                 submissionTurnSurface = (text, messageTurnSurface(spoken: true))
                 defer { submissionTurnSurface = nil }
-                let sent = await submitComposerForCall(text: text, onBusy: { foundBusy = true })
+                let sent = await submitComposerForCall(text: text, onBusy: { foundBusy = true }, stillWanted: stillWanted)
                 // The id captured before the send: the user may have moved to
                 // another chat while it was in flight.
                 if sent { return sessionID }
@@ -7664,7 +7670,8 @@ final class AppState: ObservableObject {
         await surfaceReport?.value
         let outcome = try await sendCallPromptTakingOver(
             runtimeID: target, otherSessionIDs: [thread.runtimeSessionID, thread.storedSessionID].compactMap { $0 },
-            profile: thread.profile
+            profile: thread.profile,
+            stillWanted: stillWanted
         ) {
             try await client.sendPrompt(target, text: text)
         }
@@ -22836,7 +22843,7 @@ final class AppState: ObservableObject {
               await takeOverChatForCall(stillWanted: stillWanted) else { return false }
         // The user may have opened another chat while it waited: the
         // request belongs to the chat that refused it, never that one.
-        guard stillWanted(), let current = activeSessionId,
+        guard !Task.isCancelled, stillWanted(), let current = activeSessionId,
               chatTakeoverGuardKey(current) == chatTakeoverGuardKey(sessionID) else { return false }
         return await submitComposer(text: text, onBusy: onBusy)
     }
