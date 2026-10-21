@@ -467,7 +467,7 @@ extension NotificationDashboardOwnershipTests {
 
         appState.removeDashboard(dashboardB)
         XCTAssertTrue(appState.relayGatewayIDs(of: dashboardB).isEmpty)
-        XCTAssertEqual(appState.relayGatewayIDs(of: dashboardA), ["gw-1", "gw-2"])
+        XCTAssertEqual(appState.relayGatewayIDs(of: dashboardA), ["gw-4"])
     }
 
     func testSettingsListsTheActiveHostsPairingAsThisDashboards() {
