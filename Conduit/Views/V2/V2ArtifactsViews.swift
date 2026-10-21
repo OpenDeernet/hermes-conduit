@@ -135,11 +135,13 @@ private struct ArtifactsList: View {
         .searchable(text: $query, prompt: Text("Search names and chats"))
         .refreshable { await reload() }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Toggle("Show Missing Files", isOn: $showMissing)
-                } label: {
-                    Label("More", systemImage: "ellipsis.circle")
+            if appState.supportsArtifacts {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Toggle("Show Missing Files", isOn: $showMissing)
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
                 }
             }
         }
