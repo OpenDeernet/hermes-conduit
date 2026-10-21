@@ -16,6 +16,7 @@ extension HermesClientTests {
         "daily": [[String: Any]]([
             ["day": "2026-10-20", "input_tokens": 1200, "output_tokens": 300, "estimated_cost": 0.02, "actual_cost": 0, "sessions": 2, "api_calls": 5] as [String: Any],
             ["day": "2026-10-18", "input_tokens": 800, "output_tokens": NSNull(), "estimated_cost": 0.01, "sessions": 1, "api_calls": 2] as [String: Any],
+            ["day": "2026-10-20", "input_tokens": 9, "output_tokens": 9] as [String: Any],
             ["day": "not a day", "input_tokens": 5] as [String: Any],
         ]),
         "by_model": [
@@ -42,6 +43,8 @@ extension HermesClientTests {
         // The unparseable day is dropped; the rest are oldest first.
         XCTAssertEqual(report.daily.map { UsageReport.dayFormatter.string(from: $0.date) }, ["2026-10-18", "2026-10-20"])
         XCTAssertEqual(report.daily.first?.usage.total, 800)
+        // A repeated day keeps its first row, so the chart's ids stay unique.
+        XCTAssertEqual(report.daily.last?.usage.total, 1500)
     }
 
     func testUsageReportPrefersTheModelsRouteAndFallsBackToByModel() {
@@ -84,6 +87,7 @@ extension HermesClientTests {
                 "usage": ["accounts": [
                     ["id": "a1", "label": "Work", "windows": [] as [[String: Any]], "state": "limited", "resets_at": "2026-10-23T00:00:00+00:00"] as [String: Any],
                     ["id": "", "label": "", "windows": [] as [[String: Any]], "state": "something-new"] as [String: Any],
+                    ["id": "a1", "label": "Twin", "windows": [] as [[String: Any]], "state": "ready"] as [String: Any],
                 ] as [[String: Any]]] as [String: Any],
                 "limit": ["scope": "models", "models": ["gpt-x": "2026-10-22T05:00:00+00:00"]] as [String: Any],
             ] as [String: Any],
@@ -104,8 +108,8 @@ extension HermesClientTests {
 
         let codex = quotas[1]
         XCTAssertEqual(codex.title, "openai-codex")
-        XCTAssertEqual(codex.accounts.map(\.id), ["a1", "account-1"])
-        XCTAssertEqual(codex.accounts.map(\.state), [.limited, .unknown])
+        XCTAssertEqual(codex.accounts.map(\.id), ["a1", "account-1", "account-2"])
+        XCTAssertEqual(codex.accounts.map(\.state), [.limited, .unknown, .ready])
         XCTAssertNotNil(codex.accounts[0].resetsAt)
         guard case .models(let limited) = codex.limit else { return XCTFail("expected a per-model limit") }
         XCTAssertEqual(limited.map(\.model), ["gpt-x"])

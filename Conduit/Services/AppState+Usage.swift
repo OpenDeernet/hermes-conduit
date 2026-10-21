@@ -14,6 +14,8 @@ enum UsageLoadError: Error, Equatable {
     case notConnected
     /// This Hermes has no analytics routes.
     case unsupported
+    /// The dashboard's sign-in lapsed; pulling down won't bring it back.
+    case signInRequired
     case failed
 }
 
@@ -26,6 +28,8 @@ extension AppState {
             usageResponse = try await bridge.requestJSON(path: UsageReport.path(UsageReport.usagePath, days: days, profile: profile))
         } catch let error as DashboardTicketBridgeError where GeminiLiveTokenClient.isMissingRoute(error) {
             throw UsageLoadError.unsupported
+        } catch DashboardTicketBridgeError.signInRequired {
+            throw UsageLoadError.signInRequired
         } catch is CancellationError {
             throw CancellationError()
         } catch {

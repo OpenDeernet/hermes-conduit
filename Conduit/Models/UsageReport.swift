@@ -24,6 +24,8 @@ struct UsageTokens: Equatable {
     var total: Int { input + output }
 
     /// What the provider billed when Hermes knows it, else Hermes' estimate.
+    /// Hermes sums a missing billed cost as 0 (COALESCE), so a reported $0
+    /// and an unreported one look the same; both fall back to the estimate.
     var cost: Double { actualCost > 0 ? actualCost : estimatedCost }
     var costIsEstimate: Bool { actualCost <= 0 }
 
@@ -91,8 +93,10 @@ struct UsageReport: Equatable {
     /// usage route's `by_model`, which credits a chat to its last model.
     static func parse(usage: [String: Any], models: [String: Any]?, days: Int) -> UsageReport {
         let totals = (usage["totals"] as? [String: Any]).map(UsageTokens.init(totals:)) ?? UsageTokens()
+        var seenDays = Set<Date>()
         let daily = (usage["daily"] as? [[String: Any]] ?? []).compactMap { row -> UsageDay? in
-            guard let day = row["day"] as? String, let date = dayFormatter.date(from: day) else { return nil }
+            guard let day = row["day"] as? String, let date = dayFormatter.date(from: day),
+                  seenDays.insert(date).inserted else { return nil }
             return UsageDay(date: date, usage: UsageTokens(row: row))
         }
         .sorted { $0.date < $1.date }
@@ -211,8 +215,12 @@ struct ProviderQuota: Equatable, Identifiable {
                   !slug.isEmpty, seen.insert(slug).inserted else { return nil }
             let usage = row["usage"] as? [String: Any] ?? [:]
             let windows = Self.windows(usage["windows"])
+            var accountIDs = Set<String>()
             let accounts = (usage["accounts"] as? [[String: Any]] ?? []).enumerated().compactMap { index, account -> QuotaAccount? in
-                let id = (account["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "account-\(index)"
+                // Ids name rows on screen, so a missing or repeated one gets its position.
+                let given = (account["id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                let id = given.flatMap { accountIDs.insert($0).inserted ? $0 : nil } ?? "account-\(index)"
+                accountIDs.insert(id)
                 return QuotaAccount(
                     id: id,
                     label: (account["label"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines),

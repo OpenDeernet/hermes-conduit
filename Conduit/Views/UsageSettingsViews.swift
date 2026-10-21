@@ -21,9 +21,21 @@ struct UsageSettingsDetail: View {
     @State private var isLoading = false
     /// Bumped by the Refresh button, which reruns the page's load task.
     @State private var refreshes = 0
+    /// What `report` and `quotas` were loaded for: another period, profile
+    /// or dashboard's numbers never stay up under this one.
+    @State private var scope: Scope?
+    /// The newest load. The page's task and a pull-down can overlap; only
+    /// the newest one writes its answer.
+    @State private var generation = 0
 
     private static let dayName = "Day"
     private static let tokensName = "Tokens"
+
+    private struct Scope: Equatable {
+        let days: Int
+        let profile: String
+        let dashboardID: UUID?
+    }
 
     private struct LoadKey: Equatable {
         let days: Int
@@ -42,6 +54,13 @@ struct UsageSettingsDetail: View {
             }
             .pickerStyle(.segmented)
             .accessibilityIdentifier("settings.usage.period")
+
+            if report != nil, let failure {
+                // A failed refresh says so over the numbers it couldn't renew.
+                Label(failureText(failure), systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
 
             if let report {
                 totalsSection(report)
@@ -93,28 +112,38 @@ struct UsageSettingsDetail: View {
     }
 
     private func load() async {
+        generation += 1
+        let mine = generation
+        let wanted = Scope(days: days, profile: appState.activeProfile, dashboardID: appState.activeDashboardID)
         isLoading = true
-        defer { isLoading = false }
-        let wanted = days
-        // A refresh keeps the last report up while it loads; another
-        // period's would mislabel the totals, so it goes.
-        if report?.days != wanted {
-            report = nil
-            failure = nil
+        defer {
+            if generation == mine { isLoading = false }
         }
-        do {
-            let loaded = try await appState.loadUsageReport(days: wanted)
-            guard !Task.isCancelled else { return }
-            report = loaded
+        if scope != wanted {
+            report = nil
+            quotas = nil
             failure = nil
+            scope = wanted
+        }
+        let result: Result<UsageReport, UsageLoadError>
+        do {
+            let loaded = try await appState.loadUsageReport(days: wanted.days)
+            result = .success(loaded)
         } catch is CancellationError {
             return
         } catch {
-            guard !Task.isCancelled else { return }
-            failure = error as? UsageLoadError ?? .failed
+            result = .failure(error as? UsageLoadError ?? .failed)
+        }
+        guard generation == mine, !Task.isCancelled else { return }
+        switch result {
+        case .success(let loaded):
+            report = loaded
+            failure = nil
+        case .failure(let error):
+            failure = error
         }
         let loadedQuotas = await appState.loadProviderQuotas()
-        guard !Task.isCancelled else { return }
+        guard generation == mine, !Task.isCancelled else { return }
         if let loadedQuotas { quotas = loadedQuotas }
     }
 
@@ -336,6 +365,7 @@ struct UsageSettingsDetail: View {
         switch failure {
         case .notConnected: return AppLocalization.string("Connect to Hermes to see usage.")
         case .unsupported: return AppLocalization.string("This Hermes doesn't report usage. Update Hermes to see it here.")
+        case .signInRequired: return AppLocalization.string("Sign in to this dashboard again to see usage.")
         case .failed: return AppLocalization.string("Couldn't load usage. Pull down to try again.")
         }
     }
@@ -348,6 +378,7 @@ struct UsageSettingsDetail: View {
         value.formatted(.number.locale(AppLocalization.formattingLocale))
     }
 
+    /// Hermes keeps cost in USD (`estimated_cost_usd`, `actual_cost_usd`).
     private func money(_ value: Double) -> String {
         // Cents hide most of a light month's spend; small sums keep more.
         let digits = value > 0 && value < 1 ? 2...4 : 2...2
