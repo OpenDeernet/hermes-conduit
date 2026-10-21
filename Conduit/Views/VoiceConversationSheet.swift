@@ -721,6 +721,11 @@ struct VoicePushToTalkControl<Face: View>: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var isPressed = false
     @State private var isCancelling = false
+    /// This touch already started a turn: a turn the controller ends under
+    /// the finger (a failed listen, teardown) isn't restarted by it.
+    @State private var claimedThisTouch = false
+    /// Where the finger was when the press was taken, for the cancel slide.
+    @State private var pressOrigin = CGSize.zero
 
     /// How far a finger slides off the button before letting go cancels.
     static var cancelDistance: CGFloat { 72 }
@@ -739,12 +744,19 @@ struct VoicePushToTalkControl<Face: View>: View {
                     .onChanged { value in
                         // A press that can't start yet (Hermes is answering)
                         // is retried as the finger moves, without feedback.
-                        if !isPressed, controller.pressPushToTalk() {
+                        if !isPressed, !claimedThisTouch, controller.pressPushToTalk() {
                             isPressed = true
+                            claimedThisTouch = true
+                            pressOrigin = value.translation
                             Haptics.medium()
+                            announceListening()
                         }
                         guard isPressed else { return }
-                        let cancelling = hypot(value.translation.width, value.translation.height) > Self.cancelDistance
+                        let slide = CGSize(
+                            width: value.translation.width - pressOrigin.width,
+                            height: value.translation.height - pressOrigin.height
+                        )
+                        let cancelling = hypot(slide.width, slide.height) > Self.cancelDistance
                         if cancelling != isCancelling {
                             isCancelling = cancelling
                             Haptics.selection()
@@ -754,14 +766,25 @@ struct VoicePushToTalkControl<Face: View>: View {
                         }
                     }
                     .onEnded { _ in
+                        claimedThisTouch = false
                         guard isPressed else { return }
                         let send = !isCancelling
                         isPressed = false
                         isCancelling = false
+                        // Feedback only when the release ends a hold.
+                        guard controller.isPushToTalkHeld else { return }
                         controller.endPushToTalk(send: send)
                         if send { Haptics.light() } else { Haptics.warning() }
                     }
             )
+            // The controller ended the turn under the finger: the button
+            // stops looking pressed.
+            .onChange(of: controller.isPushToTalkHeld) { _, held in
+                if !held, isPressed {
+                    isPressed = false
+                    isCancelling = false
+                }
+            }
             // A sheet closing under a held finger, or a touch the system
             // takes away (a call, the app switcher), never sends.
             .onDisappear { cancelHeldPress() }
@@ -777,8 +800,8 @@ struct VoicePushToTalkControl<Face: View>: View {
             .accessibilityAction {
                 if controller.isPushToTalkHeld {
                     controller.endPushToTalk(send: true, minimumHold: false)
-                } else {
-                    controller.pressPushToTalk()
+                } else if controller.pressPushToTalk() {
+                    announceListening()
                 }
             }
             .accessibilityActions {
@@ -794,6 +817,10 @@ struct VoicePushToTalkControl<Face: View>: View {
         if controller.state == .transcribing { return AppLocalization.string("Transcribing") }
         guard controller.isPushToTalkHeld else { return AppLocalization.string("Start talking") }
         return isCancelling ? AppLocalization.string("Let go to cancel") : AppLocalization.string("Send")
+    }
+
+    private func announceListening() {
+        AccessibilityNotification.Announcement(AppLocalization.string("Listening")).post()
     }
 
     private func cancelHeldPress() {
