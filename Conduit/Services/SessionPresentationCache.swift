@@ -157,8 +157,9 @@ final class SessionPresentationCache {
     /// instance on the same defaults, a test fixture) is still picked up.
     private var memoryStoreData: Data?
     private var memoryPendingToolsData: Data?
-    /// Guards the memory copies above. Today every caller is on the main
-    /// actor, but the type itself doesn't enforce that.
+    /// Guards the memory copies above. Callers are on the main actor,
+    /// except `prewarm()`, which decodes on a background queue outside the
+    /// lock and installs its result under it.
     private let memoryLock = NSLock()
     /// Removals the stores on disk may not reflect yet (asynchronous mode),
     /// each with the write ticket both stores must reach before it can be
