@@ -737,8 +737,13 @@ final class CarPlayVoiceCoordinator {
             let shownBefore = shownState
             let wasPresented = isTemplatePresented
             noteErrorIssue()
-            // A named fix replaces an earlier unnamed failure on the phone.
-            if controls.errorIssue == nil { showFailureOnPhone(failure) } else { clearFailureOnPhone() }
+            // A named fix, or a failure with nothing to say, replaces an
+            // earlier unnamed failure on the phone.
+            if controls.errorIssue == nil, let failure = usableFailure(failure) {
+                showFailureOnPhone(failure)
+            } else {
+                clearFailureOnPhone()
+            }
             if wasPresented, !isTemplatePresented { replacedFrom = shownBefore }
         } else {
             clearFailureOnPhone()
@@ -782,11 +787,15 @@ final class CarPlayVoiceCoordinator {
     /// A failure the car can only call "Something went wrong. See your
     /// iPhone." A call started in the car has no call screen on the phone,
     /// so without this the phone showed nothing.
-    private func showFailureOnPhone(_ message: String?) {
-        guard let message = message?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !message.isEmpty, message != shownPhoneFailure else { return }
+    private func showFailureOnPhone(_ message: String) {
+        guard message != shownPhoneFailure else { return }
         (lastBoundAppState ?? appStateProvider()).showCarPlayFailure(message, phoneOnScreen: phoneScreenProvider())
         shownPhoneFailure = message
+    }
+
+    private func usableFailure(_ message: String?) -> String? {
+        guard let message = message?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty else { return nil }
+        return message
     }
 
     /// The car moved on from the failure (a new call, Ready again): the

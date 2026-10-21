@@ -3190,6 +3190,17 @@ extension CarPlayVoiceCoordinatorTests {
         XCTAssertEqual(harness.appState.pinSyncNotice?.message, "Couldn't pin the chat.")
     }
 
+    func testAFailureWithNothingToSayClearsAnEarlierOne() async {
+        let harness = makeHarness()
+        harness.coordinator.handleConnect(harness.spy)
+        await harness.coordinator.waitForPresentation()
+        harness.coordinator.handleControllerState(.failed("Hermes didn't answer."))
+
+        harness.coordinator.handleControllerState(.failed(""))
+
+        XCTAssertNil(harness.appState.pinSyncNotice, "the earlier failure isn't this one")
+    }
+
     func testAFailureWhileThePhoneIsOffScreenShowsWhenItComesOn() async {
         let harness = makeHarness()
         harness.coordinator.phoneScreenProvider = { false }
