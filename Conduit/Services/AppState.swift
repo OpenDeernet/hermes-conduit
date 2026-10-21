@@ -24662,12 +24662,15 @@ final class AppState: ObservableObject {
             : AppLocalization.string("There's no message to undo.")
         let receipt: SessionRewindReceipt
         let target: SessionRewindSnapshot.Turn
+        // A bot chat's transcript lives in the bot profile's store; any
+        // other chat's in the workspace's, which needs no profile.
+        let profile = botScopeProfile(forSessionIDs: [sessionID], workspaceProfile: activeProfile)
         do {
             let snapshot: SessionRewindSnapshot
             if let rewindSnapshot = chatResumeLifecycleOperations.rewindSnapshot {
                 snapshot = try await rewindSnapshot(client, sessionID)
             } else {
-                snapshot = try await client.rewindSnapshot(sessionId: sessionID)
+                snapshot = try await client.rewindSnapshot(sessionId: sessionID, profile: profile)
             }
             guard isCurrentComposerSubmission(context) else { return true }
             guard snapshot.turns.count >= turnCount else {
@@ -24683,7 +24686,12 @@ final class AppState: ObservableObject {
             if let rewindSession = chatResumeLifecycleOperations.rewindSession {
                 receipt = try await rewindSession(client, sessionID, target.rowID, snapshot)
             } else {
-                receipt = try await client.rewindSession(sessionId: sessionID, targetMessageID: target.rowID, snapshot: snapshot)
+                receipt = try await client.rewindSession(
+                    sessionId: sessionID,
+                    targetMessageID: target.rowID,
+                    snapshot: snapshot,
+                    profile: profile
+                )
             }
         } catch where HermesClient.isMissingRPCMethod(error) {
             return false
@@ -24701,8 +24709,17 @@ final class AppState: ObservableObject {
         guard reopened != .superseded else { return true }
         let text = receipt.text ?? target.text ?? ""
         let current = composerSubmissionContext()
-        // A chat that didn't open again keeps a /retry's words as an /undo's.
-        if retry, reopened == .opened {
+        if reopened == .failed {
+            // Taken back, but the chat on screen still shows it: say so,
+            // and keep the words (a /retry's too) in the composer.
+            appendSlashOutput(
+                AppLocalization.string("Took the message back, but the chat couldn't reload. Open it again to see the change. The message is in the composer."),
+                context: current
+            )
+            if !text.isEmpty { prefillComposer(text) }
+            return true
+        }
+        if retry {
             _ = await performComposerSubmission(
                 text: text,
                 attachments: [],

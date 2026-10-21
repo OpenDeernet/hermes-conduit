@@ -2927,9 +2927,10 @@ final class HermesClient: ObservableObject {
 
     /// What `/undo` and `/retry` rewind from: the session's user turns and
     /// the fences a rewind must present, read from one `session.resume`
-    /// like Hermes' own clients do.
-    func rewindSnapshot(sessionId: String) async throws -> SessionRewindSnapshot {
-        let object = try await resumeSessionObject(sessionId, omitMessages: false)
+    /// like Hermes' own clients do. `profile` opens a bot chat's store, as
+    /// for any resume.
+    func rewindSnapshot(sessionId: String, profile: String? = nil) async throws -> SessionRewindSnapshot {
+        let object = try await resumeSessionObject(sessionId, omitMessages: false, profile: profile)
         return SessionRewindSnapshot(resume: object)
     }
 
@@ -2940,7 +2941,8 @@ final class HermesClient: ObservableObject {
     func rewindSession(
         sessionId: String,
         targetMessageID: Int,
-        snapshot: SessionRewindSnapshot
+        snapshot: SessionRewindSnapshot,
+        profile: String? = nil
     ) async throws -> SessionRewindReceipt {
         var params: [String: Any] = [
             "session_id": sessionId,
@@ -2950,6 +2952,9 @@ final class HermesClient: ObservableObject {
         ]
         if let revision = snapshot.revision { params["expected_revision"] = revision }
         if let generation = snapshot.generation { params["expected_generation"] = generation }
+        if let profile, !profile.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            params["profile"] = profile
+        }
         let result = try await rpc("session.mutate", params: params)
         return SessionRewindReceipt(result: result)
     }
