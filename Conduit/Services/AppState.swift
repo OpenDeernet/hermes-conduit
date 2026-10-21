@@ -22754,12 +22754,13 @@ final class AppState: ObservableObject {
         state: ChatTakeoverState,
         profile: String,
         pollInterval: Duration = chatTakeoverPollInterval,
-        waitLimit: TimeInterval = chatTakeoverWaitLimit
+        waitLimit: TimeInterval = chatTakeoverWaitLimit,
+        keepWaiting: () -> Bool = { true }
     ) async -> ChatTakeoverState.Phase? {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(waitLimit))
         var transientFailures = 0
-        while !Task.isCancelled {
+        while !Task.isCancelled, keepWaiting() {
             do {
                 switch try await client.takeOver(sessionIDs: state.sessionIDs, profile: profile) {
                 case .ready:
@@ -22808,7 +22809,7 @@ final class AppState: ObservableObject {
 
     /// How long a call's request waits for the other app's reply to finish
     /// before the call says the chat is still busy there.
-    static let callChatTakeoverWaitLimit: TimeInterval = 60
+    static let callChatTakeoverWaitLimit: TimeInterval = 20
 
     /// A call's request sent through the composer: Classic voice, Local
     /// Live, and the live modes' requests in the open chat. Hermes refuses
@@ -22823,7 +22824,7 @@ final class AppState: ObservableObject {
     func submitComposerForCall(
         text: String,
         onBusy: (() -> Void)? = nil,
-        stillWanted: () -> Bool = { true }
+        stillWanted: @escaping () -> Bool = { true }
     ) async -> Bool {
         callSubmissionTexts.append(text)
         defer {
@@ -22832,7 +22833,7 @@ final class AppState: ObservableObject {
         if await submitComposer(text: text, onBusy: onBusy) { return true }
         guard let sessionID = activeSessionId, chatTakeoverMatches(sessionID),
               let refused = chatTakeover, refused.phase == .offered, refused.isRefusedMessage(text),
-              await takeOverChatForCall() else { return false }
+              await takeOverChatForCall(stillWanted: stillWanted) else { return false }
         // The user may have opened another chat while it waited: the
         // request belongs to the chat that refused it, never that one.
         guard stillWanted(), let current = activeSessionId,
@@ -22845,7 +22846,7 @@ final class AppState: ObservableObject {
     /// notice keeps the outcome for the composer. Each request takes over
     /// once at most, so it needs no loop guard, and a later request can
     /// try again once the user fixed what stopped this one.
-    private func takeOverChatForCall() async -> Bool {
+    private func takeOverChatForCall(stillWanted: @escaping () -> Bool) async -> Bool {
         guard var state = chatTakeover, state.phase == .offered else { return false }
         chatTakeoverTask?.cancel()
         chatTakeoverTask = nil
@@ -22855,7 +22856,10 @@ final class AppState: ObservableObject {
         let profile = activeProfile
         let waiting = state
         let wait = Task { () -> ChatTakeoverState.Phase? in
-            await Self.runChatTakeover(client: client, state: waiting, profile: profile, waitLimit: Self.callChatTakeoverWaitLimit)
+            await Self.runChatTakeover(
+                client: client, state: waiting, profile: profile, waitLimit: Self.callChatTakeoverWaitLimit,
+                keepWaiting: stillWanted
+            )
         }
         // Held as the takeover's task, so dismissing the notice (or a profile
         // or dashboard switch) stops the wait as it does the composer's.
@@ -22901,10 +22905,12 @@ final class AppState: ObservableObject {
                 ids.append(id)
             }
             var state = ChatTakeoverState(sessionID: runtimeID, sessionIDs: ids, surface: details.surface, phase: .offered)
+            // What a refusal of the resend says: the other app holds it again.
+            let refusedAgainMessage = state.openElsewhereMessage
             // Nil: the call ended while it waited, so there's no refusal to report.
             guard let phase = await Self.runChatTakeover(
                 client: chatTakeoverClient, state: state, profile: profile ?? activeProfile,
-                waitLimit: Self.callChatTakeoverWaitLimit
+                waitLimit: Self.callChatTakeoverWaitLimit, keepWaiting: stillWanted
             ) else { throw CancellationError() }
             state.phase = phase
             guard state.phase == .ready else { throw VoiceAudioError.unavailable(state.callRefusalMessage) }
@@ -22917,7 +22923,7 @@ final class AppState: ObservableObject {
                 return try await send()
             } catch let again as RpcError where again.isSessionNotOwned {
                 // The other app took it straight back: no third try.
-                throw VoiceAudioError.unavailable(state.callRefusalMessage)
+                throw VoiceAudioError.unavailable(refusedAgainMessage)
             }
         }
     }
