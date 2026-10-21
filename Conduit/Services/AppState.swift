@@ -30281,7 +30281,8 @@ final class AppState: ObservableObject {
                 let existing = messages[index].tool
                 messages[index].tool = ToolActivity(
                     id: stableToolID ?? existing?.id,
-                    name: name,
+                    // A completion that names no tool keeps the card's name.
+                    name: name.isEmpty ? (existing?.name ?? name) : name,
                     input: existing?.input,
                     output: output,
                     status: .complete,
