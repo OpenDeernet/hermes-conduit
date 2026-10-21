@@ -15680,6 +15680,14 @@ final class AppState: ObservableObject {
     /// When its already-persisted prefix is also present in the recovered
     /// transcript, rendering it as the live bubble repeats the last reply.
     /// Keep only the unpersisted suffix so the next delta continues naturally.
+    ///
+    /// Hermes' projection is every delta of the turn, all of its steps run
+    /// together, while each step's text is saved as its own row before the
+    /// step's tools run. So the text of every saved step of the running turn
+    /// (the assistant rows after its prompt) comes off, in order; what is
+    /// left is the step still being written. Without this, rejoining a turn
+    /// a few steps in put the whole turn's text in one live bubble below
+    /// its own tool cards.
     nonisolated static func unpersistedInflightAssistantText(
         _ inflight: String,
         after messages: [ChatMessage]
@@ -15699,7 +15707,75 @@ final class AppState: ObservableObject {
             return String(recovered.dropFirst(persisted.count))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return recovered
+
+        // Only the running turn's own steps: an earlier turn's reply can
+        // repeat a phrase this turn writes, and must not cut it.
+        guard let promptIndex = messages.lastIndex(where: { $0.role == .user }) else {
+            return recovered
+        }
+        let savedSteps = messages[messages.index(after: promptIndex)...]
+            .filter { $0.role == .assistant }
+            .map { $0.content.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        var cursor = recovered.startIndex
+        for step in savedSteps {
+            // A step the projection doesn't show (reworded when saved) is
+            // passed over; the steps after it still place the cut.
+            if let end = endOfInflightStep(step, in: recovered, from: cursor) {
+                cursor = end
+            }
+        }
+        guard cursor > recovered.startIndex else { return recovered }
+        return String(recovered[cursor...]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Where `step` ends in `text`, searching from `start`. Whitespace is
+    /// not compared: a saved step is trimmed, and its line breaks may not be
+    /// the streamed ones.
+    nonisolated static func endOfInflightStep(
+        _ step: String,
+        in text: String,
+        from start: String.Index
+    ) -> String.Index? {
+        if let range = text.range(of: step, range: start..<text.endIndex) {
+            return range.upperBound
+        }
+        let needle = step.filter { !$0.isWhitespace }
+        guard !needle.isEmpty else { return nil }
+        // The text's visible characters, each with the index just past it.
+        var haystack: [Character] = []
+        var ends: [String.Index] = []
+        var index = start
+        while index < text.endIndex {
+            let next = text.index(after: index)
+            if !text[index].isWhitespace {
+                haystack.append(text[index])
+                ends.append(next)
+            }
+            index = next
+        }
+        guard let last = firstMatchEnd(of: Array(needle), in: haystack) else { return nil }
+        return ends[last]
+    }
+
+    /// Knuth–Morris–Pratt: the haystack position of the first match's last
+    /// character.
+    private nonisolated static func firstMatchEnd(of needle: [Character], in haystack: [Character]) -> Int? {
+        guard !needle.isEmpty, needle.count <= haystack.count else { return nil }
+        var failure = [Int](repeating: 0, count: needle.count)
+        var matched = 0
+        for position in 1..<needle.count {
+            while matched > 0, needle[position] != needle[matched] { matched = failure[matched - 1] }
+            if needle[position] == needle[matched] { matched += 1 }
+            failure[position] = matched
+        }
+        matched = 0
+        for (position, character) in haystack.enumerated() {
+            while matched > 0, character != needle[matched] { matched = failure[matched - 1] }
+            if character == needle[matched] { matched += 1 }
+            if matched == needle.count { return position }
+        }
+        return nil
     }
 
     private func canonicalSessionID(for sessionID: String?) -> String? {

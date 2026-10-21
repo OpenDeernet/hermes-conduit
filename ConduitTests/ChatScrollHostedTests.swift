@@ -315,6 +315,27 @@ final class ChatScrollHostedTests: XCTestCase {
         }
     }
 
+    func testARunningReplyOpenedAgainShowsWhatWasWrittenAtOnce() throws {
+        // Opening a chat whose reply is still running seeds the live bubble
+        // with everything written so far. It must not be typed out again:
+        // only its newest characters fade in.
+        let mounted = try mount(Self.transcript(0..<40))
+        mounted.appState.setStreamingTextForTesting(String(
+            repeating: "Everything the reply wrote before the chat was opened again. ",
+            count: 50
+        ))
+        settle(mounted.host.view, seconds: 0.2)
+        let shownAtOnce = mounted.scrollView.contentSize.height
+        settle(mounted.host.view, seconds: 1.0)
+        let shownLater = mounted.scrollView.contentSize.height
+        XCTAssertLessThan(
+            shownLater - shownAtOnce,
+            80,
+            "the written reply showed at once (\(shownAtOnce) then \(shownLater) pt)"
+        )
+        assertAtLatest(mounted, "the reopened reply is followed")
+    }
+
     func testAReaderScrolledUpIsNotMovedByNewMessages() throws {
         let mounted = try mount(Self.transcript(0..<120))
         browse(mounted, to: mounted.scrollView.contentOffset.y - 1500)
