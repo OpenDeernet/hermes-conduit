@@ -174,8 +174,9 @@ final class ArtifactsClient {
         guard response["ok"] as? Bool == true, let rows = response["items"] as? [[String: Any]] else {
             throw Failure.malformed
         }
-        // An older plugin lists missing files whatever it was asked.
-        let items = rows.compactMap(ArtifactItem.init).filter { showMissing || $0.exists }
+        // An older plugin lists missing files whatever it was asked. A link
+        // has no file, so it always stays.
+        let items = rows.compactMap(ArtifactItem.init).filter { showMissing || $0.exists || $0.path == nil }
         // Each artifact once, so list identity holds whatever the host sends.
         return ArtifactPage(items: merged([], with: items), nextBefore: response["next_before"] as? Int)
     }

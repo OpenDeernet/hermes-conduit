@@ -216,22 +216,21 @@ private struct ArtifactsList: View {
             unavailable(title: Text("Artifacts couldn't load"), detail: Text(verbatim: failure),
                         symbol: "exclamationmark.triangle", retry: true)
         } else if items.isEmpty, nextBefore == nil {
-            if currentKey.query.isEmpty && filter == .all && !showMissing {
+            // Hidden missing files may be all there is, so the way back
+            // is offered under either message.
+            let hiddenNote = showMissing ? Text(verbatim: "")
+                : Text(verbatim: " ") + Text("Files no longer on your Hermes host are hidden.")
+            if currentKey.query.isEmpty && filter == .all {
                 unavailable(
                     title: Text("No Artifacts Yet"),
-                    detail: Text("Files no longer on your Hermes host are hidden."),
+                    detail: Text("Files Hermes sends or writes, pages it draws, files you attach and links show up here.")
+                        + hiddenNote,
                     symbol: "square.grid.2x2",
-                    showMissingAction: true
-                )
-            } else if currentKey.query.isEmpty && filter == .all {
-                unavailable(
-                    title: Text("No Artifacts Yet"),
-                    detail: Text("Files Hermes sends or writes, pages it draws, files you attach and links show up here."),
-                    symbol: "square.grid.2x2"
+                    showMissingAction: !showMissing
                 )
             } else {
-                unavailable(title: Text("No Results"), detail: Text("Nothing here matches."),
-                            symbol: "magnifyingglass")
+                unavailable(title: Text("No Results"), detail: Text("Nothing here matches.") + hiddenNote,
+                            symbol: "magnifyingglass", showMissingAction: !showMissing)
             }
         } else {
             ForEach(ArtifactsClient.days(items)) { day in
@@ -338,6 +337,9 @@ private struct ArtifactsList: View {
                             .padding(.vertical, 3)
                             .background(.black.opacity(0.6), in: Capsule())
                             .padding(5)
+                            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+                            // The tile's label says it already.
+                            .accessibilityHidden(true)
                     }
                 }
                 .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
