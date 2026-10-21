@@ -243,6 +243,7 @@ final class SyncedPreferencesController: ObservableObject {
     /// A local change waits this long for others before it uploads.
     var debounce: Duration = .seconds(2)
     private var pendingUpload: Task<Void, Never>?
+    private var heldRetry: Task<Void, Never>?
     private var defaultsObserver: NSObjectProtocol?
     private var syncing = false
     /// The round owed to a call that came while one was running; a copy
@@ -261,6 +262,8 @@ final class SyncedPreferencesController: ObservableObject {
         if !enabled {
             pendingUpload?.cancel()
             pendingUpload = nil
+            heldRetry?.cancel()
+            heldRetry = nil
             status = .idle
         }
     }
@@ -333,6 +336,25 @@ final class SyncedPreferencesController: ObservableObject {
                     if self.uploadGeneration == generation { self.pendingUpload = nil }
                     guard !Task.isCancelled else { return }
                     await upload()
+                }
+            }
+        }
+    }
+
+    /// Syncs again once `isHeld` reads false, for a host value held back
+    /// while a call ran: nothing else is owed then, so no other trigger
+    /// would bring it. Checks every `interval`; one wait at a time.
+    func syncWhenReleased(interval: Duration = .seconds(15), isHeld: @escaping @MainActor () -> Bool,
+                          _ sync: @escaping @MainActor () async -> Void) {
+        guard heldRetry == nil else { return }
+        heldRetry = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard let self, self.isEnabled, !Task.isCancelled else { return }
+                if !isHeld() {
+                    self.heldRetry = nil
+                    await sync()
+                    return
                 }
             }
         }

@@ -88,6 +88,8 @@ extension AppState {
             let changes = SyncedPreferencesEngine.changes(slots: slots, ledger: ledger, host: host, start: start)
             if onlyIfChanged, let ledger, ledger.held?.isEmpty ?? true, changes.isEmpty { return }
             controller.status = .syncing
+            // Sent even with nothing to upload: the answer is the host's
+            // current set, which is what gets applied.
             let response = try await bridge.requestJSON(path: path, method: "PUT", body: [
                 "installation_id": agentSettings.installationID,
                 "device": SyncedPreferencesController.deviceName,
@@ -103,6 +105,11 @@ extension AppState {
                 slots: slots, uploaded: Set(changes.keys), ledger: ledger, before: before
             )
             controller.setLedger(entry, for: scope)
+            if !(entry.held?.isEmpty ?? true) {
+                controller.syncWhenReleased(isHeld: { [weak self] in self?.holdsSyncedVoicePreferences ?? false }) { [weak self] in
+                    await self?.syncPreferences()
+                }
+            }
             controller.status = .synced(entry.syncedAt ?? Date())
         } catch {
             guard isCurrent() else { return }

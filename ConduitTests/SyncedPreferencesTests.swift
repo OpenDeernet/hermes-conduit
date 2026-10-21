@@ -194,4 +194,16 @@ extension ChatReadStateTests {
         XCTAssertTrue(controller.begin())
         XCTAssertNil(controller.end())
     }
+
+    @MainActor
+    func testSyncedHeldValueSyncsOnceTheCallEnds() async {
+        let controller = SyncedPreferencesController(defaults: syncedDefaults())
+        controller.setEnabled(true)
+        var held = true
+        let synced = expectation(description: "synced after release")
+        controller.syncWhenReleased(interval: .milliseconds(10), isHeld: { held }) { synced.fulfill() }
+        try? await Task.sleep(for: .milliseconds(50))
+        held = false
+        await fulfillment(of: [synced], timeout: 5)
+    }
 }
