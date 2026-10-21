@@ -16,6 +16,7 @@ struct SyncedPreferencesSettingsDetail: View {
     @State private var choosingStart = false
     @State private var confirmingCopy = false
     @State private var checkingHost = false
+    @State private var turningOn: Task<Void, Never>?
 
     var body: some View {
         SettingsDetailContainer {
@@ -84,6 +85,10 @@ struct SyncedPreferencesSettingsDetail: View {
             }
         }
         .navigationTitle(AppLocalization.string("Sync across devices"))
+        .onDisappear {
+            turningOn?.cancel()
+            checkingHost = false
+        }
         .task(id: appState.activeDashboardID) {
             await appState.syncPreferences()
         }
@@ -116,9 +121,11 @@ struct SyncedPreferencesSettingsDetail: View {
 
     private func turnOn() {
         checkingHost = true
-        Task {
+        turningOn = Task {
             let hostHasValues = await appState.hostHasSyncedPreferences()
             checkingHost = false
+            // Left the page meanwhile: sync stays off.
+            guard !Task.isCancelled else { return }
             if hostHasValues == true {
                 choosingStart = true
             } else {

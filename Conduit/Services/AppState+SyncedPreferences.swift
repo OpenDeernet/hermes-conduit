@@ -86,7 +86,9 @@ extension AppState {
             }
             let before = SyncedPreferencesEngine.snapshot(slots)
             let changes = SyncedPreferencesEngine.changes(slots: slots, ledger: ledger, host: host, start: start)
-            if onlyIfChanged, let ledger, ledger.held?.isEmpty ?? true, changes.isEmpty { return }
+            // A value held back during a call isn't owed here: syncWhenReleased
+            // brings it once the call ends.
+            if onlyIfChanged, ledger != nil, changes.isEmpty { return }
             controller.status = .syncing
             // Sent even with nothing to upload: the answer is the host's
             // current set, which is what gets applied.

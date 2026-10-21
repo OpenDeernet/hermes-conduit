@@ -104,7 +104,7 @@ struct SyncedPreferencesLedgerEntry: Codable, Equatable {
     var lastLocal: [String: String] = [:]
     var syncedAt: Date?
     /// Keys whose host value differed but was held back (a call was
-    /// running): the next sync must ask the host even with nothing to upload.
+    /// running): the controller syncs again once the call ends.
     var held: Set<String>?
 }
 
