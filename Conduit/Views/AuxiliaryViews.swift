@@ -1644,10 +1644,10 @@ struct ChatSettingsDetail: View {
     }
 }
 
-/// Local, device-only chat text-size preference (issue #85). Stored in
-/// UserDefaults via @AppStorage with the same lifetime as
-/// ComposerReturnKey — never part of the Hermes profile configuration and
-/// never synchronized anywhere. A five-position stepped slider: the change
+/// Chat text-size preference (issue #85). Stored in UserDefaults via
+/// @AppStorage with the same lifetime as ComposerReturnKey — never part of
+/// the Hermes profile configuration, and shared only by Sync across
+/// devices. A five-position stepped slider: the change
 /// is live (the visible transcript re-renders as the slider moves), there
 /// is no Save button, and `Default` keeps today's appearance.
 private struct ChatTextSizeSettings: View {
@@ -1737,18 +1737,6 @@ private struct ChatFontStyleSettings: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
                 .conduitGlassSurface(cornerRadius: 14, tint: .clear)
-        }
-    }
-}
-
-private extension ChatFontStyle {
-    /// The same design for SwiftUI text, for the preview.
-    var fontDesign: Font.Design {
-        switch self {
-        case .standard: .default
-        case .rounded: .rounded
-        case .serif: .serif
-        case .mono: .monospaced
         }
     }
 }
@@ -3294,6 +3282,13 @@ private struct AccentColorPicker: View {
             set: { color in
                 var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
                 UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+                // The picker can hand back Display P3; stored components are sRGB.
+                let srgb = CGColorSpace(name: CGColorSpace.sRGB).flatMap {
+                    UIColor(color).cgColor.converted(to: $0, intent: .defaultIntent, options: nil)
+                }
+                if let components = srgb?.components, components.count >= 3 {
+                    (red, green, blue) = (components[0], components[1], components[2])
+                }
                 let pick = CustomAccentColor(red: red, green: green, blue: blue)
                 guard selection != .custom(pick) else { return }
                 if !isCustom { Haptics.selection() }

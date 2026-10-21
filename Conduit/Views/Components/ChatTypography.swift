@@ -4,10 +4,12 @@
 //
 //  Central authority for transcript-content typography (issue #85).
 //
-//  The chat text-size preference is a local, device-only presentation
-//  setting backed by UserDefaults via @AppStorage (the same pattern as
-//  ComposerReturnKey). It is never synchronized to Hermes, profiles, the
-//  gateway, or any backend configuration.
+//  The chat text-size and text-style preferences are presentation settings
+//  backed by UserDefaults via @AppStorage (the same pattern as
+//  ComposerReturnKey). They stay on the device unless Settings > Sync
+//  across devices shares them through the Conduit plugin
+//  (AppState+SyncedPreferences); they never reach Hermes's own profile or
+//  gateway configuration.
 //
 //  The selected size is a FIRST-CLASS rendering input that AUGMENTS — never
 //  replaces — iOS Dynamic Type: every transcript font resolves as
@@ -93,6 +95,17 @@ enum ChatFontStyle: String, CaseIterable, Equatable {
         }
     }
 
+    /// The same design for SwiftUI text: list markers and the Settings
+    /// preview.
+    var fontDesign: Font.Design {
+        switch self {
+        case .standard: .default
+        case .rounded: .rounded
+        case .serif: .serif
+        case .mono: .monospaced
+        }
+    }
+
     var design: UIFontDescriptor.SystemDesign {
         switch self {
         case .standard: .default
@@ -131,7 +144,7 @@ struct ChatTextAppearance: Hashable {
 /// resolve through here so settled Markdown, streaming Markdown, tables,
 /// code, large documents, and source cards agree at the selected size.
 enum ChatTypography {
-    /// Local, device-only preference key. Namespaced like ComposerReturnKey.
+    /// The size's preference key. Namespaced like ComposerReturnKey.
     static let preferenceKey = "conduit.chatTextSize"
 
     /// Initial/fallback value: existing users keep today's appearance.
@@ -152,7 +165,7 @@ enum ChatTypography {
         resolve(rawValue: defaults.object(forKey: preferenceKey) as? Int)
     }
 
-    /// Local preference key for the chat text style, beside the size's.
+    /// The chat text style's preference key, beside the size's.
     static let fontStylePreferenceKey = "conduit.chatFontStyle"
 
     /// A missing or unknown stored style (a newer app's) reads as the

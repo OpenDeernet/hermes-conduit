@@ -19,8 +19,16 @@ struct CustomAccentColor: Hashable, Sendable {
     let green: Int
     let blue: Int
 
+    /// The dark-mode accent: text and tint on the dark backdrop, lightened
+    /// until it reads there.
+    let darkShade: RGB
+    /// The light-mode accent, and the fill of sent bubbles in both modes:
+    /// darkened until it reads on the light backdrop, which also gives
+    /// white bubble text its 4.5:1.
+    let lightShade: RGB
+
     /// An sRGB colour, components 0...1.
-    struct RGB: Equatable, Sendable {
+    struct RGB: Hashable, Sendable {
         var red: Double
         var green: Double
         var blue: Double
@@ -29,9 +37,7 @@ struct CustomAccentColor: Hashable, Sendable {
     /// The pick from components 0...1, rounded to what's stored.
     init(red: Double, green: Double, blue: Double) {
         func byte(_ value: Double) -> Int { Int((min(max(value, 0), 1) * 255).rounded()) }
-        self.red = byte(red)
-        self.green = byte(green)
-        self.blue = byte(blue)
+        self.init(bytes: byte(red), byte(green), byte(blue))
     }
 
     /// "#RRGGBB", as stored under the accent's key in place of a preset's
@@ -39,9 +45,34 @@ struct CustomAccentColor: Hashable, Sendable {
     init?(hex: String) {
         guard hex.count == 7, hex.hasPrefix("#"),
               let value = Int(hex.dropFirst(), radix: 16) else { return nil }
-        red = (value >> 16) & 0xFF
-        green = (value >> 8) & 0xFF
-        blue = value & 0xFF
+        self.init(bytes: (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF)
+    }
+
+    /// The shades are worked out once here: the dynamic accent colours
+    /// read them on every resolution.
+    private init(bytes red: Int, _ green: Int, _ blue: Int) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+        let picked = RGB(red: Double(red) / 255, green: Double(green) / 255, blue: Double(blue) / 255)
+        darkShade = Self.adjusted(picked, lighter: true) {
+            Self.contrast($0, Self.darkBackdrop) >= Self.minimumContrast
+        }
+        lightShade = Self.adjusted(picked, lighter: false) {
+            Self.contrast($0, Self.lightBackdrop) >= Self.minimumContrast
+                && Self.contrast($0, Self.white) >= Self.minimumContrast
+        }
+    }
+
+    /// Picks compare by what's stored; the shades follow from it.
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        (lhs.red, lhs.green, lhs.blue) == (rhs.red, rhs.green, rhs.blue)
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(red)
+        hasher.combine(green)
+        hasher.combine(blue)
     }
 
     var hex: String { String(format: "#%02X%02X%02X", red, green, blue) }
@@ -57,22 +88,6 @@ struct CustomAccentColor: Hashable, Sendable {
     static let lightBackdrop = RGB(red: 0.94, green: 0.95, blue: 0.98)
     static let white = RGB(red: 1, green: 1, blue: 1)
     static let minimumContrast = 4.5
-
-    /// The dark-mode accent: text and tint on the dark backdrop, lightened
-    /// until it reads there.
-    var darkShade: RGB {
-        Self.adjusted(picked, lighter: true) { Self.contrast($0, Self.darkBackdrop) >= Self.minimumContrast }
-    }
-
-    /// The light-mode accent, and the fill of sent bubbles in both modes:
-    /// darkened until it reads on the light backdrop, which also gives
-    /// white bubble text its 4.5:1.
-    var lightShade: RGB {
-        Self.adjusted(picked, lighter: false) {
-            Self.contrast($0, Self.lightBackdrop) >= Self.minimumContrast
-                && Self.contrast($0, Self.white) >= Self.minimumContrast
-        }
-    }
 
     /// The lighter companion shades (`conduitAccentSoft`), as the presets
     /// have: a step towards white.

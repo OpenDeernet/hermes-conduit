@@ -182,7 +182,11 @@ enum MarkdownProseRun {
         let markerColor = usesAccentSurface
             ? UIColor.white.withAlphaComponent(0.92)
             : UIColor(Color.conduitAccent)
-        let markerFont = UIFont.systemFont(ofSize: bodyFont.pointSize, weight: .semibold)
+        let markerFont = ChatTypography.styled(
+            UIFont.systemFont(ofSize: bodyFont.pointSize, weight: .semibold),
+            role: .body,
+            style: chatTextSize.style
+        )
 
         func inline(_ source: String, font: UIFont) -> NSAttributedString {
             InlineMarkdownContent.bridged(
