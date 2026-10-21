@@ -403,6 +403,7 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertTrue(source.applied.isEmpty)
         XCTAssertEqual(engine.state.unreported.map(\.id), ["ch_add", "ch_del", "ch_done"])
         XCTAssertTrue(engine.state.unreported.allSatisfy { $0.outcome == .failed })
+        XCTAssertNil(engine.state.answered["ch_add"], "A refusal is the setting now, not the user's answer")
         // Nor in a voice call.
         let voiceAdd = try XCTUnwrap(PhoneChange(json: ["id": "v_1", "kind": "add_reminder", "fields": ["title": "Milk"]]))
         do {

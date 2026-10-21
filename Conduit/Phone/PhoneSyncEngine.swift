@@ -801,7 +801,11 @@ final class PhoneSyncEngine: ObservableObject {
             if !preferences.allows(change.kind) {
                 // Read-only (or no longer shared): never a card, whatever
                 // the host asked. A host from before read-only can ask.
-                record(PhoneChangeResult(id: change.id, outcome: .failed, note: Self.refusalNote(change.kind)))
+                // Reported, not remembered as answered: it's the setting
+                // now, so the same change asked again after the user allows
+                // changes gets its card.
+                let refusal = PhoneChangeResult(id: change.id, outcome: .failed, note: Self.refusalNote(change.kind))
+                if !state.unreported.contains(refusal) { state.unreported.append(refusal) }
                 continue
             }
             if change.auto, change.kind.addsWithoutAsking, preferences.autoAdd {
