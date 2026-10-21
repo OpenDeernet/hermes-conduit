@@ -49,6 +49,7 @@ extension GatewayRestartTests {
         XCTAssertEqual(asked.last, "/api/plugins/conduit_push/artifacts?limit=60&missing=hide")
         XCTAssertEqual(hidden.items.map(\.name), ["map.png", "Curate"], "a link has no file to miss")
         XCTAssertEqual(hidden.nextBefore, 5, "a page the filter emptied still pages on")
+        XCTAssertTrue(hidden.items[1].exists, "a link is never shown as missing")
         let shown = try await client.page(profile: "default", showMissing: true)
         XCTAssertEqual(asked.last, "/api/plugins/conduit_push/artifacts?limit=60")
         XCTAssertEqual(shown.items.map(\.name), ["map.png", "gone.pdf", "Curate"])

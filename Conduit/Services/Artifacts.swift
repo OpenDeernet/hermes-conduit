@@ -68,7 +68,8 @@ struct ArtifactItem: Identifiable, Equatable, Hashable {
         self.path = path
         self.url = url
         self.host = raw["host"] as? String
-        self.exists = raw["exists"] as? Bool ?? true
+        // A link has no file to miss.
+        self.exists = source == .link || raw["exists"] as? Bool ?? true
         self.size = (raw["size"] as? NSNumber)?.int64Value
         self.sessionID = sessionID
         self.sessionTitle = (raw["session_title"] as? String) ?? ""
@@ -174,9 +175,8 @@ final class ArtifactsClient {
         guard response["ok"] as? Bool == true, let rows = response["items"] as? [[String: Any]] else {
             throw Failure.malformed
         }
-        // An older plugin lists missing files whatever it was asked. A link
-        // has no file, so it always stays.
-        let items = rows.compactMap(ArtifactItem.init).filter { showMissing || $0.exists || $0.path == nil }
+        // An older plugin lists missing files whatever it was asked.
+        let items = rows.compactMap(ArtifactItem.init).filter { showMissing || $0.exists }
         // Each artifact once, so list identity holds whatever the host sends.
         return ArtifactPage(items: merged([], with: items), nextBefore: response["next_before"] as? Int)
     }

@@ -327,8 +327,9 @@ private struct ArtifactsList: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.08))
                 }
                 .opacity(item.exists ? 1 : 0.45)
-                .overlay(alignment: .bottomLeading) {
-                    // Over the dimming, which alone reads as a dark picture.
+                .overlay(alignment: .topLeading) {
+                    // Over the dimming, which alone reads as a dark picture,
+                    // and clear of the name along the bottom.
                     if !item.exists {
                         Label("Missing", systemImage: "exclamationmark.circle.fill")
                             .font(.caption2.weight(.semibold))
