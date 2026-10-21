@@ -382,10 +382,14 @@ enum DashboardTicketBridgeError: LocalizedError {
     /// a known-oversized history response without retrying the same giant
     /// transcript over another transport.
     case oversizedResponse(limit: Int)
+    /// The old dashboard accepted the request, but the answer landed after a
+    /// dashboard switch: it is not applied to the dashboard now showing.
+    /// Only what the phone keeps for the old dashboard may follow it.
+    case answeredAfterSwitch
 
     var errorDescription: String? {
         switch self {
-        case .notReady:
+        case .notReady, .answeredAfterSwitch:
             return AppLocalization.string("Conduit is still connecting to your dashboard. Try again in a moment.")
         case .signInRequired:
             return AppLocalization.string("Dashboard sign-in has expired. Sign in again to continue.")
@@ -1182,8 +1186,9 @@ final class DashboardTicketBridge: NSObject {
         })
         // An answer already on its way when the bridge was invalidated (a
         // dashboard switch) is the old dashboard's: its caller would apply
-        // it to the dashboard now showing.
-        guard !isInvalidated else { throw DashboardTicketBridgeError.notReady }
+        // it to the dashboard now showing. The request only returns when
+        // the dashboard accepted it.
+        guard !isInvalidated else { throw DashboardTicketBridgeError.answeredAfterSwitch }
         return response
     }
 

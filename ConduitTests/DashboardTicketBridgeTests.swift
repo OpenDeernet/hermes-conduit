@@ -309,9 +309,9 @@ extension DashboardTicketBridgeTests {
 @MainActor
 extension DashboardTicketBridgeTests {
     /// The page answered, and the switch invalidated the bridge before the
-    /// caller ran: the caller hears unreadiness, never the old dashboard's
-    /// answer, which it would apply to the dashboard now showing.
-    func testAPageAnswerThatLandsAfterInvalidationIsNotReady() async throws {
+    /// caller ran: the caller hears that the old dashboard accepted it,
+    /// never its answer, which it would apply to the dashboard now showing.
+    func testAPageAnswerThatLandsAfterInvalidationIsAnsweredAfterSwitch() async throws {
         let requests = DashboardTicketBridgePendingRequests()
         let bridge = DashboardTicketBridge(
             baseURL: "http://127.0.0.1:1",
@@ -340,19 +340,36 @@ extension DashboardTicketBridgeTests {
         do {
             _ = try await result.value
             XCTFail("an answer for an invalidated bridge must not reach its caller")
-        } catch DashboardTicketBridgeError.notReady {
+        } catch DashboardTicketBridgeError.answeredAfterSwitch {
             // expected
         }
     }
 
     /// invalidate() doesn't cancel a request sent without the page, so its
     /// answer can come back up to its deadline after a switch.
-    func testAnAnswerWithoutThePageThatLandsAfterInvalidationIsNotReady() async throws {
+    func testAnAnswerWithoutThePageThatLandsAfterInvalidationIsAnsweredAfterSwitch() async throws {
         let held = HeldDashboardRequests(baseURL: "https://late-\(UUID().uuidString.lowercased()).invalid")
         let result = Task { try await held.bridge.requestJSON(path: "/api/sessions") }
         try await held.waitForRequests(1)
         held.bridge.invalidate()
         try await held.answer(["sessions": []])
+
+        do {
+            _ = try await result.value
+            XCTFail("an answer for an invalidated bridge must not reach its caller")
+        } catch DashboardTicketBridgeError.answeredAfterSwitch {
+            // expected
+        }
+    }
+
+    /// A refusal that lands after a switch says nothing happened there: the
+    /// caller hears plain unreadiness, as for a request that never went out.
+    func testARefusalWithoutThePageThatLandsAfterInvalidationIsNotReady() async throws {
+        let held = HeldDashboardRequests(baseURL: "https://late-\(UUID().uuidString.lowercased()).invalid")
+        let result = Task { try await held.bridge.requestJSON(path: "/api/sessions/s", method: "DELETE") }
+        try await held.waitForRequests(1)
+        held.bridge.invalidate()
+        try await held.answer(["detail": "Session not found"], status: 404)
 
         do {
             _ = try await result.value
