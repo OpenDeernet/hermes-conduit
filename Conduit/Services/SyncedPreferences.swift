@@ -1,0 +1,291 @@
+//
+//  SyncedPreferences.swift
+//  Conduit
+//
+//  Preferences shared by every iPhone and iPad signed in to the same Hermes
+//  profile (#1089), kept by the notifier plugin (`/conduit-prefs`, plugin
+//  0.54+) rather than iCloud: the host already holds the rest of what these
+//  devices share, and the user can move the set to another host.
+//
+//  Each preference is a slot: a host key, how to read the value on this
+//  device and how to write one from the host. The plugin keeps a flat map of
+//  key to JSON value and the later change wins, timed by the host. This
+//  device uploads only what changed here since its last sync (a ledger per
+//  dashboard and profile remembers what it had then), then takes the host's
+//  value for everything else.
+//
+//  Never synced: passwords, sign-in sessions, Cloudflare tokens and custom
+//  headers (Keychain, this device only), live voice provider consent, which
+//  one pays for GPT-Live, the attachment size limit, and anything internal.
+//
+
+import Foundation
+import UIKit
+
+/// One preference this device shares with the host.
+struct SyncedPreferenceSlot {
+    enum Merge {
+        /// The host's value replaces this device's.
+        case replace
+        /// A list of strings that only grows here: items another device
+        /// added since the last sync are added, and an item removed
+        /// elsewhere stays on this device.
+        case addOnly
+    }
+
+    let key: String
+    /// The value as JSON (Bool, number, String, array or object), or nil
+    /// for Conduit's default.
+    let read: () -> Any?
+    /// Writes the host's value; nil goes back to the default.
+    let write: (Any?) -> Void
+    var merge: Merge = .replace
+    /// False holds the host's value back for now (a call is running); the
+    /// next sync tries again.
+    var canApply: () -> Bool = { true }
+}
+
+extension SyncedPreferenceSlot {
+    enum Kind { case bool, int, double, string, strings, json }
+
+    /// A preference stored under one UserDefaults key.
+    static func defaults(_ key: String, _ localKey: String, _ kind: Kind, in defaults: UserDefaults,
+                         canApply: @escaping () -> Bool = { true }) -> SyncedPreferenceSlot {
+        SyncedPreferenceSlot(
+            key: key,
+            read: {
+                guard let stored = defaults.object(forKey: localKey) else { return nil }
+                switch kind {
+                case .bool: return stored as? Bool
+                case .int: return (stored as? NSNumber)?.intValue
+                case .double: return (stored as? NSNumber)?.doubleValue
+                case .string: return stored as? String
+                case .strings: return stored as? [String]
+                case .json:
+                    return (stored as? Data).flatMap { try? JSONSerialization.jsonObject(with: $0, options: [.fragmentsAllowed]) }
+                }
+            },
+            write: { value in
+                let stored: Any?
+                switch kind {
+                case .bool: stored = value as? Bool
+                case .int: stored = (value as? NSNumber)?.intValue
+                case .double: stored = (value as? NSNumber)?.doubleValue
+                case .string: stored = value as? String
+                case .strings: stored = value as? [String]
+                case .json:
+                    stored = value.flatMap { JSONSerialization.isValidJSONObject($0) ? try? JSONSerialization.data(withJSONObject: $0) : nil }
+                }
+                if let stored {
+                    defaults.set(stored, forKey: localKey)
+                } else {
+                    defaults.removeObject(forKey: localKey)
+                }
+            },
+            canApply: canApply
+        )
+    }
+}
+
+/// How a first sync with a host settles which side wins.
+enum SyncedPreferencesStart: Equatable {
+    /// The host's values win; this device fills in only what the host lacks.
+    case useHost
+    /// This device's values replace the host's (also "Copy this device's
+    /// settings here").
+    case useDevice
+}
+
+/// What this device had right after its last sync with one dashboard and
+/// profile, by key, as canonical JSON. A key missing had Conduit's default.
+struct SyncedPreferencesLedgerEntry: Codable, Equatable {
+    var lastLocal: [String: String] = [:]
+    var syncedAt: Date?
+}
+
+enum SyncedPreferencesEngine {
+    static let capability = "conduit-prefs"
+    static let path = "/api/plugins/conduit_push/conduit-prefs"
+
+    /// What to upload: everything that changed here since the last sync, or
+    /// on a first sync what `start` says. NSNull clears a key on the host.
+    static func changes(
+        slots: [SyncedPreferenceSlot],
+        ledger: SyncedPreferencesLedgerEntry?,
+        host: [String: Any]?,
+        start: SyncedPreferencesStart
+    ) -> [String: Any] {
+        var changes: [String: Any] = [:]
+        for slot in slots {
+            let value = slot.read()
+            let local = canonical(value)
+            if let ledger {
+                guard local != ledger.lastLocal[slot.key] else { continue }
+            } else if start == .useHost {
+                // A first sync: only what the host doesn't have yet.
+                guard local != nil, host?[slot.key] == nil else { continue }
+            }
+            changes[slot.key] = value ?? NSNull()
+        }
+        return changes
+    }
+
+    /// Takes the host's values for every key this device didn't just
+    /// upload, and returns the new ledger entry.
+    @discardableResult
+    static func apply(
+        host: [String: Any],
+        slots: [SyncedPreferenceSlot],
+        uploaded: Set<String>,
+        ledger: SyncedPreferencesLedgerEntry?,
+        now: Date = Date()
+    ) -> SyncedPreferencesLedgerEntry {
+        var entry = SyncedPreferencesLedgerEntry(syncedAt: now)
+        for slot in slots {
+            if !uploaded.contains(slot.key), slot.canApply() {
+                let value = host[slot.key]
+                switch slot.merge {
+                case .replace:
+                    if canonical(value) != canonical(slot.read()) {
+                        slot.write(value)
+                    }
+                case .addOnly:
+                    let local = slot.read() as? [String] ?? []
+                    let before = ledger?.lastLocal[slot.key].flatMap(decoded) as? [String] ?? []
+                    let added = (value as? [String] ?? []).filter { !before.contains($0) && !local.contains($0) }
+                    if !added.isEmpty {
+                        slot.write(local + added)
+                    }
+                }
+            }
+            if let local = canonical(slot.read()) {
+                entry.lastLocal[slot.key] = local
+            }
+        }
+        return entry
+    }
+
+    /// The host's values out of a `/conduit-prefs` answer, by key.
+    static func hostValues(_ response: [String: Any]) -> [String: Any] {
+        guard let values = response["values"] as? [String: Any] else { return [:] }
+        var kept: [String: Any] = [:]
+        for (key, entry) in values {
+            guard let entry = entry as? [String: Any], let value = entry["value"], !(value is NSNull) else { continue }
+            kept[key] = value
+        }
+        return kept
+    }
+
+    /// One spelling per JSON value, so two reads of the same value compare
+    /// equal; nil for nil.
+    static func canonical(_ value: Any?) -> String? {
+        guard let value, !(value is NSNull),
+              let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed]) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func decoded(_ canonical: String) -> Any? {
+        try? JSONSerialization.jsonObject(with: Data(canonical.utf8), options: [.fragmentsAllowed])
+    }
+}
+
+/// The sync's state on this device: whether it's on, each host's ledger,
+/// and what the Settings page shows.
+@MainActor
+final class SyncedPreferencesController: ObservableObject {
+    static let enabledKey = "conduit.syncedPrefs.enabled.v1"
+    static let ledgerKey = "conduit.syncedPrefs.ledger.v1"
+
+    enum Status: Equatable {
+        case idle
+        case syncing
+        case synced(Date)
+        case failed(String)
+    }
+
+    @Published private(set) var isEnabled: Bool
+    @Published var status: Status = .idle
+
+    let defaults: UserDefaults
+    /// A local change waits this long for others before it uploads.
+    var debounce: Duration = .seconds(2)
+    private var pendingUpload: Task<Void, Never>?
+    private var defaultsObserver: NSObjectProtocol?
+    private var syncing = false
+    private var syncAgain = false
+
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+        isEnabled = defaults.bool(forKey: Self.enabledKey)
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        isEnabled = enabled
+        defaults.set(enabled, forKey: Self.enabledKey)
+        if !enabled {
+            pendingUpload?.cancel()
+            status = .idle
+        }
+    }
+
+    /// Starts a sync unless one is running; a call meanwhile gets one more
+    /// round when it ends.
+    func begin() -> Bool {
+        guard !syncing else {
+            syncAgain = true
+            return false
+        }
+        syncing = true
+        return true
+    }
+
+    /// Ends a sync; true when another round is owed.
+    func end() -> Bool {
+        syncing = false
+        defer { syncAgain = false }
+        return syncAgain
+    }
+
+    func ledger(for scope: String) -> SyncedPreferencesLedgerEntry? {
+        guard let data = defaults.data(forKey: Self.ledgerKey),
+              let ledgers = try? JSONDecoder().decode([String: SyncedPreferencesLedgerEntry].self, from: data) else {
+            return nil
+        }
+        return ledgers[scope]
+    }
+
+    func setLedger(_ entry: SyncedPreferencesLedgerEntry?, for scope: String) {
+        var ledgers = (defaults.data(forKey: Self.ledgerKey))
+            .flatMap { try? JSONDecoder().decode([String: SyncedPreferencesLedgerEntry].self, from: $0) } ?? [:]
+        ledgers[scope] = entry
+        if let data = try? JSONEncoder().encode(ledgers) {
+            defaults.set(data, forKey: Self.ledgerKey)
+        }
+    }
+
+    /// Runs `upload` a moment after the app's preferences change, so a
+    /// change made on this device reaches the host without waiting for the
+    /// next connect.
+    func observeLocalChanges(_ upload: @escaping @MainActor () async -> Void) {
+        guard defaultsObserver == nil else { return }
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: defaults, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.isEnabled else { return }
+                self.pendingUpload?.cancel()
+                let wait = self.debounce
+                self.pendingUpload = Task { @MainActor in
+                    try? await Task.sleep(for: wait)
+                    guard !Task.isCancelled else { return }
+                    await upload()
+                }
+            }
+        }
+    }
+
+    /// The name and id the host shows next to each value.
+    static var deviceName: String { UIDevice.current.name }
+}
