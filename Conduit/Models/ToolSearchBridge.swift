@@ -20,12 +20,13 @@ enum ToolSearchBridge {
         name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == callName
     }
 
-    /// A tool's own name: not empty and not one of the bridge's.
+    /// A single tool's own name: not empty, not one of the bridge's and
+    /// not a connector tool, which runs in a batch under the wrapper.
     static func isConcrete(_ name: String?) -> Bool {
         guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
             return false
         }
-        return !bridgeNames.contains(name.lowercased())
+        return !bridgeNames.contains(name.lowercased()) && !name.lowercased().hasPrefix(connectorPrefix)
     }
 
     struct Call: Equatable {
@@ -42,7 +43,8 @@ enum ToolSearchBridge {
         guard let object = jsonObject(envelope) as? [String: Any] else { return nil }
         let entry: [String: Any]
         if let calls = object["calls"], !(calls is NSNull) {
-            switch jsonObject(calls) {
+            guard let parsed = jsonObject(calls) else { return nil }
+            switch parsed {
             case let list as [Any]:
                 guard list.count == 1, let only = list[0] as? [String: Any] else { return nil }
                 entry = only
@@ -55,21 +57,26 @@ enum ToolSearchBridge {
             entry = object
         }
         guard let name = (entry["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              isConcrete(name), !name.hasPrefix(connectorPrefix) else { return nil }
-        return Call(name: name, arguments: argumentsText(entry["arguments"]))
+              isConcrete(name), case .some(let arguments) = argumentsText(entry["arguments"]) else { return nil }
+        return Call(name: name, arguments: arguments)
     }
 
-    private static func argumentsText(_ value: Any?) -> String? {
+    /// A call's arguments as JSON text, `.some(nil)` when it took none.
+    /// Nil for arguments Hermes refuses (not a JSON object), so a refused
+    /// call keeps the wrapper.
+    private static func argumentsText(_ value: Any?) -> String?? {
+        guard let value, !(value is NSNull) else { return .some(nil) }
         switch value {
         case let text as String:
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : text
+            if trimmed.isEmpty { return .some(nil) }
+            return jsonObject(trimmed) is [String: Any] ? .some(text) : nil
         case let object as [String: Any]:
             guard JSONSerialization.isValidJSONObject(object),
                   let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else {
                 return nil
             }
-            return String(data: data, encoding: .utf8)
+            return .some(String(data: data, encoding: .utf8))
         default:
             return nil
         }

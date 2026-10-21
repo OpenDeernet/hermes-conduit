@@ -134,9 +134,13 @@ extension MessageNormalizerTests {
         XCTAssertNil(ToolSearchBridge.underlyingCall(#"{"calls":[{"name":"connectors__mail__send"}]}"#))
         XCTAssertNil(ToolSearchBridge.underlyingCall(#"{"calls":[]}"#))
         XCTAssertNil(ToolSearchBridge.underlyingCall("not json"))
+        XCTAssertNil(ToolSearchBridge.underlyingCall(#"{"calls":[{"name":"conduit_show","arguments":"not json"}]}"#),
+                     "arguments Hermes refuses keep the wrapper")
+        XCTAssertNil(ToolSearchBridge.underlyingCall(#"{"calls":[{"name":"conduit_show","arguments":[1]}]}"#))
         XCTAssertTrue(ToolSearchBridge.isWrapper(" Tool_Call "))
         XCTAssertFalse(ToolSearchBridge.isConcrete("tool_describe"))
         XCTAssertFalse(ToolSearchBridge.isConcrete("  "))
+        XCTAssertFalse(ToolSearchBridge.isConcrete("Connectors__mail__send"), "a connector runs in a batch")
     }
 
     func testLiveToolEventNamesTheDeferredTool() {

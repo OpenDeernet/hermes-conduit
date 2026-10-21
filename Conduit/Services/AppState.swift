@@ -30279,10 +30279,13 @@ final class AppState: ObservableObject {
             }
             if let index = matchingIndex {
                 let existing = messages[index].tool
+                // A completion that names no tool, or only Tool Search's
+                // wrapper, keeps the tool its start named.
+                let keepsName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || (ToolSearchBridge.isWrapper(name) && ToolSearchBridge.isConcrete(existing?.name))
                 messages[index].tool = ToolActivity(
                     id: stableToolID ?? existing?.id,
-                    // A completion that names no tool keeps the card's name.
-                    name: name.isEmpty ? (existing?.name ?? name) : name,
+                    name: keepsName ? (existing?.name ?? "") : name,
                     input: existing?.input,
                     output: output,
                     status: .complete,
