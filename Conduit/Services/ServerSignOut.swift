@@ -17,7 +17,6 @@
 //
 
 import Foundation
-import OSLog
 
 /// A refresh token waiting for Hermes to revoke it.
 struct PendingServerSignOut: Codable, Equatable {
@@ -26,6 +25,8 @@ struct PendingServerSignOut: Codable, Equatable {
     let baseURL: String
     let refreshToken: String
     let signedOutAt: Date
+    /// Answers that were an auth edge turning the request away, not Hermes.
+    var refusals = 0
 }
 
 enum ServerSignOut {
@@ -38,6 +39,9 @@ enum ServerSignOut {
     static let pendingLifetime: TimeInterval = 30 * 24 * 60 * 60
     /// Records kept at most; the oldest go first.
     static let maximumPending = 32
+    /// An edge that turned the request away this often won't pass it (Remove
+    /// Dashboard deleted the Cloudflare token a retry would need).
+    static let maximumRefusals = 5
 
     enum Outcome: Equatable {
         /// Hermes answered: the token is revoked, or the server has no logout
@@ -108,12 +112,14 @@ enum ServerSignOut {
             return .ended
         case 300...399:
             guard let location,
+                  requestURL.path.hasSuffix(logoutPath),
                   let target = URL(string: location, relativeTo: requestURL)?.absoluteURL,
                   ConnectionURLPolicy.originMatches(target, expected: requestURL) else { return .retryLater }
             let logoutPrefix = String(requestURL.path.dropLast(logoutPath.count))
             return target.path == "\(logoutPrefix)/login" ? .ended : .retryLater
         case 404, 405:
             // A server without the logout route has nothing to revoke with.
+            // An edge answering 404 for a hidden origin lands here too.
             return .ended
         default:
             return .retryLater
@@ -138,7 +144,6 @@ final class ServerSignOutQueue {
     /// request never got an answer.
     typealias Send = @MainActor (URLRequest) async -> (status: Int, location: String?)?
 
-    private let log = Logger(subsystem: "com.milim.conduit", category: "ServerSignOut")
     private let send: Send
     private let now: () -> Date
     private let load: () -> [PendingServerSignOut]
@@ -212,29 +217,38 @@ final class ServerSignOutQueue {
         let current = load()
         let live = current.filter { $0.signedOutAt > cutoff }
         if live.count != current.count { save(live) }
+        let liveIDs = Set(live.map(\.id))
+        preparedRequests = preparedRequests.filter { liveIDs.contains($0.key) }
+        var ended = Set<UUID>()
+        var refused = Set<UUID>()
         for entry in live {
             let request = preparedRequests.removeValue(forKey: entry.id) ?? ServerSignOut.request(
                 baseURL: entry.baseURL,
                 refreshToken: entry.refreshToken,
                 cloudflare: KeychainHelper.loadCloudflareAccess(dashboardID: entry.dashboardID, for: entry.baseURL)
             )
-            let outcome: ServerSignOut.Outcome
-            if let request, let url = request.url {
-                if let answer = await send(request) {
-                    outcome = ServerSignOut.outcome(status: answer.status, location: answer.location, requestURL: url)
-                } else {
-                    outcome = .retryLater
-                }
-            } else {
+            guard let request, let url = request.url else {
                 // Not an address Conduit can reach: nothing to send, ever.
-                outcome = .ended
-            }
-            guard outcome == .ended else {
-                log.notice("Server sign-out still pending")
+                ended.insert(entry.id)
                 continue
             }
-            save(load().filter { $0.id != entry.id })
+            guard let answer = await send(request) else { continue }
+            if ServerSignOut.outcome(status: answer.status, location: answer.location, requestURL: url) == .ended {
+                ended.insert(entry.id)
+            } else if answer.status < 500, answer.status != 429 {
+                refused.insert(entry.id)
+            }
         }
+        guard !ended.isEmpty || !refused.isEmpty else { return }
+        // Re-read: a sign-out during the sends added its own records.
+        let remaining: [PendingServerSignOut] = load().compactMap { entry in
+            guard !ended.contains(entry.id) else { return nil }
+            guard refused.contains(entry.id) else { return entry }
+            var entry = entry
+            entry.refusals += 1
+            return entry.refusals < ServerSignOut.maximumRefusals ? entry : nil
+        }
+        save(remaining)
     }
 
     private static func urlSessionSend(_ request: URLRequest) async -> (status: Int, location: String?)? {

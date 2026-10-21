@@ -136,6 +136,33 @@ final class ServerSignOutTests: XCTestCase {
         XCTAssertTrue(harness.stored.isEmpty)
     }
 
+    func testAnEdgeThatKeepsTurningTheRequestAwayIsGivenUpOn() async {
+        let harness = Harness()
+        harness.answer = (403, nil)
+        let queue = makeQueue(harness)
+
+        queue.signOut(dashboardID: UUID(), baseURL: baseURL, refreshTokens: ["refresh-native"], cloudflare: nil)
+        await queue.retryPending().value
+        XCTAssertEqual(harness.stored.first?.refusals, 1)
+
+        for _ in 1..<ServerSignOut.maximumRefusals {
+            await queue.retryPending().value
+        }
+        XCTAssertEqual(harness.sent.count, ServerSignOut.maximumRefusals)
+        XCTAssertTrue(harness.stored.isEmpty, "The edge won't pass it")
+    }
+
+    func testAServerErrorIsNotCountedAsARefusal() async {
+        let harness = Harness()
+        harness.answer = (503, nil)
+        let queue = makeQueue(harness)
+
+        queue.signOut(dashboardID: UUID(), baseURL: baseURL, refreshTokens: ["refresh-native"], cloudflare: nil)
+        await queue.retryPending().value
+
+        XCTAssertEqual(harness.stored.first?.refusals, 0)
+    }
+
     func testATokenPastItsLifetimeIsDroppedWithoutSending() async {
         let harness = Harness()
         harness.stored = [PendingServerSignOut(
