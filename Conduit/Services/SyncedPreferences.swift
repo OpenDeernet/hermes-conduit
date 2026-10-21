@@ -103,6 +103,9 @@ enum SyncedPreferencesStart: Equatable {
 struct SyncedPreferencesLedgerEntry: Codable, Equatable {
     var lastLocal: [String: String] = [:]
     var syncedAt: Date?
+    /// Keys whose host value differed but was held back (a call was
+    /// running): the next sync must ask the host even with nothing to upload.
+    var held: Set<String>?
 }
 
 enum SyncedPreferencesEngine {
@@ -164,7 +167,11 @@ enum SyncedPreferencesEngine {
                 entry.lastLocal[slot.key] = before[slot.key]
                 continue
             }
-            if !uploaded.contains(slot.key), slot.canApply() {
+            if !uploaded.contains(slot.key), !slot.canApply() {
+                if canonical(host[slot.key]) != current {
+                    entry.held = (entry.held ?? []).union([slot.key])
+                }
+            } else if !uploaded.contains(slot.key) {
                 let value = host[slot.key]
                 switch slot.merge {
                 case .replace:

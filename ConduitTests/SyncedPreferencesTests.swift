@@ -80,10 +80,12 @@ extension ChatReadStateTests {
         XCTAssertEqual((box.values["voice.preferences"] as? [String: String])?["tone"], "calm")
         // Held back, not changed here: the next sync tries again, uploads nothing.
         XCTAssertTrue(SyncedPreferencesEngine.changes(slots: [voice], ledger: entry, host: nil, start: .useHost).isEmpty)
+        XCTAssertEqual(entry.held, ["voice.preferences"])
 
         box.holds = false
-        SyncedPreferencesEngine.apply(host: host, slots: [voice], uploaded: [], ledger: entry)
+        let released = SyncedPreferencesEngine.apply(host: host, slots: [voice], uploaded: [], ledger: entry)
         XCTAssertEqual((box.values["voice.preferences"] as? [String: String])?["tone"], "lively")
+        XCTAssertNil(released.held)
     }
 
     func testSyncedChangeWhileTheRequestIsOutIsKeptAndUploadedNext() {
