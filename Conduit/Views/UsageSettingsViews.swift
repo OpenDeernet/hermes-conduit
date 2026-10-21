@@ -35,6 +35,9 @@ struct UsageSettingsDetail: View {
         let days: Int
         let profile: String
         let dashboardID: UUID?
+        /// Disconnecting clears the page too: "Connect to Hermes" never
+        /// sits over numbers it can't vouch for.
+        let connected: Bool
     }
 
     private struct LoadKey: Equatable {
@@ -114,7 +117,7 @@ struct UsageSettingsDetail: View {
     private func load() async {
         generation += 1
         let mine = generation
-        let wanted = Scope(days: days, profile: appState.activeProfile, dashboardID: appState.activeDashboardID)
+        let wanted = Scope(days: days, profile: appState.activeProfile, dashboardID: appState.activeDashboardID, connected: appState.isConnected)
         isLoading = true
         defer {
             if generation == mine { isLoading = false }
@@ -386,7 +389,9 @@ struct UsageSettingsDetail: View {
     }
 
     private func percent(_ fraction: Double) -> String {
-        fraction.formatted(.percent.precision(.fractionLength(0)).locale(AppLocalization.formattingLocale))
+        // A window barely touched reads 0.4%, not 0%.
+        let digits = fraction > 0 && fraction < 0.1 ? 0...1 : 0...0
+        return fraction.formatted(.percent.precision(.fractionLength(digits)).locale(AppLocalization.formattingLocale))
     }
 
     private func relative(_ date: Date) -> String {

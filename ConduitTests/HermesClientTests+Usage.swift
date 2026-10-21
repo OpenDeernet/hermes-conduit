@@ -88,6 +88,8 @@ extension HermesClientTests {
                     ["id": "a1", "label": "Work", "windows": [] as [[String: Any]], "state": "limited", "resets_at": "2026-10-23T00:00:00+00:00"] as [String: Any],
                     ["id": "", "label": "", "windows": [] as [[String: Any]], "state": "something-new"] as [String: Any],
                     ["id": "a1", "label": "Twin", "windows": [] as [[String: Any]], "state": "ready"] as [String: Any],
+                    ["id": "account-4", "label": "Shaped like a fallback", "windows": [] as [[String: Any]], "state": "ready"] as [String: Any],
+                    ["id": "", "label": "", "windows": [] as [[String: Any]], "state": "ready"] as [String: Any],
                 ] as [[String: Any]]] as [String: Any],
                 "limit": ["scope": "models", "models": ["gpt-x": "2026-10-22T05:00:00+00:00"]] as [String: Any],
             ] as [String: Any],
@@ -108,8 +110,8 @@ extension HermesClientTests {
 
         let codex = quotas[1]
         XCTAssertEqual(codex.title, "openai-codex")
-        XCTAssertEqual(codex.accounts.map(\.id), ["a1", "account-1", "account-2"])
-        XCTAssertEqual(codex.accounts.map(\.state), [.limited, .unknown, .ready])
+        XCTAssertEqual(codex.accounts.map(\.id), ["a1", "account-1", "account-2", "account-4", "account-4-2"])
+        XCTAssertEqual(codex.accounts.map(\.state), [.limited, .unknown, .ready, .ready, .ready])
         XCTAssertNotNil(codex.accounts[0].resetsAt)
         guard case .models(let limited) = codex.limit else { return XCTFail("expected a per-model limit") }
         XCTAssertEqual(limited.map(\.model), ["gpt-x"])

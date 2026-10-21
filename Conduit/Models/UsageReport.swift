@@ -121,6 +121,7 @@ struct UsageReport: Equatable {
 
     /// SQLite's `date(…, 'localtime')`: the host's day, read here as a
     /// calendar day in this device's zone so the chart's bars land on it.
+    /// Main-actor use only, like CronScheduleText's formatters.
     static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -219,8 +220,12 @@ struct ProviderQuota: Equatable, Identifiable {
             let accounts = (usage["accounts"] as? [[String: Any]] ?? []).enumerated().compactMap { index, account -> QuotaAccount? in
                 // Ids name rows on screen, so a missing or repeated one gets its position.
                 let given = (account["id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-                let id = given.flatMap { accountIDs.insert($0).inserted ? $0 : nil } ?? "account-\(index)"
-                accountIDs.insert(id)
+                var id = given.flatMap { accountIDs.insert($0).inserted ? $0 : nil } ?? "account-\(index)"
+                var suffix = 1
+                while given.map({ $0 != id }) ?? true, !accountIDs.insert(id).inserted {
+                    suffix += 1
+                    id = "account-\(index)-\(suffix)"
+                }
                 return QuotaAccount(
                     id: id,
                     label: (account["label"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
