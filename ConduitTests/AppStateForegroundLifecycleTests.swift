@@ -234,22 +234,44 @@ final class AppStateForegroundLifecycleTests: XCTestCase {
         box.client.disconnect()
     }
 
-    func testCallRequestRefusedByDesktopWithoutAutomaticTakeoverSaysWhy() async {
-        // Take over automatically off: the chat isn't taken from Desktop.
-        // The call says the chat is open there, and the composer keeps the
-        // offer for later.
+    func testCallRequestTakesOverEvenWithAutomaticTakeoverOff() async {
+        // Starting a call in the chat already says the user wants it here:
+        // the call takes over whatever the composer's setting says.
         let defaults = UserDefaults.standard
         let savedAutomatic = defaults.object(forKey: ChatTakeoverPreference.automaticKey)
         defaults.set(false, forKey: ChatTakeoverPreference.automaticKey)
         defer { defaults.set(savedAutomatic, forKey: ChatTakeoverPreference.automaticKey) }
         var sent: [String] = []
-        var takeovers = 0
+        var takenOver = false
+        let harness = makeHarness(lifecycleOperations: desktopHeldChatOperations(
+            sends: { sent.append($0) }, takenOver: { takenOver }
+        ))
+        harness.appState.chatTakeoverClient = ChatTakeoverClient(request: { _, _, _ in
+            takenOver = true
+            return ["ok": true, "status": "taken_over"]
+        })
+        let box = await installConnectedClient(into: harness)
+        harness.appState.sessions = [session("stored-a", alternateIDs: ["runtime-a"])]
+        let opened = await harness.appState.openSession("stored-a")
+        XCTAssertTrue(opened)
+
+        let submitted = await harness.appState.submitComposerForCall(text: "What's on my calendar")
+
+        XCTAssertTrue(submitted)
+        XCTAssertEqual(sent, ["What's on my calendar", "What's on my calendar"])
+        XCTAssertNil(harness.appState.chatTakeover)
+        box.client.disconnect()
+    }
+
+    func testCallRequestThatCannotTakeOverSaysWhy() async {
+        // Conduit on another device holds the chat: the host never takes it
+        // from there, and the call says so instead of a bare failure.
+        var sent: [String] = []
         let harness = makeHarness(lifecycleOperations: desktopHeldChatOperations(
             sends: { sent.append($0) }, takenOver: { false }
         ))
         harness.appState.chatTakeoverClient = ChatTakeoverClient(request: { _, _, _ in
-            takeovers += 1
-            return ["ok": true, "status": "taken_over"]
+            ["ok": true, "status": "same_host"]
         })
         let box = await installConnectedClient(into: harness)
         harness.appState.sessions = [session("stored-a", alternateIDs: ["runtime-a"])]
@@ -260,13 +282,20 @@ final class AppStateForegroundLifecycleTests: XCTestCase {
 
         XCTAssertFalse(submitted)
         XCTAssertEqual(sent, ["What's on my calendar"])
-        XCTAssertEqual(takeovers, 0)
-        XCTAssertEqual(harness.appState.chatTakeover?.phase, .offered)
-        XCTAssertEqual(
-            harness.appState.callRefusalMessageForOpenChat(),
-            AppLocalization.string("This chat is open in Hermes Desktop. Take it over to send from here.")
-        )
+        XCTAssertEqual(harness.appState.chatTakeover?.phase, .heldHere)
+        XCTAssertEqual(harness.appState.callRefusalMessageForOpenChat(), ChatTakeoverState.heldHereMessage)
         box.client.disconnect()
+    }
+
+    func testTakeOverAutomaticallyIsOnUntilTurnedOff() {
+        let defaults = UserDefaults.standard
+        let savedAutomatic = defaults.object(forKey: ChatTakeoverPreference.automaticKey)
+        defer { defaults.set(savedAutomatic, forKey: ChatTakeoverPreference.automaticKey) }
+        let appState = makeHarness().appState
+        defaults.removeObject(forKey: ChatTakeoverPreference.automaticKey)
+        XCTAssertTrue(appState.takesOverChatsAutomatically)
+        defaults.set(false, forKey: ChatTakeoverPreference.automaticKey)
+        XCTAssertFalse(appState.takesOverChatsAutomatically)
     }
 
     func testCallRequestToAChatOffScreenIsSentAgainAfterTakeover() async throws {

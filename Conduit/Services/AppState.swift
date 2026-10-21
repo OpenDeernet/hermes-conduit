@@ -22636,7 +22636,8 @@ final class AppState: ObservableObject {
     static let chatTakeoverWaitLimit: TimeInterval = 15 * 60
 
     var takesOverChatsAutomatically: Bool {
-        UserDefaults.standard.bool(forKey: ChatTakeoverPreference.automaticKey)
+        UserDefaults.standard.object(forKey: ChatTakeoverPreference.automaticKey) as? Bool
+            ?? ChatTakeoverPreference.automaticDefault
     }
 
     /// The chat Conduit last took over automatically. A send refused again
@@ -22802,9 +22803,11 @@ final class AppState: ObservableObject {
 
     /// A call's request sent through the composer: Classic voice, Local
     /// Live, and the live modes' requests in the open chat. Hermes refuses
-    /// it while Hermes Desktop or a terminal still holds the chat; with Take
-    /// over automatically on, Conduit takes the chat over and sends the same
-    /// request once more (#1061), so the call's first request isn't lost.
+    /// it while Hermes Desktop or a terminal still holds the chat; Conduit
+    /// then takes the chat over and sends the same request once more
+    /// (#1061), so the call's first request isn't lost. Calls take over
+    /// whatever Take over automatically says: starting a call in the chat
+    /// already says the user wants it here.
     /// The composer's own resend never runs for it: its draft isn't the
     /// request, and the notice is gone once the chat is Conduit's.
     func submitComposerForCall(text: String, onBusy: (() -> Void)? = nil) async -> Bool {
@@ -22821,7 +22824,7 @@ final class AppState: ObservableObject {
     /// minute at most. True when the chat is Conduit's now; otherwise the
     /// notice keeps the outcome for the composer.
     private func takeOverChatForCall() async -> Bool {
-        guard var state = chatTakeover, state.phase == .offered, takesOverChatsAutomatically else { return false }
+        guard var state = chatTakeover, state.phase == .offered else { return false }
         // Refused again right after a takeover: the button, not a loop.
         let key = chatTakeoverGuardKey(state.sessionID)
         guard chatTakeoverAutomaticSessionID != key else { return false }
@@ -22867,9 +22870,6 @@ final class AppState: ObservableObject {
                 ids.append(id)
             }
             var state = ChatTakeoverState(sessionID: runtimeID, sessionIDs: ids, surface: details.surface, phase: .offered)
-            guard takesOverChatsAutomatically else {
-                throw VoiceAudioError.unavailable(state.callRefusalMessage)
-            }
             state.phase = await Self.runChatTakeover(
                 client: chatTakeoverClient, state: state, profile: profile ?? activeProfile,
                 waitLimit: Self.callChatTakeoverWaitLimit

@@ -124,6 +124,9 @@ struct ChatTakeoverState: Equatable {
 enum ChatTakeoverPreference {
     /// Device-only: take a chat over as soon as a send is refused.
     static let automaticKey = "conduit.takeOverChatsAutomatically"
+    /// On until the user turns it off: a reply running in the other app
+    /// always finishes first, so taking over costs little (#1061).
+    static let automaticDefault = true
 }
 
 enum ChatTakeoverError: Error, Equatable {

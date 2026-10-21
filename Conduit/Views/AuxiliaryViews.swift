@@ -1742,7 +1742,7 @@ private struct AttachmentLimitSettings: View {
 /// as a send is refused, instead of offering a button (#304).
 private struct ChatTakeoverSettings: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
-    @AppStorage(ChatTakeoverPreference.automaticKey) private var automatic = false
+    @AppStorage(ChatTakeoverPreference.automaticKey) private var automatic = ChatTakeoverPreference.automaticDefault
 
     var body: some View {
         ConduitSettingsSection(
