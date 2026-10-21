@@ -115,7 +115,7 @@ struct StreamingText: View {
             // (a running chat opened again, the bubble scrolled back into
             // view) has been written: it shows at once instead of being
             // typed out again, and only its newest characters fade in.
-            if visibleCharacters.isEmpty, !reduceMotion {
+            if !isLargeStream, visibleCharacters.isEmpty, !reduceMotion {
                 visibleCharacters = Array(
                     targetCharacters.prefix(Self.charactersShownOnAppear(of: targetCharacters.count))
                 )

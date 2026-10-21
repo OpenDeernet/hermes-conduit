@@ -93,15 +93,48 @@ final class MessageNormalizerTests: XCTestCase {
         let history = [
             ChatMessage(id: "u", role: .user, content: "Go.", timestamp: "t"),
             ChatMessage(id: "a1", role: .assistant, content: "Saved differently.", timestamp: "t"),
-            ChatMessage(id: "a2", role: .assistant, content: "Second step.", timestamp: "t")
+            ChatMessage(id: "a2", role: .assistant, content: "The second step checked every config file.", timestamp: "t")
         ]
 
         XCTAssertEqual(
             AppState.unpersistedInflightAssistantText(
-                "First step as streamed. Second step. Third",
+                "First step as streamed. The second step checked every config file. Third",
                 after: history
             ),
             "Third"
+        )
+    }
+
+    func testResumeNeverCutsTheStepBeingWrittenAtAShortStepsWords() {
+        // A short saved step the projection doesn't show at its place is
+        // not looked for inside the step still being written.
+        let history = [
+            ChatMessage(id: "u", role: .user, content: "Go.", timestamp: "t"),
+            ChatMessage(id: "a1", role: .assistant, content: "Done.", timestamp: "t")
+        ]
+
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Working on it. Done. Now the rest",
+                after: history
+            ),
+            "Working on it. Done. Now the rest"
+        )
+    }
+
+    func testResumeNeverCutsWithAnEarlierTurnsReplyAtTheStart() {
+        let history = [
+            ChatMessage(id: "u1", role: .user, content: "Look into it.", timestamp: "t"),
+            ChatMessage(id: "a1", role: .assistant, content: "Checking the logs.", timestamp: "t"),
+            ChatMessage(id: "u2", role: .user, content: "Again please.", timestamp: "t")
+        ]
+
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Checking the logs. They look different now.",
+                after: history
+            ),
+            "Checking the logs. They look different now."
         )
     }
 

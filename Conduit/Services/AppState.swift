@@ -15694,12 +15694,19 @@ final class AppState: ObservableObject {
     ) -> String {
         let recovered = inflight.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !recovered.isEmpty,
-              let persisted = messages.last(where: {
+              let lastReplyIndex = messages.lastIndex(where: {
                   $0.role == .assistant && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-              })?.content.trimmingCharacters(in: .whitespacesAndNewlines) else {
+              }) else {
+            return recovered
+        }
+        // Only the running turn's own steps: an earlier turn's reply can
+        // repeat a phrase this turn writes, and must not cut it.
+        let promptIndex = messages.lastIndex(where: { $0.role == .user })
+        if let promptIndex, lastReplyIndex < promptIndex {
             return recovered
         }
 
+        let persisted = messages[lastReplyIndex].content.trimmingCharacters(in: .whitespacesAndNewlines)
         if recovered == persisted || persisted.hasPrefix(recovered) {
             return ""
         }
@@ -15708,11 +15715,7 @@ final class AppState: ObservableObject {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // Only the running turn's own steps: an earlier turn's reply can
-        // repeat a phrase this turn writes, and must not cut it.
-        guard let promptIndex = messages.lastIndex(where: { $0.role == .user }) else {
-            return recovered
-        }
+        guard let promptIndex else { return recovered }
         let savedSteps = messages[messages.index(after: promptIndex)...]
             .filter { $0.role == .assistant }
             .map { $0.content.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -15729,23 +15732,44 @@ final class AppState: ObservableObject {
         return String(recovered[cursor...]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Where `step` ends in `text`, searching from `start`. Whitespace is
-    /// not compared: a saved step is trimmed, and its line breaks may not be
-    /// the streamed ones.
+    /// Steps shorter than this ("Done.") are only matched where the
+    /// projection's next step starts: found further on, they are as likely a
+    /// phrase of the step still being written.
+    nonisolated static let inflightStepSearchMinimumCharacters = 24
+
+    /// Where `step` ends in `text`, from `start`. Saved steps follow one
+    /// another in the projection, so the step is looked for right at
+    /// `start` first; only a long one is searched for further on, past text
+    /// the projection has and the rows don't. Whitespace is not compared:
+    /// a saved step is trimmed, and its line breaks may not be the streamed
+    /// ones.
     nonisolated static func endOfInflightStep(
         _ step: String,
         in text: String,
         from start: String.Index
     ) -> String.Index? {
+        let needle = Array(step.filter { !$0.isWhitespace })
+        guard !needle.isEmpty else { return nil }
+        // Right at `start`, skipping whitespace on both sides.
+        var index = start
+        var matched = 0
+        while index < text.endIndex, matched < needle.count {
+            let character = text[index]
+            index = text.index(after: index)
+            if character.isWhitespace { continue }
+            guard character == needle[matched] else { break }
+            matched += 1
+        }
+        if matched == needle.count { return index }
+
+        guard needle.count >= inflightStepSearchMinimumCharacters else { return nil }
         if let range = text.range(of: step, range: start..<text.endIndex) {
             return range.upperBound
         }
-        let needle = step.filter { !$0.isWhitespace }
-        guard !needle.isEmpty else { return nil }
         // The text's visible characters, each with the index just past it.
         var haystack: [Character] = []
         var ends: [String.Index] = []
-        var index = start
+        index = start
         while index < text.endIndex {
             let next = text.index(after: index)
             if !text[index].isWhitespace {
@@ -15754,7 +15778,7 @@ final class AppState: ObservableObject {
             }
             index = next
         }
-        guard let last = firstMatchEnd(of: Array(needle), in: haystack) else { return nil }
+        guard let last = firstMatchEnd(of: needle, in: haystack) else { return nil }
         return ends[last]
     }
 
