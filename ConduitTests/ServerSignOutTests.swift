@@ -136,6 +136,25 @@ final class ServerSignOutTests: XCTestCase {
         XCTAssertTrue(harness.stored.isEmpty)
     }
 
+    func testAnOfflineTryKeepsTheHeadersBuiltAtSignOut() async {
+        let harness = Harness()
+        harness.answer = nil
+        let queue = makeQueue(harness)
+
+        queue.signOut(
+            dashboardID: UUID(),
+            baseURL: baseURL,
+            refreshTokens: ["refresh-native"],
+            cloudflare: CloudflareAccessCredentials(clientID: "id", clientSecret: "secret")
+        )
+        await queue.retryPending().value
+        harness.answer = (302, "/login")
+        await queue.retryPending().value
+
+        XCTAssertEqual(harness.sent.map { $0.value(forHTTPHeaderField: "CF-Access-Client-Id") }, ["id", "id"])
+        XCTAssertTrue(harness.stored.isEmpty)
+    }
+
     func testAnEdgeThatKeepsTurningTheRequestAwayIsGivenUpOn() async {
         let harness = Harness()
         harness.answer = (403, nil)

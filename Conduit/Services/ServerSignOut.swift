@@ -17,6 +17,7 @@
 //
 
 import Foundation
+import OSLog
 
 /// A refresh token waiting for Hermes to revoke it.
 struct PendingServerSignOut: Codable, Equatable {
@@ -144,6 +145,7 @@ final class ServerSignOutQueue {
     /// request never got an answer.
     typealias Send = @MainActor (URLRequest) async -> (status: Int, location: String?)?
 
+    private let log = Logger(subsystem: "com.milim.conduit", category: "ServerSignOut")
     private let send: Send
     private let now: () -> Date
     private let load: () -> [PendingServerSignOut]
@@ -216,13 +218,18 @@ final class ServerSignOutQueue {
         let cutoff = now().addingTimeInterval(-ServerSignOut.pendingLifetime)
         let current = load()
         let live = current.filter { $0.signedOutAt > cutoff }
-        if live.count != current.count { save(live) }
+        if live.count != current.count {
+            log.notice("Server sign-out past its lifetime dropped")
+            save(live)
+        }
         let liveIDs = Set(live.map(\.id))
         preparedRequests = preparedRequests.filter { liveIDs.contains($0.key) }
         var ended = Set<UUID>()
         var refused = Set<UUID>()
         for entry in live {
-            let request = preparedRequests.removeValue(forKey: entry.id) ?? ServerSignOut.request(
+            // The prepared request stays until Hermes or an edge answers: an
+            // offline try must not lose the headers Remove Dashboard deleted.
+            let request = preparedRequests[entry.id] ?? ServerSignOut.request(
                 baseURL: entry.baseURL,
                 refreshToken: entry.refreshToken,
                 cloudflare: KeychainHelper.loadCloudflareAccess(dashboardID: entry.dashboardID, for: entry.baseURL)
@@ -233,6 +240,7 @@ final class ServerSignOutQueue {
                 continue
             }
             guard let answer = await send(request) else { continue }
+            preparedRequests[entry.id] = nil
             if ServerSignOut.outcome(status: answer.status, location: answer.location, requestURL: url) == .ended {
                 ended.insert(entry.id)
             } else if answer.status < 500, answer.status != 429 {
@@ -246,7 +254,11 @@ final class ServerSignOutQueue {
             guard refused.contains(entry.id) else { return entry }
             var entry = entry
             entry.refusals += 1
-            return entry.refusals < ServerSignOut.maximumRefusals ? entry : nil
+            guard entry.refusals < ServerSignOut.maximumRefusals else {
+                log.notice("Server sign-out given up after repeated refusals")
+                return nil
+            }
+            return entry
         }
         save(remaining)
     }
@@ -256,6 +268,7 @@ final class ServerSignOutQueue {
         configuration.httpShouldSetCookies = false
         configuration.httpCookieAcceptPolicy = .never
         configuration.httpCookieStorage = nil
+        configuration.timeoutIntervalForResource = 30
         let session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
         guard let answer = try? await session.data(for: request),
