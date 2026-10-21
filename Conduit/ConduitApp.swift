@@ -269,8 +269,12 @@ struct ConduitApp: App {
             .background(WindowAccentTint(choice: accentChoice))
             // Notes touches app-wide so the backdrop can rest when idle.
             .background(InteractionIdleTouchProbe())
-            // The Watch app draws in the same accent.
-            .onChange(of: accentChoice) { _, _ in appState.shareWatchCallVoices() }
+            // The Watch app draws in the same accent. Shared once a pick
+            // settles: dragging in the colour picker changes it many times.
+            .task(id: accentChoice) {
+                guard (try? await Task.sleep(for: .milliseconds(600))) != nil else { return }
+                appState.shareWatchCallVoices()
+            }
 #if DEBUG
             .modifier(WidgetLaunchUITestFixture.modifier(appState: appState))
             .modifier(ScreenshotCallFixtureModifier(appState: appState))

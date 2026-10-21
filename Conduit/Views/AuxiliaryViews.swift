@@ -3229,6 +3229,11 @@ private struct AccentColorPicker: View {
                 AccentPreview()
             }
         }
+        // A custom colour that arrives from another device is the one the
+        // custom swatch reopens on too.
+        .onChange(of: selection) { _, newSelection in
+            if case .custom(let custom) = newSelection { lastCustomHex = custom.hex }
+        }
     }
 
     private func presetSwatch(_ choice: ConduitAccentChoice) -> some View {
@@ -3281,7 +3286,7 @@ private struct AccentColorPicker: View {
             },
             set: { color in
                 var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-                UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+                guard UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return }
                 // The picker can hand back Display P3; stored components are sRGB.
                 let srgb = CGColorSpace(name: CGColorSpace.sRGB).flatMap {
                     UIColor(color).cgColor.converted(to: $0, intent: .defaultIntent, options: nil)

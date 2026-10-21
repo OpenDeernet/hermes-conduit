@@ -44,8 +44,8 @@ struct CustomAccentColor: Hashable, Sendable {
     /// name. Anything else is nil.
     init?(hex: String) {
         guard hex.count == 7, hex.hasPrefix("#"),
-              let value = Int(hex.dropFirst(), radix: 16) else { return nil }
-        self.init(bytes: (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF)
+              let value = UInt32(hex.dropFirst(), radix: 16) else { return nil }
+        self.init(bytes: Int(value >> 16) & 0xFF, Int(value >> 8) & 0xFF, Int(value) & 0xFF)
     }
 
     /// The shades are worked out once here: the dynamic accent colours
