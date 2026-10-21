@@ -781,12 +781,11 @@ final class CarPlayVoiceCoordinator {
 
     /// A failure the car can only call "Something went wrong. See your
     /// iPhone." A call started in the car has no call screen on the phone,
-    /// so without this the phone showed nothing. The message goes where the
-    /// phone shows errors, above the composer.
+    /// so without this the phone showed nothing.
     private func showFailureOnPhone(_ message: String?) {
         guard let message = message?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !message.isEmpty else { return }
-        (lastBoundAppState ?? appStateProvider()).errorMessage = message
+              !message.isEmpty, message != shownPhoneFailure else { return }
+        (lastBoundAppState ?? appStateProvider()).showCarPlayFailure(message, phoneOnScreen: phoneScreenProvider())
         shownPhoneFailure = message
     }
 
@@ -795,8 +794,7 @@ final class CarPlayVoiceCoordinator {
     private func clearFailureOnPhone() {
         guard let shown = shownPhoneFailure else { return }
         shownPhoneFailure = nil
-        let appState = lastBoundAppState ?? appStateProvider()
-        if appState.errorMessage == shown { appState.errorMessage = nil }
+        (lastBoundAppState ?? appStateProvider()).clearCarPlayFailure(shown)
     }
 
     /// Records what the Error state should name as the thing to fix.

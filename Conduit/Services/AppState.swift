@@ -5804,6 +5804,36 @@ final class AppState: ObservableObject {
         publishNotice(PinSyncNotice(message: message, systemImage: systemImage))
     }
 
+    /// A call that failed in the car for a reason the car couldn't name
+    /// ("See your iPhone"), waiting for the phone's screen to come on.
+    private(set) var carPlayFailureForPhone: String?
+
+    /// Says on the phone why a call failed in the car: at once when the
+    /// phone is on screen, otherwise when it next comes on. The composer's
+    /// error line shows only while the composer is locked, so the notice
+    /// over the screen carries it.
+    func showCarPlayFailure(_ message: String, phoneOnScreen: Bool) {
+        if phoneOnScreen {
+            carPlayFailureForPhone = nil
+            showNotice(message, systemImage: "car.fill")
+        } else {
+            carPlayFailureForPhone = message
+        }
+    }
+
+    /// The car moved on from `message`: the phone no longer needs it.
+    func clearCarPlayFailure(_ message: String) {
+        if carPlayFailureForPhone == message { carPlayFailureForPhone = nil }
+        if pinSyncNotice?.message == message { pinSyncNotice = nil }
+    }
+
+    /// The phone's screen came on: a failure from the car shows now.
+    func presentCarPlayFailureIfWaiting() {
+        guard let message = carPlayFailureForPhone else { return }
+        carPlayFailureForPhone = nil
+        showNotice(message, systemImage: "car.fill")
+    }
+
     private func publishNotice(_ notice: PinSyncNotice) {
         pinSyncNotice = notice
         UIAccessibility.post(notification: .announcement, argument: notice.message)
@@ -16727,6 +16757,8 @@ final class AppState: ObservableObject {
             // A Talk that arrived before there was a window shows its call
             // screen now.
             presentWaitingCallIfNeeded()
+            // So does why a call failed in the car.
+            presentCarPlayFailureIfWaiting()
             noteActiveChatSeen(respectingMarks: true)
             // Health data the phone gathered while Conduit was away.
             Task { await runHealthSync(reason: .foreground) }
