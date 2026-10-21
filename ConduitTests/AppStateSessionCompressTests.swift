@@ -1791,6 +1791,11 @@ final class AppStateSessionCompressTests: XCTestCase {
         XCTAssertEqual(rewinds.first?.1, 5)
         XCTAssertEqual(rewinds.first?.2, 2)
         XCTAssertEqual(harness.appState.composerPrefillText, "first ask")
+        XCTAssertEqual(
+            harness.appState.messages.last?.content,
+            "Took the message back, but the chat couldn't reload. Open it again to see the change. The message is in the composer.",
+            "the harness's reopen fails, so the note says the chat on screen is stale"
+        )
     }
 
     func testUndoBeyondTheTranscriptRewindsNothing() async throws {

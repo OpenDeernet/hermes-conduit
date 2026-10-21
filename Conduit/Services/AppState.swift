@@ -24713,7 +24713,9 @@ final class AppState: ObservableObject {
             // Taken back, but the chat on screen still shows it: say so,
             // and keep the words (a /retry's too) in the composer.
             appendSlashOutput(
-                AppLocalization.string("Took the message back, but the chat couldn't reload. Open it again to see the change. The message is in the composer."),
+                text.isEmpty
+                    ? AppLocalization.string("Took the message back, but the chat couldn't reload. Open it again to see the change.")
+                    : AppLocalization.string("Took the message back, but the chat couldn't reload. Open it again to see the change. The message is in the composer."),
                 context: current
             )
             if !text.isEmpty { prefillComposer(text) }

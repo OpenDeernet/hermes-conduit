@@ -310007,6 +310007,88 @@
           }
         }
       }
+    },
+    "Took the message back, but the chat couldn't reload. Open it again to see the change." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Nachricht wurde zurückgenommen, aber der Chat konnte nicht neu geladen werden. Öffne ihn erneut, um die Änderung zu sehen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se deshizo el mensaje, pero el chat no se pudo recargar. Ábrelo de nuevo para ver el cambio."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le message a été annulé, mais la discussion n'a pas pu être rechargée. Rouvrez-la pour voir la modification."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pesan sudah ditarik kembali, tetapi chat tidak dapat dimuat ulang. Buka lagi untuk melihat perubahannya."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il messaggio è stato ritirato, ma non è stato possibile ricaricare la chat. Riaprila per vedere la modifica."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッセージを取り消しましたが、チャットを再読み込みできませんでした。もう一度開くと変更が表示されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지를 되돌렸지만 채팅을 다시 불러오지 못했습니다. 다시 열면 변경 내용이 보입니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cofnięto wiadomość, ale nie udało się ponownie wczytać czatu. Otwórz go ponownie, aby zobaczyć zmianę."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A mensagem foi desfeita, mas não foi possível recarregar o chat. Abra-o novamente para ver a alteração."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сообщение отменено, но чат не удалось перезагрузить. Откройте его снова, чтобы увидеть изменение."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mesaj geri alındı ancak sohbet yeniden yüklenemedi. Değişikliği görmek için sohbeti yeniden açın."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已撤回该消息，但聊天无法重新加载。请重新打开以查看更改。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已撤回該訊息，但聊天無法重新載入。請重新開啟以查看變更。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
