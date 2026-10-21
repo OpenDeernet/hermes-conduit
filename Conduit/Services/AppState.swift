@@ -24730,13 +24730,23 @@ final class AppState: ObservableObject {
             )
             return true
         }
+        guard !text.isEmpty else {
+            // A turn that held more than text has nothing to put back.
+            appendSlashOutput(
+                turnCount == 1
+                    ? AppLocalization.string("Took back your last message.")
+                    : AppLocalization.string("Messages taken back: \(turnCount)"),
+                context: current
+            )
+            return true
+        }
         appendSlashOutput(
             turnCount == 1
                 ? AppLocalization.string("Took back your last message. It's in the composer to edit.")
                 : AppLocalization.string("The oldest is in the composer to edit. Messages taken back: \(turnCount)"),
             context: current
         )
-        if !text.isEmpty { prefillComposer(text) }
+        prefillComposer(text)
         return true
     }
 

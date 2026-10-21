@@ -150,6 +150,12 @@ extension ComposerDraftStoreTests {
             SessionRewindReceipt(result: .object(["status": .string("nothing"), "rewound_count": .number(0)])).rewoundCount,
             0
         )
+        XCTAssertEqual(
+            SessionRewindReceipt(result: .object(["status": .string("applied")])).rewoundCount,
+            1,
+            "An applied rewind without its count still took the target back"
+        )
+        XCTAssertNil(SessionRewindSnapshot.text(of: .array([])), "No parts is not a text turn")
     }
 
     func testRewindRefusalsReadAsWords() {

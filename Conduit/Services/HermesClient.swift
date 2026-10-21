@@ -647,7 +647,7 @@ struct SessionRewindSnapshot: Equatable {
         switch content {
         case .string(let text)?:
             return text
-        case .array(let parts)?:
+        case .array(let parts)? where !parts.isEmpty:
             var words: [String] = []
             for part in parts {
                 guard let object = part.objectValue,
@@ -676,8 +676,10 @@ struct SessionRewindReceipt: Equatable {
 
     init(result: AnyCodable) {
         let object = result.objectValue ?? [:]
+        // Only `nothing` means nothing was taken back; an applied rewind
+        // without its count still took back the target.
         let nothing = object["status"]?.stringValue == "nothing"
-        rewoundCount = nothing ? 0 : (HermesClient.exactIntValue(object["rewound_count"]) ?? 0)
+        rewoundCount = nothing ? 0 : (HermesClient.exactIntValue(object["rewound_count"]) ?? 1)
         text = SessionRewindSnapshot.text(of: object["target_message"]?.objectValue?["content"])
     }
 }
