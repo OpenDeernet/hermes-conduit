@@ -1751,7 +1751,7 @@ private struct ChatTakeoverSettings: View {
             symbol: "desktopcomputer",
             tint: .conduitAura
         ) {
-            Text("Hermes lets one app use a chat at a time. When a chat is open in Hermes Desktop or a terminal, Conduit takes it over when you send. Turn this off to be asked first.")
+            Text("Hermes lets one app use a chat at a time. When a chat is open in Hermes Desktop or a terminal, Conduit takes it over when you send. Calls always take it over; turn this off to be asked first when you type.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Text("A reply running there always finishes first. If you go back to that app, reopen the chat there to see what you sent from Conduit.")

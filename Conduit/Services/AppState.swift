@@ -22644,9 +22644,10 @@ final class AppState: ObservableObject {
     /// right after that offers the button instead of looping; a successful
     /// send clears it.
     private var chatTakeoverAutomaticSessionID: String?
-    /// The call request `submitComposerForCall` is sending, while it is: its
-    /// takeover waits in the call, not in the composer.
-    private var callSubmissionText: String?
+    /// The call requests `submitComposerForCall` is sending, while it is:
+    /// their takeover waits in the call, not in the composer. A list, so
+    /// calls overlapping on another text keep their own marks.
+    private var callSubmissionTexts: [String] = []
 
     /// The takeover for the open chat, matched on every id the chat goes by,
     /// so a runtime id rotated mid-takeover keeps the notice and the resend.
@@ -22811,24 +22812,28 @@ final class AppState: ObservableObject {
     /// The composer's own resend never runs for it: its draft isn't the
     /// request, and the notice is gone once the chat is Conduit's.
     func submitComposerForCall(text: String, onBusy: (() -> Void)? = nil) async -> Bool {
-        callSubmissionText = text
-        defer { callSubmissionText = nil }
+        callSubmissionTexts.append(text)
+        defer {
+            if let index = callSubmissionTexts.firstIndex(of: text) { callSubmissionTexts.remove(at: index) }
+        }
         if await submitComposer(text: text, onBusy: onBusy) { return true }
         guard let sessionID = activeSessionId, chatTakeoverMatches(sessionID),
               let refused = chatTakeover, refused.phase == .offered, refused.isRefusedMessage(text),
               await takeOverChatForCall() else { return false }
+        // The user may have opened another chat while it waited: the
+        // request belongs to the chat that refused it, never that one.
+        guard let current = activeSessionId,
+              chatTakeoverGuardKey(current) == chatTakeoverGuardKey(sessionID) else { return false }
         return await submitComposer(text: text, onBusy: onBusy)
     }
 
     /// Takes the refused open chat over for a call's request, waiting a
     /// minute at most. True when the chat is Conduit's now; otherwise the
-    /// notice keeps the outcome for the composer.
+    /// notice keeps the outcome for the composer. Each request takes over
+    /// once at most, so it needs no loop guard, and a later request can
+    /// try again once the user fixed what stopped this one.
     private func takeOverChatForCall() async -> Bool {
         guard var state = chatTakeover, state.phase == .offered else { return false }
-        // Refused again right after a takeover: the button, not a loop.
-        let key = chatTakeoverGuardKey(state.sessionID)
-        guard chatTakeoverAutomaticSessionID != key else { return false }
-        chatTakeoverAutomaticSessionID = key
         chatTakeoverTask?.cancel()
         chatTakeoverTask = nil
         state.phase = .waiting
@@ -23396,7 +23401,7 @@ final class AppState: ObservableObject {
             // Automatic takeover starts once the refused draft is back in
             // the composer, which sends it again when the chat is Conduit's.
             // A call's request is taken over and sent again by the call.
-            if callSubmissionText != text, surface != Self.spokenPromptSurface,
+            if !callSubmissionTexts.contains(text), surface != Self.spokenPromptSurface,
                chatTakeoverMatches(sessionId), activeChatTakeover?.phase == .offered,
                takesOverChatsAutomatically, chatTakeoverAutomaticSessionID != chatTakeoverGuardKey(sessionId) {
                 chatTakeoverAutomaticSessionID = chatTakeoverGuardKey(sessionId)

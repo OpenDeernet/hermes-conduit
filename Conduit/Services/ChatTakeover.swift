@@ -100,7 +100,8 @@ struct ChatTakeoverState: Equatable {
     /// another app holds it and Conduit didn't take it over (#1061).
     var callRefusalMessage: String {
         switch phase {
-        case .offered, .waiting, .ready: return openElsewhereMessage
+        case .offered, .ready: return openElsewhereMessage
+        case .waiting: return takingOverMessage
         case .failed(let message), .unavailable(let message): return message
         case .heldHere: return Self.heldHereMessage
         }

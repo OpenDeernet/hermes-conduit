@@ -263,6 +263,42 @@ final class AppStateForegroundLifecycleTests: XCTestCase {
         box.client.disconnect()
     }
 
+    func testCallRequestRefusedAgainAfterTakeoverStopsAndALaterOneTriesAgain() async {
+        // Desktop took the chat straight back: one resend, no third send,
+        // and the call says the chat is open there. The next request takes
+        // over again rather than being blocked for the rest of the call.
+        var sent: [String] = []
+        var takeovers = 0
+        let harness = makeHarness(lifecycleOperations: desktopHeldChatOperations(
+            sends: { sent.append($0) }, takenOver: { false }
+        ))
+        harness.appState.chatTakeoverClient = ChatTakeoverClient(request: { _, _, _ in
+            takeovers += 1
+            return ["ok": true, "status": "taken_over"]
+        })
+        let box = await installConnectedClient(into: harness)
+        harness.appState.sessions = [session("stored-a", alternateIDs: ["runtime-a"])]
+        let opened = await harness.appState.openSession("stored-a")
+        XCTAssertTrue(opened)
+
+        let first = await harness.appState.submitComposerForCall(text: "What's on my calendar")
+
+        XCTAssertFalse(first)
+        XCTAssertEqual(sent.count, 2)
+        XCTAssertEqual(takeovers, 1)
+        XCTAssertEqual(
+            harness.appState.callRefusalMessageForOpenChat(),
+            AppLocalization.string("This chat is open in Hermes Desktop. Take it over to send from here.")
+        )
+
+        let second = await harness.appState.submitComposerForCall(text: "Any new email")
+
+        XCTAssertFalse(second)
+        XCTAssertEqual(sent.count, 4)
+        XCTAssertEqual(takeovers, 2)
+        box.client.disconnect()
+    }
+
     func testCallRequestThatCannotTakeOverSaysWhy() async {
         // Conduit on another device holds the chat: the host never takes it
         // from there, and the call says so instead of a bare failure.
