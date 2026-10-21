@@ -22841,8 +22841,8 @@ final class AppState: ObservableObject {
         return await submitComposer(text: text, onBusy: onBusy)
     }
 
-    /// Takes the refused open chat over for a call's request, waiting a
-    /// minute at most. True when the chat is Conduit's now; otherwise the
+    /// Takes the refused open chat over for a call's request, waiting 20
+    /// seconds at most. True when the chat is Conduit's now; otherwise the
     /// notice keeps the outcome for the composer. Each request takes over
     /// once at most, so it needs no loop guard, and a later request can
     /// try again once the user fixed what stopped this one.
@@ -22870,7 +22870,13 @@ final class AppState: ObservableObject {
         let phase = await withTaskCancellationHandler { await wait.value } onCancel: { wait.cancel() }
         if chatTakeoverTask == handle { chatTakeoverTask = nil }
         // Dismissed, or replaced by another refusal, while it waited.
-        guard let phase, chatTakeover?.sessionID == state.sessionID, chatTakeover?.phase == .waiting else { return false }
+        guard chatTakeover?.sessionID == state.sessionID, chatTakeover?.phase == .waiting else { return false }
+        guard let phase else {
+            // The call moved on: the composer offers the button again.
+            state.phase = .offered
+            chatTakeover = state
+            return false
+        }
         if phase == .ready {
             dismissChatTakeover()
             return true
