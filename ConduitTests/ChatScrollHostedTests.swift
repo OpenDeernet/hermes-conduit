@@ -320,11 +320,18 @@ final class ChatScrollHostedTests: XCTestCase {
         // with everything written so far. It must not be typed out again:
         // only its newest characters fade in.
         let mounted = try mount(Self.transcript(0..<40))
+        let transcriptOnly = mounted.scrollView.contentSize.height
         mounted.appState.setStreamingTextForTesting(String(
             repeating: "Everything the reply wrote before the chat was opened again. ",
             count: 50
         ))
-        settle(mounted.host.view, seconds: 0.2)
+        // The first sample is taken once the bubble is laid out, however
+        // long a busy simulator takes to get there.
+        let deadline = Date().addingTimeInterval(5)
+        repeat {
+            settle(mounted.host.view, seconds: 0.05)
+        } while mounted.scrollView.contentSize.height <= transcriptOnly + 1 && Date() < deadline
+        settle(mounted.host.view, seconds: 0.1)
         let shownAtOnce = mounted.scrollView.contentSize.height
         settle(mounted.host.view, seconds: 1.0)
         let shownLater = mounted.scrollView.contentSize.height

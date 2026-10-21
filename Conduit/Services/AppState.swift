@@ -15700,8 +15700,9 @@ final class AppState: ObservableObject {
             return recovered
         }
         // Only the running turn's own steps: an earlier turn's reply can
-        // repeat a phrase this turn writes, and must not cut it.
-        let promptIndex = messages.lastIndex(where: { $0.role == .user })
+        // repeat a phrase this turn writes, and must not cut it. A steer is
+        // part of the running turn, not its prompt.
+        let promptIndex = messages.lastIndex(where: { $0.role == .user && !$0.isSteer })
         if let promptIndex, lastReplyIndex < promptIndex {
             return recovered
         }

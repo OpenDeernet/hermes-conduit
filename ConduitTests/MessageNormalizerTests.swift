@@ -73,6 +73,32 @@ final class MessageNormalizerTests: XCTestCase {
         )
     }
 
+    func testResumeCountsStepsBeforeASteerAsTheRunningTurns() {
+        // A steer lands mid-turn; the projection still holds the steps
+        // written before it.
+        let history = [
+            ChatMessage(id: "u", role: .user, content: "Check the logs and the config.", timestamp: "t"),
+            ChatMessage(id: "a1", role: .assistant, content: "Reading the logs first.", timestamp: "t"),
+            ChatMessage(id: "s", role: .user, content: "Skip the config.", timestamp: "t", displayKind: ChatMessage.steerDisplayKind),
+            ChatMessage(id: "a2", role: .assistant, content: "Ok.", timestamp: "t")
+        ]
+
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Reading the logs first.Ok.Summing up the logs",
+                after: history
+            ),
+            "Summing up the logs"
+        )
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Reading the logs first.Then",
+                after: Array(history.prefix(3))
+            ),
+            "Then"
+        )
+    }
+
     func testResumeMatchesSavedStepsWhateverTheirWhitespace() {
         let history = [
             ChatMessage(id: "u", role: .user, content: "Summarise it.", timestamp: "t"),
