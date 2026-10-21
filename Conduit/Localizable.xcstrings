@@ -307419,19 +307419,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "なし"
+            "value" : "ファイルなし"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "없음"
+            "value" : "파일 없음"
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Brak"
+            "value" : "Brak pliku"
           }
         },
         "pt-BR" : {
@@ -307443,7 +307443,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Нет"
+            "value" : "Нет файла"
           }
         },
         "tr" : {
