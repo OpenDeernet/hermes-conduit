@@ -54,9 +54,12 @@ extension AppState {
               let scope = syncedPreferencesScope, let bridge = dashboardTicketBridge else { return }
         guard controller.begin() else { return }
         defer {
-            // A sync dropped for another host or profile leaves no status behind.
-            if controller.status == .syncing { controller.status = .idle }
-            if controller.end() { Task { await self.syncPreferences() } }
+            if controller.end() {
+                Task { await self.syncPreferences() }
+            } else if controller.status == .syncing {
+                // A sync dropped for another host or profile leaves no status behind.
+                controller.status = .idle
+            }
         }
         controller.keepLedgers(dashboardIDs: Set(savedDashboardRegistry.dashboards.map(\.id.uuidString)))
 
@@ -76,6 +79,7 @@ extension AppState {
                 host = SyncedPreferencesEngine.hostValues(response)
                 guard isCurrent() else { return }
             }
+            let before = SyncedPreferencesEngine.snapshot(slots)
             let changes = SyncedPreferencesEngine.changes(slots: slots, ledger: ledger, host: host, start: start)
             if onlyIfChanged, ledger != nil, changes.isEmpty { return }
             controller.status = .syncing
@@ -87,7 +91,7 @@ extension AppState {
             guard isCurrent() else { return }
             let entry = SyncedPreferencesEngine.apply(
                 host: SyncedPreferencesEngine.hostValues(response),
-                slots: slots, uploaded: Set(changes.keys), ledger: ledger
+                slots: slots, uploaded: Set(changes.keys), ledger: ledger, before: before
             )
             controller.setLedger(entry, for: scope)
             controller.status = .synced(entry.syncedAt ?? Date())

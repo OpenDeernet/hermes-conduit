@@ -130,29 +130,49 @@ enum SyncedPreferencesEngine {
         return changes
     }
 
+    /// What every slot holds now, as canonical JSON, taken before a sync's
+    /// request so `apply` can tell what changed while it was out.
+    static func snapshot(_ slots: [SyncedPreferenceSlot]) -> [String: String] {
+        var values: [String: String] = [:]
+        for slot in slots {
+            values[slot.key] = canonical(slot.read())
+        }
+        return values
+    }
+
     /// Takes the host's values for every key this device didn't just
-    /// upload, and returns the new ledger entry.
+    /// upload, and returns the new ledger entry. A key changed here since
+    /// `before` (while the request was out) keeps its new value and stays
+    /// owed to the host: the ledger records what it was before, so the next
+    /// sync uploads it.
     @discardableResult
     static func apply(
         host: [String: Any],
         slots: [SyncedPreferenceSlot],
         uploaded: Set<String>,
         ledger: SyncedPreferencesLedgerEntry?,
+        before: [String: String]? = nil,
         now: Date = Date()
     ) -> SyncedPreferencesLedgerEntry {
         var entry = SyncedPreferencesLedgerEntry(syncedAt: now)
         for slot in slots {
+            let current = canonical(slot.read())
+            if let before, before[slot.key] != current {
+                // Missing from the ledger when it had the default before.
+                entry.lastLocal[slot.key] = before[slot.key]
+                continue
+            }
             if !uploaded.contains(slot.key), slot.canApply() {
                 let value = host[slot.key]
                 switch slot.merge {
                 case .replace:
-                    if canonical(value) != canonical(slot.read()) {
+                    if canonical(value) != current {
                         slot.write(value)
                     }
                 case .addOnly:
                     let local = slot.read() as? [String] ?? []
-                    let before = ledger?.lastLocal[slot.key].flatMap(decoded) as? [String] ?? []
-                    let added = (value as? [String] ?? []).filter { !before.contains($0) && !local.contains($0) }
+                    let previous = ledger?.lastLocal[slot.key].flatMap(decoded) as? [String] ?? []
+                    let added = (value as? [String] ?? []).filter { !previous.contains($0) && !local.contains($0) }
                     if !added.isEmpty {
                         slot.write(local + added)
                     }

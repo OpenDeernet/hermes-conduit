@@ -118,13 +118,12 @@ struct SyncedPreferencesSettingsDetail: View {
         Task {
             let hostHasValues = await appState.hostHasSyncedPreferences()
             checkingHost = false
-            switch hostHasValues {
-            case true?:
+            if hostHasValues == true {
                 choosingStart = true
-            case false?:
-                await appState.setSyncedPreferencesEnabled(true, start: .useDevice)
-            case nil:
-                // Couldn't tell: the host's values win, so nothing on it is lost.
+            } else {
+                // An empty host takes all of this device's values either way;
+                // one another device filled meanwhile, or one that couldn't
+                // be read, keeps its own.
                 await appState.setSyncedPreferencesEnabled(true, start: .useHost)
             }
         }

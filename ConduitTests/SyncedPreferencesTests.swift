@@ -86,6 +86,29 @@ extension ChatReadStateTests {
         XCTAssertEqual((box.values["voice.preferences"] as? [String: String])?["tone"], "lively")
     }
 
+    func testSyncedChangeWhileTheRequestIsOutIsKeptAndUploadedNext() {
+        let box = SyncedBox()
+        box.values = ["app.text": 2, "app.accent": "green"]
+        let text = box.slot("app.text")
+        let accent = box.slot("app.accent")
+        let ledger = SyncedPreferencesEngine.apply(host: box.values, slots: [text, accent], uploaded: [], ledger: nil)
+
+        box.values["app.text"] = 3
+        let before = SyncedPreferencesEngine.snapshot([text, accent])
+        let changes = SyncedPreferencesEngine.changes(slots: [text, accent], ledger: ledger, host: nil, start: .useHost)
+        XCTAssertEqual(changes["app.text"] as? Int, 3)
+        // Changed again, and the accent too, while the request was out.
+        box.values["app.text"] = 4
+        box.values["app.accent"] = "violet"
+        let entry = SyncedPreferencesEngine.apply(host: ["app.text": 3, "app.accent": "green"], slots: [text, accent],
+                                                  uploaded: Set(changes.keys), ledger: ledger, before: before)
+        XCTAssertEqual(box.values["app.text"] as? Int, 4)
+        XCTAssertEqual(box.values["app.accent"] as? String, "violet")
+        let next = SyncedPreferencesEngine.changes(slots: [text, accent], ledger: entry, host: nil, start: .useHost)
+        XCTAssertEqual(next["app.text"] as? Int, 4)
+        XCTAssertEqual(next["app.accent"] as? String, "violet")
+    }
+
     func testSyncedHostClearingAKeyGoesBackToTheDefault() {
         let box = SyncedBox()
         box.values = ["app.accent": "green"]
