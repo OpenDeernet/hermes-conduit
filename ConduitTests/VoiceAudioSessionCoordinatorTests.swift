@@ -649,6 +649,7 @@ extension VoiceAudioSessionCoordinatorTests {
         XCTAssertTrue(session.categoryCalls.isEmpty, "a category change would clear the speaker override")
         XCTAssertEqual(session.speakerOverrides, 0)
         XCTAssertTrue(session.isOutputOnBuiltInSpeaker)
+        XCTAssertEqual(session.activationCount, 1, "the next owner still reactivates the session")
         XCTAssertEqual(coordinator.appliedPolicy, .conversation)
     }
 
@@ -661,6 +662,8 @@ extension VoiceAudioSessionCoordinatorTests {
         coordinator.release(capture)
 
         XCTAssertEqual(session.deactivationCount, 1)
+        XCTAssertEqual(session.lastDeactivationOptions, .notifyOthersOnDeactivation)
+        XCTAssertNil(coordinator.appliedPolicy)
     }
 
     func testFailedCallCategoryStillReappliesOnTheNextTransition() throws {

@@ -201,8 +201,11 @@ final class VoiceAudioSessionCoordinator {
     static let shared = VoiceAudioSessionCoordinator()
 
     /// The session policy currently applied to the system session, or nil
-    /// while no audio intent is active. Exposed read-only for diagnostics
-    /// and deterministic ownership tests.
+    /// while no audio intent is active. Nil means Conduit holds nothing, not
+    /// that the session is off: in a call from Hermes CallKit keeps it
+    /// active, so code that reconfigures the session checks `isInNativeCall`
+    /// too. Exposed read-only for diagnostics and deterministic ownership
+    /// tests.
     private(set) var appliedPolicy: Policy?
 
     /// Raised when a policy transition failed partway — typically the
