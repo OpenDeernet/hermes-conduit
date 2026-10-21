@@ -3442,7 +3442,7 @@ final class AppState: ObservableObject {
     private var localLiveOwnChat: VoiceThreadTarget?
 
     /// A Local Live call's turns, run as Hermes turns in the call's chat.
-    lazy var localLiveTurns = LocalLiveTurnRunner(backend: LocalLiveTurnRunner.Backend(
+    lazy var localLiveTurns: LocalLiveTurnRunner = LocalLiveTurnRunner(backend: LocalLiveTurnRunner.Backend(
         resolveChat: { [weak self] in
             guard let self, let client = self.client else { throw HermesError.notConnected }
             if let thread = self.voiceBackgroundJobSupervisor.liveThread {
