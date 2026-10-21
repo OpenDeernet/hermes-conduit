@@ -118,10 +118,14 @@ struct SyncedPreferencesSettingsDetail: View {
         Task {
             let hostHasValues = await appState.hostHasSyncedPreferences()
             checkingHost = false
-            if hostHasValues == true {
+            switch hostHasValues {
+            case true?:
                 choosingStart = true
-            } else {
+            case false?:
                 await appState.setSyncedPreferencesEnabled(true, start: .useDevice)
+            case nil:
+                // Couldn't tell: the host's values win, so nothing on it is lost.
+                await appState.setSyncedPreferencesEnabled(true, start: .useHost)
             }
         }
     }
@@ -131,7 +135,7 @@ struct SyncedPreferencesSettingsDetail: View {
         case .idle: return AppLocalization.string("Not synced yet")
         case .syncing: return AppLocalization.string("Syncing…")
         case .synced(let date):
-            return AppLocalization.string("Synced \(date.formatted(.relative(presentation: .named)))")
+            return AppLocalization.string("Synced \(date.formatted(.relative(presentation: .named).locale(AppLocalization.formattingLocale)))")
         case .failed(let message): return message
         }
     }

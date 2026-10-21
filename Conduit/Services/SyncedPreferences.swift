@@ -226,6 +226,7 @@ final class SyncedPreferencesController: ObservableObject {
         defaults.set(enabled, forKey: Self.enabledKey)
         if !enabled {
             pendingUpload?.cancel()
+            pendingUpload = nil
             status = .idle
         }
     }
@@ -265,6 +266,17 @@ final class SyncedPreferencesController: ObservableObject {
         }
     }
 
+    /// Drops the ledgers of dashboards no longer saved.
+    func keepLedgers(dashboardIDs: Set<String>) {
+        guard let data = defaults.data(forKey: Self.ledgerKey),
+              let ledgers = try? JSONDecoder().decode([String: SyncedPreferencesLedgerEntry].self, from: data) else { return }
+        let kept = ledgers.filter { scope, _ in
+            dashboardIDs.contains(String(scope.prefix { character in character != "|" }))
+        }
+        guard kept.count != ledgers.count, let encoded = try? JSONEncoder().encode(kept) else { return }
+        defaults.set(encoded, forKey: Self.ledgerKey)
+    }
+
     /// Runs `upload` a moment after the app's preferences change, so a
     /// change made on this device reaches the host without waiting for the
     /// next connect.
@@ -274,11 +286,13 @@ final class SyncedPreferencesController: ObservableObject {
             forName: UserDefaults.didChangeNotification, object: defaults, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.isEnabled else { return }
-                self.pendingUpload?.cancel()
+                // Most writes are other keys: one check per interval, not
+                // a new task per write.
+                guard let self, self.isEnabled, self.pendingUpload == nil else { return }
                 let wait = self.debounce
                 self.pendingUpload = Task { @MainActor in
                     try? await Task.sleep(for: wait)
+                    self.pendingUpload = nil
                     guard !Task.isCancelled else { return }
                     await upload()
                 }

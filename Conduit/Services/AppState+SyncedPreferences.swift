@@ -53,7 +53,12 @@ extension AppState {
         guard controller.isEnabled, supportsSyncedPreferences,
               let scope = syncedPreferencesScope, let bridge = dashboardTicketBridge else { return }
         guard controller.begin() else { return }
-        defer { if controller.end() { Task { await self.syncPreferences() } } }
+        defer {
+            // A sync dropped for another host or profile leaves no status behind.
+            if controller.status == .syncing { controller.status = .idle }
+            if controller.end() { Task { await self.syncPreferences() } }
+        }
+        controller.keepLedgers(dashboardIDs: Set(savedDashboardRegistry.dashboards.map(\.id.uuidString)))
 
         let profile = activeProfile
         let path = DashboardPath.withProfile(SyncedPreferencesEngine.path, profile: profile)
