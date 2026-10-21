@@ -3202,6 +3202,19 @@ extension CarPlayVoiceCoordinatorTests {
         XCTAssertNil(harness.appState.errorMessage)
     }
 
+    func testANamedFixReplacesAnEarlierFailureOnThePhone() async {
+        let harness = makeHarness()
+        harness.coordinator.handleConnect(harness.spy)
+        await harness.coordinator.waitForPresentation()
+        harness.coordinator.handleControllerState(.failed("Hermes didn't answer."))
+        harness.appState.isConnected = false
+
+        harness.coordinator.handleControllerState(.failed("Not connected."))
+
+        XCTAssertEqual(harness.coordinator.controls.errorIssue, .notConnected)
+        XCTAssertNil(harness.appState.errorMessage, "the car says what to fix now")
+    }
+
     func testAGPTLiveCallThatFailsInTheCarShowsWhyOnThePhone() async {
         let harness = makeHarness()
         harness.coordinator.handleConnect(harness.spy)

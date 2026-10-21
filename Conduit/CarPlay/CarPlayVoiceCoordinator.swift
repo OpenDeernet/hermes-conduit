@@ -737,7 +737,8 @@ final class CarPlayVoiceCoordinator {
             let shownBefore = shownState
             let wasPresented = isTemplatePresented
             noteErrorIssue()
-            if controls.errorIssue == nil { showFailureOnPhone(failure) }
+            // A named fix replaces an earlier unnamed failure on the phone.
+            if controls.errorIssue == nil { showFailureOnPhone(failure) } else { clearFailureOnPhone() }
             if wasPresented, !isTemplatePresented { replacedFrom = shownBefore }
         } else {
             clearFailureOnPhone()
