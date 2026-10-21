@@ -117,10 +117,13 @@ enum NotificationDashboardOwnership {
             return .failClosed(.unrecognizedDashboard)
         }
         // The push came from the host the active dashboard is signed in to:
-        // that host told this dashboard its relay gateway id. A pairing
-        // bound to another saved entry for the same host (or to one since
-        // removed) still belongs here, and switching away would tear down
-        // the connection that can open it.
+        // that host told this dashboard its relay gateway id, over its
+        // signed-in connection and only for a pairing with this iPhone. A
+        // pairing bound to another saved entry for the same host (or to one
+        // since removed) still belongs here, and switching away would tear
+        // down the connection that can open it. The id comes from the relay
+        // stamp, as `dashboard_id` does: the relay is already trusted to
+        // route.
         if activeDashboardID != nil, let targetGatewayID,
            activeDashboardGatewayIDs.contains(targetGatewayID) {
             return .route

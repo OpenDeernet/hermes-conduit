@@ -12208,6 +12208,8 @@ final class AppState: ObservableObject {
         registry.dashboards[index].pendingURL = nil
         savedDashboardRegistry = registry
         SavedDashboardRegistryStore.save(registry)
+        // The old address's host reported them; the new one reports its own.
+        forgetRelayGatewayIDs(of: id)
         return registry.dashboards[index]
     }
 

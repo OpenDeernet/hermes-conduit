@@ -476,3 +476,17 @@ extension NotificationDashboardOwnershipTests {
         XCTAssertEqual(pairings.otherDashboardsCount, 0)
     }
 }
+
+extension NotificationDashboardOwnershipTests {
+    func testRelayGatewayIDsAreForgottenWhenTheDashboardMoves() {
+        var moving = SavedDashboard(id: dashboardA, label: "VPS", normalizedURL: "https://vps.tailnet.ts.net")
+        moving.pendingURL = "https://other.tailnet.ts.net"
+        let appState = makeAppState(registry: SavedDashboardRegistry(activeDashboardID: dashboardA, dashboards: [moving]))
+        appState.recordRelayGatewayID("gw-1", for: dashboardA)
+
+        appState.settlePendingDashboardMove(dashboardA)
+
+        XCTAssertEqual(appState.savedDashboardRegistry.dashboard(with: dashboardA)?.normalizedURL, "https://other.tailnet.ts.net")
+        XCTAssertTrue(appState.relayGatewayIDs(of: dashboardA).isEmpty)
+    }
+}
