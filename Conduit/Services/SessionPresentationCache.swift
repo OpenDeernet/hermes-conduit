@@ -1258,11 +1258,25 @@ final class SessionPresentationCache {
     /// Decodes the stored chats into memory off the main thread, so the
     /// first read at launch (the sync after unlock) finds them decoded
     /// instead of decoding the whole store while the Chats list draws.
+    /// The decode runs outside `memoryLock`, so a main-thread read never
+    /// waits on it; the result goes in only if nothing filled memory first.
     func prewarm() {
         guard writeQueue != nil else { return }
         DispatchQueue.global(qos: .userInitiated).async { [self] in
-            _ = load()
-            _ = loadPendingTools()
+            let data = defaults.data(forKey: storageKey)
+            let sessions = data.flatMap { try? JSONDecoder().decode([String: CachedSession].self, from: $0) } ?? [:]
+            let toolsData = defaults.data(forKey: pendingToolsStorageKey)
+            let tools = toolsData.flatMap { try? JSONDecoder().decode([String: [CachedMessage]].self, from: $0) } ?? [:]
+            memoryLock.withLock {
+                if memoryStore == nil {
+                    memoryStore = withoutTombstonedKeys(sessions)
+                    memoryStoreData = data
+                }
+                if memoryPendingTools == nil {
+                    memoryPendingTools = withoutTombstonedKeys(tools)
+                    memoryPendingToolsData = toolsData
+                }
+            }
         }
     }
 

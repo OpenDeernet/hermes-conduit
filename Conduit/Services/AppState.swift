@@ -5581,7 +5581,6 @@ final class AppState: ObservableObject {
         self.savedDashboardRegistry = initialRegistry
         self.profileAppearanceStore = profileAppearanceStore ?? ProfileAppearanceStore(defaults: defaults)
         self.sessionPresentationCache = sessionPresentationCache
-        sessionPresentationCache.prewarm()
         self.offlineChatCache = offlineChatCache ?? Self.makeDefaultOfflineChatCache()
         self.sessionYoloStore = sessionYoloStore ?? SessionYoloStore(defaults: defaults)
         self.conversationIdentityIndex = conversationIdentityIndex ?? ConversationIdentityIndex()
@@ -5678,6 +5677,8 @@ final class AppState: ObservableObject {
             .sink { [weak self] conditions in
                 MainActor.assumeIsolated { self?.deviceConditionsChanged(conditions) }
             }
+        // After init's own defaults reads, so they don't queue behind it.
+        sessionPresentationCache.prewarm()
     }
 
     func deviceConditionsChanged(_ conditions: DeviceConditions) {
@@ -25955,11 +25956,15 @@ final class AppState: ObservableObject {
     /// Normalizes a transcript page off the main actor: a long chat's
     /// rows take tens of milliseconds, and the launch sync runs while the
     /// Chats list is drawing its first frames.
-    nonisolated private static func normalizeTranscriptRows(
+    private static func normalizeTranscriptRows(
         _ rows: [Any],
         imageScope: TranscriptImageScope?
     ) async -> [ChatMessage] {
-        MessageNormalizer.normalizeMessages(rows.map(AnyCodable.from), imageScope: imageScope)
+        // Detached, so the hop off the main actor never depends on how a
+        // nonisolated async function is scheduled.
+        await Task.detached(priority: .userInitiated) {
+            MessageNormalizer.normalizeMessages(rows.map(AnyCodable.from), imageScope: imageScope)
+        }.value
     }
 
     /// The dashboard server returns `messages`; the API-server variant
