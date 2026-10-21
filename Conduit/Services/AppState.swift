@@ -685,6 +685,10 @@ final class AppState: ObservableObject {
     /// The dashboard a connection currently belongs to (the selected target).
     var activeDashboardID: UUID? { savedDashboardRegistry.activeDashboardID }
     @Published private(set) var defaultProfileName: String
+    /// Each profile's `display_name` set in Hermes, when it has one (#1046):
+    /// "Coding Assistant" for `coding-agent`. Names only; routing keeps the
+    /// profile id.
+    @Published private(set) var profileHermesNames: [String: String] = [:]
     @Published private(set) var profileAvatarURLs: [String: URL] {
         // Also bumped when a photo's bytes change under the same URL, so the
         // glow colors drawn from the photos are worked out again.
@@ -5196,6 +5200,7 @@ final class AppState: ObservableObject {
     private let sessionFilterOrderKey = "conduit.sessionFilterOrder.v1"
     private let reviewSummaryCacheKey = "conduit.reviewSummaryCache.v1"
     private let knownProfilesKey = "conduit.knownProfiles.v1"
+    private let profileHermesNamesKey = "conduit.profileHermesNames.v1"
     /// Per-dashboard copies of profile-level presentation choices (#148).
     /// Profile names repeat across Hermes servers ("default" everywhere), so
     /// these are keyed by dashboard UUID. The pre-scoping global values were
@@ -5668,6 +5673,7 @@ final class AppState: ObservableObject {
         profiles = orderedProfiles(
             (defaults.stringArray(forKey: knownProfilesKey) ?? []) + [activeProfile, "default"]
         )
+        profileHermesNames = defaults.dictionary(forKey: profileHermesNamesKey) as? [String: String] ?? [:]
         restoreActiveSessionState(for: activeProfile)
         restorePinnedSessions(for: activeProfile)
         if shouldLoadSavedConnection {
@@ -9534,6 +9540,8 @@ final class AppState: ObservableObject {
         defaults.removeObject(forKey: voiceJobSessionIDsByProfileKey)
         defaults.removeObject(forKey: reviewSummaryCacheKey)
         defaults.removeObject(forKey: knownProfilesKey)
+        defaults.removeObject(forKey: profileHermesNamesKey)
+        profileHermesNames = [:]
         refreshSiriProfileShortcuts()
         clearSessionPresentationCache()
         // Saved chats are kept apart per dashboard and stay for the next
@@ -10674,6 +10682,7 @@ final class AppState: ObservableObject {
             isConnected: isConnected,
             profile: activeProfile,
             defaultProfileName: defaultProfileName,
+            profileDisplayName: profileDisplayName(activeProfile),
             theme: themePreference,
             busyInputMode: busyInputMode,
             chatResumeBehavior: chatResumeBehavior,
@@ -10721,7 +10730,21 @@ final class AppState: ObservableObject {
     func profileDisplayName(_ profile: String) -> String {
         let normalized = profile.trimmingCharacters(in: .whitespacesAndNewlines)
         if normalized.isEmpty || normalized.lowercased() == "default" { return defaultProfileName }
+        if let name = profileHermesNames[normalized] { return name }
         return String(normalized.prefix(1)).uppercased() + String(normalized.dropFirst())
+    }
+
+    /// Keeps the `display_name`s a full profile listing named. Profiles
+    /// without one read as their id again.
+    func adoptProfileHermesNames(_ rows: [(profile: String, displayName: String)]) {
+        var names: [String: String] = [:]
+        for row in rows {
+            let name = row.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty, name != row.profile { names[row.profile] = name }
+        }
+        guard names != profileHermesNames else { return }
+        profileHermesNames = names
+        defaults.set(names, forKey: profileHermesNamesKey)
     }
 
     func profileAvatarURL(for profile: String) -> URL? {
@@ -19436,6 +19459,7 @@ final class AppState: ObservableObject {
             // bot's canonical registry (including meta-hidden bots), while
             // the roster VIEW hides meta-hidden rows for display only.
             botRoster = BotProfile.displayOrder(snapshot.bots)
+            adoptProfileHermesNames(snapshot.bots.map { (profile: $0.name, displayName: $0.displayName) })
             desktopGroupChats = snapshot.desktopGroups
             botRosterSupportsProtocol = snapshot.supportsBotProtocol
             botModePhase = .available
@@ -27032,6 +27056,14 @@ final class AppState: ObservableObject {
             let names = values.compactMap { value -> String? in
                 if let name = value as? String { return name }
                 return (value as? [String: Any])?["name"] as? String
+            }
+            // Rows as objects carry `display_name`; a plain-name listing
+            // says nothing about it, and the bot roster fills it in.
+            let rows = values.compactMap { $0 as? [String: Any] }
+            if !rows.isEmpty, rows.count == values.count {
+                adoptProfileHermesNames(rows.compactMap { row in
+                    (row["name"] as? String).map { (profile: $0, displayName: row["display_name"] as? String ?? "") }
+                })
             }
             // A 200 with no profile names is a degraded payload (dashboard
             // mid-restart, partial deploy, proxy), not authoritative evidence

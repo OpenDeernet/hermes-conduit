@@ -72,6 +72,40 @@ final class ProfileDiscoveryTests: XCTestCase {
         )
     }
 
+    // MARK: - Display names (#1046)
+
+    func testProfilesReadAsTheirHermesDisplayNameAndItIsRemembered() async throws {
+        seedKnownProfiles(["default", "coding-agent"], activeProfile: "default")
+        let appState = makeAppState(profileDiscoveryLoader: {
+            ["profiles": [
+                ["name": "default", "display_name": ""],
+                ["name": "coding-agent", "display_name": "Coding Assistant"],
+                ["name": "daily-helper"]
+            ]]
+        })
+        appState.installDashboardTicketBridgeForTesting(makeBridge("https://one.example"))
+
+        await appState.loadProfiles()
+
+        XCTAssertEqual(appState.profileDisplayName("coding-agent"), "Coding Assistant")
+        XCTAssertEqual(appState.profileDisplayName("daily-helper"), "Daily-helper", "No display name keeps the id")
+        XCTAssertEqual(appState.profileDisplayName("default"), appState.defaultProfileName)
+        XCTAssertEqual(makeAppState().profileDisplayName("coding-agent"), "Coding Assistant", "Known at the next launch")
+    }
+
+    func testAPlainNameListingKeepsTheDisplayNamesItCantSpeakFor() async throws {
+        seedKnownProfiles(["default", "coding-agent"], activeProfile: "default")
+        var listing: [String: Any] = ["profiles": [["name": "coding-agent", "display_name": "Coding Assistant"]]]
+        let appState = makeAppState(profileDiscoveryLoader: { listing })
+        appState.installDashboardTicketBridgeForTesting(makeBridge("https://one.example"))
+        await appState.loadProfiles()
+
+        listing = ["profiles": ["default", "coding-agent"]]
+        await appState.loadProfiles()
+
+        XCTAssertEqual(appState.profileDisplayName("coding-agent"), "Coding Assistant")
+    }
+
     // MARK: - Initialization hydration
 
     func testInitHydratesProfilesFromPersistedKnownProfileCache() {
