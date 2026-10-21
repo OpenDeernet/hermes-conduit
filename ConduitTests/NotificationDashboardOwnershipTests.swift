@@ -423,7 +423,7 @@ extension NotificationDashboardOwnershipTests {
         let savedA = SavedDashboard(id: dashboardA, label: "VPS", normalizedURL: "https://vps.tailnet.ts.net")
         let savedB = SavedDashboard(id: dashboardB, label: "VPS (old)", normalizedURL: "http://100.64.0.7:9119")
         let appState = makeAppState(registry: SavedDashboardRegistry(activeDashboardID: dashboardA, dashboards: [savedA, savedB]))
-        appState.recordRelayGatewayID("gw-1", for: dashboardA)
+        appState.recordRelayGatewayID("gw-1", for: dashboardA, profile: "default")
         let target = ConduitNotificationTarget(
             profile: "default",
             sessionId: "runtime-1",
@@ -447,14 +447,19 @@ extension NotificationDashboardOwnershipTests {
         let savedB = SavedDashboard(id: dashboardB, label: "Mac", normalizedURL: "https://mac.tailnet.ts.net")
         let appState = makeAppState(registry: SavedDashboardRegistry(activeDashboardID: dashboardA, dashboards: [savedA, savedB]))
 
-        appState.recordRelayGatewayID("gw-1", for: dashboardA)
-        appState.recordRelayGatewayID("gw-1", for: dashboardA)
-        appState.recordRelayGatewayID(" gw-2 ", for: dashboardA)
-        appState.recordRelayGatewayID("", for: dashboardA)
-        appState.recordRelayGatewayID("gw-3", for: dashboardB)
+        appState.recordRelayGatewayID("gw-1", for: dashboardA, profile: "default")
+        appState.recordRelayGatewayID("gw-1", for: dashboardA, profile: "default")
+        appState.recordRelayGatewayID(" gw-2 ", for: dashboardA, profile: "work")
+        appState.recordRelayGatewayID("", for: dashboardA, profile: "default")
+        appState.recordRelayGatewayID("gw-3", for: dashboardB, profile: "default")
 
         XCTAssertEqual(appState.activeDashboardRelayGatewayIDs, ["gw-1", "gw-2"])
         XCTAssertEqual(appState.relayGatewayIDs(of: dashboardB), ["gw-3"])
+
+        // A profile paired again (or a new host at the address) replaces
+        // its old gateway rather than adding to it.
+        appState.recordRelayGatewayID("gw-4", for: dashboardA, profile: "default")
+        XCTAssertEqual(appState.activeDashboardRelayGatewayIDs, ["gw-4", "gw-2"])
 
         appState.removeDashboard(dashboardB)
         XCTAssertTrue(appState.relayGatewayIDs(of: dashboardB).isEmpty)
@@ -482,7 +487,7 @@ extension NotificationDashboardOwnershipTests {
         var moving = SavedDashboard(id: dashboardA, label: "VPS", normalizedURL: "https://vps.tailnet.ts.net")
         moving.pendingURL = "https://other.tailnet.ts.net"
         let appState = makeAppState(registry: SavedDashboardRegistry(activeDashboardID: dashboardA, dashboards: [moving]))
-        appState.recordRelayGatewayID("gw-1", for: dashboardA)
+        appState.recordRelayGatewayID("gw-1", for: dashboardA, profile: "default")
 
         appState.settlePendingDashboardMove(dashboardA)
 

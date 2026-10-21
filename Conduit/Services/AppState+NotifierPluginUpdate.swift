@@ -192,7 +192,7 @@ extension AppState {
             return
         }
         // Reconnected or switched meanwhile: the next refresh checks again.
-        guard bridge === dashboardTicketBridge, activeProfile == profile else {
+        guard bridge === dashboardTicketBridge, activeDashboardID == dashboardID, activeProfile == profile else {
             automaticPairingAttempts.remove(attempt)
             return
         }
@@ -200,7 +200,7 @@ extension AppState {
         if pairing == .thisDevice, let gatewayID = status["gateway_id"] as? String {
             // Pushes through this pairing come from the host on screen, even
             // when it was paired from another saved entry for it.
-            recordRelayGatewayID(gatewayID, for: dashboardID)
+            recordRelayGatewayID(gatewayID, for: dashboardID, profile: profile)
         }
         guard pairing == .unpaired else { return }
         do {
@@ -232,7 +232,7 @@ extension AppState {
             return try await bridge.requestJSON(path: path, method: method, body: body,
                                                 timeoutMilliseconds: PushNotificationService.pairTimeoutMilliseconds)
         }
-        if let gatewayID { recordRelayGatewayID(gatewayID, for: dashboardID) }
+        if let gatewayID { recordRelayGatewayID(gatewayID, for: dashboardID, profile: profile) }
         // The new pairing gets its key right away, before its first push.
         await provisionNotificationEncryption(bridge: bridge)
     }

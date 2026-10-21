@@ -11156,9 +11156,8 @@ final class AppState: ObservableObject {
 
     // MARK: Relay gateways each dashboard's host reported
 
-    private static let relayGatewayIDsByDashboardKey = "conduit.relayGatewayIDsByDashboard"
-    /// Enough for every profile of one host, with room for re-pairings.
-    private static let relayGatewayIDsPerDashboardLimit = 32
+    /// Per dashboard, each profile's gateway: `[dashboard id: [profile: gateway id]]`.
+    private static let relayGatewayIDsByDashboardKey = "conduit.relayGatewayIDsByDashboardProfile"
 
     /// The relay gateway ids the active dashboard's host said its profiles
     /// pair this iPhone through. A push stamped with one of them came from
@@ -11169,29 +11168,30 @@ final class AppState: ObservableObject {
     }
 
     func relayGatewayIDs(of dashboardID: UUID) -> Set<String> {
-        let stored = defaults.dictionary(forKey: Self.relayGatewayIDsByDashboardKey) as? [String: [String]] ?? [:]
-        return Set(stored[dashboardID.uuidString] ?? [])
+        Set(storedRelayGatewayIDs()[dashboardID.uuidString]?.values.map { $0 } ?? [])
     }
 
-    /// Remembers that `dashboardID`'s host pairs a profile with this iPhone
+    /// Remembers that `dashboardID`'s host pairs `profile` with this iPhone
     /// through `gatewayID`, as that host said over its signed-in connection.
-    func recordRelayGatewayID(_ gatewayID: String, for dashboardID: UUID) {
+    /// The profile's last report replaces its earlier one, so a re-pairing
+    /// (or another host now at that address) leaves no stale id behind.
+    func recordRelayGatewayID(_ gatewayID: String, for dashboardID: UUID, profile: String) {
         let gatewayID = gatewayID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gatewayID.isEmpty, gatewayID.count <= 80 else { return }
-        var stored = defaults.dictionary(forKey: Self.relayGatewayIDsByDashboardKey) as? [String: [String]] ?? [:]
-        var ids = stored[dashboardID.uuidString] ?? []
-        guard ids.last != gatewayID else { return }
-        // Newest last, so the oldest pairing is the one dropped.
-        ids.removeAll { $0 == gatewayID }
-        ids.append(gatewayID)
-        stored[dashboardID.uuidString] = Array(ids.suffix(Self.relayGatewayIDsPerDashboardLimit))
+        var stored = storedRelayGatewayIDs()
+        guard stored[dashboardID.uuidString]?[profile] != gatewayID else { return }
+        stored[dashboardID.uuidString, default: [:]][profile] = gatewayID
         defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
     }
 
     func forgetRelayGatewayIDs(of dashboardID: UUID) {
-        var stored = defaults.dictionary(forKey: Self.relayGatewayIDsByDashboardKey) as? [String: [String]] ?? [:]
+        var stored = storedRelayGatewayIDs()
         guard stored.removeValue(forKey: dashboardID.uuidString) != nil else { return }
         defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
+    }
+
+    private func storedRelayGatewayIDs() -> [String: [String: String]] {
+        defaults.dictionary(forKey: Self.relayGatewayIDsByDashboardKey) as? [String: [String: String]] ?? [:]
     }
 
     /// The All pill stays fixed; the remaining session categories are local UI preference.
