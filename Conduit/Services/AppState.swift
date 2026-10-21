@@ -24709,6 +24709,10 @@ final class AppState: ObservableObject {
         guard reopened != .superseded else { return true }
         let text = receipt.text ?? target.text ?? ""
         let current = composerSubmissionContext()
+        // Our own open moved the viewport on, so `context` is stale by
+        // construction; the rewound chat must still be the one on screen.
+        guard composerSessionIDsAreEquivalent(context.sessionID, current.sessionID)
+            || composerSessionIDsAreEquivalent(context.durableSessionID, current.sessionID) else { return true }
         if reopened == .failed {
             // Taken back, but the chat on screen still shows it: say so,
             // and keep the words (a /retry's too) in the composer.
@@ -24719,6 +24723,15 @@ final class AppState: ObservableObject {
                 context: current
             )
             if !text.isEmpty { prefillComposer(text) }
+            return true
+        }
+        if retry, !composerIsEnabled {
+            // Taken back, but nothing can be sent right now: keep the words.
+            appendSlashOutput(
+                AppLocalization.string("Took back your last message. It's in the composer to edit."),
+                context: current
+            )
+            prefillComposer(text)
             return true
         }
         if retry {
