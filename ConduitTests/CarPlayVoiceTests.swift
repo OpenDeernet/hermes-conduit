@@ -3158,3 +3158,57 @@ final class HeldOnceVoiceConfigRequester: VoiceConfigurationRequesting {
         held = nil
     }
 }
+
+// MARK: "See your iPhone" shows the failure on the phone
+
+@MainActor
+extension CarPlayVoiceCoordinatorTests {
+    func testAFailureTheCarCannotNameShowsOnThePhone() async {
+        let harness = makeHarness()
+        harness.coordinator.handleConnect(harness.spy)
+        await harness.coordinator.waitForPresentation()
+
+        harness.coordinator.handleControllerState(.failed("Hermes didn't answer."))
+
+        XCTAssertEqual(harness.activations.last, .error)
+        XCTAssertNil(harness.coordinator.controls.errorIssue, "the car says only \"See your iPhone\"")
+        XCTAssertEqual(harness.appState.errorMessage, "Hermes didn't answer.", "so the phone says what went wrong")
+    }
+
+    func testAFailureTheCarNamesLeavesThePhoneAlone() async {
+        let harness = makeHarness()
+        harness.coordinator.handleConnect(harness.spy)
+        await harness.coordinator.waitForPresentation()
+        harness.appState.isConnected = false
+
+        harness.coordinator.handleControllerState(.failed("Not connected."))
+
+        XCTAssertEqual(harness.coordinator.controls.errorIssue, .notConnected, "the car names the fix itself")
+        XCTAssertNil(harness.appState.errorMessage)
+    }
+
+    func testAGPTLiveCallThatFailsInTheCarShowsWhyOnThePhone() async {
+        let harness = makeHarness()
+        harness.coordinator.handleConnect(harness.spy)
+        await harness.coordinator.waitForPresentation()
+        let client = FakeGPTLiveClient()
+        client.availabilityResult = .failure(URLError(.timedOut))
+        harness.appState.gptLiveController = GPTLiveConversationController(
+            makeSession: { FakeGPTLiveSessionControl() },
+            availability: { try await client.availability() },
+            briefing: { "[rules]" },
+            supervisor: harness.appState.voiceBackgroundJobSupervisor,
+            requestPermission: { true }
+        )
+        harness.coordinator.selectVoiceMode(.gptLive)
+        XCTAssertEqual(harness.coordinator.observedVoiceMode, .gptLive)
+
+        await harness.appState.gptLiveController.start()
+
+        guard case .failed(let message) = harness.appState.gptLiveController.phase else {
+            return XCTFail("the call failed: \(harness.appState.gptLiveController.phase)")
+        }
+        XCTAssertEqual(harness.activations.last, .error)
+        XCTAssertEqual(harness.appState.errorMessage, message)
+    }
+}

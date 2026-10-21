@@ -2836,20 +2836,7 @@ final class AppState: ObservableObject {
                     client: client,
                     history: self?.liveVoiceResumeContext?.gptLiveHistory ?? [],
                     voice: self?.gptLiveCallVoice,
-                    briefing: GPTLiveConversationController.briefing(
-                        memory: self?.gptLiveMemoryContext,
-                        personality: self?.gptLivePersonality,
-                        answerLength: self?.liveVoiceStyle.answerLength ?? .standard
-                    )
-                        + (self?.liveVoiceResumeContext?.summaryInstructionBlock ?? "")
-                        + (self?.liveHermesCall?.instructionBlock(delegation: true) ?? "")
-                        + (self.map { $0.liveVoiceThreadInstructions(delegation: true) + $0.phoneVoiceSettingHint(for: .gptLive) } ?? "")
-                        + (self?.hermesCallsInstructions(delegation: true) ?? "")
-                        + VoiceHostTool.gptLiveRules(self?.voiceBackgroundJobSupervisor.hostTools ?? [])
-                        + GPTLiveConversationController.jobApprovalRule
-                        + (self?.gptLiveWebLookUps == true ? GPTLiveConversationController.webLookUpRule : "")
-                        + LiveVoiceStyle.askFirstInstructions(on: self?.voiceBackgroundJobSupervisor.asksBeforeSending == true)
-                        + (self?.liveVoiceStyle.instructions ?? ""),
+                    briefing: self?.gptLiveBriefing() ?? GPTLiveConversationController.briefing(),
                     // A call Hermes made opens with its brief instead (#449),
                     // spoken first rather than waiting for the user (#544).
                     greeting: self?.liveHermesCall == nil ? self?.liveVoiceStyle.greeting : nil,
@@ -2871,22 +2858,7 @@ final class AppState: ObservableObject {
             },
             // Fails closed: without the app state, the stored answer decides.
             missingConsent: { [weak self] in self?.requestLiveVoiceConsentIfMissing(.gptLive) ?? LiveVoiceProviderConsent.missing(.gptLive) },
-            briefing: { [weak self] in
-                GPTLiveConversationController.briefing(
-                    memory: self?.gptLiveMemoryContext,
-                    personality: self?.gptLivePersonality,
-                    answerLength: self?.liveVoiceStyle.answerLength ?? .standard
-                )
-                    + (self?.liveVoiceResumeContext?.summaryInstructionBlock ?? "")
-                    + (self?.liveHermesCall?.instructionBlock(delegation: true) ?? "")
-                    + (self.map { $0.liveVoiceThreadInstructions(delegation: true) + $0.phoneVoiceSettingHint(for: .gptLive) } ?? "")
-                    + (self?.hermesCallsInstructions(delegation: true) ?? "")
-                    + VoiceHostTool.gptLiveRules(self?.voiceBackgroundJobSupervisor.hostTools ?? [])
-                    + GPTLiveConversationController.jobApprovalRule
-                    + (self?.gptLiveWebLookUps == true ? GPTLiveConversationController.webLookUpRule : "")
-                    + LiveVoiceStyle.askFirstInstructions(on: self?.voiceBackgroundJobSupervisor.asksBeforeSending == true)
-                    + (self?.liveVoiceStyle.instructions ?? "")
-            },
+            briefing: { [weak self] in self?.gptLiveBriefing() ?? GPTLiveConversationController.briefing() },
             openingPrompt: { [weak self] in self?.liveHermesCall?.openingTurn ?? self?.liveVoiceStyle.openingPrompt },
             supervisor: self.voiceBackgroundJobSupervisor,
             webSearch: hostContext,
@@ -2904,6 +2876,27 @@ final class AppState: ObservableObject {
         }
         return controller
     }()
+
+    /// The phone's GPT-Live briefing: Conduit's rules, persona and memory,
+    /// then this call's own blocks. One builder for the session request and
+    /// the context a host that doesn't take briefings gets, so both fit the
+    /// plugin's size limit the same way.
+    func gptLiveBriefing() -> String {
+        GPTLiveConversationController.briefing(
+            memory: gptLiveMemoryContext,
+            personality: gptLivePersonality,
+            answerLength: liveVoiceStyle.answerLength,
+            followedBy: (liveVoiceResumeContext?.summaryInstructionBlock ?? "")
+                + (liveHermesCall?.instructionBlock(delegation: true) ?? "")
+                + liveVoiceThreadInstructions(delegation: true) + phoneVoiceSettingHint(for: .gptLive)
+                + hermesCallsInstructions(delegation: true)
+                + VoiceHostTool.gptLiveRules(voiceBackgroundJobSupervisor.hostTools)
+                + GPTLiveConversationController.jobApprovalRule
+                + (gptLiveWebLookUps ? GPTLiveConversationController.webLookUpRule : "")
+                + LiveVoiceStyle.askFirstInstructions(on: voiceBackgroundJobSupervisor.asksBeforeSending)
+                + liveVoiceStyle.instructions
+        )
+    }
 
     /// Opens GPT-Live instead of the other voice modes, which (with Read
     /// Aloud) are closed first so they never share the audio session.
@@ -32417,8 +32410,9 @@ final class AppState: ObservableObject {
                 // GPT-Live on the Watch finds chats only through the grant,
                 // and has no phone to fall back on: briefed only once the host
                 // has reported them.
-                watchChats: notifierPlugin.reports(WatchToolAnswer.chatCapability)
-            ) + (hermesCall?.instructionBlock(delegation: true, canAnswer: false) ?? "") + style.instructions,
+                watchChats: notifierPlugin.reports(WatchToolAnswer.chatCapability),
+                followedBy: (hermesCall?.instructionBlock(delegation: true, canAnswer: false) ?? "") + style.instructions
+            ),
             // A call Hermes made opens with its brief instead (#449).
             greeting: hermesCall == nil ? style.greeting : nil,
             openingTurn: hermesCall?.watchOpeningTurn,
