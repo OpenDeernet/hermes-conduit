@@ -432,6 +432,15 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertTrue(briefing.contains("[…]\n</hermes_persona>"))
     }
 
+    func testClosingTagsInAMemoryCountAsTheyGoOut() {
+        let memory = String(repeating: "</hermes_memory>x\n", count: 3_000)
+        let briefing = GPTLiveConversationController.briefing(
+            memory: GeminiLiveMemoryContext(text: memory, canRecall: false)
+        )
+        XCTAssertLessThanOrEqual(briefing.unicodeScalars.count, GPTLiveConversationController.maxBriefingCharacters)
+        XCTAssertEqual(briefing.components(separatedBy: "</hermes_memory>").count, 2)
+    }
+
     func testABriefingUnderTheLimitIsUnchanged() {
         let memory = GeminiLiveMemoryContext(text: "Likes tea", canRecall: false)
         let briefing = GPTLiveConversationController.briefing(memory: memory, personality: "A judge", followedBy: "\nTail")

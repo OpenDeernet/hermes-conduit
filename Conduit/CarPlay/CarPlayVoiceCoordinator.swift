@@ -236,6 +236,8 @@ final class CarPlayVoiceCoordinator {
     /// `driverStartRequest` when End was last tapped: a driver start after
     /// it owns the conversation (classic or live) an ended start would close.
     private var driverStartRequestAtLastEnd: UInt64 = 0
+    /// The failure this coordinator last put on the phone (`showFailureOnPhone`).
+    private var shownPhoneFailure: String?
     /// A list is pushed over the voice screen. A conversation that starts
     /// meanwhile (from the phone, say) brings the voice screen back (#378).
     private(set) var isBrowsing = false
@@ -737,6 +739,8 @@ final class CarPlayVoiceCoordinator {
             noteErrorIssue()
             if controls.errorIssue == nil { showFailureOnPhone(failure) }
             if wasPresented, !isTemplatePresented { replacedFrom = shownBefore }
+        } else {
+            clearFailureOnPhone()
         }
         guard let template else { return }
         updateBrowseButtons(for: target)
@@ -782,6 +786,16 @@ final class CarPlayVoiceCoordinator {
         guard let message = message?.trimmingCharacters(in: .whitespacesAndNewlines),
               !message.isEmpty else { return }
         (lastBoundAppState ?? appStateProvider()).errorMessage = message
+        shownPhoneFailure = message
+    }
+
+    /// The car moved on from the failure (a new call, Ready again): the
+    /// phone stops showing it, unless something else replaced it meanwhile.
+    private func clearFailureOnPhone() {
+        guard let shown = shownPhoneFailure else { return }
+        shownPhoneFailure = nil
+        let appState = lastBoundAppState ?? appStateProvider()
+        if appState.errorMessage == shown { appState.errorMessage = nil }
     }
 
     /// Records what the Error state should name as the thing to fix.

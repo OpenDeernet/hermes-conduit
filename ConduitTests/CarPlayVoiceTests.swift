@@ -3173,6 +3173,21 @@ extension CarPlayVoiceCoordinatorTests {
         XCTAssertEqual(harness.activations.last, .error)
         XCTAssertNil(harness.coordinator.controls.errorIssue, "the car says only \"See your iPhone\"")
         XCTAssertEqual(harness.appState.errorMessage, "Hermes didn't answer.", "so the phone says what went wrong")
+
+        harness.coordinator.handleControllerState(.idle)
+        XCTAssertNil(harness.appState.errorMessage, "the car moved on, so the phone stops showing it")
+    }
+
+    func testMovingOnLeavesAnotherErrorOnThePhone() async {
+        let harness = makeHarness()
+        harness.coordinator.handleConnect(harness.spy)
+        await harness.coordinator.waitForPresentation()
+        harness.coordinator.handleControllerState(.failed("Hermes didn't answer."))
+        harness.appState.errorMessage = "Couldn't send the message."
+
+        harness.coordinator.handleControllerState(.idle)
+
+        XCTAssertEqual(harness.appState.errorMessage, "Couldn't send the message.")
     }
 
     func testAFailureTheCarNamesLeavesThePhoneAlone() async {
