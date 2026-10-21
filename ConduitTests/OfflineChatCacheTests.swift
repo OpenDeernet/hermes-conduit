@@ -1009,8 +1009,8 @@ final class OfflineChatCacheTests: XCTestCase {
 
     /// Offline with a Face ID dashboard: closing the Face ID sheet makes
     /// Conduit active again, which retries the restore. One unlock holds,
-    /// so the retries don't bring the sheet back in a loop; signing out of
-    /// the dashboard asks again.
+    /// so the retries don't bring the sheet back in a loop; a newly saved
+    /// password or signing out of the dashboard asks again.
     func testOneFaceIDUnlockHoldsWhileTheServerCantBeReached() async {
         useInMemoryKeychain()
         // Loopback port 1: nothing listens, so the restore fails as
@@ -1055,13 +1055,25 @@ final class OfflineChatCacheTests: XCTestCase {
             XCTAssertFalse(appState.showLogin)
         }
 
-        appState.signOutDashboard(dashboard)
+        // A password saved later for the dashboard wasn't unlocked yet.
+        let previous = appState.connectionTimeline?.startedAt
         KeychainHelper.saveCredentials(
-            DashboardCredentials(baseURL: loopback.normalizedURL, username: "hermes", password: "unused", requiresFaceID: true),
+            DashboardCredentials(baseURL: loopback.normalizedURL, username: "hermes", password: "changed", requiresFaceID: true),
             dashboardID: dashboard
         )
         appState.loadSavedConnection()
-        await waitUntil { unlocks == 2 }
+        await waitUntil {
+            appState.connectionTimeline?.startedAt != previous && passwordTries() == 1 && !appState.isConnecting
+        }
+        XCTAssertEqual(unlocks, 2)
+
+        appState.signOutDashboard(dashboard)
+        KeychainHelper.saveCredentials(
+            DashboardCredentials(baseURL: loopback.normalizedURL, username: "hermes", password: "changed", requiresFaceID: true),
+            dashboardID: dashboard
+        )
+        appState.loadSavedConnection()
+        await waitUntil { unlocks == 3 }
     }
 
     /// A dashboard switch starts the phone's pins over until Hermes' arrive

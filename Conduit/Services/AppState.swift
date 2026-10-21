@@ -9,6 +9,7 @@
 
 import SwiftUI
 import Combine
+import CryptoKit
 import OSLog
 import UIKit
 import WebKit
@@ -11793,7 +11794,7 @@ final class AppState: ObservableObject {
 
     func disconnect() {
         // The next sign-in to it asks for Face ID again.
-        if let activeDashboardID { faceIDUnlockedDashboards.remove(activeDashboardID) }
+        if let activeDashboardID { faceIDUnlockedDashboards[activeDashboardID] = nil }
         // Its turns' Lock Screen progress has nothing left to follow.
         liveTurnActivitiesEndDashboard(activeDashboardID?.uuidString, false)
         // Drafts shared for this dashboard belong to the signed-out user,
@@ -12379,7 +12380,7 @@ final class AppState: ObservableObject {
             disconnect()
             return
         }
-        faceIDUnlockedDashboards.remove(id)
+        faceIDUnlockedDashboards[id] = nil
         removeWidgetSnapshot(dashboardID: id)
         liveTurnActivitiesEndDashboard(id.uuidString, false)
         KeychainHelper.clearConnection(dashboardID: id)
@@ -12517,10 +12518,15 @@ final class AppState: ObservableObject {
         // offline retries (each return from the Face ID sheet makes the scene
         // active again) must not ask again, or the sheet loops until the
         // server answers.
-        let faceIDUnlockHeld = scopedDashboardID.map { faceIDUnlockedDashboards.contains($0) } ?? false
+        let faceIDUnlockHeld = scopedDashboardID.map {
+            faceIDUnlockedDashboards[$0] == Self.faceIDUnlockFingerprint(credentials)
+        } ?? false
         if credentials.requiresFaceID, faceIDUnlockHeld {
-            if let scopedDashboardID, offlineChatPresentation == nil {
-                presentOfflineChatIfAvailable(dashboardID: scopedDashboardID)
+            if let scopedDashboardID {
+                // A retry keeps the copy already on screen.
+                if offlineChatPresentation == nil {
+                    presentOfflineChatIfAvailable(dashboardID: scopedDashboardID)
+                }
                 if offlineChatPresentation != nil {
                     showLogin = false
                     isConnecting = true
@@ -12553,7 +12559,9 @@ final class AppState: ObservableObject {
             if let switchGeneration, !switchGenerationIsCurrent(switchGeneration) {
                 return
             }
-            if let scopedDashboardID { faceIDUnlockedDashboards.insert(scopedDashboardID) }
+            if let scopedDashboardID {
+                faceIDUnlockedDashboards[scopedDashboardID] = Self.faceIDUnlockFingerprint(credentials)
+            }
             // The user just unlocked the saved password for the selected
             // dashboard: the sign-in finishes even if the widget launch
             // expired meanwhile.
@@ -12609,8 +12617,16 @@ final class AppState: ObservableObject {
     }
 
     /// Dashboards whose saved password Face ID or Touch ID unlocked since
-    /// launch. Sign-out and removal drop theirs.
-    private var faceIDUnlockedDashboards: Set<UUID> = []
+    /// launch, with a fingerprint of the password it unlocked: a password
+    /// saved later for the same dashboard asks again. Sign-out and removal
+    /// drop theirs. The unlock holds while Conduit runs, also after a long
+    /// time away, as a connected Conduit never asks again on return; a
+    /// cold launch asks.
+    private var faceIDUnlockedDashboards: [UUID: SHA256.Digest] = [:]
+
+    private static func faceIDUnlockFingerprint(_ credentials: DashboardCredentials) -> SHA256.Digest {
+        SHA256.hash(data: Data("\(credentials.baseURL)\n\(credentials.username)\n\(credentials.password)".utf8))
+    }
 
     /// Face ID or Touch ID for a saved password. Test seam.
     var unlockWithFaceID: @MainActor () async -> Bool = {
