@@ -325,12 +325,14 @@ final class ChatScrollHostedTests: XCTestCase {
             repeating: "Everything the reply wrote before the chat was opened again. ",
             count: 50
         ))
-        // The first sample is taken once the bubble is laid out, however
-        // long a busy simulator takes to get there.
+        // The first sample is taken once the bubble is laid out well past a
+        // first line (the reply is about 70 lines), however long a busy
+        // simulator takes to get there. Typed out, it would only be a few
+        // hundred points in and keep growing.
         let deadline = Date().addingTimeInterval(5)
         repeat {
             settle(mounted.host.view, seconds: 0.05)
-        } while mounted.scrollView.contentSize.height <= transcriptOnly + 1 && Date() < deadline
+        } while mounted.scrollView.contentSize.height <= transcriptOnly + 600 && Date() < deadline
         settle(mounted.host.view, seconds: 0.1)
         let shownAtOnce = mounted.scrollView.contentSize.height
         settle(mounted.host.view, seconds: 1.0)
