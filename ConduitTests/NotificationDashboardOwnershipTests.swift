@@ -434,11 +434,11 @@ extension NotificationDashboardOwnershipTests {
 
         let outcome = await appState.openNotificationTargetOutcome(target)
 
-        // Routed here: only the connection isn't up in this test. No switch,
-        // so no sign-in for the other entry.
+        // Routed here: only the connection isn't up in this test. A switch
+        // to the other entry would end `.failed` on its sign-in, with an
+        // error (testSwitchThatNeedsSignInIsFinal).
         XCTAssertEqual(outcome, .retry)
         XCTAssertEqual(appState.activeDashboardID, dashboardA)
-        XCTAssertFalse(appState.showLogin)
         XCTAssertNil(appState.errorMessage)
     }
 
