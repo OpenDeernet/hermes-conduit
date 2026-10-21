@@ -12617,15 +12617,15 @@ final class AppState: ObservableObject {
     }
 
     /// Dashboards whose saved password Face ID or Touch ID unlocked since
-    /// launch, with a fingerprint of the password it unlocked: a password
-    /// saved later for the same dashboard asks again. Sign-out and removal
-    /// drop theirs. The unlock holds while Conduit runs, also after a long
-    /// time away, as a connected Conduit never asks again on return; a
-    /// cold launch asks.
+    /// launch, with a fingerprint of the password it unlocked: a different
+    /// password saved later for the same dashboard asks again. Sign-out and
+    /// removal drop theirs. The unlock holds while Conduit runs, also after
+    /// a long time away, as a connected Conduit never asks again on return;
+    /// a cold launch asks.
     private var faceIDUnlockedDashboards: [UUID: SHA256.Digest] = [:]
 
     private static func faceIDUnlockFingerprint(_ credentials: DashboardCredentials) -> SHA256.Digest {
-        SHA256.hash(data: Data("\(credentials.baseURL)\n\(credentials.username)\n\(credentials.password)".utf8))
+        SHA256.hash(data: Data([credentials.baseURL, credentials.username, credentials.password].joined(separator: "\u{1f}").utf8))
     }
 
     /// Face ID or Touch ID for a saved password. Test seam.
