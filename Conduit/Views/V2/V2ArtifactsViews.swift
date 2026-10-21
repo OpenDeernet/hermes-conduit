@@ -99,6 +99,10 @@ private struct ArtifactsList: View {
     @State private var nextBefore: Int?
     @State private var loadedKey: ArtifactsListKey?
     @State private var isLoading = false
+    /// The next page's read. Apart from `isLoading`, which swaps an empty
+    /// list for the centred spinner: that swap unmounted the pager and
+    /// cancelled its read, so a page with nothing to list never paged on.
+    @State private var isLoadingMore = false
     @State private var failure: String?
     @State private var generation = 0
     @State private var openingID: String?
@@ -249,6 +253,19 @@ private struct ArtifactsList: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 60)
                 } else {
+                    if items.isEmpty, !showMissing {
+                        // A history of deleted files can take a few pages
+                        // to get past.
+                        VStack(spacing: 8) {
+                            Text("Files no longer on your Hermes host are hidden.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                            Button("Show Missing Files") { showMissing = true }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 40)
+                    }
                     // Reaching the end reads the next page.
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: 60)
@@ -555,10 +572,10 @@ private struct ArtifactsList: View {
     }
 
     private func loadMore() async {
-        guard let before = nextBefore, let key = loadedKey, key == currentKey, !isLoading else { return }
+        guard let before = nextBefore, let key = loadedKey, key == currentKey, !isLoading, !isLoadingMore else { return }
         let ticket = generation
-        isLoading = true
-        defer { if ticket == generation { isLoading = false } }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
         do {
             let result = try await appState.artifactsClient.page(
                 profile: key.profile, sessionIDs: scope.sessionIDs, filter: key.filter, query: key.query,
