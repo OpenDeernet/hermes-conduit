@@ -11287,7 +11287,7 @@ final class AppState: ObservableObject {
             guard widgetLease?.isCurrent != false else { return }
             await connect(with: HermesConnection(baseUrl: baseURL, ticket: ticket), profile: activeProfile)
             if isConnected {
-                KeychainHelper.clearCredentials(dashboardID: dashboardID)
+                clearSavedPassword(dashboardID: dashboardID)
                 KeychainHelper.clearDashboardCookies(dashboardID: dashboardID)
             }
         } catch is CancellationError {
@@ -11692,7 +11692,7 @@ final class AppState: ObservableObject {
             restoreNativeOAuthTokens(previousTokens, dashboardID: dashboardID, baseURL: baseURL)
             return false
         }
-        KeychainHelper.clearCredentials(dashboardID: dashboardID)
+        clearSavedPassword(dashboardID: dashboardID)
         KeychainHelper.clearDashboardCookies(dashboardID: dashboardID)
         return true
     }
@@ -11780,13 +11780,13 @@ final class AppState: ObservableObject {
             // is remembered, and same-origin Cloudflare rules are untouched.
             rememberDashboardURL(baseURL)
             if let dashboardID = resolveDashboardID(forURL: baseURL, registerIfMissing: false) {
-                KeychainHelper.clearCredentials(dashboardID: dashboardID)
+                clearSavedPassword(dashboardID: dashboardID)
                 KeychainHelper.clearNativeOAuthTokens(dashboardID: dashboardID)
             }
         case .nativeOAuth(_, let baseURL, _):
             rememberDashboardURL(baseURL)
             if let dashboardID = resolveDashboardID(forURL: baseURL, registerIfMissing: false) {
-                KeychainHelper.clearCredentials(dashboardID: dashboardID)
+                clearSavedPassword(dashboardID: dashboardID)
                 KeychainHelper.clearDashboardCookies(dashboardID: dashboardID)
             }
         }
@@ -11852,7 +11852,7 @@ final class AppState: ObservableObject {
         if let dashboardID = signingOutDashboardID {
             KeychainHelper.clearConnection(dashboardID: dashboardID)
             keepUsernameForNextSignIn(dashboardID: dashboardID)
-            KeychainHelper.clearCredentials(dashboardID: dashboardID)
+            clearSavedPassword(dashboardID: dashboardID)
             // The Cloudflare Access token stays, like the address and the
             // extra headers: it reaches the server, it doesn't sign in.
             // Remove Dashboard deletes it.
@@ -12054,7 +12054,7 @@ final class AppState: ObservableObject {
         if let previous = savedDashboardRegistry.dashboards[index].pendingURL, previous != url,
            let credentials = KeychainHelper.loadCredentials(dashboardID: id),
            Self.normalizedDashboardURL(credentials.baseURL) == previous {
-            KeychainHelper.clearCredentials(dashboardID: id)
+            clearSavedPassword(dashboardID: id)
         }
         var registry = savedDashboardRegistry
         registry.dashboards[index].pendingURL = url == registry.dashboards[index].normalizedURL ? nil : url
@@ -12095,7 +12095,7 @@ final class AppState: ObservableObject {
         }
         if let credentials = KeychainHelper.loadCredentials(dashboardID: id),
            Self.normalizedDashboardURL(credentials.baseURL) != newURL {
-            KeychainHelper.clearCredentials(dashboardID: id)
+            clearSavedPassword(dashboardID: id)
         }
         if sameOrigin,
            let access = KeychainHelper.loadCloudflareAccess(dashboardID: id, for: oldURL), access.isConfigured {
@@ -12118,7 +12118,7 @@ final class AppState: ObservableObject {
             let id = registry.dashboards[index].id
             if let credentials = KeychainHelper.loadCredentials(dashboardID: id),
                Self.normalizedDashboardURL(credentials.baseURL) == url {
-                KeychainHelper.clearCredentials(dashboardID: id)
+                clearSavedPassword(dashboardID: id)
             }
             registry.dashboards[index].pendingURL = nil
         }
@@ -12380,12 +12380,11 @@ final class AppState: ObservableObject {
             disconnect()
             return
         }
-        faceIDUnlockedDashboards[id] = nil
         removeWidgetSnapshot(dashboardID: id)
         liveTurnActivitiesEndDashboard(id.uuidString, false)
         KeychainHelper.clearConnection(dashboardID: id)
         keepUsernameForNextSignIn(dashboardID: id)
-        KeychainHelper.clearCredentials(dashboardID: id)
+        clearSavedPassword(dashboardID: id)
         wipeOfflineChatCache(dashboardID: id)
         // The dashboard is not connected, but its OWN web session may still
         // hold live cookies from an earlier session; sign-out removes the
@@ -12618,11 +12617,19 @@ final class AppState: ObservableObject {
 
     /// Dashboards whose saved password Face ID or Touch ID unlocked since
     /// launch, with a fingerprint of the password it unlocked: a different
-    /// password saved later for the same dashboard asks again. Sign-out and
-    /// removal drop theirs. The unlock holds while Conduit runs, also after
-    /// a long time away, as a connected Conduit never asks again on return;
-    /// a cold launch asks.
+    /// password saved later for the same dashboard asks again. Clearing the
+    /// saved password (sign-out, removal, a switch to browser sign-in) drops
+    /// it. The unlock holds while Conduit runs, also after a long time away,
+    /// as a connected Conduit never asks again on return; a cold launch
+    /// asks.
     private var faceIDUnlockedDashboards: [UUID: SHA256.Digest] = [:]
+
+    /// Clears the dashboard's saved password and the Face ID unlock that
+    /// held for it: a password saved for it again asks again.
+    private func clearSavedPassword(dashboardID: UUID) {
+        KeychainHelper.clearCredentials(dashboardID: dashboardID)
+        faceIDUnlockedDashboards[dashboardID] = nil
+    }
 
     private static func faceIDUnlockFingerprint(_ credentials: DashboardCredentials) -> SHA256.Digest {
         SHA256.hash(data: Data([credentials.baseURL, credentials.username, credentials.password].joined(separator: "\u{1f}").utf8))
