@@ -22833,9 +22833,20 @@ final class AppState: ObservableObject {
         chatTakeoverTask = nil
         state.phase = .waiting
         chatTakeover = state
-        let phase = await Self.runChatTakeover(
-            client: chatTakeoverClient, state: state, profile: activeProfile, waitLimit: Self.callChatTakeoverWaitLimit
-        )
+        let client = chatTakeoverClient
+        let profile = activeProfile
+        let waiting = state
+        let wait = Task { () -> ChatTakeoverState.Phase? in
+            await Self.runChatTakeover(client: client, state: waiting, profile: profile, waitLimit: Self.callChatTakeoverWaitLimit)
+        }
+        // Held as the takeover's task, so dismissing the notice (or a profile
+        // or dashboard switch) stops the wait as it does the composer's.
+        let handle = Task {
+            await withTaskCancellationHandler { _ = await wait.value } onCancel: { wait.cancel() }
+        }
+        chatTakeoverTask = handle
+        let phase = await withTaskCancellationHandler { await wait.value } onCancel: { wait.cancel() }
+        if chatTakeoverTask == handle { chatTakeoverTask = nil }
         // Dismissed, or replaced by another refusal, while it waited.
         guard let phase, chatTakeover?.sessionID == state.sessionID, chatTakeover?.phase == .waiting else { return false }
         if phase == .ready {
@@ -22878,7 +22889,12 @@ final class AppState: ObservableObject {
             lifecycleLog.notice(
                 "call request: took chat over from \(details.surface ?? "another surface", privacy: .public); sending again session=\(runtimeID, privacy: .private(mask: .hash))"
             )
-            return try await send()
+            do {
+                return try await send()
+            } catch let again as RpcError where again.isSessionNotOwned {
+                // The other app took it straight back: no third try.
+                throw VoiceAudioError.unavailable(state.callRefusalMessage)
+            }
         }
     }
 

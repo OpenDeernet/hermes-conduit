@@ -287,6 +287,30 @@ final class AppStateForegroundLifecycleTests: XCTestCase {
         box.client.disconnect()
     }
 
+    func testCallRequestRefusedAgainAfterTakeoverStopsWithTheReason() async {
+        // Desktop took the chat straight back: one resend, then the call
+        // says the chat is open there instead of the raw refusal.
+        let harness = makeHarness()
+        harness.appState.chatTakeoverClient = ChatTakeoverClient(request: { _, _, _ in
+            ["ok": true, "status": "taken_over"]
+        })
+        var sends = 0
+        do {
+            _ = try await harness.appState.sendCallPromptTakingOver(
+                runtimeID: "runtime-b", otherSessionIDs: [], profile: nil
+            ) {
+                sends += 1
+                throw RpcError(code: 4090, message: "Details: session stored-b opened by desktop 1m ago.", reason: "SESSION_NOT_OWNED")
+            }
+            XCTFail("A second refusal fails the request")
+        } catch {
+            XCTAssertEqual(error as? VoiceAudioError, .unavailable(
+                AppLocalization.string("This chat is open in Hermes Desktop. Take it over to send from here.")
+            ))
+        }
+        XCTAssertEqual(sends, 2)
+    }
+
     func testTakeOverAutomaticallyIsOnUntilTurnedOff() {
         let defaults = UserDefaults.standard
         let savedAutomatic = defaults.object(forKey: ChatTakeoverPreference.automaticKey)
