@@ -130,6 +130,13 @@ final class LocalLiveTurnRunner {
         }
     }
 
+    /// Whether the turn sending now is still the newest, for a send that
+    /// waits (a chat takeover, #1061) before going out again.
+    func currentTurnCheck() -> () -> Bool {
+        let generation = generation
+        return { [weak self] in self?.generation == generation }
+    }
+
     func cancel(turnID: String) {
         guard turn?.id == turnID else { return }
         turn = nil
