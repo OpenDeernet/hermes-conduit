@@ -135,7 +135,8 @@ final class VoiceConversationController: ObservableObject {
     private var utteranceStartedAt: Date?
     private var lastSpeechAt: Date?
     private var bargeInStartedAt: Date?
-    private var pushToTalkPressedAt: Date?
+    /// System uptime at the press: a clock change can't turn a hold into a tap.
+    private var pushToTalkPressedAt: TimeInterval?
     /// Whether a surface that can hold the push-to-talk button presents
     /// the conversation. AppState answers false for CarPlay and for a call
     /// from Hermes, which stay hands-free with push to talk on.
@@ -306,25 +307,51 @@ final class VoiceConversationController: ObservableObject {
         isPushToTalkEnabled && !isBackgroundListeningRequested && pushToTalkSurfaceAvailable()
     }
 
+    /// Whether a press would open a window right now. While Hermes works
+    /// with nothing to steer into (reply speech queued, output muted, no
+    /// steer seam), a press waits for the reply instead.
+    var canPushToTalkNow: Bool {
+        guard isPushToTalkActive, !isPushToTalkHeld, state != .transcribing else { return false }
+        switch state {
+        case .thinking:
+            return isPlaybackCaptureSuspended || isSteerAvailable
+        case .muted:
+            return isPlaybackCaptureSuspended
+        default:
+            return true
+        }
+    }
+
+    /// Push to talk's press from the button. The press is taken at once, so
+    /// a release that lands before the window opens still finds it held.
+    /// Returns false when the press does nothing (`canPushToTalkNow`).
+    @discardableResult
+    func pressPushToTalk() -> Bool {
+        guard claimPushToTalkPress() else { return false }
+        Task { await openPushToTalkWindow() }
+        return true
+    }
+
     /// Push to talk's press: listen until release. Pressing while Hermes
     /// speaks stops the reply first, as talking over it does; pressing while
     /// Hermes works steers the running turn.
     func beginPushToTalk() async {
-        guard isPushToTalkActive, !isPushToTalkHeld, state != .transcribing else { return }
-        switch state {
-        case .thinking, .muted:
-            // Nothing to steer (no steer seam, or the reply is already
-            // being spoken or muted): the press waits for the reply.
-            guard !isPlaybackCaptureSuspended, isSteerAvailable else { return }
-        default:
-            break
-        }
+        guard claimPushToTalkPress() else { return }
+        await openPushToTalkWindow()
+    }
+
+    private func claimPushToTalkPress() -> Bool {
+        guard canPushToTalkNow else { return false }
         isPushToTalkHeld = true
-        pushToTalkPressedAt = Date()
+        pushToTalkPressedAt = ProcessInfo.processInfo.systemUptime
+        return true
+    }
+
+    private func openPushToTalkWindow() async {
         isMicrophonePaused = false
-        if isPlaybackCaptureSuspended || state == .speaking {
+        if isPlaybackCaptureSuspended || state == .speaking || state == .muted {
             await stopAssistantReplyAndListen()
-        } else if state == .thinking || state == .muted {
+        } else if state == .thinking {
             bargeInTask?.cancel()
             bargeInTask = nil
             let generation = operationGeneration
@@ -338,7 +365,7 @@ final class VoiceConversationController: ObservableObject {
         } else if state != .listening {
             await startListening()
         }
-        // Released before the window opened: too short to be a turn.
+        // Released before the window opened: nothing was recorded yet.
         if !isPushToTalkHeld, state == .listening, utteranceTask == nil {
             cancelPushToTalkUtterance()
         } else if state != .listening {
@@ -351,9 +378,10 @@ final class VoiceConversationController: ObservableObject {
     func endPushToTalk(send: Bool) {
         guard isPushToTalkHeld else { return }
         isPushToTalkHeld = false
-        // Still opening: `beginPushToTalk` drops the window once it opens.
+        // Still opening: the press drops the window once it opens. Already
+        // sent by the length cap: nothing left to do.
         guard state == .listening, utteranceTask == nil else { return }
-        let heldFor = pushToTalkPressedAt.map { Date().timeIntervalSince($0) } ?? 0
+        let heldFor = pushToTalkPressedAt.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0
         if send, heldFor >= configuration.pushToTalkMinimumHold {
             scheduleFinishUtterance()
         } else {
@@ -916,10 +944,10 @@ final class VoiceConversationController: ObservableObject {
             }
             pumpLiveTranscription()
             if isPushToTalkHeld {
-                // Held: silence never ends the turn; release does.
+                // Held: silence never ends the turn; release does. The cap
+                // sends, and the hold ends with the finger.
                 if let started = utteranceStartedAt,
                    date.timeIntervalSince(started) >= configuration.pushToTalkMaximumUtterance {
-                    isPushToTalkHeld = false
                     scheduleFinishUtterance()
                 }
             } else if let started = utteranceStartedAt, date.timeIntervalSince(started) >= configuration.maximumUtterance {

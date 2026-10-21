@@ -188,6 +188,56 @@ extension ContinuousConversationPreferenceTests {
         XCTAssertEqual(submitted.texts, ["From the car"], "a pause ends the turn, as without push to talk")
     }
 
+    func testPushToTalkReleaseBeforeTheWindowOpensLeavesNothingListening() async {
+        let capture = MockCapture(permissionGranted: true)
+        let submitted = SubmitSpy()
+        let controller = makePushToTalkController(capture: capture, gateway: MockGateway(), submitted: submitted)
+
+        // The button's press returns at once; the release can land before
+        // the window opens.
+        XCTAssertTrue(controller.pressPushToTalk())
+        controller.endPushToTalk(send: true)
+        await drainPendingMainActorWork()
+
+        XCTAssertEqual(controller.state, .idle, "no window is left open with no finger down")
+        XCTAssertFalse(controller.isPushToTalkHeld)
+        XCTAssertEqual(submitted.count, 0)
+    }
+
+    func testPushToTalkLengthCapSendsAndTheHoldEndsWithTheFinger() async {
+        let capture = MockCapture(permissionGranted: true)
+        let submitted = SubmitSpy()
+        let controller = makePushToTalkController(
+            capture: capture, gateway: MockGateway(transcript: "A long story"), submitted: submitted
+        )
+
+        await controller.beginPushToTalk()
+        let start = Date()
+        controller.ingestAudioLevel(0.1, at: start)
+        controller.ingestAudioLevel(0.1, at: start.addingTimeInterval(181))
+        await submitted.waitUntilSubmitted(1)
+
+        XCTAssertEqual(submitted.texts, ["A long story"])
+        XCTAssertTrue(controller.isPushToTalkHeld, "still held until the finger lifts")
+        controller.endPushToTalk(send: true)
+        XCTAssertFalse(controller.isPushToTalkHeld)
+        XCTAssertEqual(submitted.count, 1, "the release after the cap sends nothing more")
+    }
+
+    func testPushToTalkPressWhileHermesWorksWithNothingToSteerWaits() async {
+        let capture = MockCapture(permissionGranted: true)
+        let gateway = MockGateway(transcript: "Question")
+        let submitted = SubmitSpy()
+        // No steer seam: a press while Hermes works has nothing to do.
+        let controller = makePushToTalkController(capture: capture, gateway: gateway, submitted: submitted)
+        await pushToTalkTurn(controller, submitted: submitted, count: 1)
+
+        XCTAssertFalse(controller.canPushToTalkNow)
+        XCTAssertFalse(controller.pressPushToTalk())
+        XCTAssertFalse(controller.isPushToTalkHeld)
+        XCTAssertEqual(controller.state, .thinking)
+    }
+
     // MARK: Helpers
 
     private func makePushToTalkController(
