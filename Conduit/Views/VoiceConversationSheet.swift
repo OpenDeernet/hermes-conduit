@@ -222,7 +222,6 @@ struct VoiceConversationSheet: View {
                             .padding(.vertical, 6).frame(minHeight: 48)
                             .conduitGlassControl(cornerRadius: 17, tint: controller.isPushToTalkHeld ? .conduitAccent.opacity(0.4) : .conduitAccent.opacity(0.16))
                     }
-                    .disabled(controller.state == .transcribing)
                 } else {
                     Button { microphoneTapped() } label: {
                         Label(microphoneLabel, systemImage: microphoneSymbol)
@@ -669,7 +668,6 @@ extension VoiceConversationSheet {
                         style: controller.isPushToTalkHeld ? (cancelling ? .destructive : .selected) : .normal
                     )
                 }
-                .disabled(controller.state == .transcribing)
             } else {
                 LiveVoiceCallButton(
                     symbol: microphoneSymbol,
@@ -720,7 +718,6 @@ struct VoicePushToTalkControl<Face: View>: View {
     /// Draws the button; true while a slide away would cancel.
     @ViewBuilder let face: (_ cancelling: Bool) -> Face
 
-    @Environment(\.isEnabled) private var isEnabled
     @Environment(\.scenePhase) private var scenePhase
     @State private var isPressed = false
     @State private var isCancelling = false
@@ -729,15 +726,17 @@ struct VoicePushToTalkControl<Face: View>: View {
     static var cancelDistance: CGFloat { 72 }
 
     var body: some View {
+        // Never disabled while transcribing: that would cancel a finger
+        // still down after the length cap sent, and its release with it.
+        // A press then is refused by the controller instead.
         face(isCancelling)
-            .opacity(isEnabled ? 1 : 0.4)
+            .opacity(controller.state == .transcribing ? 0.4 : 1)
             .scaleEffect(isPressed ? 0.94 : 1)
             .animation(.easeOut(duration: 0.12), value: isPressed)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        guard isEnabled else { return }
                         // A press that can't start yet (Hermes is answering)
                         // is retried as the finger moves, without feedback.
                         if !isPressed, controller.pressPushToTalk() {
@@ -777,13 +776,17 @@ struct VoicePushToTalkControl<Face: View>: View {
                 : AppLocalization.string("Listens until you double-tap again to send")))
             .accessibilityAction {
                 if controller.isPushToTalkHeld {
-                    controller.endPushToTalk(send: true)
+                    controller.endPushToTalk(send: true, minimumHold: false)
                 } else {
                     controller.pressPushToTalk()
                 }
             }
-            .accessibilityAction(named: Text(verbatim: AppLocalization.string("Cancel"))) {
-                controller.endPushToTalk(send: false)
+            .accessibilityActions {
+                if controller.isPushToTalkHeld {
+                    Button(AppLocalization.string("Cancel")) {
+                        controller.endPushToTalk(send: false)
+                    }
+                }
             }
     }
 

@@ -374,15 +374,16 @@ final class VoiceConversationController: ObservableObject {
     }
 
     /// Push to talk's release. `send` false is slide-away-to-cancel: the
-    /// words are dropped and nothing reaches Hermes.
-    func endPushToTalk(send: Bool) {
+    /// words are dropped and nothing reaches Hermes. `minimumHold` false is
+    /// VoiceOver's Send, a deliberate second tap rather than a hold.
+    func endPushToTalk(send: Bool, minimumHold: Bool = true) {
         guard isPushToTalkHeld else { return }
         isPushToTalkHeld = false
         // Still opening: the press drops the window once it opens. Already
         // sent by the length cap: nothing left to do.
         guard state == .listening, utteranceTask == nil else { return }
         let heldFor = pushToTalkPressedAt.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0
-        if send, heldFor >= configuration.pushToTalkMinimumHold {
+        if send, !minimumHold || heldFor >= configuration.pushToTalkMinimumHold {
             scheduleFinishUtterance()
         } else {
             cancelPushToTalkUtterance()

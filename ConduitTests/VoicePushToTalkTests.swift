@@ -188,6 +188,21 @@ extension ContinuousConversationPreferenceTests {
         XCTAssertEqual(submitted.texts, ["From the car"], "a pause ends the turn, as without push to talk")
     }
 
+    func testVoiceOverSendIsNotHeldToTheMinimumHold() async {
+        let capture = MockCapture(permissionGranted: true)
+        let submitted = SubmitSpy()
+        let controller = makePushToTalkController(
+            capture: capture, gateway: MockGateway(transcript: "Quick one"), submitted: submitted, minimumHold: 0.3
+        )
+
+        await controller.beginPushToTalk()
+        controller.ingestAudioLevel(0.1, at: Date())
+        controller.endPushToTalk(send: true, minimumHold: false)
+        await submitted.waitUntilSubmitted(1)
+
+        XCTAssertEqual(submitted.texts, ["Quick one"], "a second double-tap is a deliberate send")
+    }
+
     func testPushToTalkReleaseBeforeTheWindowOpensLeavesNothingListening() async {
         let capture = MockCapture(permissionGranted: true)
         let submitted = SubmitSpy()
