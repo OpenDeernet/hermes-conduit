@@ -11181,18 +11181,24 @@ final class AppState: ObservableObject {
         var stored = storedRelayGatewayIDs()
         guard stored[dashboardID.uuidString]?[profile] != gatewayID else { return }
         stored[dashboardID.uuidString, default: [:]][profile] = gatewayID
-        defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
+        saveRelayGatewayIDs(stored)
     }
 
     func forgetRelayGatewayID(for dashboardID: UUID, profile: String) {
         var stored = storedRelayGatewayIDs()
         guard stored[dashboardID.uuidString]?.removeValue(forKey: profile) != nil else { return }
-        defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
+        saveRelayGatewayIDs(stored)
     }
 
     func forgetRelayGatewayIDs(of dashboardID: UUID) {
         var stored = storedRelayGatewayIDs()
         guard stored.removeValue(forKey: dashboardID.uuidString) != nil else { return }
+        saveRelayGatewayIDs(stored)
+    }
+
+    /// Settings > Notifications sorts pairings by these, so it redraws.
+    private func saveRelayGatewayIDs(_ stored: [String: [String: String]]) {
+        objectWillChange.send()
         defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
     }
 
@@ -12483,6 +12489,8 @@ final class AppState: ObservableObject {
     /// active dashboard this is the full Disconnect teardown, scoped.
     func signOutDashboard(_ id: UUID) {
         guard let dashboard = savedDashboardRegistry.dashboard(with: id) else { return }
+        // The host signed in next reports its own gateways.
+        forgetRelayGatewayIDs(of: id)
         // Drafts shared for this dashboard belong to the signed-out user.
         discardSharedDrafts(forDashboard: id)
         if id == activeDashboardID {

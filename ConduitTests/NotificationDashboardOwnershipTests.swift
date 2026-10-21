@@ -499,3 +499,18 @@ extension NotificationDashboardOwnershipTests {
         XCTAssertTrue(appState.relayGatewayIDs(of: dashboardA).isEmpty)
     }
 }
+
+extension NotificationDashboardOwnershipTests {
+    func testRelayGatewayIDsAreForgottenOnSignOut() {
+        let savedA = SavedDashboard(id: dashboardA, label: "VPS", normalizedURL: "https://vps.tailnet.ts.net")
+        let savedB = SavedDashboard(id: dashboardB, label: "Mac", normalizedURL: "https://mac.tailnet.ts.net")
+        let appState = makeAppState(registry: SavedDashboardRegistry(activeDashboardID: dashboardA, dashboards: [savedA, savedB]))
+        appState.recordRelayGatewayID("gw-1", for: dashboardA, profile: "default")
+        appState.recordRelayGatewayID("gw-2", for: dashboardB, profile: "default")
+
+        appState.signOutDashboard(dashboardB)
+
+        XCTAssertTrue(appState.relayGatewayIDs(of: dashboardB).isEmpty)
+        XCTAssertEqual(appState.relayGatewayIDs(of: dashboardA), ["gw-1"])
+    }
+}

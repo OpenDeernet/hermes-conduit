@@ -237,7 +237,10 @@ extension AppState {
             return try await bridge.requestJSON(path: path, method: method, body: body,
                                                 timeoutMilliseconds: PushNotificationService.pairTimeoutMilliseconds)
         }
-        if let gatewayID { recordRelayGatewayID(gatewayID, for: dashboardID, profile: profile) }
+        // Still the host it was paired on: a switch or move meanwhile isn't.
+        if let gatewayID, bridge === dashboardTicketBridge, activeDashboardID == dashboardID {
+            recordRelayGatewayID(gatewayID, for: dashboardID, profile: profile)
+        }
         // The new pairing gets its key right away, before its first push.
         await provisionNotificationEncryption(bridge: bridge)
     }
