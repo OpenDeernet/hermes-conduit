@@ -273,6 +273,7 @@ final class CarPlayVoiceCoordinator {
         observeAudioInterruptions()
         connectionGeneration &+= 1
         let generation = connectionGeneration
+        shownPhoneFailure = nil
         connectionWaitTask?.cancel()
         connectionWaitTask = nil
         // Defensive: never two live sinks, even for an unpaired re-connect.
@@ -347,6 +348,9 @@ final class CarPlayVoiceCoordinator {
     /// the runtime exactly like the PR #161 background boundary.
     func handleDisconnect() {
         connectionGeneration &+= 1
+        // What the phone shows stays for the driver; the next drive may
+        // post the same failure again.
+        shownPhoneFailure = nil
         connectionWaitTask?.cancel()
         connectionWaitTask = nil
         interfacing = nil
