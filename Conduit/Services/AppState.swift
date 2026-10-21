@@ -22881,10 +22881,12 @@ final class AppState: ObservableObject {
                 ids.append(id)
             }
             var state = ChatTakeoverState(sessionID: runtimeID, sessionIDs: ids, surface: details.surface, phase: .offered)
-            state.phase = await Self.runChatTakeover(
+            // Nil: the call ended while it waited, so there's no refusal to report.
+            guard let phase = await Self.runChatTakeover(
                 client: chatTakeoverClient, state: state, profile: profile ?? activeProfile,
                 waitLimit: Self.callChatTakeoverWaitLimit
-            ) ?? .offered
+            ) else { throw CancellationError() }
+            state.phase = phase
             guard state.phase == .ready else { throw VoiceAudioError.unavailable(state.callRefusalMessage) }
             lifecycleLog.notice(
                 "call request: took chat over from \(details.surface ?? "another surface", privacy: .public); sending again session=\(runtimeID, privacy: .private(mask: .hash))"

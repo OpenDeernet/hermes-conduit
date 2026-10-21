@@ -1739,7 +1739,8 @@ private struct AttachmentLimitSettings: View {
 }
 
 /// Device-only: take a chat over from Hermes Desktop or a terminal as soon
-/// as a send is refused, instead of offering a button (#304).
+/// as a send is refused (#304), on until turned off (#1061). Off, the
+/// composer offers a button instead; calls take over either way.
 private struct ChatTakeoverSettings: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     @AppStorage(ChatTakeoverPreference.automaticKey) private var automatic = ChatTakeoverPreference.automaticDefault
@@ -1750,7 +1751,7 @@ private struct ChatTakeoverSettings: View {
             symbol: "desktopcomputer",
             tint: .conduitAura
         ) {
-            Text("Hermes lets one app use a chat at a time. When a chat is open in Hermes Desktop or a terminal, Conduit offers to take it over when you send.")
+            Text("Hermes lets one app use a chat at a time. When a chat is open in Hermes Desktop or a terminal, Conduit takes it over when you send. Turn this off to be asked first.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Text("A reply running there always finishes first. If you go back to that app, reopen the chat there to see what you sent from Conduit.")
