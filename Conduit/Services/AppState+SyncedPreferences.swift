@@ -40,7 +40,7 @@ extension AppState {
         guard supportsSyncedPreferences, let bridge = dashboardTicketBridge else { return nil }
         let path = DashboardPath.withProfile(SyncedPreferencesEngine.path, profile: activeProfile)
         guard let response = try? await bridge.requestJSON(path: path) else { return nil }
-        return !SyncedPreferencesEngine.hostValues(response).isEmpty
+        return SyncedPreferencesEngine.hostValues(response).map { !$0.isEmpty }
     }
 
     /// Shares this device's changes and takes the host's. Quiet when sync
@@ -52,10 +52,10 @@ extension AppState {
         controller.observeLocalChanges { [weak self] in await self?.syncPreferences(onlyIfChanged: true) }
         guard controller.isEnabled, supportsSyncedPreferences,
               let scope = syncedPreferencesScope, let bridge = dashboardTicketBridge else { return }
-        guard controller.begin() else { return }
+        guard controller.begin(start) else { return }
         defer {
-            if controller.end() {
-                Task { await self.syncPreferences() }
+            if let owed = controller.end() {
+                Task { await self.syncPreferences(start: owed) }
             } else if controller.status == .syncing {
                 // A sync dropped for another host or profile leaves no status behind.
                 controller.status = .idle
@@ -67,8 +67,9 @@ extension AppState {
         let path = DashboardPath.withProfile(SyncedPreferencesEngine.path, profile: profile)
         // Another host or profile by the time an answer comes: its values
         // aren't this one's.
+        // Sync turned off meanwhile: nothing it brings back is applied.
         let isCurrent = { [weak self] in
-            bridge === self?.dashboardTicketBridge && self?.syncedPreferencesScope == scope
+            bridge === self?.dashboardTicketBridge && self?.syncedPreferencesScope == scope && controller.isEnabled
         }
         let ledger = start == .useDevice ? nil : controller.ledger(for: scope)
         let slots = syncedPreferenceSlots
@@ -76,8 +77,12 @@ extension AppState {
             var host: [String: Any]?
             if ledger == nil, start == .useHost {
                 let response = try await bridge.requestJSON(path: path)
-                host = SyncedPreferencesEngine.hostValues(response)
                 guard isCurrent() else { return }
+                guard let values = SyncedPreferencesEngine.hostValues(response) else {
+                    controller.status = .failed(AppLocalization.string("The host's answer wasn't readable."))
+                    return
+                }
+                host = values
             }
             let before = SyncedPreferencesEngine.snapshot(slots)
             let changes = SyncedPreferencesEngine.changes(slots: slots, ledger: ledger, host: host, start: start)
@@ -89,8 +94,12 @@ extension AppState {
                 "changes": changes,
             ])
             guard isCurrent() else { return }
+            guard let values = SyncedPreferencesEngine.hostValues(response) else {
+                controller.status = .failed(AppLocalization.string("The host's answer wasn't readable."))
+                return
+            }
             let entry = SyncedPreferencesEngine.apply(
-                host: SyncedPreferencesEngine.hostValues(response),
+                host: values,
                 slots: slots, uploaded: Set(changes.keys), ledger: ledger, before: before
             )
             controller.setLedger(entry, for: scope)

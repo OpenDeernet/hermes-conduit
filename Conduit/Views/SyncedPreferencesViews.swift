@@ -24,7 +24,8 @@ struct SyncedPreferencesSettingsDetail: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Toggle(AppLocalization.string("Sync with this Hermes"), isOn: Binding(
-                    get: { controller.isEnabled },
+                    // Holds on while the host is checked, so the tap reads as taken.
+                    get: { controller.isEnabled || checkingHost },
                     set: { enabled in
                         Haptics.selection()
                         if enabled {

@@ -101049,88 +101049,6 @@
         }
       }
     },
-    "Hermes settings follow the active profile. Appearance, notifications, and privacy controls stay on this device." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hermes-Einstellungen folgen dem aktiven Profil. Erscheinungsbild, Mitteilungen und Datenschutzeinstellungen bleiben auf diesem Gerät."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Los ajustes de Hermes siguen al perfil activo. La apariencia, las notificaciones y los controles de privacidad se quedan en este dispositivo."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Les réglages Hermes suivent le profil actif. L'apparence, les notifications et les contrôles de confidentialité restent sur cet appareil."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pengaturan Hermes mengikuti profil aktif. Kontrol tampilan, pemberitahuan, dan privasi tetap di perangkat ini."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le impostazioni di Hermes seguono il profilo attivo. Aspetto, notifiche e controlli della privacy restano su questo dispositivo."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hermesの設定は使用中のプロファイルに従います。外観、通知、プライバシーの設定はこのデバイスに保存されます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hermes 설정은 사용 중인 프로필을 따라요. 모양, 알림, 개인정보 보호 설정은 이 기기에 남아 있어요."
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ustawienia Hermesa zależą od aktywnego profilu. Wygląd, powiadomienia i ustawienia prywatności pozostają na tym urządzeniu."
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Os ajustes do Hermes seguem o perfil ativo. Aparência, notificações e controles de privacidade ficam neste aparelho."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Настройки Hermes относятся к активному профилю. Оформление, уведомления и настройки конфиденциальности остаются на этом устройстве."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hermes ayarları etkin profili izler. Görünüm, bildirimler ve gizlilik denetimleri bu cihazda kalır."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hermes 设置跟随当前档案。外观、通知与隐私控制保留在此设备上。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hermes 設定會跟隨目前的設定檔。外觀、通知和隱私權控制項則保留在此裝置上。"
-          }
-        }
-      }
-    },
     "Hermes speech stream failed." : {
       "localizations" : {
         "de" : {
@@ -312382,6 +312300,170 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此主機上的其他裝置會在下次連線時採用這些設定。"
+          }
+        }
+      }
+    },
+    "Hermes settings follow the active profile. Appearance, notifications, and privacy controls stay on this device unless you turn on Sync across devices." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes-Einstellungen folgen dem aktiven Profil. Darstellung, Mitteilungen und Datenschutz bleiben auf diesem Gerät, außer du schaltest „Geräteübergreifend synchronisieren“ ein."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los ajustes de Hermes siguen al perfil activo. La apariencia, las notificaciones y los controles de privacidad se quedan en este dispositivo, salvo que actives Sincronizar entre dispositivos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les réglages Hermes suivent le profil actif. L’apparence, les notifications et les contrôles de confidentialité restent sur cet appareil, sauf si vous activez Synchroniser entre appareils."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pengaturan Hermes mengikuti profil aktif. Tampilan, notifikasi, dan kontrol privasi tetap di perangkat ini kecuali kamu menyalakan Sinkronkan antarperangkat."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le impostazioni di Hermes seguono il profilo attivo. Aspetto, notifiche e controlli della privacy restano su questo dispositivo, a meno che tu non attivi Sincronizza tra dispositivi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes の設定はアクティブなプロファイルに従います。外観、通知、プライバシーの設定は、「デバイス間で同期」をオンにしない限りこのデバイスに残ります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes 설정은 활성 프로필을 따릅니다. 화면 모양, 알림, 개인정보 보호 설정은 기기 간 동기화를 켜지 않는 한 이 기기에 남습니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ustawienia Hermes podążają za aktywnym profilem. Wygląd, powiadomienia i ustawienia prywatności zostają na tym urządzeniu, chyba że włączysz Synchronizuj między urządzeniami."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Os ajustes do Hermes seguem o perfil ativo. Aparência, notificações e controles de privacidade ficam neste dispositivo, a menos que você ative Sincronizar entre dispositivos."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Настройки Hermes следуют за активным профилем. Оформление, уведомления и конфиденциальность остаются на этом устройстве, если не включить синхронизацию между устройствами."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes ayarları etkin profili izler. Görünüm, bildirimler ve gizlilik denetimleri, Cihazlar arasında eşitle’yi açmadığın sürece bu cihazda kalır."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes 设置跟随当前配置文件。除非你开启“跨设备同步”，外观、通知和隐私控制都只保留在此设备上。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes 設定會跟隨目前的設定檔。除非你開啟「跨裝置同步」，外觀、通知和隱私權控制都只保留在此裝置上。"
+          }
+        }
+      }
+    },
+    "The host's answer wasn't readable." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Antwort des Hosts war nicht lesbar."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo leer la respuesta del host."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La réponse de l’hôte était illisible."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jawaban host tidak dapat dibaca."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La risposta dell’host non era leggibile."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ホストの応答を読み取れませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "호스트의 응답을 읽을 수 없습니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nie udało się odczytać odpowiedzi hosta."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível ler a resposta do host."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось прочитать ответ хоста."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ana makinenin yanıtı okunamadı."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取主机的响应。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法讀取主機的回應。"
           }
         }
       }

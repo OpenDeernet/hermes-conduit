@@ -144,7 +144,10 @@ extension ChatReadStateTests {
             "app.bad": "not an entry",
         ]]
         let values = SyncedPreferencesEngine.hostValues(response)
-        XCTAssertEqual(Set(values.keys), ["app.accent"])
+        XCTAssertEqual(values.map { Set($0.keys) }, ["app.accent"])
+        // Not the plugin's answer: never an empty host.
+        XCTAssertNil(SyncedPreferencesEngine.hostValues(["ok": true]))
+        XCTAssertEqual(SyncedPreferencesEngine.hostValues(["values": [String: Any]()])?.isEmpty, true)
     }
 
     func testSyncedDefaultsSlotsRoundTripEachKind() {
@@ -182,9 +185,11 @@ extension ChatReadStateTests {
         XCTAssertNotNil(controller.ledger(for: "a|default"))
         XCTAssertNil(controller.ledger(for: "gone|default"))
         XCTAssertTrue(controller.begin())
+        XCTAssertFalse(controller.begin(.useDevice))
         XCTAssertFalse(controller.begin())
-        XCTAssertTrue(controller.end())
+        // A copy asked for meanwhile isn't lost to a later ordinary sync.
+        XCTAssertEqual(controller.end(), .useDevice)
         XCTAssertTrue(controller.begin())
-        XCTAssertFalse(controller.end())
+        XCTAssertNil(controller.end())
     }
 }

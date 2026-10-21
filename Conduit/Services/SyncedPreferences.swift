@@ -29,7 +29,9 @@ struct SyncedPreferenceSlot {
         case replace
         /// A list of strings that only grows here: items another device
         /// added since the last sync are added, and an item removed
-        /// elsewhere stays on this device.
+        /// elsewhere stays on this device. The host keeps whole lists, so an
+        /// item removed here comes back if another device that still has
+        /// it uploads its list.
         case addOnly
     }
 
@@ -185,9 +187,11 @@ enum SyncedPreferencesEngine {
         return entry
     }
 
-    /// The host's values out of a `/conduit-prefs` answer, by key.
-    static func hostValues(_ response: [String: Any]) -> [String: Any] {
-        guard let values = response["values"] as? [String: Any] else { return [:] }
+    /// The host's values out of a `/conduit-prefs` answer, by key; nil for
+    /// an answer without them (not the plugin's), which must never read as
+    /// a host that cleared everything.
+    static func hostValues(_ response: [String: Any]) -> [String: Any]? {
+        guard let values = response["values"] as? [String: Any] else { return nil }
         var kept: [String: Any] = [:]
         for (key, entry) in values {
             guard let entry = entry as? [String: Any], let value = entry["value"], !(value is NSNull) else { continue }
@@ -234,7 +238,10 @@ final class SyncedPreferencesController: ObservableObject {
     private var pendingUpload: Task<Void, Never>?
     private var defaultsObserver: NSObjectProtocol?
     private var syncing = false
-    private var syncAgain = false
+    /// The round owed to a call that came while one was running; a copy
+    /// of this device's settings wins over an ordinary sync.
+    private var owed: SyncedPreferencesStart?
+    private var uploadGeneration = 0
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
@@ -253,20 +260,20 @@ final class SyncedPreferencesController: ObservableObject {
 
     /// Starts a sync unless one is running; a call meanwhile gets one more
     /// round when it ends.
-    func begin() -> Bool {
+    func begin(_ start: SyncedPreferencesStart = .useHost) -> Bool {
         guard !syncing else {
-            syncAgain = true
+            owed = owed == .useDevice ? .useDevice : start
             return false
         }
         syncing = true
         return true
     }
 
-    /// Ends a sync; true when another round is owed.
-    func end() -> Bool {
+    /// Ends a sync; the start of the round owed, if one is.
+    func end() -> SyncedPreferencesStart? {
         syncing = false
-        defer { syncAgain = false }
-        return syncAgain
+        defer { owed = nil }
+        return owed
     }
 
     func ledger(for scope: String) -> SyncedPreferencesLedgerEntry? {
@@ -303,16 +310,20 @@ final class SyncedPreferencesController: ObservableObject {
     func observeLocalChanges(_ upload: @escaping @MainActor () async -> Void) {
         guard defaultsObserver == nil else { return }
         defaultsObserver = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification, object: defaults, queue: .main
+            // No object filter: which object posts it has varied by release.
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 // Most writes are other keys: one check per interval, not
                 // a new task per write.
                 guard let self, self.isEnabled, self.pendingUpload == nil else { return }
                 let wait = self.debounce
+                self.uploadGeneration += 1
+                let generation = self.uploadGeneration
                 self.pendingUpload = Task { @MainActor in
                     try? await Task.sleep(for: wait)
-                    self.pendingUpload = nil
+                    // A task cancelled while a newer one was scheduled leaves it be.
+                    if self.uploadGeneration == generation { self.pendingUpload = nil }
                     guard !Task.isCancelled else { return }
                     await upload()
                 }
