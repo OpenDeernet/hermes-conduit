@@ -529,7 +529,14 @@ final class VoiceAudioSessionCoordinator {
                 try session.setActive(true, options: [])
                 appliedPolicy = .wakeListening
             case nil:
-                try session.setActive(false, options: .notifyOthersOnDeactivation)
+                // In a call from Hermes the session is CallKit's, which
+                // deactivates it when the call ends. Classic voice holds
+                // nothing while Hermes thinks or between listens; a
+                // deactivation there dropped the Speaker button's override,
+                // and the call came back on the earpiece every turn.
+                if !isInNativeCall {
+                    try session.setActive(false, options: .notifyOthersOnDeactivation)
+                }
                 appliedPolicy = nil
             }
             needsReapply = false
