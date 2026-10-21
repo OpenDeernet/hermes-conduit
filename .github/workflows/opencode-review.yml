@@ -137,7 +137,7 @@ jobs:
       # prompt it would ask, and this bounds whatever else can stall a run.
       # The slowest reviews that finished took about 26 minutes.
       - name: Run opencode review
-        timeout-minutes: 30
+        timeout-minutes: 40
         run: GITHUB_EVENT_PATH=${DISPATCH_EVENT_PATH:-$GITHUB_EVENT_PATH} GITHUB_EVENT_NAME=pull_request GITHUB_ACTOR=${{ github.repository_owner }} opencode github run
         env:
           DISPATCH_EVENT_PATH: ${{ steps.dispatch_event.outputs.path }}
