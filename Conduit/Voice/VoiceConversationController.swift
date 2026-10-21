@@ -16,6 +16,10 @@ final class VoiceConversationController: ObservableObject {
         var trailingSilence: TimeInterval = 1.25
         var idleSilence: TimeInterval = 12
         var maximumUtterance: TimeInterval = 60
+        /// A held push-to-talk turn has no silence timers; this caps it.
+        var pushToTalkMaximumUtterance: TimeInterval = 180
+        /// A press shorter than this is a tap, not a turn: nothing is sent.
+        var pushToTalkMinimumHold: TimeInterval = 0.3
         var bargeInDuration: TimeInterval = 0.3
         var speechDetector = VoiceSpeechDetectorConstants()
     }
@@ -32,6 +36,12 @@ final class VoiceConversationController: ObservableObject {
     @Published private(set) var isSteeringTurn = false
     @Published private(set) var isOutputMuted = false
     @Published private(set) var isMicrophonePaused = false
+    /// The profile's push-to-talk setting (#886), for the voice screen.
+    /// Whether it applies right now is `isPushToTalkActive`.
+    @Published private(set) var isPushToTalkEnabled = false
+    /// The push-to-talk button is held: the listening window stays open
+    /// through silence until it is released.
+    @Published private(set) var isPushToTalkHeld = false
     /// Latest raw microphone input peak from the capture service. This is
     /// presentation state: it moves whenever audio reaches Conduit,
     /// regardless of whether the speech detector classifies it as speech,
@@ -125,6 +135,11 @@ final class VoiceConversationController: ObservableObject {
     private var utteranceStartedAt: Date?
     private var lastSpeechAt: Date?
     private var bargeInStartedAt: Date?
+    private var pushToTalkPressedAt: Date?
+    /// Whether a surface that can hold the push-to-talk button presents
+    /// the conversation. AppState answers false for CarPlay and for a call
+    /// from Hermes, which stay hands-free with push to talk on.
+    private let pushToTalkSurfaceAvailable: @MainActor () -> Bool
     private var isForegroundActive = true
     /// App-level foreground state, deliberately separate from
     /// `isForegroundActive`: the phone scene is on screen (or CarPlay
@@ -199,7 +214,8 @@ final class VoiceConversationController: ObservableObject {
         interrupt: @escaping @MainActor () async -> Bool,
         steer: (@MainActor (String) async -> VoiceSteerOutcome)? = nil,
         onEndConversation: (@MainActor () -> Void)? = nil,
-        backgroundJobs: VoiceBackgroundJobHandling? = nil
+        backgroundJobs: VoiceBackgroundJobHandling? = nil,
+        pushToTalkSurfaceAvailable: (@MainActor () -> Bool)? = nil
     ) {
         let capture = capture ?? AVAudioCaptureService()
         self.capture = capture
@@ -220,6 +236,7 @@ final class VoiceConversationController: ObservableObject {
         self.steerTurn = steer
         self.endConversationRequest = onEndConversation
         self.backgroundJobs = backgroundJobs
+        self.pushToTalkSurfaceAvailable = pushToTalkSurfaceAvailable ?? { true }
         captureEventsTask = Task { [weak self, capture] in
             for await event in capture.events {
                 guard !Task.isCancelled else { return }
@@ -278,6 +295,81 @@ final class VoiceConversationController: ObservableObject {
     func setProfilePreferences(_ preferences: VoiceProfilePreferences) {
         self.preferences = preferences
         isOutputMuted = preferences.outputMuted
+        let pushToTalk = preferences.pushToTalk == true
+        if isPushToTalkEnabled != pushToTalk { isPushToTalkEnabled = pushToTalk }
+    }
+
+    /// Push to talk applies: the setting is on and the phone's voice
+    /// screen, where the button is, presents the conversation. A locked
+    /// phone, CarPlay and calls from Hermes stay hands-free.
+    var isPushToTalkActive: Bool {
+        isPushToTalkEnabled && !isBackgroundListeningRequested && pushToTalkSurfaceAvailable()
+    }
+
+    /// Push to talk's press: listen until release. Pressing while Hermes
+    /// speaks stops the reply first, as talking over it does; pressing while
+    /// Hermes works steers the running turn.
+    func beginPushToTalk() async {
+        guard isPushToTalkActive, !isPushToTalkHeld, state != .transcribing else { return }
+        switch state {
+        case .thinking, .muted:
+            // Nothing to steer (no steer seam, or the reply is already
+            // being spoken or muted): the press waits for the reply.
+            guard !isPlaybackCaptureSuspended, isSteerAvailable else { return }
+        default:
+            break
+        }
+        isPushToTalkHeld = true
+        pushToTalkPressedAt = Date()
+        isMicrophonePaused = false
+        if isPlaybackCaptureSuspended || state == .speaking {
+            await stopAssistantReplyAndListen()
+        } else if state == .thinking || state == .muted {
+            bargeInTask?.cancel()
+            bargeInTask = nil
+            let generation = operationGeneration
+            isSteeringTurn = true
+            await startListening()
+            guard isCurrent(generation) else {
+                isSteeringTurn = false
+                return
+            }
+            if isSteeringTurn, state != .listening { resumeTurnAfterSteer() }
+        } else if state != .listening {
+            await startListening()
+        }
+        // Released before the window opened: too short to be a turn.
+        if !isPushToTalkHeld, state == .listening, utteranceTask == nil {
+            cancelPushToTalkUtterance()
+        } else if state != .listening {
+            isPushToTalkHeld = false
+        }
+    }
+
+    /// Push to talk's release. `send` false is slide-away-to-cancel: the
+    /// words are dropped and nothing reaches Hermes.
+    func endPushToTalk(send: Bool) {
+        guard isPushToTalkHeld else { return }
+        isPushToTalkHeld = false
+        // Still opening: `beginPushToTalk` drops the window once it opens.
+        guard state == .listening, utteranceTask == nil else { return }
+        let heldFor = pushToTalkPressedAt.map { Date().timeIntervalSince($0) } ?? 0
+        if send, heldFor >= configuration.pushToTalkMinimumHold {
+            scheduleFinishUtterance()
+        } else {
+            cancelPushToTalkUtterance()
+        }
+    }
+
+    /// Drops the held window's audio without a transcription or a send.
+    private func cancelPushToTalkUtterance() {
+        _ = try? capture.finishUtterance()
+        resetLiveTranscription()
+        if isSteeringTurn {
+            resumeTurnAfterSteer()
+        } else {
+            settleOpenSessionAfterAssistantTurn()
+        }
     }
 
     /// Whether a completed assistant response automatically opens the next
@@ -385,6 +477,20 @@ final class VoiceConversationController: ObservableObject {
         initialWidgetCaptureAuthorization = nil
         guard isForegroundActive else { return }
         guard widgetAuthorization?.mayStartCapture != false else { return }
+        // Push to talk: only a held button opens a window. Every automatic
+        // relisten (after a reply, an empty transcript, a spoken Stop, the
+        // voice screen opening) settles to wait for the next press instead.
+        if isPushToTalkActive, !isPushToTalkHeld {
+            if isSteeringTurn {
+                resumeTurnAfterSteer()
+            } else if isVoiceSessionActive {
+                releaseHeldCapture()
+                settleOpenSessionAfterAssistantTurn()
+            } else {
+                state = .idle
+            }
+            return
+        }
         let generation = operationGeneration
         isVoiceSessionActive = true
         // A fresh listen re-arms the runtime: suspended state ends here.
@@ -626,6 +732,7 @@ final class VoiceConversationController: ObservableObject {
         endSteerBookkeeping()
         speechDetector.reset()
         resetMicrophoneMeter()
+        isPushToTalkHeld = false
     }
 
     func setOutputMuted(_ muted: Bool) {
@@ -808,7 +915,14 @@ final class VoiceConversationController: ObservableObject {
             case .none: break
             }
             pumpLiveTranscription()
-            if let started = utteranceStartedAt, date.timeIntervalSince(started) >= configuration.maximumUtterance {
+            if isPushToTalkHeld {
+                // Held: silence never ends the turn; release does.
+                if let started = utteranceStartedAt,
+                   date.timeIntervalSince(started) >= configuration.pushToTalkMaximumUtterance {
+                    isPushToTalkHeld = false
+                    scheduleFinishUtterance()
+                }
+            } else if let started = utteranceStartedAt, date.timeIntervalSince(started) >= configuration.maximumUtterance {
                 scheduleFinishUtterance()
             } else if let speech = lastSpeechAt, date.timeIntervalSince(speech) >= configuration.trailingSilence {
                 scheduleFinishUtterance()
@@ -831,6 +945,12 @@ final class VoiceConversationController: ObservableObject {
             // even from a stale level event that slipped past the paused
             // tap.
             guard !isPlaybackCaptureSuspended else { break }
+            // Push to talk: the press talks over or steers, never the
+            // microphone level.
+            guard !isPushToTalkActive else {
+                bargeInStartedAt = nil
+                break
+            }
             // Speech over an audible reply talks over it (a new turn).
             // Speech while Hermes thinks steers the running turn. Anything
             // else (silent gaps mid-reply, muted output) is ignored, so it
@@ -1216,6 +1336,12 @@ final class VoiceConversationController: ObservableObject {
                 resumeTurnAfterSteer()
                 return
             }
+            // A push-to-talk press that caught no audio just waits for the
+            // next press.
+            if isPushToTalkActive, (error as? VoiceAudioError) == .noAudioCaptured {
+                settleOpenSessionAfterAssistantTurn()
+                return
+            }
             state = .failed(UserFacingError.message(for: error))
         }
     }
@@ -1475,6 +1601,7 @@ final class VoiceConversationController: ObservableObject {
         assistantFinished = false
         isMicrophonePaused = false
         isPlaybackCaptureSuspended = false
+        isPushToTalkHeld = false
         endSteerBookkeeping()
         speechDetector.reset()
         resetMicrophoneMeter()
@@ -1596,7 +1723,7 @@ final class VoiceConversationController: ObservableObject {
             promotedSteerReplyDeadline = nil
             return false
         }
-        if state == .listening, !isMicrophonePaused, lastSpeechAt == nil, utteranceTask == nil {
+        if state == .listening, !isMicrophonePaused, !isPushToTalkHeld, lastSpeechAt == nil, utteranceTask == nil {
             promotedSteerReplyDeadline = nil
             isAwaitingVoiceAssistant = true
             awaitedAssistantResponseStarted = false
@@ -1962,7 +2089,7 @@ final class VoiceConversationController: ObservableObject {
             // (barge-in, manual Interrupt, empty transcript, spoken stop,
             // stream cancellation after the assistant finished) always
             // re-listen and are intentionally not gated here.
-            if preferences.continuousConversation || isBackgroundListening {
+            if (preferences.continuousConversation && !isPushToTalkActive) || isBackgroundListening {
                 cachedRoutePolicy = nil
                 isPlaybackCaptureSuspended = false
                 await startListening()
@@ -1972,8 +2099,8 @@ final class VoiceConversationController: ObservableObject {
                 // reply can start a drain of its own.
                 Task { @MainActor [weak self] in self?.replayHeldPromotedSteerReply() }
             } else {
-                // Continuous conversation off: the follow-up reply isn't
-                // spoken (it still shows in chat).
+                // Continuous conversation off, or push to talk: the
+                // follow-up reply isn't spoken (it still shows in chat).
                 dropPromotedSteerReply()
                 settleOpenSessionAfterAssistantTurn()
             }
