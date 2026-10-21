@@ -1732,7 +1732,8 @@ private struct ChatFontStyleSettings: View {
             }
             .pickerStyle(.segmented)
             Text("Hermes replies like this.")
-                .font(.body.design(selected.fontDesign))
+                .font(.body)
+                .fontDesign(selected.fontDesign)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
                 .conduitGlassSurface(cornerRadius: 14, tint: .clear)
