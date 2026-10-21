@@ -166,6 +166,7 @@ struct PhoneSettingsPage: View {
                     .font(.subheadline)
                     .padding(.leading, 28)
                     .accessibilityLabel(Text("Reminders read only"))
+                    .accessibilityHint(Text(AppLocalization.string("Hermes reads your reminders but can't add, change, complete or delete any.")))
                     .accessibilityIdentifier("settings.phone.reminders-read-only")
                 Text(choices.remindersReadOnly
                      ? AppLocalization.string("Hermes reads your reminders but can't add, change, complete or delete any.")

@@ -92,7 +92,7 @@ enum PhoneVoiceTools {
 
     private static func addable(_ preferences: PhoneSyncPreferences, access: PhoneCalendarAccess,
                                 remindersAuthorized: Bool) -> (events: Bool, reminders: Bool) {
-        (preferences.calendar.adds && access != .off, preferences.allows(.addReminder) && remindersAuthorized)
+        (preferences.allows(.addEvent) && access != .off, preferences.allows(.addReminder) && remindersAuthorized)
     }
 
     /// Changing or deleting finds the item by the id a read gave, so
