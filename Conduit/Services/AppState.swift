@@ -11184,6 +11184,12 @@ final class AppState: ObservableObject {
         defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
     }
 
+    func forgetRelayGatewayID(for dashboardID: UUID, profile: String) {
+        var stored = storedRelayGatewayIDs()
+        guard stored[dashboardID.uuidString]?.removeValue(forKey: profile) != nil else { return }
+        defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
+    }
+
     func forgetRelayGatewayIDs(of dashboardID: UUID) {
         var stored = storedRelayGatewayIDs()
         guard stored.removeValue(forKey: dashboardID.uuidString) != nil else { return }

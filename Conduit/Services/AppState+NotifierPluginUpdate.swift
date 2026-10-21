@@ -201,6 +201,10 @@ extension AppState {
             // Pushes through this pairing come from the host on screen, even
             // when it was paired from another saved entry for it.
             recordRelayGatewayID(gatewayID, for: dashboardID, profile: profile)
+        } else {
+            // This host no longer pairs the profile with this iPhone: the id
+            // recorded for it no longer counts.
+            forgetRelayGatewayID(for: dashboardID, profile: profile)
         }
         guard pairing == .unpaired else { return }
         do {

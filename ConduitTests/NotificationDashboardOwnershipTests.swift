@@ -461,6 +461,10 @@ extension NotificationDashboardOwnershipTests {
         appState.recordRelayGatewayID("gw-4", for: dashboardA, profile: "default")
         XCTAssertEqual(appState.activeDashboardRelayGatewayIDs, ["gw-4", "gw-2"])
 
+        // A profile the host no longer pairs with this iPhone drops its id.
+        appState.forgetRelayGatewayID(for: dashboardA, profile: "work")
+        XCTAssertEqual(appState.activeDashboardRelayGatewayIDs, ["gw-4"])
+
         appState.removeDashboard(dashboardB)
         XCTAssertTrue(appState.relayGatewayIDs(of: dashboardB).isEmpty)
         XCTAssertEqual(appState.relayGatewayIDs(of: dashboardA), ["gw-1", "gw-2"])
