@@ -53,6 +53,133 @@ final class MessageNormalizerTests: XCTestCase {
         )
     }
 
+    func testResumeKeepsOnlyTheStepStillBeingWrittenWhenEarlierStepsAreSaved() {
+        // Hermes' projection runs every step of the turn together; each
+        // finished step is already a saved row next to its tool card.
+        let history = [
+            ChatMessage(id: "u", role: .user, content: "Check the logs and the config.", timestamp: "t"),
+            ChatMessage(id: "a1", role: .assistant, content: "Reading the logs first.", timestamp: "t"),
+            ChatMessage(id: "t1", role: .tool, content: "", timestamp: "t"),
+            ChatMessage(id: "a2", role: .assistant, content: "The logs are clean. Now the config.", timestamp: "t"),
+            ChatMessage(id: "t2", role: .tool, content: "", timestamp: "t")
+        ]
+
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Reading the logs first.The logs are clean. Now the config.The config sets",
+                after: history
+            ),
+            "The config sets"
+        )
+    }
+
+    func testResumeCountsStepsBeforeASteerAsTheRunningTurns() {
+        // A steer lands mid-turn; the projection still holds the steps
+        // written before it.
+        let history = [
+            ChatMessage(id: "u", role: .user, content: "Check the logs and the config.", timestamp: "t"),
+            ChatMessage(id: "a1", role: .assistant, content: "Reading the logs first.", timestamp: "t"),
+            ChatMessage(id: "s", role: .user, content: "Skip the config.", timestamp: "t", displayKind: ChatMessage.steerDisplayKind),
+            ChatMessage(id: "a2", role: .assistant, content: "Ok.", timestamp: "t")
+        ]
+
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Reading the logs first.Ok.Summing up the logs",
+                after: history
+            ),
+            "Summing up the logs"
+        )
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Reading the logs first.Then",
+                after: Array(history.prefix(3))
+            ),
+            "Then"
+        )
+    }
+
+    func testResumeMatchesSavedStepsWhateverTheirWhitespace() {
+        let history = [
+            ChatMessage(id: "u", role: .user, content: "Summarise it.", timestamp: "t"),
+            ChatMessage(id: "a1", role: .assistant, content: "Step one:\n- read\n- note", timestamp: "t"),
+            ChatMessage(id: "a2", role: .assistant, content: "Step two done.", timestamp: "t")
+        ]
+
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Step one:\n\n- read\n- note\n\nStep two  done.\n\nAnd the summary",
+                after: history
+            ),
+            "And the summary"
+        )
+    }
+
+    func testResumePassesOverAStepTheProjectionDoesNotShow() {
+        let history = [
+            ChatMessage(id: "u", role: .user, content: "Go.", timestamp: "t"),
+            ChatMessage(id: "a1", role: .assistant, content: "Saved differently.", timestamp: "t"),
+            ChatMessage(id: "a2", role: .assistant, content: "The second step checked every config file.", timestamp: "t")
+        ]
+
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "First step as streamed. The second step checked every config file. Third",
+                after: history
+            ),
+            "Third"
+        )
+    }
+
+    func testResumeNeverCutsTheStepBeingWrittenAtAShortStepsWords() {
+        // A short saved step the projection doesn't show at its place is
+        // not looked for inside the step still being written.
+        let history = [
+            ChatMessage(id: "u", role: .user, content: "Go.", timestamp: "t"),
+            ChatMessage(id: "a1", role: .assistant, content: "Done.", timestamp: "t")
+        ]
+
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Working on it. Done. Now the rest",
+                after: history
+            ),
+            "Working on it. Done. Now the rest"
+        )
+    }
+
+    func testResumeNeverCutsWithAnEarlierTurnsReplyAtTheStart() {
+        let history = [
+            ChatMessage(id: "u1", role: .user, content: "Look into it.", timestamp: "t"),
+            ChatMessage(id: "a1", role: .assistant, content: "Checking the logs.", timestamp: "t"),
+            ChatMessage(id: "u2", role: .user, content: "Again please.", timestamp: "t")
+        ]
+
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Checking the logs. They look different now.",
+                after: history
+            ),
+            "Checking the logs. They look different now."
+        )
+    }
+
+    func testResumeNeverCutsTheRunningTurnWithAnEarlierTurnsReply() {
+        let history = [
+            ChatMessage(id: "u1", role: .user, content: "Look into it.", timestamp: "t"),
+            ChatMessage(id: "a1", role: .assistant, content: "Checking the logs.", timestamp: "t"),
+            ChatMessage(id: "u2", role: .user, content: "Again please.", timestamp: "t")
+        ]
+
+        XCTAssertEqual(
+            AppState.unpersistedInflightAssistantText(
+                "Once more from the top. Checking the logs.",
+                after: history
+            ),
+            "Once more from the top. Checking the logs."
+        )
+    }
+
     func testSessionNormalizationPreservesExplicitProfileOwnership() {
         let sessions = MessageNormalizer.normalizeSessions(
             .object([
@@ -818,8 +945,59 @@ final class MessageNormalizerTests: XCTestCase {
         XCTAssertNil(service.pendingTarget?.decision)
     }
 
-    func testFailedNotificationRouteRetriesOnceThenClearsTarget() async {
+    /// Waits for the scheduled retry to bump `navigationAttempt`. A cap, not
+    /// a timing: the loop exits as soon as the retry lands. A busy simulator
+    /// can stall the main actor for seconds inside one yield, and a 1s cap
+    /// then expired before the retry got its turn.
+    private func waitForNotificationRetry(
+        _ service: PushNotificationService,
+        after attempt: Int,
+        cap: Duration = .seconds(10)
+    ) async {
+        let deadline = ContinuousClock.now.advanced(by: cap)
+        while service.navigationAttempt == attempt,
+              ContinuousClock.now < deadline {
+            await Task.yield()
+        }
+    }
+
+    /// #789: a cold launch on a slow network can fail the open several times
+    /// while the session catalog is still loading. The tap stays pending and
+    /// is retried for as long as the retry window lasts, however many reads
+    /// fail inside it.
+    func testFailedNotificationRouteKeepsRetryingInsideTheWindow() async {
         let service = PushNotificationService(retryDelay: .zero)
+        service.receiveNotificationPayload([
+            "conduit": [
+                "session_id": "runtime-123",
+                "type": "response_ready"
+            ] as [String: Any]
+        ])
+        guard let target = service.pendingTarget else {
+            return XCTFail("Expected the notification target to be pending")
+        }
+
+        for failure in 1...4 {
+            let attempt = service.navigationAttempt
+            XCTAssertTrue(
+                service.handleFailedNotificationRoute(target),
+                "Failure \(failure) inside the window dropped the tap"
+            )
+            await waitForNotificationRetry(service, after: attempt)
+            XCTAssertEqual(service.navigationAttempt, attempt + 1)
+            XCTAssertEqual(service.pendingTarget, target)
+        }
+    }
+
+    /// The window, counted from the tap, is a cap: once it has run out, the
+    /// next failure clears the tap and schedules nothing more.
+    func testFailedNotificationRouteClearsTargetOnceTheWindowRunsOut() async {
+        var now = ContinuousClock.now
+        let service = PushNotificationService(
+            retryDelay: .zero,
+            routeRetryWindow: .seconds(30),
+            now: { now }
+        )
         service.receiveNotificationPayload([
             "conduit": [
                 "session_id": "runtime-123",
@@ -832,26 +1010,185 @@ final class MessageNormalizerTests: XCTestCase {
 
         let initialAttempt = service.navigationAttempt
         XCTAssertTrue(service.handleFailedNotificationRoute(target))
-        // A cap, not a timing: the loop exits as soon as the retry lands. A
-        // busy simulator can stall the main actor for seconds inside one
-        // yield, and a 1s cap then expired before the retry got its turn.
-        let retryDeadline = ContinuousClock.now.advanced(by: .seconds(10))
-        while service.navigationAttempt == initialAttempt,
-              ContinuousClock.now < retryDeadline {
-            await Task.yield()
-        }
+        await waitForNotificationRetry(service, after: initialAttempt)
         XCTAssertEqual(service.navigationAttempt, initialAttempt + 1)
+
+        now = now.advanced(by: .seconds(29))
+        let lateAttempt = service.navigationAttempt
+        XCTAssertTrue(service.handleFailedNotificationRoute(target))
+        await waitForNotificationRetry(service, after: lateAttempt)
         XCTAssertEqual(service.pendingTarget, target)
 
+        now = now.advanced(by: .seconds(2))
         XCTAssertFalse(service.handleFailedNotificationRoute(target))
         XCTAssertNil(service.pendingTarget)
         let terminalAttempt = service.navigationAttempt
-        let terminalDeadline = ContinuousClock.now.advanced(by: .milliseconds(100))
-        while service.navigationAttempt == terminalAttempt,
-              ContinuousClock.now < terminalDeadline {
-            await Task.yield()
-        }
+        await waitForNotificationRetry(service, after: terminalAttempt, cap: .milliseconds(100))
         XCTAssertEqual(service.navigationAttempt, terminalAttempt)
+    }
+
+    /// An open that starts while a retry is still waiting stands the retry
+    /// down: firing later would cancel the open in flight.
+    func testStartingAnOpenCancelsTheWaitingRetry() async {
+        let service = PushNotificationService(retryDelay: .milliseconds(50))
+        service.receiveNotificationPayload([
+            "conduit": ["session_id": "runtime-123", "type": "response_ready"] as [String: Any]
+        ])
+        guard let target = service.pendingTarget else {
+            return XCTFail("Expected the notification target to be pending")
+        }
+        XCTAssertTrue(service.handleFailedNotificationRoute(target))
+        let attempt = service.navigationAttempt
+        service.beginNotificationRoute(target)
+        try? await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(service.navigationAttempt, attempt)
+        XCTAssertEqual(service.pendingTarget, target)
+    }
+
+    /// A new tap gets a window of its own, so an earlier tap's failures don't
+    /// shorten it.
+    func testNewNotificationTapStartsAFreshRetryWindow() async {
+        var now = ContinuousClock.now
+        let service = PushNotificationService(
+            retryDelay: .zero,
+            routeRetryWindow: .seconds(30),
+            now: { now }
+        )
+        service.receiveNotificationPayload([
+            "conduit": ["session_id": "runtime-1", "type": "response_ready"] as [String: Any]
+        ])
+        guard let first = service.pendingTarget else {
+            return XCTFail("Expected the first target to be pending")
+        }
+        XCTAssertTrue(service.handleFailedNotificationRoute(first))
+
+        now = now.advanced(by: .seconds(25))
+        service.receiveNotificationPayload([
+            "conduit": ["session_id": "runtime-2", "type": "response_ready"] as [String: Any]
+        ])
+        guard let second = service.pendingTarget, second != first else {
+            return XCTFail("Expected the second target to replace the first")
+        }
+        XCTAssertTrue(service.handleFailedNotificationRoute(second))
+        now = now.advanced(by: .seconds(10))
+        XCTAssertTrue(service.handleFailedNotificationRoute(second))
+        XCTAssertEqual(service.pendingTarget, second)
+    }
+
+    private func makeWindowedService(
+        now: @escaping () -> ContinuousClock.Instant
+    ) -> (PushNotificationService, ConduitNotificationTarget?) {
+        let service = PushNotificationService(
+            retryDelay: .zero,
+            routeRetryWindow: .seconds(30),
+            now: now
+        )
+        service.receiveNotificationPayload([
+            "conduit": ["session_id": "runtime-123", "type": "response_ready"] as [String: Any]
+        ])
+        return (service, service.pendingTarget)
+    }
+
+    /// #789: a launch that took longer than the window to connect still
+    /// makes the tap's first open.
+    func testFirstOpenRunsEvenAfterTheWindow() {
+        var now = ContinuousClock.now
+        let (service, pending) = makeWindowedService(now: { now })
+        guard let target = pending else { return XCTFail("Expected a pending target") }
+        now = now.advanced(by: .seconds(45))
+        XCTAssertTrue(service.beginNotificationRoute(target))
+        XCTAssertEqual(service.pendingTarget, target)
+    }
+
+    /// An open that a lost connection cut short is not reopened by a
+    /// reconnect after the window: the tap is too old to open now.
+    func testReconnectAfterTheWindowDoesNotReopenAnOldTap() {
+        var now = ContinuousClock.now
+        let (service, pending) = makeWindowedService(now: { now })
+        guard let target = pending else { return XCTFail("Expected a pending target") }
+        XCTAssertTrue(service.beginNotificationRoute(target))
+        now = now.advanced(by: .seconds(31))
+        XCTAssertFalse(service.beginNotificationRoute(target))
+        XCTAssertNil(service.pendingTarget)
+    }
+
+    /// A reconnect inside the window still opens the tap.
+    func testReconnectInsideTheWindowReopensTheTap() {
+        var now = ContinuousClock.now
+        let (service, pending) = makeWindowedService(now: { now })
+        guard let target = pending else { return XCTFail("Expected a pending target") }
+        XCTAssertTrue(service.beginNotificationRoute(target))
+        now = now.advanced(by: .seconds(20))
+        XCTAssertTrue(service.beginNotificationRoute(target))
+        XCTAssertEqual(service.pendingTarget, target)
+    }
+
+    /// The retry the window's end scheduled fires at the deadline, and runs.
+    func testRetryScheduledForTheWindowsEndStillRuns() async {
+        var now = ContinuousClock.now
+        let (service, pending) = makeWindowedService(now: { now })
+        guard let target = pending else { return XCTFail("Expected a pending target") }
+        XCTAssertTrue(service.beginNotificationRoute(target))
+        now = now.advanced(by: .seconds(29))
+        let attempt = service.navigationAttempt
+        XCTAssertTrue(service.handleFailedNotificationRoute(target))
+        await waitForNotificationRetry(service, after: attempt)
+        XCTAssertEqual(service.navigationAttempt, attempt + 1)
+        now = now.advanced(by: .seconds(1))
+        XCTAssertTrue(service.beginNotificationRoute(target))
+        XCTAssertEqual(service.pendingTarget, target)
+    }
+
+    /// A scheduled retry whose run was held back (the app was suspended
+    /// when it came due) doesn't open the tap long after the window.
+    func testScheduledRetryStartedLateAfterTheWindowDoesNotOpen() async {
+        var now = ContinuousClock.now
+        let (service, pending) = makeWindowedService(now: { now })
+        guard let target = pending else { return XCTFail("Expected a pending target") }
+        XCTAssertTrue(service.beginNotificationRoute(target))
+        now = now.advanced(by: .seconds(29))
+        let attempt = service.navigationAttempt
+        XCTAssertTrue(service.handleFailedNotificationRoute(target))
+        await waitForNotificationRetry(service, after: attempt)
+        XCTAssertEqual(service.navigationAttempt, attempt + 1)
+        now = now.advanced(by: .seconds(60))
+        XCTAssertFalse(service.beginNotificationRoute(target))
+        XCTAssertNil(service.pendingTarget)
+    }
+
+    /// A retry whose sleep ran out while the app was suspended wakes late:
+    /// it is measured from when it came due, so past the window it doesn't open.
+    func testScheduledRetryThatWokeLateAfterTheWindowDoesNotOpen() async {
+        var now = ContinuousClock.now
+        let (service, pending) = makeWindowedService(now: { now })
+        guard let target = pending else { return XCTFail("Expected a pending target") }
+        XCTAssertTrue(service.beginNotificationRoute(target))
+        now = now.advanced(by: .seconds(29))
+        let attempt = service.navigationAttempt
+        XCTAssertTrue(service.handleFailedNotificationRoute(target))
+        now = now.advanced(by: .seconds(60))
+        await waitForNotificationRetry(service, after: attempt)
+        XCTAssertEqual(service.navigationAttempt, attempt + 1)
+        XCTAssertFalse(service.beginNotificationRoute(target))
+        XCTAssertNil(service.pendingTarget)
+    }
+
+    /// A retry that came due while the app was offline is not what the late
+    /// reconnect runs: past the window, that reconnect drops the tap.
+    func testRetryDueWhileOfflineDoesNotOpenAfterTheWindow() async {
+        var now = ContinuousClock.now
+        let (service, pending) = makeWindowedService(now: { now })
+        guard let target = pending else { return XCTFail("Expected a pending target") }
+        XCTAssertTrue(service.beginNotificationRoute(target))
+        now = now.advanced(by: .seconds(10))
+        let attempt = service.navigationAttempt
+        XCTAssertTrue(service.handleFailedNotificationRoute(target))
+        await waitForNotificationRetry(service, after: attempt)
+        XCTAssertEqual(service.navigationAttempt, attempt + 1)
+        service.notificationRouteAwaitsConnection(target)
+        now = now.advanced(by: .seconds(60))
+        XCTAssertFalse(service.beginNotificationRoute(target))
+        XCTAssertNil(service.pendingTarget)
     }
 
     func testSessionNormalizationDoesNotInventOwnershipWithoutFallback() {
