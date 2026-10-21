@@ -106,6 +106,22 @@ final class ProfileDiscoveryTests: XCTestCase {
         XCTAssertEqual(appState.profileDisplayName("coding-agent"), "Coding Assistant")
     }
 
+    func testTheBotRosterAndTheProfileListingAddToEachOther() async throws {
+        seedKnownProfiles(["default", "coding-agent", "atlas"], activeProfile: "default")
+        let appState = makeAppState(profileDiscoveryLoader: {
+            ["profiles": [["name": "coding-agent", "display_name": "Coding Assistant"]]]
+        })
+        appState.installDashboardTicketBridgeForTesting(makeBridge("https://one.example"))
+        await appState.loadProfiles()
+
+        appState.adoptProfileHermesNames([(profile: "atlas", displayName: "Atlas Prime")])
+        XCTAssertEqual(appState.profileDisplayName("coding-agent"), "Coding Assistant", "A list that leaves it out keeps it")
+        XCTAssertEqual(appState.profileDisplayName("atlas"), "Atlas Prime")
+
+        appState.adoptProfileHermesNames([(profile: "atlas", displayName: "")])
+        XCTAssertEqual(appState.profileDisplayName("atlas"), "Atlas", "Listed without a name reads as the id")
+    }
+
     // MARK: - Initialization hydration
 
     func testInitHydratesProfilesFromPersistedKnownProfileCache() {

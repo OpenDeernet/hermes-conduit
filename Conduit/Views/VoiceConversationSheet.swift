@@ -239,7 +239,7 @@ struct VoiceConversationSheet: View {
     }
 
     private var profileDisplayName: String {
-        if profile != "default", let name = appState?.profileHermesNames[profile] { return name }
+        if let appState { return appState.profileDisplayName(profile) }
         return profile == "default" ? AppLocalization.string("Default profile") : profile.replacingOccurrences(of: "_", with: " ").capitalized
     }
 

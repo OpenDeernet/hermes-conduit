@@ -323,9 +323,12 @@ enum CronScheduleText {
     /// without one.
     private static func isoDate(_ text: String, timeZone: TimeZone) -> Date? {
         if let date = plainISOFormatter.date(from: text) { return date }
-        let local = ISO8601DateFormatter()
-        local.formatOptions = [.withFullDate, .withTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
-        local.timeZone = timeZone
+        let local: ISO8601DateFormatter = cachedFormatter("isoWithoutOffset|\(timeZone.identifier)") {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withFullDate, .withTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
+            formatter.timeZone = timeZone
+            return formatter
+        }
         return local.date(from: text)
     }
 }

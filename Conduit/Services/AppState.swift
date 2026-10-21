@@ -10734,13 +10734,17 @@ final class AppState: ObservableObject {
         return String(normalized.prefix(1)).uppercased() + String(normalized.dropFirst())
     }
 
-    /// Keeps the `display_name`s a full profile listing named. Profiles
-    /// without one read as their id again.
+    /// Takes the `display_name`s a listing gave. The bot roster and
+    /// `/api/profiles` may not list the same profiles, so a profile either
+    /// leaves out keeps what the other said; one listed without a name
+    /// reads as its id again.
     func adoptProfileHermesNames(_ rows: [(profile: String, displayName: String)]) {
-        var names: [String: String] = [:]
+        var names = profileHermesNames
         for row in rows {
+            let profile = row.profile.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !profile.isEmpty else { continue }
             let name = row.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !name.isEmpty, name != row.profile { names[row.profile] = name }
+            names[profile] = name.isEmpty || name == profile ? nil : name
         }
         guard names != profileHermesNames else { return }
         profileHermesNames = names
