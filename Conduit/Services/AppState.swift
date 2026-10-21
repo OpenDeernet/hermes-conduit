@@ -12626,7 +12626,7 @@ final class AppState: ObservableObject {
 
     /// Clears the dashboard's saved password and the Face ID unlock that
     /// held for it: a password saved for it again asks again.
-    private func clearSavedPassword(dashboardID: UUID) {
+    func clearSavedPassword(dashboardID: UUID) {
         KeychainHelper.clearCredentials(dashboardID: dashboardID)
         faceIDUnlockedDashboards[dashboardID] = nil
     }
