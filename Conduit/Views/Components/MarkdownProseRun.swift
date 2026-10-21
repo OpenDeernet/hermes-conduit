@@ -175,9 +175,9 @@ enum MarkdownProseRun {
         references: MarkdownReferenceContext,
         foregroundStyle: Color,
         usesAccentSurface: Bool,
-        chatTextSize: ChatTextSize
+        chatTextSize: ChatTextAppearance
     ) -> NSAttributedString {
-        let bodyFont = ChatTypography.font(for: .body, chatSize: chatTextSize)
+        let bodyFont = ChatTypography.font(for: .body, appearance: chatTextSize)
         let textColor = usesAccentSurface ? UIColor.white : UIColor(foregroundStyle)
         let markerColor = usesAccentSurface
             ? UIColor.white.withAlphaComponent(0.92)
@@ -202,7 +202,7 @@ enum MarkdownProseRun {
         }
 
         func listItems(_ items: [String], ordered: Bool) -> [Paragraph] {
-            let markerColumn = ChatTypography.dimension(ordered ? 24 : 12, chatSize: chatTextSize)
+            let markerColumn = ChatTypography.dimension(ordered ? 24 : 12, appearance: chatTextSize)
             return items.enumerated().map { (index, item) -> Paragraph in
                 let marker = ordered ? "\(index + 1)." : "•"
                 let markerAttributes: [NSAttributedString.Key: Any] = [
@@ -320,7 +320,7 @@ struct MarkdownProseRunView: View {
     var body: some View {
         SelectableTextView(
             attributedText: text,
-            font: ChatTypography.font(for: .body, chatSize: chatTextSize),
+            font: ChatTypography.font(for: .body, appearance: chatTextSize),
             textColor: usesAccentSurface ? .white : UIColor(foregroundStyle),
             linkColor: usesAccentSurface ? .white : .link,
             selectionCoordinator: selectionCoordinator,
