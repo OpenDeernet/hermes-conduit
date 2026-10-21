@@ -92,6 +92,7 @@ private struct ArtifactsList: View {
     let chatIsOpen: Bool
     let showInChat: (ArtifactItem) -> Void
 
+    @AppStorage(ArtifactsClient.showMissingKey) private var showMissing = false
     @State private var filter: ArtifactFilter = .all
     @State private var query = ""
     @State private var items: [ArtifactItem] = []
@@ -117,7 +118,7 @@ private struct ArtifactsList: View {
 
     private var currentKey: ArtifactsListKey {
         ArtifactsListKey(dashboard: appState.activeDashboardID, profile: appState.activeProfile, filter: filter,
-                         query: query.trimmingCharacters(in: .whitespacesAndNewlines))
+                         query: query.trimmingCharacters(in: .whitespacesAndNewlines), showMissing: showMissing)
     }
 
     var body: some View {
@@ -133,6 +134,15 @@ private struct ArtifactsList: View {
         .scrollDismissesKeyboard(.interactively)
         .searchable(text: $query, prompt: Text("Search names and chats"))
         .refreshable { await reload() }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Toggle("Show Missing Files", isOn: $showMissing)
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+            }
+        }
         .task(id: currentKey) {
             // Typing settles before the host is asked.
             if loadedKey != nil, currentKey.query != loadedKey?.query {
@@ -206,7 +216,14 @@ private struct ArtifactsList: View {
             unavailable(title: Text("Artifacts couldn't load"), detail: Text(verbatim: failure),
                         symbol: "exclamationmark.triangle", retry: true)
         } else if items.isEmpty, nextBefore == nil {
-            if currentKey.query.isEmpty && filter == .all {
+            if currentKey.query.isEmpty && filter == .all && !showMissing {
+                unavailable(
+                    title: Text("No Artifacts Yet"),
+                    detail: Text("Files no longer on your Hermes host are hidden."),
+                    symbol: "square.grid.2x2",
+                    showMissingAction: true
+                )
+            } else if currentKey.query.isEmpty && filter == .all {
                 unavailable(
                     title: Text("No Artifacts Yet"),
                     detail: Text("Files Hermes sends or writes, pages it draws, files you attach and links show up here."),
@@ -240,7 +257,8 @@ private struct ArtifactsList: View {
         }
     }
 
-    private func unavailable(title: Text, detail: Text, symbol: String, retry: Bool = false) -> some View {
+    private func unavailable(title: Text, detail: Text, symbol: String, retry: Bool = false,
+                             showMissingAction: Bool = false) -> some View {
         ContentUnavailableView {
             Label { title } icon: { Image(systemName: symbol) }
         } description: {
@@ -248,6 +266,9 @@ private struct ArtifactsList: View {
         } actions: {
             if retry {
                 Button("Try Again") { Task { await reload() } }
+            }
+            if showMissingAction {
+                Button("Show Missing Files") { showMissing = true }
             }
         }
         .frame(maxWidth: .infinity, minHeight: 280)
@@ -307,6 +328,18 @@ private struct ArtifactsList: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.08))
                 }
                 .opacity(item.exists ? 1 : 0.45)
+                .overlay(alignment: .bottomLeading) {
+                    // Over the dimming, which alone reads as a dark picture.
+                    if !item.exists {
+                        Label("Missing", systemImage: "exclamationmark.circle.fill")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(.black.opacity(0.6), in: Capsule())
+                            .padding(5)
+                    }
+                }
                 .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(PressableButtonStyle())
@@ -401,7 +434,8 @@ private struct ArtifactsList: View {
     }
 
     private func accessibilityName(_ item: ArtifactItem) -> String {
-        [item.name, Self.kindLabel(item.kind), chatIsOpen ? "" : item.sessionTitle]
+        [item.name, Self.kindLabel(item.kind), item.exists ? "" : AppLocalization.string("No longer on the host"),
+         chatIsOpen ? "" : item.sessionTitle]
             .filter { !$0.isEmpty }
             .joined(separator: ", ")
     }
@@ -494,7 +528,8 @@ private struct ArtifactsList: View {
         defer { if ticket == generation { isLoading = false } }
         do {
             let result = try await appState.artifactsClient.page(
-                profile: key.profile, sessionIDs: scope.sessionIDs, filter: key.filter, query: key.query
+                profile: key.profile, sessionIDs: scope.sessionIDs, filter: key.filter, query: key.query,
+                showMissing: key.showMissing
             )
             guard ticket == generation else { return }
             items = result.items
@@ -522,7 +557,7 @@ private struct ArtifactsList: View {
         do {
             let result = try await appState.artifactsClient.page(
                 profile: key.profile, sessionIDs: scope.sessionIDs, filter: key.filter, query: key.query,
-                before: before
+                showMissing: key.showMissing, before: before
             )
             guard ticket == generation else { return }
             items = ArtifactsClient.merged(items, with: result.items)
@@ -545,6 +580,7 @@ struct ArtifactsListKey: Equatable {
     let profile: String
     let filter: ArtifactFilter
     let query: String
+    var showMissing = true
 
     /// Whether rows read for `loaded` may stay up, dimmed, while this key's
     /// rows load: another filter or search, not another server.

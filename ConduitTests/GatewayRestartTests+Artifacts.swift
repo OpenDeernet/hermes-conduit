@@ -32,6 +32,33 @@ extension GatewayRestartTests {
         XCTAssertEqual(asked.last, "/api/plugins/conduit_push/artifacts?limit=60")
     }
 
+    func testArtifactsHideMissingFilesUnlessAsked() async throws {
+        var asked: [String] = []
+        let rows = [
+            artifactRow([:]),
+            artifactRow(["exists": false, "path": "/root/gone.pdf", "kind": "document", "name": "gone.pdf"]),
+            artifactRow(["kind": "link", "source": "link", "path": NSNull(), "url": "https://curate.example/r",
+                         "name": "Curate"]),
+        ]
+        // An older plugin lists missing files whatever it was asked.
+        let client = ArtifactsClient { path in
+            asked.append(path)
+            return ["ok": true, "items": rows, "next_before": 5]
+        }
+        let hidden = try await client.page(profile: "default", showMissing: false)
+        XCTAssertEqual(asked.last, "/api/plugins/conduit_push/artifacts?limit=60&missing=hide")
+        XCTAssertEqual(hidden.items.map(\.name), ["map.png", "Curate"])
+        XCTAssertEqual(hidden.nextBefore, 5, "a page the filter emptied still pages on")
+        let shown = try await client.page(profile: "default", showMissing: true)
+        XCTAssertEqual(asked.last, "/api/plugins/conduit_push/artifacts?limit=60")
+        XCTAssertEqual(shown.items.map(\.name), ["map.png", "gone.pdf", "Curate"])
+
+        let key = ArtifactsListKey(dashboard: nil, profile: "default", filter: .all, query: "", showMissing: false)
+        let showing = ArtifactsListKey(dashboard: nil, profile: "default", filter: .all, query: "", showMissing: true)
+        XCTAssertNotEqual(key, showing, "the toggle reads the list again")
+        XCTAssertTrue(showing.showsRows(of: key))
+    }
+
     func testArtifactListsBelongToTheirDashboard() {
         let first = UUID()
         let second = UUID()
