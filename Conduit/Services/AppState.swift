@@ -11792,6 +11792,8 @@ final class AppState: ObservableObject {
     }
 
     func disconnect() {
+        // The next sign-in to it asks for Face ID again.
+        if let activeDashboardID { faceIDUnlockedDashboards.remove(activeDashboardID) }
         // Its turns' Lock Screen progress has nothing left to follow.
         liveTurnActivitiesEndDashboard(activeDashboardID?.uuidString, false)
         // Drafts shared for this dashboard belong to the signed-out user,
@@ -12377,6 +12379,7 @@ final class AppState: ObservableObject {
             disconnect()
             return
         }
+        faceIDUnlockedDashboards.remove(id)
         removeWidgetSnapshot(dashboardID: id)
         liveTurnActivitiesEndDashboard(id.uuidString, false)
         KeychainHelper.clearConnection(dashboardID: id)
@@ -12510,7 +12513,20 @@ final class AppState: ObservableObject {
         let scopedDashboardID = dashboardID ?? activeDashboardID
         rememberDashboardURL(credentials.baseURL)
 
-        if credentials.requiresFaceID {
+        // One Face ID unlock holds for the dashboard while Conduit runs: the
+        // offline retries (each return from the Face ID sheet makes the scene
+        // active again) must not ask again, or the sheet loops until the
+        // server answers.
+        let faceIDUnlockHeld = scopedDashboardID.map { faceIDUnlockedDashboards.contains($0) } ?? false
+        if credentials.requiresFaceID, faceIDUnlockHeld {
+            if let scopedDashboardID, offlineChatPresentation == nil {
+                presentOfflineChatIfAvailable(dashboardID: scopedDashboardID)
+                if offlineChatPresentation != nil {
+                    showLogin = false
+                    isConnecting = true
+                }
+            }
+        } else if credentials.requiresFaceID {
             guard await unlockWithFaceID() else {
                 // A superseded switch owns the flow: present nothing.
                 guard restoreOwnsFlow(switchGeneration) else { return }
@@ -12537,6 +12553,7 @@ final class AppState: ObservableObject {
             if let switchGeneration, !switchGenerationIsCurrent(switchGeneration) {
                 return
             }
+            if let scopedDashboardID { faceIDUnlockedDashboards.insert(scopedDashboardID) }
             // The user just unlocked the saved password for the selected
             // dashboard: the sign-in finishes even if the widget launch
             // expired meanwhile.
@@ -12590,6 +12607,10 @@ final class AppState: ObservableObject {
             )
         }
     }
+
+    /// Dashboards whose saved password Face ID or Touch ID unlocked since
+    /// launch. Sign-out and removal drop theirs.
+    private var faceIDUnlockedDashboards: Set<UUID> = []
 
     /// Face ID or Touch ID for a saved password. Test seam.
     var unlockWithFaceID: @MainActor () async -> Bool = {
