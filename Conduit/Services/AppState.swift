@@ -631,6 +631,8 @@ final class AppState: ObservableObject {
     /// Every profile's chats for All, read in one request.
     @Published var allProfilesCatalog = AllProfilesCatalog()
     var allProfilesCatalogTask: Task<Void, Never>?
+    /// Which read `allProfilesCatalogTask` is, so only it clears the handle.
+    var allProfilesCatalogRead: UUID?
     @Published private(set) var sessionFilterOrder: [SessionSource] = AppState.defaultSessionFilterOrder
     static let defaultSessionFilterOrder: [SessionSource] = [.chat, .voice, .voiceJob, .discord, .telegram, .api, .webhook, .cron, .other]
     /// Stable per-profile gateway-media resolver for settled row content.
@@ -34707,15 +34709,13 @@ extension AppState {
     func refreshAllProfilesCatalog() {
         guard isAllProfilesChatsOn, allProfilesCatalogTask == nil, let bridge = dashboardTicketBridge else { return }
         let dashboardID = activeDashboardID
-        let task = Task { @MainActor [weak self] () -> Void in
+        let read = UUID()
+        allProfilesCatalogRead = read
+        allProfilesCatalogTask = Task { @MainActor [weak self] () -> Void in
             guard let self else { return }
             await self.readAllProfilesCatalog(using: bridge, dashboardID: dashboardID)
-        }
-        allProfilesCatalogTask = task
-        Task { @MainActor [weak self] in
-            await task.value
             // A reset since may have started a newer read.
-            if self?.allProfilesCatalogTask == task { self?.allProfilesCatalogTask = nil }
+            if self.allProfilesCatalogRead == read { self.allProfilesCatalogTask = nil }
         }
     }
 
