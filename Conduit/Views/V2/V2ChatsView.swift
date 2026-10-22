@@ -388,6 +388,9 @@ struct V2ChatsView: View, Equatable {
         // A new render reads the catalog afresh; within it, the list, the
         // filter menu and its counts share each walk.
         let _ = renderMemo.reset()
+        // Read once: it walks the catalog, and the bar measures both its
+        // layouts.
+        let waitingApprovalCount = self.waitingApprovalCount
         ZStack {
             V2Backdrop(isTabRoot: true)
             // Projects sits behind the folder button on the right, so it
@@ -407,8 +410,8 @@ struct V2ChatsView: View, Equatable {
             .v2ProfileSwitchContent()
         }
         .v2EdgeBar(.top) {
-            V2TopBar(lowerLeading: { filterPill }) { stacked in
-                trailingControls(stacked: stacked)
+            V2TopBar(lowerLeading: { filterPill(waitingApprovalCount: waitingApprovalCount) }) { stacked in
+                trailingControls(stacked: stacked, waitingApprovalCount: waitingApprovalCount)
             }
                 .withoutScrollEdge()
                 .modifier(V2LegacyScrollEdge())
@@ -537,7 +540,7 @@ struct V2ChatsView: View, Equatable {
     /// One glass capsule: Sessions/Projects toggle, Artifacts, Filter (amber
     /// dot while approvals wait), New chat. Under a row of profiles
     /// (`stacked`) Filter leaves it for the labeled pill on the left.
-    private func trailingControls(stacked: Bool) -> some View {
+    private func trailingControls(stacked: Bool, waitingApprovalCount: Int) -> some View {
         V2ControlCapsule {
             Button {
                 Haptics.selection()
@@ -559,7 +562,7 @@ struct V2ChatsView: View, Equatable {
             .macTooltip(AppLocalization.string("Artifacts"))
 
             if !stacked {
-                filterMenu { filterIcon(waitingApprovalCount: $0) }
+                filterMenu(waitingApprovalCount: waitingApprovalCount) { filterIcon(waitingApprovalCount: waitingApprovalCount) }
             }
 
             // The gold button beside the tabs makes new chats instead
@@ -588,10 +591,10 @@ struct V2ChatsView: View, Equatable {
 
     /// The filter menu's button where the bar stacks: what the list shows,
     /// by name, so the filters aren't hidden behind an icon.
-    private var filterPill: some View {
-        filterMenu { waitingApprovalCount in
+    private func filterPill(waitingApprovalCount: Int) -> some View {
+        filterMenu(waitingApprovalCount: waitingApprovalCount) {
             HStack(spacing: 6) {
-                Image(systemName: showingProjects ? "folder" : "line.3.horizontal.decrease")
+                Image(systemName: "line.3.horizontal.decrease")
                     .font(.system(size: 14, weight: .semibold))
                     .conduitFixedGlyph()
                 Text(showingProjects ? AppLocalization.string("Projects") : selectionTitles(separator: ", "))
@@ -624,12 +627,9 @@ struct V2ChatsView: View, Equatable {
         )
     }
 
-    /// The filter menu behind `button`, which gets the number of chats
-    /// waiting for approval.
-    private func filterMenu<MenuButton: View>(@ViewBuilder button: (Int) -> MenuButton) -> some View {
-        // Read once: it walks the catalog.
-        let waitingApprovalCount = self.waitingApprovalCount
-        return Menu {
+    /// The filter menu behind `button`.
+    private func filterMenu<MenuButton: View>(waitingApprovalCount: Int, @ViewBuilder button: () -> MenuButton) -> some View {
+        Menu {
             if showingProjects {
                 Button {
                     Haptics.selection()
@@ -680,13 +680,13 @@ struct V2ChatsView: View, Equatable {
                 }
             }
         } label: {
-            button(waitingApprovalCount)
+            button()
         }
         .menuOrder(.fixed)
         .accessibilityLabel(AppLocalization.string("Filter"))
         .macTooltip(AppLocalization.string("Filter"))
         .accessibilityValue(waitingApprovalCount > 0
-            ? AppLocalization.string("\(waitingApprovalCount) waiting for approval")
+            ? spokenSelection + ", " + AppLocalization.string("\(waitingApprovalCount) waiting for approval")
             : spokenSelection)
     }
 

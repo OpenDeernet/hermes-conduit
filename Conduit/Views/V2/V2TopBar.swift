@@ -190,6 +190,9 @@ struct V2ProfileStrip: View {
                 .scrollClipDisabled()
                 .mask { edgeFade }
                 .padding(.horizontal, -edgeBleed)
+                // A new strip (launch, or the bar turning to two rows)
+                // starts at the first profile; bring the selected one in.
+                .onAppear { proxy.scrollTo(appState.activeProfile, anchor: .center) }
                 .onChange(of: appState.activeProfile) { _, profile in
                     withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) {
                         proxy.scrollTo(profile, anchor: .center)
