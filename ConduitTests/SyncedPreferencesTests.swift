@@ -1,9 +1,9 @@
 import XCTest
 @testable import Conduit
 
-/// Preferences shared through the plugin (#1089). An extension of an
-/// existing class so the CI planner gets no new class to place.
-extension ChatReadStateTests {
+/// Preferences shared through the plugin (#1089). Its own class, so a PR
+/// that edits these tests runs exactly them in smoke.
+final class SyncedPreferencesTests: XCTestCase {
     private final class SyncedBox {
         var values: [String: Any] = [:]
         var holds = false

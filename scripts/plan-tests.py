@@ -1230,8 +1230,11 @@ def cmd_smoke(args) -> int:
     changed_unit, changed_skipped = [], []
     changed = []
     if args.changed_files:
-        with open(args.changed_files, encoding="utf-8") as fh:
-            changed = [line.strip() for line in fh if line.strip()]
+        try:
+            with open(args.changed_files, encoding="utf-8") as fh:
+                changed = [line.strip() for line in fh if line.strip()]
+        except OSError as exc:
+            warn(f"changed files unreadable ({exc}); smoke runs the curated set only")
     elif args.changed_from:
         changed = changed_files_since(args.repo_root, args.changed_from)
     nightly_only = None
