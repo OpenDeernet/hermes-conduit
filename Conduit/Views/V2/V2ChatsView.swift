@@ -604,7 +604,7 @@ struct V2ChatsView: View, Equatable {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .conduitFixedGlyph()
-                if waitingApprovalCount > 0 && !showingProjects {
+                if waitingApprovalCount > 0 {
                     Circle()
                         .fill(Color.conduitAttention)
                         .frame(width: 8, height: 8)
