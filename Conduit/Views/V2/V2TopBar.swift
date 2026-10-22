@@ -381,7 +381,7 @@ struct V2ProfileStrip: View {
         }
         .buttonStyle(PressableButtonStyle())
         .disabled(!isSelected && appState.isProfileSwitching)
-        .modifier(DashboardSwitchMenu(enabled: isSelected))
+        .modifier(DashboardSwitchMenu(enabled: profile == appState.activeProfile))
         .accessibilityIdentifier(isSelected ? "sidebar.workspace" : "v2.profile.\(profile)")
         .accessibilityLabel(AppLocalization.string("\(name) profile"))
         .accessibilityValue(unread ? AppLocalization.string("Unread") : "")
@@ -459,10 +459,10 @@ struct V2ProfileStrip: View {
     }
 }
 
-/// Long-pressing the selected profile lists the other saved dashboards,
-/// for moving to another Hermes without opening Settings (#288 in the
-/// notifier repo). Only with two or more saved; a tap still opens the
-/// Profiles sheet, which lists them too.
+/// Long-pressing the active profile's chip (selected, or under All) lists
+/// the other saved dashboards, for moving to another Hermes without
+/// opening Settings (#288 in the notifier repo). Only with two or more
+/// saved; the Profiles sheet lists them too.
 private struct DashboardSwitchMenu: ViewModifier {
     @EnvironmentObject private var appState: AppState
     let enabled: Bool
