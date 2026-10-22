@@ -32,15 +32,12 @@ struct ChatRowState: Equatable {
     /// Each live card's last row: earlier rows with that live name show
     /// that it was updated below.
     var latestLiveRows: [String: String] = [:]
-<<<<<<< HEAD
     /// Replies can be pinned here (#918), and the rows that are.
     var canPinReplies = false
     var pinnedMessageIDs: Set<String> = []
-=======
     /// The open chat's messages that have a Pulse card, by Hermes' message
     /// id (PulseFeed.swift): they show a Pulse mark that opens it.
     var pulseCards: [Int: Int] = [:]
->>>>>>> origin/pulse
 
     init() {}
 
@@ -60,12 +57,9 @@ struct ChatRowState: Equatable {
         displayPreferences = appState.displayPreferences
         voiceCallLinksRevision = appState.voiceCallChatLinksRevision
         latestLiveRows = RichCard.latestLiveRows(appState.messages)
-<<<<<<< HEAD
         canPinReplies = appState.canPinReplies
         pinnedMessageIDs = appState.openChatPinnedMessageIDs
-=======
         pulseCards = appState.pulseCards(forChat: appState.activeSessionId)
->>>>>>> origin/pulse
     }
 
     /// `AppState.canReact(to:)`, from these values alone.

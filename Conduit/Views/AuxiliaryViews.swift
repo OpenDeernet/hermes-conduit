@@ -504,11 +504,7 @@ private struct LegacySettingsView: View {
 // MARK: - Settings home and detail routes
 
 private enum SettingsDestination: Hashable {
-<<<<<<< HEAD
-    case profile, model, usage, chat, voice, hermesCalls, workspace, memory, advanced, capabilities, gateway, conduitPlugin, savedDashboards, appearance, notifications, syncedPreferences, health, location, phone, screenQuestion, about
-=======
-    case profile, model, chat, voice, hermesCalls, workspace, memory, advanced, capabilities, pulse, gateway, conduitPlugin, savedDashboards, appearance, notifications, health, location, phone, screenQuestion, about
->>>>>>> origin/pulse
+    case profile, model, usage, chat, voice, hermesCalls, workspace, memory, advanced, capabilities, pulse, gateway, conduitPlugin, savedDashboards, appearance, notifications, syncedPreferences, health, location, phone, screenQuestion, about
 
     init(_ link: ConduitAppLink.SettingsLink) {
         switch link {
