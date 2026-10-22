@@ -1099,6 +1099,7 @@ extension NotificationE2ETests {
             (26.1600, 119.9500),  // Matsu
             (22.2819, 114.1582),  // Hong Kong Central
             (22.4450, 114.0200),  // Yuen Long
+            (22.5280, 114.1130),  // Lo Wu
             (22.1987, 113.5439),  // Macau
             (47.9184, 106.9177),  // Ulaanbaatar
             (48.9683, 89.9625),   // Ölgii
@@ -1114,8 +1115,10 @@ extension NotificationE2ETests {
         for (latitude, longitude) in outside {
             let place = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
             XCTAssertFalse(MapDatum.isShifted(place), "\(latitude), \(longitude)")
-            XCTAssertEqual(MapDatum.toMap(place).latitude, place.latitude)
-            XCTAssertEqual(MapDatum.fromMap(place).longitude, place.longitude)
+            for converted in [MapDatum.toMap(place), MapDatum.fromMap(place)] {
+                XCTAssertEqual(converted.latitude, place.latitude)
+                XCTAssertEqual(converted.longitude, place.longitude)
+            }
         }
         let mainland: [(Double, Double)] = [
             (22.5431, 114.0579),  // Shenzhen
