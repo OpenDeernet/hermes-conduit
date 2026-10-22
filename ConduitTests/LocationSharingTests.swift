@@ -1091,17 +1091,46 @@ extension NotificationE2ETests {
     }
 
     func testMapDatumLeavesPlacesOutsideMainlandChinaAlone() {
-        for place in [CLLocationCoordinate2D(latitude: 51.5007, longitude: -0.1246),   // London
-                      CLLocationCoordinate2D(latitude: 25.0330, longitude: 121.5654),  // Taipei
-                      CLLocationCoordinate2D(latitude: 22.2819, longitude: 114.1582),  // Hong Kong Central
-                      CLLocationCoordinate2D(latitude: 22.1987, longitude: 113.5439),  // Macau
-                      CLLocationCoordinate2D(latitude: 47.9184, longitude: 106.9177),  // Ulaanbaatar
-                      CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780)] { // Seoul
-            XCTAssertFalse(MapDatum.isShifted(place))
+        let outside: [(Double, Double)] = [
+            (51.5007, -0.1246),   // London
+            (25.0330, 121.5654),  // Taipei
+            (23.5700, 119.5800),  // Penghu
+            (24.4300, 118.3200),  // Kinmen
+            (26.1600, 119.9500),  // Matsu
+            (22.2819, 114.1582),  // Hong Kong Central
+            (22.4450, 114.0200),  // Yuen Long
+            (22.1987, 113.5439),  // Macau
+            (47.9184, 106.9177),  // Ulaanbaatar
+            (48.9683, 89.9625),   // Ölgii
+            (42.8700, 74.6000),   // Bishkek
+            (27.7000, 85.3200),   // Kathmandu
+            (27.4700, 89.6400),   // Thimphu
+            (21.0300, 105.8500),  // Hanoi
+            (40.1000, 124.4000),  // Sinuiju
+            (50.2700, 127.5300),  // Blagoveshchensk
+            (37.5665, 126.9780),  // Seoul
+            (37.9700, 124.6700),  // Baengnyeong
+        ]
+        for (latitude, longitude) in outside {
+            let place = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            XCTAssertFalse(MapDatum.isShifted(place), "\(latitude), \(longitude)")
             XCTAssertEqual(MapDatum.toMap(place).latitude, place.latitude)
             XCTAssertEqual(MapDatum.fromMap(place).longitude, place.longitude)
         }
-        XCTAssertTrue(MapDatum.isShifted(CLLocationCoordinate2D(latitude: 22.5431, longitude: 114.0579))) // Shenzhen
-        XCTAssertTrue(MapDatum.isShifted(CLLocationCoordinate2D(latitude: 43.8256, longitude: 87.6168)))  // Urumqi
+        let mainland: [(Double, Double)] = [
+            (22.5431, 114.0579),  // Shenzhen
+            (22.4800, 113.9100),  // Shekou
+            (22.2186, 113.5489),  // Gongbei, Zhuhai
+            (24.4798, 118.0894),  // Xiamen
+            (30.0160, 122.2070),  // Zhoushan
+            (18.2528, 109.5119),  // Sanya
+            (40.1270, 124.3900),  // Dandong
+            (50.2450, 127.4900),  // Heihe
+            (43.8256, 87.6168),   // Urumqi
+            (39.4700, 75.9900),   // Kashgar
+        ]
+        for (latitude, longitude) in mainland {
+            XCTAssertTrue(MapDatum.isShifted(CLLocationCoordinate2D(latitude: latitude, longitude: longitude)), "\(latitude), \(longitude)")
+        }
     }
 }

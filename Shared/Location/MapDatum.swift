@@ -8,7 +8,7 @@
 //  keeps saved places and fixes in WGS-84 and converts where MapKit is on
 //  the other side: what MapKit hands back is read with `fromMap`, what is
 //  drawn or routed in MapKit goes through `toMap`. Outside mainland China
-//  both are the identity.
+//  (MapDatumRegion) both are the identity.
 //
 //  Shared with the Location Push extension, which routes saved places.
 //
@@ -41,39 +41,60 @@ enum MapDatum {
         return wgs
     }
 
-    /// Whether Apple Maps shifts this point: mainland China, not Hong Kong,
-    /// Macau or Taiwan, nor the neighbours inside China's bounding box. Boxes
-    /// are north, west, south, east; borders are approximate to a few km.
+    /// Whether Apple Maps shifts this point: inside mainland China (coast and
+    /// islands included), not Hong Kong, Macau, Taiwan, Kinmen or Matsu. The
+    /// land border is simplified to about 2 km (MapDatumRegion).
     static func isShifted(_ coordinate: CLLocationCoordinate2D) -> Bool {
-        guard CLLocationCoordinate2DIsValid(coordinate) else { return false }
-        let inside = { (box: Box) in
-            coordinate.latitude <= box.north && coordinate.latitude >= box.south
-                && coordinate.longitude >= box.west && coordinate.longitude <= box.east
-        }
-        return mainland.contains(where: inside) && !excluded.contains(where: inside)
+        guard CLLocationCoordinate2DIsValid(coordinate),
+              outline.contains(coordinate) else { return false }
+        if islands.contains(where: { $0.contains(coordinate) }) { return false }
+        return !excluded.contains { $0.contains(coordinate) }
     }
 
-    private typealias Box = (north: Double, west: Double, south: Double, east: Double)
+    private struct Ring {
+        let longitudes: [Double]
+        let latitudes: [Double]
+        let west, east, south, north: Double
 
-    private static let mainland: [Box] = [
-        (49.2204, 79.4462, 42.8899, 96.3300),
-        (54.1415, 109.6872, 39.3742, 135.0002),
-        (42.8899, 73.1246, 29.5297, 124.143255),
-        (29.5297, 82.9684, 26.7186, 97.0352),
-        (29.5297, 97.0253, 20.414096, 124.367395),
-        (20.414096, 107.975793, 17.871542, 111.744104),
-    ]
+        /// "longitude,latitude" pairs separated by white space.
+        init(_ pairs: String) {
+            let points = pairs.split(whereSeparator: \.isWhitespace).map { pair -> (Double, Double) in
+                let parts = pair.split(separator: ",")
+                return (Double(parts[0]) ?? 0, Double(parts[1]) ?? 0)
+            }
+            self.init(longitudes: points.map(\.0), latitudes: points.map(\.1))
+        }
 
-    private static let excluded: [Box] = [
-        (25.398623, 119.921265, 21.785006, 122.497559), // Taiwan
-        (22.2840, 101.8652, 20.0988, 106.6650),          // Laos and Vietnam
-        (21.5422, 106.4525, 20.4878, 108.0510),          // Vietnam
-        (55.8175, 109.0323, 50.3257, 119.1270),          // Mongolia and Russia
-        (55.8175, 127.4568, 49.5574, 137.0227),          // Russia
-        (44.8922, 131.2662, 42.5692, 137.0227),          // Russia
-        (22.4300, 113.8200, 22.1500, 114.4500),          // Hong Kong: Lantau, Kowloon, the island
-        (22.5000, 113.9600, 22.4300, 114.4500),          // Hong Kong: New Territories, south of Shenzhen
-        (22.2200, 113.5200, 22.1000, 113.6000),          // Macau
+        init(longitudes: [Double], latitudes: [Double]) {
+            self.longitudes = longitudes
+            self.latitudes = latitudes
+            west = longitudes.min() ?? 0
+            east = longitudes.max() ?? 0
+            south = latitudes.min() ?? 0
+            north = latitudes.max() ?? 0
+        }
+
+        /// Even-odd ray casting; a box check first keeps most calls cheap.
+        func contains(_ coordinate: CLLocationCoordinate2D) -> Bool {
+            let x = coordinate.longitude, y = coordinate.latitude
+            guard x >= west, x <= east, y >= south, y <= north else { return false }
+            var inside = false
+            var j = longitudes.count - 1
+            for i in longitudes.indices {
+                let (xi, yi, xj, yj) = (longitudes[i], latitudes[i], longitudes[j], latitudes[j])
+                if (yi > y) != (yj > y), x < (xj - xi) * (y - yi) / (yj - yi) + xi { inside.toggle() }
+                j = i
+            }
+            return inside
+        }
+    }
+
+    private static let outline = Ring(MapDatumRegion.mainland)
+    private static let excluded = MapDatumRegion.excluded.map(Ring.init)
+    /// Taiwan's islands a few km off Xiamen and Fuzhou, inside the sea line.
+    private static let islands = [
+        Ring(longitudes: [118.22, 118.50, 118.50, 118.22], latitudes: [24.38, 24.38, 24.53, 24.53]), // Kinmen
+        Ring(longitudes: [119.85, 120.55, 120.55, 119.85], latitudes: [25.90, 25.90, 26.40, 26.40]), // Matsu
     ]
 
     private static let semiMajorAxis = 6_378_245.0
