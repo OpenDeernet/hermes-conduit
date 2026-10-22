@@ -192,7 +192,10 @@ struct V2ProfileStrip: View {
                 .padding(.horizontal, -edgeBleed)
                 // A new strip (launch, or the bar turning to two rows)
                 // starts at the first profile; bring the selected one in.
-                .onAppear { proxy.scrollTo(appState.activeProfile, anchor: .center) }
+                // After the first layout pass, or the scroll does nothing.
+                .onAppear {
+                    Task { @MainActor in proxy.scrollTo(appState.activeProfile, anchor: .center) }
+                }
                 .onChange(of: appState.activeProfile) { _, profile in
                     withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) {
                         proxy.scrollTo(profile, anchor: .center)
@@ -234,10 +237,12 @@ struct V2ProfileStrip: View {
     }
 
     /// How much wider the selected chip would be with the longest name, so
-    /// the fixed row measures the same whichever profile is selected.
+    /// the fixed row measures the same whichever profile is selected. A
+    /// little over, since UIKit's metrics can trail SwiftUI's text by a
+    /// point or two.
     private var widestNameSlack: CGFloat {
         let widest = profiles.map { nameWidth(appState.profileDisplayName($0)) }.max() ?? 0
-        return max(0, widest - nameWidth(appState.profileDisplayName(appState.activeProfile)))
+        return max(0, widest - nameWidth(appState.profileDisplayName(appState.activeProfile))) + 4
     }
 
     /// The selected chip's name width: subheadline semibold at the bar's
