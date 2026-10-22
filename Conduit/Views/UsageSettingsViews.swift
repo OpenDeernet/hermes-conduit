@@ -145,6 +145,8 @@ struct UsageSettingsDetail: View {
         case .failure(let error):
             failure = error
         }
+        // Offline, the page says to connect; no quota card under that.
+        if case .failure(.notConnected) = result { return }
         let loadedQuotas = await appState.loadProviderQuotas()
         guard generation == mine, !Task.isCancelled else { return }
         if let loadedQuotas { quotas = loadedQuotas }
@@ -283,7 +285,7 @@ struct UsageSettingsDetail: View {
                 Text(verbatim: window.label)
                     .font(.footnote)
                 Spacer(minLength: 8)
-                Text(AppLocalization.string("\(percent(window.fraction)) used"))
+                Text(AppLocalization.string("\(percent(window.usedPercent / 100)) used"))
                     .font(.footnote.monospacedDigit())
                     .foregroundStyle(.secondary)
             }

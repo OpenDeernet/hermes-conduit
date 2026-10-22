@@ -220,9 +220,9 @@ struct ProviderQuota: Equatable, Identifiable {
             let accounts = (usage["accounts"] as? [[String: Any]] ?? []).enumerated().compactMap { index, account -> QuotaAccount? in
                 // Ids name rows on screen, so a missing or repeated one gets its position.
                 let given = (account["id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-                var id = given.flatMap { accountIDs.insert($0).inserted ? $0 : nil } ?? "account-\(index)"
+                var id = given.flatMap { accountIDs.contains($0) ? nil : $0 } ?? "account-\(index)"
                 var suffix = 1
-                while given.map({ $0 != id }) ?? true, !accountIDs.insert(id).inserted {
+                while !accountIDs.insert(id).inserted {
                     suffix += 1
                     id = "account-\(index)-\(suffix)"
                 }
