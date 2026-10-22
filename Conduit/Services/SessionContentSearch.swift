@@ -152,6 +152,9 @@ struct SessionContentSearchHit: Identifiable, Equatable {
     let snippet: SessionSearchSnippet
     let lastActive: TimeInterval?
     let isArchived: Bool
+    /// The profile it was found in, when a search went to more than the
+    /// one in use (the Chats list's All view).
+    var profile: String? = nil
 
     var id: String { sessionID }
 
@@ -305,6 +308,9 @@ final class SessionContentSearchModel: ObservableObject {
     struct Context {
         let scope: AnyObject
         let profile: String
+        /// More profiles to search with it (the Chats list's All view),
+        /// one request each, their hits after the profile in use's.
+        var otherProfiles: [String] = []
         let request: Requester
     }
 
@@ -325,6 +331,7 @@ final class SessionContentSearchModel: ObservableObject {
     private struct Key: Equatable {
         let query: String
         let profile: String
+        let otherProfiles: [String]
         let scope: ObjectIdentifier
     }
 
@@ -351,7 +358,12 @@ final class SessionContentSearchModel: ObservableObject {
             reset()
             return
         }
-        let key = Key(query: query, profile: context.profile, scope: ObjectIdentifier(context.scope))
+        let key = Key(
+            query: query,
+            profile: context.profile,
+            otherProfiles: context.otherProfiles,
+            scope: ObjectIdentifier(context.scope)
+        )
         guard key != currentKey else { return }
         reset()
         currentKey = key
@@ -361,6 +373,7 @@ final class SessionContentSearchModel: ObservableObject {
         generation += 1
         let generation = generation
         let path = SessionContentSearch.path(query: query, profile: context.profile)
+        let others = context.otherProfiles.map { (profile: $0, path: SessionContentSearch.path(query: query, profile: $0)) }
         let scope = context.scope
         let request = context.request
         let debounce = debounce
@@ -373,16 +386,31 @@ final class SessionContentSearchModel: ObservableObject {
             // The bridge doesn't stop a request it already sent: an answer
             // for a query the field has moved past is dropped here.
             guard self.generation == generation else { return }
-            self.isSearching = false
             switch outcome {
             case .success(let response):
-                guard let hits = SessionContentSearch.hits(from: response, query: query) else {
+                guard var hits = SessionContentSearch.hits(from: response, query: query) else {
+                    self.isSearching = false
                     self.support.markUnsupported(scope)
                     return
                 }
+                // The other profiles' hits follow; one that fails is left
+                // out, as the list's own matches still show.
+                for other in others {
+                    guard let response = try? await request(other.path) else { continue }
+                    guard self.generation == generation else { return }
+                    let found = SessionContentSearch.hits(from: response, query: query) ?? []
+                    hits += found.map { hit in
+                        var hit = hit
+                        hit.profile = other.profile
+                        return hit
+                    }
+                }
+                guard self.generation == generation else { return }
+                self.isSearching = false
                 self.hits = hits
                 self.resultsQuery = query
             case .failure(let error):
+                self.isSearching = false
                 if SessionContentSearch.isUnsupported(error) {
                     self.support.markUnsupported(scope)
                 } else {
@@ -416,8 +444,14 @@ extension AppState {
     /// connected: its bridge, the profile in use, and the bridge's
     /// `requestJSON`, as the other dashboard routes are asked.
     var sessionContentSearchContext: SessionContentSearchModel.Context? {
+        sessionContentSearchContext(acrossAllProfiles: false)
+    }
+
+    /// The same, and in All every other included profile too.
+    func sessionContentSearchContext(acrossAllProfiles: Bool) -> SessionContentSearchModel.Context? {
         guard isConnected, let bridge = dashboardTicketBridge else { return nil }
-        return SessionContentSearchModel.Context(scope: bridge, profile: activeProfile) { [weak bridge] path in
+        let others = acrossAllProfiles ? allProfilesIncluded.filter { $0 != activeProfile } : []
+        return SessionContentSearchModel.Context(scope: bridge, profile: activeProfile, otherProfiles: others) { [weak bridge] path in
             guard let bridge else { throw DashboardTicketBridgeError.notReady }
             return try await bridge.requestJSON(path: path)
         }

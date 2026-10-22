@@ -492,4 +492,28 @@ final class SessionContentSearchTests: XCTestCase {
         XCTAssertEqual(styled.count, 1)
         XCTAssertEqual(styled.first.map { String(attributed[$0.range].characters) }, "recycling")
     }
+
+    // MARK: - All profiles
+
+    func testAllProfilesSearchAsksEachProfileAndTagsTheirHits() async {
+        let stub = StubSearchRequester()
+        stub.responses[path("recycling")] = .success(["results": [result("own")]])
+        stub.responses[path("recycling", profile: "atlas")] = .success(["results": [result("theirs")]])
+        stub.responses[path("recycling", profile: "nova")] = .failure(URLError(.timedOut))
+        let model = SessionContentSearchModel(support: SessionContentSearchSupport(), debounce: .zero)
+        let context = SessionContentSearchModel.Context(
+            scope: scope,
+            profile: "default",
+            otherProfiles: ["atlas", "nova"]
+        ) { path in
+            try await stub.request(path)
+        }
+        model.update(query: "recycling", context: context)
+        await model.waitForPendingSearch()
+        XCTAssertEqual(stub.paths, [path("recycling"), path("recycling", profile: "atlas"), path("recycling", profile: "nova")])
+        // A profile whose search failed is left out; the others still show.
+        XCTAssertEqual(model.hits.map(\.sessionID), ["own", "theirs"])
+        XCTAssertEqual(model.hits.map(\.profile), [nil, "atlas"])
+        XCTAssertFalse(model.isSearching)
+    }
 }
