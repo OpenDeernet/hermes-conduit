@@ -1065,4 +1065,43 @@ extension NotificationE2ETests {
         _ = await engine.send(batch, config: background, request: request)
         XCTAssertEqual(keyRequests, 1)
     }
+
+    // MARK: Apple Maps datum in mainland China (#1122)
+
+    func testMapDatumShiftsMainlandChinaToWhereAppleMapsDrawsIt() {
+        let tiananmen = CLLocationCoordinate2D(latitude: 39.9087, longitude: 116.3975)
+        let onMap = MapDatum.toMap(tiananmen)
+        XCTAssertEqual(onMap.latitude, 39.910103, accuracy: 0.000005)
+        XCTAssertEqual(onMap.longitude, 116.403744, accuracy: 0.000005)
+        let shift = CLLocation(latitude: tiananmen.latitude, longitude: tiananmen.longitude)
+            .distance(from: CLLocation(latitude: onMap.latitude, longitude: onMap.longitude))
+        XCTAssertGreaterThan(shift, 300)
+    }
+
+    func testMapDatumReadsAMapPointBackToTheFixDatum() {
+        for fix in [CLLocationCoordinate2D(latitude: 39.9087, longitude: 116.3975),
+                    CLLocationCoordinate2D(latitude: 31.2304, longitude: 121.4737),
+                    CLLocationCoordinate2D(latitude: 22.5431, longitude: 114.0579),
+                    CLLocationCoordinate2D(latitude: 30.5728, longitude: 104.0668)] {
+            let back = MapDatum.fromMap(MapDatum.toMap(fix))
+            let error = CLLocation(latitude: fix.latitude, longitude: fix.longitude)
+                .distance(from: CLLocation(latitude: back.latitude, longitude: back.longitude))
+            XCTAssertLessThan(error, 0.01)
+        }
+    }
+
+    func testMapDatumLeavesPlacesOutsideMainlandChinaAlone() {
+        for place in [CLLocationCoordinate2D(latitude: 51.5007, longitude: -0.1246),   // London
+                      CLLocationCoordinate2D(latitude: 25.0330, longitude: 121.5654),  // Taipei
+                      CLLocationCoordinate2D(latitude: 22.2819, longitude: 114.1582),  // Hong Kong Central
+                      CLLocationCoordinate2D(latitude: 22.1987, longitude: 113.5439),  // Macau
+                      CLLocationCoordinate2D(latitude: 47.9184, longitude: 106.9177),  // Ulaanbaatar
+                      CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780)] { // Seoul
+            XCTAssertFalse(MapDatum.isShifted(place))
+            XCTAssertEqual(MapDatum.toMap(place).latitude, place.latitude)
+            XCTAssertEqual(MapDatum.fromMap(place).longitude, place.longitude)
+        }
+        XCTAssertTrue(MapDatum.isShifted(CLLocationCoordinate2D(latitude: 22.5431, longitude: 114.0579))) // Shenzhen
+        XCTAssertTrue(MapDatum.isShifted(CLLocationCoordinate2D(latitude: 43.8256, longitude: 87.6168)))  // Urumqi
+    }
 }

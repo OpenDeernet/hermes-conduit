@@ -358,7 +358,9 @@ enum MapsEngine {
 @MainActor
 private final class MapsRun {
     struct Resolved {
+        /// Where Apple Maps puts it (GCJ-02 in mainland China, see MapDatum).
         var item: MKMapItem
+        /// WGS-84, like the fixes, for distances.
         var coordinate: CLLocationCoordinate2D
         /// What the answer says about it.
         var json: [String: Any]
@@ -454,7 +456,7 @@ private final class MapsRun {
         switch ref {
         case .me:
             guard let meLocation else { throw MapsFailure.noLocation() }
-            return Resolved(item: MapsKit.item(at: meLocation.coordinate, name: nil), coordinate: meLocation.coordinate,
+            return Resolved(item: MapsKit.item(at: MapDatum.toMap(meLocation.coordinate), name: nil), coordinate: meLocation.coordinate,
                             json: await meJSON(), isMe: true)
         case .saved(let id):
             guard let place = context.places.first(where: { $0.id == id }) else {
@@ -463,18 +465,18 @@ private final class MapsRun {
             guard !place.isPrivate else { throw MapsFailure.privatePlace }
             // The host hears its name only; Apple routes from its coordinates.
             let name = MapsText.clean(place.name, limit: LocationSavedPlace.maxNameLength)
-            return Resolved(item: MapsKit.item(at: place.coordinate, name: name), coordinate: place.coordinate,
+            return Resolved(item: MapsKit.item(at: MapDatum.toMap(place.coordinate), name: name), coordinate: place.coordinate,
                             json: ["name": name.isEmpty ? "Saved place" : name], isMe: false)
         case .text(let text):
             let found = try await MapsKit.search(text, near: hint, span: MapsEngine.resolveSpan)
             guard let item = found.first else { throw MapsFailure.notFound("Nothing matched \(text).") }
-            return Resolved(item: item, coordinate: item.placemark.coordinate, json: placeJSON(item, from: nil), isMe: false)
+            return Resolved(item: item, coordinate: MapDatum.fromMap(item.placemark.coordinate), json: placeJSON(item, from: nil), isMe: false)
         case .placeID(let id):
             guard #available(iOS 18.0, *) else {
                 throw MapsFailure.notFound("Place ids need iOS 18 on the iPhone; look it up by name instead.")
             }
             let item = try await MapsKit.item(placeID: id)
-            return Resolved(item: item, coordinate: item.placemark.coordinate, json: placeJSON(item, from: nil), isMe: false)
+            return Resolved(item: item, coordinate: MapDatum.fromMap(item.placemark.coordinate), json: placeJSON(item, from: nil), isMe: false)
         case .coordinate(let latitude, let longitude):
             let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
             return Resolved(item: MapsKit.item(at: coordinate, name: nil), coordinate: coordinate,
@@ -520,8 +522,9 @@ private final class MapsRun {
         }
         if let zone = item.timeZone?.identifier { json["time_zone"] = zone }
         if let origin {
+            let place = MapDatum.fromMap(placemark.coordinate)
             let meters = CLLocation(latitude: origin.coordinate.latitude, longitude: origin.coordinate.longitude)
-                .distance(from: CLLocation(latitude: placemark.coordinate.latitude, longitude: placemark.coordinate.longitude))
+                .distance(from: CLLocation(latitude: place.latitude, longitude: place.longitude))
             json["distance_m"] = distance(meters, fromMe: origin.isMe)
         }
         return json
