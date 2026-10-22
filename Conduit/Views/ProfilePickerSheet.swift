@@ -63,6 +63,7 @@ struct ProfilePickerSheet: View {
                             ProfilePickerRow(
                                 profile: profile,
                                 isReordering: isReordering,
+                                isDashboardSwitching: switchingToDashboard != nil,
                                 canMoveEarlier: index > 0,
                                 canMoveLater: index < visibleProfiles.count - 1,
                                 moveEarlier: {
@@ -102,6 +103,7 @@ extension ProfilePickerSheet {
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
+                .accessibilityAddTraits(.isHeader)
             VStack(spacing: 0) {
                 ForEach(dashboardRows) { row in
                     Button {
@@ -152,6 +154,9 @@ private struct ProfilePickerRow: View {
     @EnvironmentObject private var appState: AppState
     let profile: String
     let isReordering: Bool
+    /// A dashboard switch from this sheet is under way: its profiles are
+    /// on their way out.
+    let isDashboardSwitching: Bool
     let canMoveEarlier: Bool
     let canMoveLater: Bool
     let moveEarlier: () -> Void
@@ -166,7 +171,7 @@ private struct ProfilePickerRow: View {
     /// card-sized selection surface behind the row must agree on when a
     /// profile can be selected.
     private var canSelect: Bool {
-        !isCurrent && !appState.isProfileSwitching && !isReordering
+        !isCurrent && !appState.isProfileSwitching && !isReordering && !isDashboardSwitching
     }
 
     var body: some View {

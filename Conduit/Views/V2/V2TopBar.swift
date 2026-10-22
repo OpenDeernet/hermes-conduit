@@ -468,9 +468,13 @@ private struct DashboardSwitchMenu: ViewModifier {
     let enabled: Bool
 
     func body(content: Content) -> some View {
-        let others = appState.savedDashboardRegistry.dashboards.filter { $0.id != appState.activeDashboardID }
-        if enabled && !others.isEmpty {
-            content.contextMenu {
+        // Always attached, with the items gated: switching the modifier on
+        // and off would rebuild the chip as it becomes (or stops being) the
+        // selected one, under its matched-geometry capsule. An empty menu
+        // doesn't open.
+        content.contextMenu {
+            let others = appState.savedDashboardRegistry.dashboards.filter { $0.id != appState.activeDashboardID }
+            if enabled && !others.isEmpty {
                 Section(AppLocalization.string("Saved Dashboards")) {
                     ForEach(others) { dashboard in
                         Button {
@@ -486,8 +490,6 @@ private struct DashboardSwitchMenu: ViewModifier {
                     }
                 }
             }
-        } else {
-            content
         }
     }
 }

@@ -95,7 +95,7 @@ struct SavedDashboardsSettingsDetail: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(row.isActive)
+        .disabled(row.isActive || isSwitchingTo != nil)
         .accessibilityIdentifier("settings.dashboard.row")
         .contextMenu {
             Button {
@@ -169,6 +169,7 @@ struct SavedDashboardRowModel: Identifiable {
             let hasAuth = id == appState.activeDashboardID
                 || KeychainHelper.loadCredentials(dashboardID: id) != nil
                 || KeychainHelper.loadConnection(dashboardID: id) != nil
+                || KeychainHelper.loadNativeOAuthTokens(dashboardID: id) != nil
             return SavedDashboardRowModel(
                 dashboard: dashboard,
                 isActive: id == appState.activeDashboardID,
