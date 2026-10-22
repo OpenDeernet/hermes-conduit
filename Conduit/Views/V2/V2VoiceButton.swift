@@ -6,7 +6,9 @@
 //  project page. A tap starts voice where the user is (a new call, or a
 //  new chat in the open project's folder); touch and hold on a tab lists
 //  the three most recent conversations to talk in instead. While a call is
-//  minimised the button brings it back, its bars moving.
+//  minimised the button brings it back, its bars moving. Beside a chat's
+//  composer a tap does what Chat voice button says (a call or dictation),
+//  and touch and hold offers the other.
 //
 
 import SwiftUI
@@ -38,6 +40,9 @@ struct V2VoiceButton: View {
     /// Faded out (the expanded composer): its bars stop redrawing unseen.
     var isHidden = false
     @EnvironmentObject private var appState: AppState
+    /// What the big button beside a chat does, app-wide (Settings >
+    /// Appearance); a profile can override it.
+    @AppStorage(ChatVoiceButtonAction.key) private var appChatVoiceButton = ChatVoiceButtonAction.defaultValue.rawValue
     /// A start in flight: a second tap doesn't make a second chat or call.
     @State private var isStarting = false
 
@@ -48,7 +53,23 @@ struct V2VoiceButton: View {
     /// Voice is off for this profile: the button opens its setup instead.
     private var needsSetup: Bool { !appState.showsComposerVoiceButton }
 
+    /// The big button beside a chat's composer: its tap is the chosen
+    /// action, and touch and hold offers the others.
+    private var isChatButton: Bool { context == .conversation && style == .circle }
+
+    /// What a tap does here. Only the chat's big button follows the
+    /// setting; a top-bar button is always the call.
+    private var chatAction: ChatVoiceButtonAction {
+        guard isChatButton else { return .liveCall }
+        return ChatVoiceButtonAction.resolved(profile: appState.chatVoiceButtonOverride, app: appChatVoiceButton)
+    }
+
+    /// A tap dictates into the draft. A minimised call still comes first:
+    /// the button is the way back to it.
+    private var dictates: Bool { chatAction == .dictation && !returnsToCall }
+
     private var canAct: Bool {
+        if dictates { return appState.composerIsEnabled && !appState.isVoiceInUse }
         if returnsToCall || needsSetup { return true }
         guard !isStarting, !appState.isPreparingVoiceResume,
               appState.canStartPhoneVoiceConversation, !appState.isVoiceInUse else { return false }
@@ -84,8 +105,22 @@ struct V2VoiceButton: View {
         context == .home && !returnsToCall && !needsSetup && !appState.activeProfileSessions.isEmpty
     }
 
+    /// Touch and hold on the chat's big button: a live call or dictation,
+    /// whichever the tap doesn't do.
+    private var showsChatMenu: Bool { isChatButton && !returnsToCall }
+
+    /// The call's label in the chat, whatever the button's tap does.
+    private var conversationCallLabel: String {
+        if appState.openChatCallToResume != nil { return AppLocalization.string("Resume call") }
+        if appState.activeBotChatProfile != nil {
+            return AppLocalization.string("Call \(appState.conversationAgentIdentity.name)")
+        }
+        return AppLocalization.string("Talk in this conversation")
+    }
+
     private var label: String {
         if returnsToCall { return AppLocalization.string("Return to call") }
+        if dictates { return AppLocalization.string("Dictate") }
         if needsSetup { return AppLocalization.string("Set up voice") }
         switch context {
         case .home: return AppLocalization.string("New voice call")
@@ -94,16 +129,18 @@ struct V2VoiceButton: View {
                 ? AppLocalization.string("New voice call")
                 : AppLocalization.string("Talk in this project")
         case .conversation:
-            if appState.openChatCallToResume != nil { return AppLocalization.string("Resume call") }
-            if appState.activeBotChatProfile != nil {
-                return AppLocalization.string("Call \(appState.conversationAgentIdentity.name)")
-            }
-            return AppLocalization.string("Talk in this conversation")
+            return conversationCallLabel
         }
     }
 
     private var hint: String? {
+        if dictates {
+            return canAct
+                ? AppLocalization.string("Types what you say into the message. Touch and hold for a live call.")
+                : nil
+        }
         if !canAct { return appState.phoneVoiceUnavailableReason }
+        if showsChatMenu { return AppLocalization.string("Touch and hold to dictate instead") }
         return showsRecentMenu ? AppLocalization.string("Touch and hold for recent conversations") : nil
     }
 
@@ -135,6 +172,25 @@ struct V2VoiceButton: View {
                     tap()
                 }
                 .menuIndicator(.hidden)
+            } else if showsChatMenu {
+                Menu {
+                    Button {
+                        callTap()
+                    } label: {
+                        Label(conversationCallLabel, systemImage: "waveform")
+                    }
+                    Button {
+                        dictate()
+                    } label: {
+                        Label("Dictate", systemImage: "mic")
+                    }
+                    .disabled(!appState.composerIsEnabled || appState.isVoiceInUse)
+                } label: {
+                    face
+                } primaryAction: {
+                    tap()
+                }
+                .menuIndicator(.hidden)
             } else {
                 Button(action: tap) { face }
                     .buttonStyle(PressableButtonStyle())
@@ -145,7 +201,7 @@ struct V2VoiceButton: View {
         .accessibilityHint(hint ?? "")
         .macTooltip(label)
         .accessibilityShowsLargeContentViewer {
-            Label(label, systemImage: "waveform")
+            Label(label, systemImage: dictates ? "mic" : "waveform")
         }
     }
 
@@ -163,13 +219,22 @@ struct V2VoiceButton: View {
     }
 
     private var circleFace: some View {
-        // Only a minimised call moves them: any other call's screen covers
-        // the button, so it doesn't redraw unseen.
-        V2VoiceBars(isLive: returnsToCall && !isHidden)
-            .frame(width: Self.diameter, height: Self.diameter)
-            .background(Color.conduitAccent, in: Circle())
-            .opacity(canAct ? 1 : 0.55)
-            .contentShape(Circle())
+        Group {
+            if dictates {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .conduitFixedGlyph()
+                    .foregroundStyle(Color.black.opacity(0.82))
+            } else {
+                // Only a minimised call moves them: any other call's screen
+                // covers the button, so it doesn't redraw unseen.
+                V2VoiceBars(isLive: returnsToCall && !isHidden)
+            }
+        }
+        .frame(width: Self.diameter, height: Self.diameter)
+        .background(Color.conduitAccent, in: Circle())
+        .opacity(canAct ? 1 : 0.55)
+        .contentShape(Circle())
     }
 
     /// The project's folder for a new chat, as its page reads it.
@@ -182,6 +247,21 @@ struct V2VoiceButton: View {
     // MARK: - Actions
 
     private func tap() {
+        if dictates {
+            dictate()
+            return
+        }
+        callTap()
+    }
+
+    /// Dictation in the open chat's composer, which expands to show it.
+    private func dictate() {
+        appState.requestComposerDictation()
+    }
+
+    /// Voice where the button is: back to a minimised call, voice setup,
+    /// or a new call.
+    private func callTap() {
         if returnsToCall {
             Haptics.medium()
             appState.restoreMinimisedLiveVoice()

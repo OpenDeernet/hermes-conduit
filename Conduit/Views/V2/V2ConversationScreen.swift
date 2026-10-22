@@ -49,6 +49,7 @@ struct V2ConversationScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.v2Shell) private var shell
     @State private var composerExpanded = false
+    @AppStorage(ChatVoiceButtonAction.key) private var appChatVoiceButton = ChatVoiceButtonAction.defaultValue.rawValue
     @State private var chatTitlePendingRename: SessionSummary?
     @State private var chatTitlePendingDeletion: SessionSummary?
     @State private var confirmsRoomDisband = false
@@ -159,6 +160,14 @@ struct V2ConversationScreen: View {
                     }
                     .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: appState.isConnected)
                     .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: appState.isRecoveringConnection)
+                }
+            }
+            // The big button does something else: a live call stays one
+            // tap away up here.
+            if appState.activeRoomSurface == nil,
+               ChatVoiceButtonAction.resolved(profile: appState.chatVoiceButtonOverride, app: appChatVoiceButton) != .liveCall {
+                ToolbarItem(placement: .topBarTrailing) {
+                    V2VoiceButton(context: .conversation, style: .toolbar)
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {

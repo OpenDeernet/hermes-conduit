@@ -68,6 +68,9 @@ struct ComposerBar: View, Equatable {
     /// (`ComposerReturnKey.sendsByDefault`).
     @AppStorage(ComposerReturnKey.preferenceKey) private var returnKeySends = ComposerReturnKey.sendsByDefault
     @AppStorage(AttachmentSizeLimit.preferenceKey) private var attachmentLimitMegabytes = AttachmentSizeLimit.defaultMegabytes
+    /// The app's choice for the big button beside the chat (V2); the
+    /// profile's own, if any, is in `updates.inputs`.
+    @AppStorage(ChatVoiceButtonAction.key) private var appChatVoiceButton = ChatVoiceButtonAction.defaultValue.rawValue
     @Namespace private var glassNamespace
     /// The dictate button types into the draft (#290, #335).
     @StateObject private var dictation = ComposerDictationService()
@@ -426,6 +429,9 @@ struct ComposerBar: View, Equatable {
         .onChange(of: updates.inputs.focusRequest) { _, request in
             applyFocusRequest(request)
         }
+        .onChange(of: updates.inputs.dictationRequest) { _, request in
+            applyDictationRequest(request)
+        }
         .onChange(of: photoItems) { _, _ in
             handlePhotoSelection()
         }
@@ -590,7 +596,7 @@ struct ComposerBar: View, Equatable {
                 // Resting, the plain mic stays in reach: dictating needs no
                 // tap on the field first. Starting it expands the composer,
                 // whose controls row has the same button.
-                if rests {
+                if rests && showsRestingDictateButton {
                     dictateButton
                         .padding(.trailing, stopOnly ? 0 : 4)
                         .transition(.opacity)
@@ -1813,6 +1819,41 @@ struct ComposerBar: View, Equatable {
         Task { @MainActor in
             isFocused = true
         }
+    }
+
+    /// The chat's big button asked to dictate: start, as the mic does.
+    private func applyDictationRequest(_ request: ComposerDictationRequest?) {
+        guard let request else { return }
+        appState.consumeComposerDictationRequest(request.id)
+        // Left for another chat before it applied: dropped.
+        guard request.sessionID == appState.activeSessionId else { return }
+        switch ComposerDictation.tap(
+            isCapturing: dictation.isCapturing,
+            isStarting: dictation.isStarting,
+            canDictate: canDictateFromComposer,
+            isTranscribing: dictation.isTranscribing
+        ) {
+        case .start: beginDictation()
+        // Already dictating: the button's second tap stops it.
+        case .stop: dictation.stop()
+        case .cancelStart: dictation.cancel()
+        case .nothing: break
+        }
+    }
+
+    /// The resting bar's mic, unless the big button beside the composer
+    /// already dictates.
+    private var showsRestingDictateButton: Bool {
+        Self.showsRestingDictateButton(
+            chatVoiceButton: ChatVoiceButtonAction.resolved(
+                profile: updates.inputs.chatVoiceButtonOverride,
+                app: appChatVoiceButton
+            )
+        )
+    }
+
+    static func showsRestingDictateButton(chatVoiceButton: ChatVoiceButtonAction) -> Bool {
+        chatVoiceButton != .dictation
     }
 
     /// A quote from the transcript (#385): selected text joins the draft as
