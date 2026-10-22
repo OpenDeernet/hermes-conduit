@@ -2126,10 +2126,12 @@ final class AppState: ObservableObject {
     }
     /// The Pulse screen (PulseFeed.swift): its unseen cards for the
     /// button's badge, the chats' messages that have a card (chat id, then
-    /// Hermes' message id, to card id), and a request to show it.
+    /// Hermes' message id, to card id), a request to show it, and Pulse's
+    /// own chat, which the screen stands in for.
     @Published var pulseUnseen = 0
     @Published var pulseSources: [String: [Int: Int]] = [:]
     @Published var pulseOpenRequest: PulseOpenRequest?
+    @Published var pulseHomeChatID: String?
     @Published private(set) var composerPrefillText = ""
     @Published private(set) var composerPrefillToken = UUID()
     /// The draft the prefill is for, until ComposerBar puts it in. A new
@@ -12275,6 +12277,10 @@ final class AppState: ObservableObject {
         recordOfflineChatCopy()
         recordSavedChatList()
         selectDashboardTarget(id)
+        // Pulse's badge, marks and chat are the outgoing dashboard's.
+        pulseUnseen = 0
+        pulseSources = [:]
+        pulseHomeChatID = nil
         rememberDashboardURL(dashboard.normalizedURL)
         let crossedServer = prepareChatResumeForConnection(to: dashboard.normalizedURL, dashboardID: id)
         retireConnectionRuntimeForDashboardSwitch()
@@ -21020,6 +21026,10 @@ final class AppState: ObservableObject {
                 errorMessage = AppLocalization.string("This notification predates multi-dashboard pairing. Update the notifier on the sending gateway and pair it again to continue.")
             }
             return .failed
+        }
+        if await opensPulseScreen(for: target) {
+            traceStage = "pulse"
+            return .opened
         }
         traceStage = "open start"
         let notificationAttemptID = UUID()
