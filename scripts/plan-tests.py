@@ -1233,7 +1233,8 @@ def cmd_smoke(args) -> int:
     changed = []
     if args.changed_files:
         try:
-            with open(args.changed_files, encoding="utf-8") as fh:
+            with open(_resolve_in_repo(args.repo_root, args.changed_files),
+                      encoding="utf-8") as fh:
                 changed = [line.strip() for line in fh if line.strip()]
         except OSError as exc:
             warn(f"changed files unreadable ({exc}); smoke runs the curated set only")
@@ -1255,8 +1256,13 @@ def cmd_smoke(args) -> int:
                       if c not in unit and c not in nightly_only]
 
         def cost(name):
+            # Same rules as load_estimates: only a finite positive number
+            # is a timing.
             value = baseline.get(name)
-            return float(value) if isinstance(value, (int, float)) else _UNKNOWN_CLASS_COST_S
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(value) or value <= 0):
+                return _UNKNOWN_CLASS_COST_S
+            return float(value)
 
         spent = 0.0
         for name in sorted(candidates, key=lambda n: (cost(n), n)):
