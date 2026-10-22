@@ -1189,6 +1189,7 @@ struct V2ChatsView: View, Equatable {
         if haptic { Haptics.selection() }
         var collapsed = collapsedProfiles
         if collapsed.contains(profile) { collapsed.remove(profile) } else { collapsed.insert(profile) }
+        collapsed = collapsed.filter { name in appState.profiles.contains(name) }
         UserDefaults.standard.set(collapsed.sorted().joined(separator: "\n"), forKey: Self.collapsedProfilesKey)
         withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) {
             collapsedProfiles = collapsed
@@ -1380,7 +1381,7 @@ struct V2ChatsView: View, Equatable {
                 appState.requestOpenSession(row.openID)
             } else if let owner = row.hit.profile, !AppState.profilesMatch(owner, appState.activeProfile) {
                 // Another profile's chat All hasn't listed: its link's way.
-                Task { await appState.routeLinkedSession(row.hit.sessionID, toProfile: owner) }
+                appState.openOtherProfileChat(row.hit.sessionID, inProfile: owner)
             } else {
                 // Older than any listed row: the link route opens it and
                 // refreshes the list, as a job link does.

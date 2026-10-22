@@ -8315,7 +8315,10 @@ final class AppState: ObservableObject {
         if owner != activeProfile {
             // Another profile's row in All: Hermes' flag when its listing
             // has one, else the pins this phone keeps for that profile.
-            return session.isPinned ?? (pinnedSessionIDsByProfile[owner] ?? []).contains { ids.contains($0) }
+            // A pin Hermes refused stays on this phone, over the listing.
+            let kept = (pinnedSessionIDsByProfile[owner] ?? []).contains { ids.contains($0) }
+            if kept, sessionPinSync.isPhoneOnly(pinID: pinID(for: session), profile: owner) { return true }
+            return session.isPinned ?? kept
         }
         if pinnedSessionIDs.contains(where: { ids.contains($0) }) { return true }
         guard let saved = savedChatListForActiveScope else { return false }
@@ -9814,6 +9817,8 @@ final class AppState: ObservableObject {
         resetHostPins()
         sessionStars = SessionStars()
         defaults.removeObject(forKey: SessionStars.storageKey)
+        allProfilesCatalogTask?.cancel()
+        allProfilesCatalogTask = nil
         allProfilesCatalog = AllProfilesCatalog()
         clearPinnedReplies()
         voiceJobSessionIDsByProfile = [:]
@@ -12349,6 +12354,8 @@ final class AppState: ObservableObject {
         resetHostPins()
         sessionStars = SessionStars()
         defaults.removeObject(forKey: SessionStars.storageKey)
+        allProfilesCatalogTask?.cancel()
+        allProfilesCatalogTask = nil
         allProfilesCatalog = AllProfilesCatalog()
         clearPinnedReplies()
         voiceJobSessionIDsByProfile = [:]
@@ -34700,9 +34707,14 @@ extension AppState {
     func refreshAllProfilesCatalog() {
         guard isAllProfilesChatsOn, allProfilesCatalogTask == nil, let bridge = dashboardTicketBridge else { return }
         let dashboardID = activeDashboardID
-        allProfilesCatalogTask = Task { @MainActor [weak self] in
+        let task = Task { @MainActor [weak self] in
             await self?.readAllProfilesCatalog(using: bridge, dashboardID: dashboardID)
-            self?.allProfilesCatalogTask = nil
+        }
+        allProfilesCatalogTask = task
+        Task { @MainActor [weak self] in
+            await task.value
+            // A reset since may have started a newer read.
+            if self?.allProfilesCatalogTask == task { self?.allProfilesCatalogTask = nil }
         }
     }
 
@@ -34770,6 +34782,16 @@ extension AppState {
         allProfilesCatalog.sessions.removeAll {
             Self.profilesMatch($0.profile ?? "", session.profile ?? "") && !ids.isDisjoint(with: $0.nestingIDs)
         }
+    }
+
+    /// A message hit in another profile's chat that All hasn't listed: its
+    /// link's way, refused with a notice during a call.
+    func openOtherProfileChat(_ id: String, inProfile profile: String) {
+        guard !isVoiceCallInProgress else {
+            showSessionMutationNotice(AppLocalization.string("End the call to open a chat in another profile."))
+            return
+        }
+        Task { await routeLinkedSession(id, toProfile: profile) }
     }
 
     /// New Chat from All's menu: here, or in `profile` after a switch to
