@@ -47,6 +47,10 @@ extension AppState {
         }, install: install, renewSignIn: { [weak self] in
             guard let self, let dashboardID, self.activeDashboardID == dashboardID else { return false }
             return await self.renewDashboardSignIn(dashboardID: dashboardID)
+        }, onHost: notifierPlugin.reports(NotifierPluginUpdater.selfUpdateCapability),
+           profile: activeProfile, report: { [weak self] json in
+            guard let self, self.activeDashboardID == dashboardID else { return }
+            self.applyNotifierPluginReport(json)
         })
         notifierPluginUpdateTask = Task { [weak self] in
             let outcome = await updater.run { state in
@@ -68,6 +72,12 @@ extension AppState {
             // The dashboard restart drops the chat connection.
             if !self.isConnected { await self.reconnect() }
             await self.refreshNotifierPluginStatus()
+            // A read that failed right after the restart keeps the old
+            // plugin's "restart to finish": ask once more (#299).
+            if case .updated = outcome, self.notifierPlugin.restartPending, self.activeDashboardID == dashboardID {
+                try? await Task.sleep(for: .seconds(3))
+                await self.refreshNotifierPluginStatus()
+            }
         }
     }
 
