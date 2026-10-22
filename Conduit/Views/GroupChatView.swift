@@ -61,7 +61,10 @@ struct GroupChatView: View {
 
     private var surface: AppState.GroupRoomSurface? { appState.activeRoomSurface }
 
-    private var members: [GroupMember] { surface?.room.members ?? [] }
+    /// Named as the bots are now, not as they were when they joined.
+    private var members: [GroupMember] {
+        GroupRoomTurns.members(surface?.room.members ?? [], namedBy: appState.botRoster)
+    }
 
     /// Log events that earn a row: a member turn that posted settles
     /// silently, since its bubble already says so.

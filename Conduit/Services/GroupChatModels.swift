@@ -886,6 +886,34 @@ enum GroupRoomTurns {
 
     /// The member's name for captions, never empty: a member with no name
     /// fields at all reads as "A member".
+    /// The members as this gateway's own bots are named now. A room keeps
+    /// the name each bot had when it joined, so a bot renamed since (from a
+    /// long press in Conduit, or in Desktop) would keep its old name there.
+    /// Only a local member's profile is looked up; another gateway's bot
+    /// keeps the room's name. The old name stays a known name for tags.
+    static func members(_ members: [GroupMember], namedBy roster: [BotProfile]) -> [GroupMember] {
+        guard !roster.isEmpty else { return members }
+        return members.map { member in
+            if member.target?["kind"]?.stringValue == "peer" { return member }
+            guard let profile = member.profile?.trimmingCharacters(in: .whitespacesAndNewlines), !profile.isEmpty,
+                  let bot = roster.first(where: { $0.name == profile }) else { return member }
+            let label = bot.displayLabel
+            let old = member.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard label != old else { return member }
+            var renamed = GroupMember(
+                memberID: member.memberID,
+                profile: member.profile,
+                handle: member.handle,
+                displayName: label,
+                target: member.target,
+                extra: member.extra
+            )
+            renamed.previousNames = member.previousNames
+            if !old.isEmpty, !renamed.previousNames.contains(old) { renamed.previousNames.append(old) }
+            return renamed
+        }
+    }
+
     static func displayName(of member: GroupMember) -> String {
         for candidate in [member.displayName, member.handle, member.profile, member.memberID] {
             if let trimmed = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
