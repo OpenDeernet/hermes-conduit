@@ -249,8 +249,9 @@ enum SessionContentSearch {
             guard hit.identities.isDisjoint(with: listedIDs) else { return nil }
             if let allowedIDs, hit.identities.isDisjoint(with: allowedIDs) { return nil }
             let session = knownByID[hit.sessionID] ?? hit.lineageRootID.flatMap { knownByID[$0] }
-            // A call Hermes archived at its end is still a listed row here (#1124).
-            if session?.isArchived ?? hit.isArchived { return nil }
+            // Hermes' flag decides, except for a call it archived at its end
+            // that Conduit still lists (#1124).
+            if hit.isArchived && session?.isArchived != false { return nil }
             let row = SessionContentSearchRow(hit: hit, session: session)
             guard shown.insert(row.id).inserted else { return nil }
             return row

@@ -27565,10 +27565,12 @@ final class AppState: ObservableObject {
         // A failed read keeps the call rows the list showed before, so the
         // live list's authority doesn't hang on this one.
         let tags = voiceSessionTagsByKey[voiceHistoryKey(profile: profile)] ?? [:]
+        let listedIDs = Set(sessions.map(\.id))
         let calls = await archivedCalls ?? (self.sessions + self.cronSessions).filter {
             var archived = $0
             archived.isArchived = true
             return Self.isArchivedVoiceChat(archived, tags: tags) && sessionBelongsToProfile($0, profile: profile)
+                && !listedIDs.contains($0.id)  // used since: the live read has it fresh
         }
         return DashboardSessionCatalog(
             sessions: V2FilterSelection.mergedByRecency(sessions, calls),
@@ -27610,7 +27612,11 @@ final class AppState: ObservableObject {
                         listed.isArchived = false
                         return listed
                     }
-                let hasMore = booleanValue(response["has_more"] ?? response["hasMore"]) || batch.count == 200
+                let offset = page * 200
+                let nextOffset = Self.integerValue(response["next_offset"] ?? response["nextOffset"])
+                let total = Self.integerValue(response["total"])
+                let done = (nextOffset.map { $0 <= offset } ?? false) || (total.map { offset + batch.count >= $0 } ?? false)
+                let hasMore = !done && (booleanValue(response["has_more"] ?? response["hasMore"]) || batch.count == 200)
                 if !hasMore || batch.isEmpty { break }
             }
         } catch {
