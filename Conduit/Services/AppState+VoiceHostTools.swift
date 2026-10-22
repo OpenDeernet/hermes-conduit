@@ -67,9 +67,17 @@ extension AppState {
         if keys.contains("health"), !healthSync.isSyncing { Task { await runHealthSync(reason: .voiceCall) } }
         if keys.contains("location") { Task { await LocationSharingController.shared.prepareVoiceReads() } }
         if phoneAllowed, !phoneSync.isSyncing { Task { await runPhoneSync(reason: .voiceCall) } }
+        // This iPhone's id in each store: a call reads this iPhone alone, so
+        // the host offers only what this iPhone shares.
+        let location = LocationSharingController.shared
+        let devices = [
+            "health_device": keys.contains("health") && healthSync.readStateIfNeeded() ? healthSync.state.deviceID : nil,
+            "location_device": keys.contains("location") ? location.config.deviceID : nil,
+            "phone_device": phoneAllowed && phoneSync.readStateIfNeeded() ? phoneSync.state.deviceID : nil,
+        ]
         do {
             let response = try await bridge.requestJSON(
-                path: DashboardPath.withProfile(Self.voiceToolsPath, profile: activeProfile),
+                path: Self.voiceToolsListPath(profile: activeProfile, devices: devices),
                 method: "GET", body: nil, timeoutMilliseconds: 5_000)
             let host = VoiceHostTool.tools(from: response).filter { tool in
                 keys.contains(tool.key) || (tool.key == "phone" && phoneAllowed)
@@ -79,6 +87,18 @@ extension AppState {
             Self.voiceToolsLog.info("Voice tools unavailable: \(LogRedaction.redactingURLs(HealthSyncEngine.describe(error)), privacy: .public)")
             return (nil, local)
         }
+    }
+
+    /// GET /voice-tools for `profile`, naming this iPhone's device in each
+    /// store it shares from (older plugins ignore the names).
+    static func voiceToolsListPath(profile: String, devices: [String: String?]) -> String {
+        var path = DashboardPath.withProfile(voiceToolsPath, profile: profile)
+        for name in devices.keys.sorted() {
+            guard let id = devices[name] ?? nil, !id.isEmpty,
+                  let encoded = DashboardPath.encodedQueryComponent(id) else { continue }
+            path += "\(path.contains("?") ? "&" : "?")\(name)=\(encoded)"
+        }
+        return path
     }
 
     /// The briefing line for a call on `mode` that the user hasn't let use

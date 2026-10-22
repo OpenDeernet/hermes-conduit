@@ -114,6 +114,17 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(VoiceHostTool.functionToolsFirst([]), "")
     }
 
+    func testTheToolListNamesThisIPhonesDevicePerStore() {
+        // The host offers what this iPhone shares, since a call reads it alone.
+        XCTAssertEqual(AppState.voiceToolsListPath(profile: "default", devices: [:]), AppState.voiceToolsPath)
+        XCTAssertEqual(
+            AppState.voiceToolsListPath(profile: "work", devices: [
+                "phone_device": "phone-1", "health_device": "health 1", "location_device": nil]),
+            "\(AppState.voiceToolsPath)?profile=work&health_device=health%201&phone_device=phone-1")
+        XCTAssertEqual(AppState.voiceToolsListPath(profile: "default", devices: ["location_device": "loc-1"]),
+                       "\(AppState.voiceToolsPath)?location_device=loc-1")
+    }
+
     func testLiveCallsReachTheHostToolOnlyWhenOffered() async {
         let supervisor = VoiceBackgroundJobSupervisor(backend: FakeVoiceJobBackend().backend, pollInterval: .seconds(3_600))
         var calls: [(String, [String: Any])] = []
