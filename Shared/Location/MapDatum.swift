@@ -27,7 +27,7 @@ enum MapDatum {
 
     /// A coordinate read from Apple Maps (a search result, a map item) in WGS-84.
     static func fromMap(_ coordinate: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
-        guard isShifted(coordinate) else { return coordinate }
+        guard CLLocationCoordinate2DIsValid(coordinate) else { return coordinate }
         // The shift has no closed inverse: step back until the forward shift lands
         // on the map's point. It converges to well under a millimetre in a few steps.
         var wgs = coordinate
@@ -38,7 +38,8 @@ enum MapDatum {
             wgs = CLLocationCoordinate2D(latitude: wgs.latitude - errorLatitude, longitude: wgs.longitude - errorLongitude)
             if abs(errorLatitude) < 1e-9 && abs(errorLongitude) < 1e-9 { break }
         }
-        return wgs
+        // Gate on the WGS-84 point, as toMap does, so a point near a border round trips.
+        return isShifted(wgs) ? wgs : coordinate
     }
 
     /// Whether Apple Maps shifts this point: inside mainland China (coast and
@@ -58,9 +59,10 @@ enum MapDatum {
 
         /// "longitude,latitude" pairs separated by white space.
         init(_ pairs: String) {
-            let points = pairs.split(whereSeparator: \.isWhitespace).map { pair -> (Double, Double) in
+            let points = pairs.split(whereSeparator: \.isWhitespace).compactMap { pair -> (Double, Double)? in
                 let parts = pair.split(separator: ",")
-                return (Double(parts[0]) ?? 0, Double(parts[1]) ?? 0)
+                guard parts.count == 2, let longitude = Double(parts[0]), let latitude = Double(parts[1]) else { return nil }
+                return (longitude, latitude)
             }
             self.init(longitudes: points.map(\.0), latitudes: points.map(\.1))
         }

@@ -1078,6 +1078,17 @@ extension NotificationE2ETests {
         XCTAssertGreaterThan(shift, 300)
     }
 
+    func testMapDatumRegionParsesEveryPoint() {
+        let tokens = MapDatumRegion.mainland.split(whereSeparator: \.isWhitespace)
+        XCTAssertGreaterThan(tokens.count, 1_000)
+        for token in tokens + MapDatumRegion.excluded.flatMap({ $0.split(whereSeparator: \.isWhitespace) }) {
+            let parts = token.split(separator: ",")
+            XCTAssertEqual(parts.count, 2, String(token))
+            XCTAssertNotNil(parts.first.flatMap { Double($0) }, String(token))
+            XCTAssertNotNil(parts.last.flatMap { Double($0) }, String(token))
+        }
+    }
+
     func testMapDatumReadsAMapPointBackToTheFixDatum() {
         for fix in [CLLocationCoordinate2D(latitude: 39.9087, longitude: 116.3975),
                     CLLocationCoordinate2D(latitude: 31.2304, longitude: 121.4737),

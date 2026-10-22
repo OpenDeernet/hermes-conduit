@@ -843,6 +843,7 @@ enum MapsKit {
         return item
     }
 
+    /// `centre` is WGS-84, like fixes and saved places; it's converted for MapKit here.
     static func search(_ query: String, near centre: CLLocationCoordinate2D?, span: CLLocationDistance) async throws -> [MKMapItem] {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
