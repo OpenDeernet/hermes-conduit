@@ -21,14 +21,54 @@ extension ComposerFullEditorTests {
     }
 
     func testChatVoiceButtonSkipsChoicesThisBuildCantDo() {
-        // A newer build's value, or voice messages before they ship, read
-        // as the next choice down.
+        // A newer build's value reads as the next choice down.
         XCTAssertEqual(ChatVoiceButtonAction.resolved(profile: "telepathy", app: "dictation"), .dictation)
-        XCTAssertEqual(ChatVoiceButtonAction.resolved(profile: "voice_message", app: nil), .liveCall)
-        XCTAssertNil(ChatVoiceButtonAction.offeredChoice("voice_message"))
+        XCTAssertEqual(ChatVoiceButtonAction.resolved(profile: "telepathy", app: "telepathy"), .liveCall)
+        XCTAssertEqual(ChatVoiceButtonAction.resolved(profile: "voice_message", app: nil), .voiceMessage)
+        XCTAssertNil(ChatVoiceButtonAction.offeredChoice("telepathy"))
         XCTAssertNil(ChatVoiceButtonAction.offeredChoice(nil))
         XCTAssertEqual(ChatVoiceButtonAction.offeredChoice("dictation"), .dictation)
-        XCTAssertEqual(ChatVoiceButtonAction.offered, [.liveCall, .dictation])
+        XCTAssertEqual(ChatVoiceButtonAction.offered, [.liveCall, .voiceMessage, .dictation])
+    }
+
+    func testVoiceMessagePromptCarriesItsLengthAndWords() {
+        XCTAssertEqual(
+            VoiceMessage.promptText(duration: 14.4, transcript: "  Pick up milk  "),
+            "[Voice message, 0:14. Transcript:]\nPick up milk"
+        )
+        XCTAssertEqual(
+            VoiceMessage.promptText(duration: 61, transcript: ""),
+            "[Voice message, 1:01. No transcript: listen to the attached audio file if you can.]"
+        )
+        XCTAssertEqual(VoiceMessage.durationLabel(3_723), "1:02:03")
+    }
+
+    func testVoiceMessageBubbleReadsBackItsPrompt() throws {
+        let sent = VoiceMessage.promptText(duration: 14, transcript: "Pick up milk\nand eggs")
+        let parsed = try XCTUnwrap(VoiceMessage.parse(sent))
+        XCTAssertEqual(parsed.duration, "0:14")
+        XCTAssertEqual(parsed.transcript, "Pick up milk\nand eggs")
+        let silent = try XCTUnwrap(VoiceMessage.parse(VoiceMessage.promptText(duration: 3, transcript: "")))
+        XCTAssertEqual(silent.transcript, "")
+        // Typed text that merely mentions one is not a voice message.
+        XCTAssertNil(VoiceMessage.parse("I sent a [Voice message, 0:14] earlier"))
+        XCTAssertNil(VoiceMessage.parse("Hello"))
+    }
+
+    func testVoiceMessageFilesAreKnownByTheirName() {
+        XCTAssertTrue(VoiceMessage.isVoiceMessageFile("voice-message-20261022-211500.m4a"))
+        XCTAssertTrue(VoiceMessage.isVoiceMessageFile("/tmp/ABC-voice-message-20261022-211500.m4a"))
+        XCTAssertFalse(VoiceMessage.isVoiceMessageFile("podcast.m4a"))
+    }
+
+    func testVoiceMessageCopiesWhatWasSaid() {
+        let message = ChatMessage(
+            id: "1",
+            role: .user,
+            content: VoiceMessage.promptText(duration: 5, transcript: "Call Mona"),
+            timestamp: "ts-1"
+        )
+        XCTAssertEqual(UserMessageCopyButton.copyText(for: message), "Call Mona")
     }
 
     func testRestingComposerHidesItsMicWhenTheBigButtonDictates() {

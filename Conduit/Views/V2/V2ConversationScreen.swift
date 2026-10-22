@@ -50,6 +50,11 @@ struct V2ConversationScreen: View {
     @Environment(\.v2Shell) private var shell
     @State private var composerExpanded = false
     @AppStorage(ChatVoiceButtonAction.key) private var appChatVoiceButton = ChatVoiceButtonAction.defaultValue.rawValue
+    /// A voice message recorded while the big button is held keeps the
+    /// button under the finger, though the composer opens beside it.
+    @ObservedObject private var voiceMessages = VoiceMessageRecorder.shared
+
+    private var hidesVoiceButton: Bool { composerExpanded && !voiceMessages.isHeld }
     @State private var chatTitlePendingRename: SessionSummary?
     @State private var chatTitlePendingDeletion: SessionSummary?
     @State private var confirmsRoomDisband = false
@@ -83,15 +88,15 @@ struct V2ConversationScreen: View {
                     if appState.activeRoomSurface == nil {
                         // Beside the resting composer; it slides aside,
                         // shrinks and fades while the composer is expanded.
-                        V2VoiceButton(context: .conversation, isHidden: composerExpanded)
-                            .scaleEffect(composerExpanded && !reduceMotion ? 0.4 : 1)
-                            .offset(x: composerExpanded && !reduceMotion ? 30 : 0)
-                            .opacity(composerExpanded ? 0 : 1)
-                            .allowsHitTesting(!composerExpanded)
-                            .accessibilityHidden(composerExpanded)
+                        V2VoiceButton(context: .conversation, isHidden: hidesVoiceButton)
+                            .scaleEffect(hidesVoiceButton && !reduceMotion ? 0.4 : 1)
+                            .offset(x: hidesVoiceButton && !reduceMotion ? 30 : 0)
+                            .opacity(hidesVoiceButton ? 0 : 1)
+                            .allowsHitTesting(!hidesVoiceButton)
+                            .accessibilityHidden(hidesVoiceButton)
                             .padding(.trailing, 16)
                             .padding(.bottom, 10)
-                            .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: composerExpanded)
+                            .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: hidesVoiceButton)
                     }
                 }
                 // On a wide window the transcript, the composer and the

@@ -7,8 +7,9 @@
 //  new chat in the open project's folder); touch and hold on a tab lists
 //  the three most recent conversations to talk in instead. While a call is
 //  minimised the button brings it back, its bars moving. Beside a chat's
-//  composer a tap does what Chat voice button says (a call or dictation),
-//  and touch and hold offers the other.
+//  composer a tap does what Chat voice button says: a call or dictation,
+//  where touch and hold offers the other, or a voice message, recorded
+//  while the button is held.
 //
 
 import SwiftUI
@@ -45,6 +46,19 @@ struct V2VoiceButton: View {
     @AppStorage(ChatVoiceButtonAction.key) private var appChatVoiceButton = ChatVoiceButtonAction.defaultValue.rawValue
     /// A start in flight: a second tap doesn't make a second chat or call.
     @State private var isStarting = false
+    @ObservedObject private var voiceMessages = VoiceMessageRecorder.shared
+    /// When the press that may become a held recording began.
+    @State private var pressBegan: Date?
+    /// The finger slid far enough away that letting go throws the held
+    /// recording away.
+    @State private var releaseCancels = false
+    /// This press became a held recording (whether or not it started).
+    @State private var holdStarted = false
+
+    /// How long a press lasts before it records while held.
+    static let holdToRecordDelay: TimeInterval = 0.3
+    /// How far the finger slides away before letting go cancels.
+    static let slideToCancelDistance: CGFloat = 80
 
     static let diameter: CGFloat = 56
 
@@ -68,8 +82,15 @@ struct V2VoiceButton: View {
     /// the button is the way back to it.
     private var dictates: Bool { chatAction == .dictation && !returnsToCall }
 
+    /// A tap records a voice message; holding records until let go.
+    private var recordsMessage: Bool { chatAction == .voiceMessage && !returnsToCall }
+
     private var canAct: Bool {
         if dictates { return appState.composerIsEnabled && !appState.isVoiceInUse }
+        if recordsMessage {
+            return appState.composerIsEnabled && !appState.isVoiceInUse
+                && (!voiceMessages.isActive || voiceMessages.isHeld)
+        }
         if returnsToCall || needsSetup { return true }
         guard !isStarting, !appState.isPreparingVoiceResume,
               appState.canStartPhoneVoiceConversation, !appState.isVoiceInUse else { return false }
@@ -107,7 +128,7 @@ struct V2VoiceButton: View {
 
     /// Touch and hold on the chat's big button: a live call or dictation,
     /// whichever the tap doesn't do.
-    private var showsChatMenu: Bool { isChatButton && !returnsToCall }
+    private var showsChatMenu: Bool { isChatButton && !returnsToCall && !recordsMessage }
 
     /// The call's label in the chat, whatever the button's tap does.
     private var conversationCallLabel: String {
@@ -121,6 +142,7 @@ struct V2VoiceButton: View {
     private var label: String {
         if returnsToCall { return AppLocalization.string("Return to call") }
         if dictates { return AppLocalization.string("Dictate") }
+        if recordsMessage { return AppLocalization.string("Record voice message") }
         if needsSetup { return AppLocalization.string("Set up voice") }
         switch context {
         case .home: return AppLocalization.string("New voice call")
@@ -137,6 +159,11 @@ struct V2VoiceButton: View {
         if dictates {
             return canAct
                 ? AppLocalization.string("Types what you say into the message. Touch and hold for a live call.")
+                : nil
+        }
+        if recordsMessage {
+            return canAct
+                ? AppLocalization.string("Records a voice message. Or touch and hold to record, and let go to send.")
                 : nil
         }
         if !canAct { return appState.phoneVoiceUnavailableReason }
@@ -191,6 +218,11 @@ struct V2VoiceButton: View {
                     tap()
                 }
                 .menuIndicator(.hidden)
+            } else if recordsMessage {
+                face
+                    .gesture(holdToRecord)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { tap() }
             } else {
                 Button(action: tap) { face }
                     .buttonStyle(PressableButtonStyle())
@@ -201,7 +233,7 @@ struct V2VoiceButton: View {
         .accessibilityHint(hint ?? "")
         .macTooltip(label)
         .accessibilityShowsLargeContentViewer {
-            Label(label, systemImage: dictates ? "mic" : "waveform")
+            Label(label, systemImage: dictates || recordsMessage ? chatAction.symbol : "waveform")
         }
     }
 
@@ -220,8 +252,8 @@ struct V2VoiceButton: View {
 
     private var circleFace: some View {
         Group {
-            if dictates {
-                Image(systemName: "mic.fill")
+            if dictates || recordsMessage {
+                Image(systemName: chatAction.symbol)
                     .font(.system(size: 22, weight: .semibold))
                     .conduitFixedGlyph()
                     .foregroundStyle(Color.black.opacity(0.82))
@@ -251,7 +283,70 @@ struct V2VoiceButton: View {
             dictate()
             return
         }
+        if recordsMessage {
+            Haptics.medium()
+            Task { await appState.startVoiceMessage() }
+            return
+        }
         callTap()
+    }
+
+    /// A tap starts a recording to preview; a press held past a moment
+    /// records until let go and sends, unless the finger slid away.
+    private var holdToRecord: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard canAct else { return }
+                if pressBegan == nil {
+                    let began = Date()
+                    pressBegan = began
+                    releaseCancels = false
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(Self.holdToRecordDelay))
+                        // Still the same press, and still down.
+                        guard pressBegan == began, !voiceMessages.isActive else { return }
+                        Haptics.medium()
+                        holdStarted = true
+                        voiceMessages.isHeld = true
+                        await appState.startVoiceMessage()
+                    }
+                }
+                let distance = hypot(value.translation.width, value.translation.height)
+                let cancels = distance > Self.slideToCancelDistance
+                if voiceMessages.isHeld, cancels != releaseCancels {
+                    releaseCancels = cancels
+                    Haptics.selection()
+                }
+            }
+            .onEnded { _ in
+                let held = holdStarted
+                let cancels = releaseCancels
+                pressBegan = nil
+                releaseCancels = false
+                holdStarted = false
+                guard held else {
+                    // A tap, not a hold.
+                    if canAct { tap() }
+                    return
+                }
+                // The recording couldn't start: its reason is showing.
+                guard voiceMessages.isHeld else { return }
+                voiceMessages.isHeld = false
+                Task { @MainActor in
+                    // Let go while the microphone was still coming up.
+                    while voiceMessages.phase == .starting {
+                        try? await Task.sleep(for: .milliseconds(50))
+                    }
+                    if cancels {
+                        Haptics.light()
+                        voiceMessages.cancel()
+                        return
+                    }
+                    guard voiceMessages.phase == .recording,
+                          await voiceMessages.stop() != nil else { return }
+                    await appState.sendRecordedVoiceMessage()
+                }
+            }
     }
 
     /// Dictation in the open chat's composer, which expands to show it.

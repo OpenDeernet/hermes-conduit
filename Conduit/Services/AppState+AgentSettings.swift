@@ -184,7 +184,7 @@ extension AppState {
         ))
         catalog.append(choiceDescriptor(
             key: "voice.chat_button", section: "Conversation", title: "Chat voice button",
-            description: "What the round button beside a chat's message box does on this profile. app: follow the app-wide choice in Settings > Appearance. live_call: start a live voice call in the chat. dictation: type what the user says into the message. A live call stays in the chat's top bar either way.",
+            description: "What the round button beside a chat's message box does on this profile. app: follow the app-wide choice in Settings > Appearance. live_call: start a live voice call in the chat. voice_message: record an audio message (sent with its transcript). dictation: type what the user says into the message. A live call stays in the chat's top bar either way.",
             tier: .small, displayTitle: { AppLocalization.string("Chat voice button") },
             choices: [(value: "app", title: "App setting")]
                 + ChatVoiceButtonAction.offered.map { (value: $0.rawValue, title: $0.title) },

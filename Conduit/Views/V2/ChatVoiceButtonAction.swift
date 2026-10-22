@@ -21,15 +21,14 @@ enum ChatVoiceButtonAction: String, CaseIterable, Equatable {
     static let key = "conduit.v2.chatVoiceButton"
     static let defaultValue = ChatVoiceButtonAction.liveCall
 
-    /// The choices Settings offers. Voice messages aren't offered until
-    /// Conduit can send them; a stored one reads as a live call meanwhile.
+    /// The choices Settings offers.
     static var offered: [ChatVoiceButtonAction] {
         allCases.filter(\.isAvailable)
     }
 
-    var isAvailable: Bool {
-        self != .voiceMessage
-    }
+    /// Whether this build can do it. Every choice can today; one added
+    /// later reads as unknown to an older build instead.
+    var isAvailable: Bool { true }
 
     /// The profile's override when it has one, else the app's choice. An
     /// unknown or unavailable value (written by a newer Conduit) reads as
@@ -62,8 +61,8 @@ enum ChatVoiceButtonAction: String, CaseIterable, Equatable {
     var symbol: String {
         switch self {
         case .liveCall: return "waveform"
-        case .voiceMessage: return "mic.circle"
-        case .dictation: return "mic"
+        case .voiceMessage: return "mic.fill"
+        case .dictation: return "character.cursor.ibeam"
         }
     }
 }

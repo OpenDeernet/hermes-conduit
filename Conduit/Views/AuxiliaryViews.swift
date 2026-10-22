@@ -3205,7 +3205,8 @@ private struct AppearanceSettingsDetail: View {
                             Text(action.title).tag(action)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    // Three choices whose names run long in some languages.
+                    .pickerStyle(.menu)
                 }
 
                 // A project's chats otherwise show only on its page.
