@@ -633,6 +633,7 @@ class SmokeSelectionTests(unittest.TestCase):
         self.assertFalse(
             nightly_only & set(suite.get("unit") or []),
             "a nightly-only timing family must not be in the smoke set")
+        self.assertFalse(nightly_only & set(suite.get("source_contracts") or []))
         self.assertFalse(nightly_only & set(suite.get("ui") or []))
 
     def test_a_nonexistent_class_fails_the_selection(self):
@@ -807,11 +808,28 @@ class SmokeSelectionTests(unittest.TestCase):
         def mutate(suite):
             suite["changed_budget_s"] = 0
         proc, doc = self._changed_selection(
-            ["ConduitTests/SessionPresentationCacheTests.swift"], mutate)
+            ["ConduitTests/SessionPresentationCacheTests.swift",
+             "ConduitTests/DashboardTicketBridgeTests.swift"], mutate)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertEqual(doc["changed_unit"], [])
-        self.assertIn("SessionPresentationCacheTests", doc["changed_skipped"])
+        # The cheapest still runs, so a change always gets one of its own.
+        self.assertEqual(doc["changed_unit"], ["SessionPresentationCacheTests"])
+        self.assertEqual(doc["changed_skipped"], ["DashboardTicketBridgeTests"])
         self.assertIn("changed classes left to nightly", proc.stdout)
+
+    def test_an_unreadable_hosted_suite_adds_no_changed_classes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            listing = os.path.join(tmp, "changed.txt")
+            with open(listing, "w", encoding="utf-8") as fh:
+                fh.write("ConduitTests/LongContextScalingFixtureTests.swift\n")
+            proc = subprocess.run(
+                [sys.executable, os.path.join(SCRIPTS_DIR, "plan-tests.py"),
+                 "smoke", "--repo-root", REPO_ROOT, "--suite", SMOKE_SUITE,
+                 "--changed-files", listing,
+                 "--hosted-suite", os.path.join(tmp, "missing.json")],
+                capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertNotIn("changed unit classes added", proc.stdout)
+        self.assertIn("no changed classes added", proc.stdout + proc.stderr)
 
     def test_an_unknown_source_contract_fails_the_selection(self):
         def mutate(suite):

@@ -256,6 +256,13 @@ final class SyncedPreferencesController: ObservableObject {
         isEnabled = defaults.bool(forKey: Self.enabledKey)
     }
 
+    deinit {
+        // A block observer stays registered until removed.
+        if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
+        pendingUpload?.cancel()
+        heldRetry?.cancel()
+    }
+
     func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
         defaults.set(enabled, forKey: Self.enabledKey)
@@ -328,18 +335,21 @@ final class SyncedPreferencesController: ObservableObject {
             forName: UserDefaults.didChangeNotification, object: nil, queue: nil
         ) { [weak self] _ in
             DispatchQueue.main.async {
-                // Most writes are other keys: one check per interval, not
-                // a new task per write.
-                guard let self, self.isEnabled, self.pendingUpload == nil else { return }
-                let wait = self.debounce
-                self.uploadGeneration += 1
-                let generation = self.uploadGeneration
-                self.pendingUpload = Task { @MainActor in
-                    try? await Task.sleep(for: wait)
-                    // A task cancelled while a newer one was scheduled leaves it be.
-                    if self.uploadGeneration == generation { self.pendingUpload = nil }
-                    guard !Task.isCancelled else { return }
-                    await upload()
+                MainActor.assumeIsolated {
+                    // Most writes are other keys: one check per interval, not
+                    // a new task per write.
+                    guard let self, self.isEnabled, self.pendingUpload == nil else { return }
+                    let wait = self.debounce
+                    self.uploadGeneration += 1
+                    let generation = self.uploadGeneration
+                    self.pendingUpload = Task { @MainActor [weak self] in
+                        try? await Task.sleep(for: wait)
+                        guard let self else { return }
+                        // A task cancelled while a newer one was scheduled leaves it be.
+                        if self.uploadGeneration == generation { self.pendingUpload = nil }
+                        guard !Task.isCancelled else { return }
+                        await upload()
+                    }
                 }
             }
         }

@@ -1129,6 +1129,17 @@ def unit_classes_for_changes(repo_root: str, changed: list, unit_entries: list) 
     return picked
 
 
+def _resolve_in_repo(repo_root: str, path: str) -> str:
+    """A relative path is read against --repo-root when it exists there, as
+    `_load_history_or_baseline` does, so smoke behaves the same from any
+    working directory."""
+    if path and not os.path.isabs(path):
+        joined = os.path.join(repo_root, path)
+        if os.path.exists(joined):
+            return joined
+    return path
+
+
 def _baseline_seconds(path: str) -> dict:
     try:
         with open(path, encoding="utf-8") as fh:
@@ -1139,12 +1150,15 @@ def _baseline_seconds(path: str) -> dict:
     return classes if isinstance(classes, dict) else {}
 
 
-def _nightly_only(path: str) -> set:
+def _nightly_only(path: str):
+    """The nightly-only timing families, or None when the hosted suite
+    cannot be read (the caller then adds no changed classes at all)."""
     try:
         with open(path, encoding="utf-8") as fh:
-            return set(json.load(fh).get("nightly_only_unit") or [])
+            names = json.load(fh).get("nightly_only_unit")
     except (OSError, ValueError, AttributeError):
-        return set()
+        return None
+    return set(names) if isinstance(names, list) else None
 
 
 def cmd_smoke(args) -> int:
@@ -1220,9 +1234,17 @@ def cmd_smoke(args) -> int:
             changed = [line.strip() for line in fh if line.strip()]
     elif args.changed_from:
         changed = changed_files_since(args.repo_root, args.changed_from)
+    nightly_only = None
     if changed:
-        nightly_only = _nightly_only(args.hosted_suite)
-        baseline = _baseline_seconds(args.baseline)
+        nightly_only = _nightly_only(_resolve_in_repo(args.repo_root, args.hosted_suite))
+        if nightly_only is None:
+            # Fail closed: without the list a touched timing family would
+            # join every PR's run.
+            warn(f"hosted suite {args.hosted_suite} unreadable; no changed "
+                 f"classes added to smoke")
+            changed = []
+    if changed:
+        baseline = _baseline_seconds(_resolve_in_repo(args.repo_root, args.baseline))
         candidates = [c for c in unit_classes_for_changes(
                           args.repo_root, changed, discovery["unit"])
                       if c not in unit and c not in nightly_only]
@@ -1238,6 +1260,16 @@ def cmd_smoke(args) -> int:
                 spent += cost(name)
             else:
                 changed_skipped.append(name)
+        # The change's only heavy class still runs once: a slow new suite
+        # is exactly what would otherwise first fail at night.
+        if not changed_unit and changed_skipped:
+            cheapest = min(changed_skipped, key=lambda n: (cost(n), n))
+            changed_skipped.remove(cheapest)
+            changed_unit.append(cheapest)
+            spent = cost(cheapest)
+            print(f"::notice title=changed class over the smoke budget::"
+                  f"{cheapest} (~{spent:.0f}s) runs anyway: nothing else of the "
+                  f"change fit")
         changed_unit.sort()
         changed_skipped.sort()
         unit = unit + changed_unit
