@@ -378,6 +378,28 @@ final class SessionContentSearchTests: XCTestCase {
         XCTAssertEqual(rows.first?.title, "Kitchen chat")
     }
 
+    func testAllProfilesHitsMatchChatsOnlyInTheirOwnProfile() {
+        // Two profiles hold the same chat id: the one in use lists it, the
+        // other's match still shows and opens that profile's chat.
+        var atlasChat = session("same", title: "Atlas chat")
+        atlasChat.profile = "atlas"
+        let tagged = hits([result("same")]) + hits([result("same")]).map { hit in
+            var hit = hit
+            hit.profile = "atlas"
+            return hit
+        }
+        let rows = SessionContentSearch.rows(
+            hits: tagged,
+            listed: [session("same")],
+            known: [session("same"), atlasChat],
+            activeProfile: "default",
+            owner: { $0.profile ?? "" }
+        )
+        XCTAssertEqual(rows.map(\.id), ["atlas\u{1F}same"])
+        XCTAssertEqual(rows.first?.session?.profile, "atlas")
+        XCTAssertEqual(rows.first?.title, "Atlas chat")
+    }
+
     func testDuplicatesMatchThroughStoredIDsAndLineageRoots() {
         // The list holds the runtime id; Hermes answers with the stored id,
         // or with a compression tip whose root the list row carries.

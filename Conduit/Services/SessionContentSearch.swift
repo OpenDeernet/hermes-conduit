@@ -172,7 +172,9 @@ struct SessionContentSearchRow: Identifiable, Equatable {
     let hit: SessionContentSearchHit
     let session: SessionSummary?
 
-    var id: String { session?.id ?? hit.sessionID }
+    /// Another profile's match carries its profile, as All's list rows do:
+    /// two profiles can hold the same chat id.
+    var id: String { (hit.profile.map { $0.lowercased() + "\u{1F}" } ?? "") + openID }
     /// The id that opens it: the listed chat's, else Hermes' tip.
     var openID: String { session?.id ?? hit.sessionID }
 
@@ -235,23 +237,37 @@ enum SessionContentSearch {
     /// as is an archived chat the list leaves out. `known` is every chat
     /// Conduit has for the profile, for titles; `allowed`, when set, keeps
     /// only matches among those chats (an active filter).
+    ///
+    /// In All, `owner` names each chat's profile and a hit's profile is its
+    /// tag (else `activeProfile`), so a chat id two profiles share matches
+    /// only within its own profile.
     static func rows(
         hits: [SessionContentSearchHit],
         listed: [SessionSummary],
         known: [SessionSummary],
-        allowed: [SessionSummary]? = nil
+        allowed: [SessionSummary]? = nil,
+        activeProfile: String = "",
+        owner: (SessionSummary) -> String = { _ in "" }
     ) -> [SessionContentSearchRow] {
-        let listedIDs = Set(listed.flatMap(identities))
+        func scoped(_ profile: String, _ ids: [String]) -> [String] {
+            let prefix = profile.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() + "\u{1F}"
+            return ids.map { prefix + $0 }
+        }
+        func keys(_ session: SessionSummary) -> [String] { scoped(owner(session), identities(of: session)) }
+        let listedIDs = Set(listed.flatMap(keys))
         var knownByID: [String: SessionSummary] = [:]
         for session in known {
-            for id in identities(of: session) where knownByID[id] == nil { knownByID[id] = session }
+            for id in keys(session) where knownByID[id] == nil { knownByID[id] = session }
         }
-        let allowedIDs = allowed.map { Set($0.flatMap(identities)) }
+        let allowedIDs = allowed.map { Set($0.flatMap(keys)) }
         var shown = Set<String>()
         return hits.compactMap { hit -> SessionContentSearchRow? in
-            guard !hit.isArchived, hit.identities.isDisjoint(with: listedIDs) else { return nil }
-            if let allowedIDs, hit.identities.isDisjoint(with: allowedIDs) { return nil }
-            let session = knownByID[hit.sessionID] ?? hit.lineageRootID.flatMap { knownByID[$0] }
+            let profile = hit.profile ?? activeProfile
+            let hitIDs = Set(scoped(profile, Array(hit.identities)))
+            guard !hit.isArchived, hitIDs.isDisjoint(with: listedIDs) else { return nil }
+            if let allowedIDs, hitIDs.isDisjoint(with: allowedIDs) { return nil }
+            let session = scoped(profile, [hit.sessionID] + (hit.lineageRootID.map { [$0] } ?? []))
+                .lazy.compactMap { knownByID[$0] }.first
             if session?.isArchived == true { return nil }
             let row = SessionContentSearchRow(hit: hit, session: session)
             guard shown.insert(row.id).inserted else { return nil }
@@ -450,7 +466,7 @@ extension AppState {
     /// The same, and in All every other included profile too.
     func sessionContentSearchContext(acrossAllProfiles: Bool) -> SessionContentSearchModel.Context? {
         guard isConnected, let bridge = dashboardTicketBridge else { return nil }
-        let others = acrossAllProfiles ? allProfilesIncluded.filter { $0 != activeProfile } : []
+        let others = acrossAllProfiles ? allProfilesIncluded.filter { !AppState.profilesMatch($0, activeProfile) } : []
         return SessionContentSearchModel.Context(scope: bridge, profile: activeProfile, otherProfiles: others) { [weak bridge] path in
             guard let bridge else { throw DashboardTicketBridgeError.notReady }
             return try await bridge.requestJSON(path: path)

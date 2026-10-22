@@ -963,7 +963,9 @@ struct V2ChatsView: View, Equatable {
             hits: contentSearch.hits,
             listed: displayed,
             known: known,
-            allowed: selection.isEmpty ? nil : filterRows(selection, searching: true)
+            allowed: selection.isEmpty ? nil : filterRows(selection, searching: true),
+            activeProfile: appState.isAllProfilesChatsOn ? appState.activeProfile : "",
+            owner: { session in appState.isAllProfilesChatsOn ? appState.rowProfile(session) : "" }
         )
     }
 
@@ -1394,7 +1396,8 @@ struct V2ChatsView: View, Equatable {
                 snippet: row.hit.snippet,
                 isUnread: row.session.map { appState.isSessionUnread($0) } ?? false,
                 isStarred: row.session.map { appState.isSessionStarred($0) } ?? false,
-                isSelected: row.openID == appState.activeSessionId
+                isSelected: row.openID == appState.activeSessionId && row.hit.profile == nil
+                    && !(row.session.map(appState.isOtherProfileRow) ?? false)
             )
         }
         .buttonStyle(.plain)
