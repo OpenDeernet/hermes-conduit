@@ -967,6 +967,20 @@ extension NotificationE2ETests {
         XCTAssertTrue(try JSONDecoder().decode(LocationSharingSettings.self, from: JSONEncoder().encode(settings)).otherProfiles)
     }
 
+    @MainActor
+    func testTheFirstLayerOnRecordsWhetherOtherProfilesMayReadAndASecondKeepsIt() {
+        var settings = LocationSharingSettings()
+        XCTAssertTrue(LocationSharingController.otherProfiles(turningOn: settings, offered: true))
+        XCTAssertFalse(LocationSharingController.otherProfiles(turningOn: settings, offered: false))
+        settings.talking = true
+        settings.otherProfiles = true
+        XCTAssertTrue(LocationSharingController.otherProfiles(turningOn: settings, offered: false),
+                      "the background layer keeps what the user agreed to")
+        settings.otherProfiles = false
+        XCTAssertFalse(LocationSharingController.otherProfiles(turningOn: settings, offered: true),
+                       "turned off in Settings: a second layer doesn't turn it back on")
+    }
+
     func testEveryIngestSaysThePhoneAnswersMapsAndWhetherTheHostMayToo() throws {
         var settings = LocationSharingSettings()
         settings.background = true

@@ -124,7 +124,7 @@ struct LocationSettingsPage: View {
                 if settings.isOn { pauseSection }
                 retentionSection
                 mapsSection
-                if settings.isOn, pluginSharesProfiles || settings.otherProfiles { profilesSection }
+                if settings.isOn, controller.binding != nil, pluginSharesProfiles || settings.otherProfiles { profilesSection }
             }
             // Kept while a mode is allowed, even on an older plugin, so it can
             // still be turned off.
@@ -504,7 +504,7 @@ struct LocationSettingsPage: View {
             ))
             .disabled(isWorking)
             .accessibilityIdentifier("settings.location.other-profiles")
-            Text(AppLocalization.string("Other Hermes profiles on \(hostLabel) that are paired with this iPhone can read your location and ask for a fresh one. Place rules stay with \(controller.binding?.profile ?? appState.activeProfile)."))
+            Text(AppLocalization.string("When this is on, other Hermes profiles on \(hostLabel) that are paired with this iPhone can read your location and ask for a fresh one. Place rules stay with \(controller.binding?.profile ?? appState.activeProfile)."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

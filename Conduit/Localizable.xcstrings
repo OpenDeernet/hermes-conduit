@@ -83,84 +83,84 @@
         }
       }
     },
-    "Other Hermes profiles on %@ that are paired with this iPhone can read your location and ask for a fresh one. Place rules stay with %@." : {
+    "When this is on, other Hermes profiles on %@ that are paired with this iPhone can read your location and ask for a fresh one. Place rules stay with %@." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Andere Hermes-Profile auf %1$@, die mit diesem iPhone gekoppelt sind, können deinen Standort lesen und einen aktuellen anfordern. Ortsregeln bleiben bei %2$@."
+            "value" : "Wenn das an ist, können andere Hermes-Profile auf %1$@, die mit diesem iPhone gekoppelt sind, deinen Standort lesen und einen aktuellen anfordern. Ortsregeln bleiben bei %2$@."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Otros perfiles de Hermes en %1$@ vinculados con este iPhone pueden leer tu ubicación y pedir una actual. Las reglas de lugar se quedan en %2$@."
+            "value" : "Si está activado, otros perfiles de Hermes en %1$@ vinculados con este iPhone pueden leer tu ubicación y pedir una actual. Las reglas de lugar se quedan en %2$@."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Les autres profils Hermes sur %1$@ jumelés avec cet iPhone peuvent lire votre position et en demander une récente. Les règles de lieu restent avec %2$@."
+            "value" : "Si cette option est activée, les autres profils Hermes sur %1$@ jumelés avec cet iPhone peuvent lire votre position et en demander une récente. Les règles de lieu restent avec %2$@."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Profil Hermes lain di %1$@ yang dipasangkan dengan iPhone ini dapat membaca lokasi Anda dan meminta yang terbaru. Aturan tempat tetap di %2$@."
+            "value" : "Jika aktif, profil Hermes lain di %1$@ yang dipasangkan dengan iPhone ini dapat membaca lokasi Anda dan meminta yang terbaru. Aturan tempat tetap di %2$@."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gli altri profili Hermes su %1$@ abbinati a questo iPhone possono leggere la tua posizione e chiederne una aggiornata. Le regole dei luoghi restano su %2$@."
+            "value" : "Se attivo, gli altri profili Hermes su %1$@ abbinati a questo iPhone possono leggere la tua posizione e chiederne una aggiornata. Le regole dei luoghi restano su %2$@."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このiPhoneとペアリングされている%1$@上のほかのHermesプロファイルも、あなたの位置を読み取り、最新の位置を問い合わせられます。場所のルールは%2$@に残ります。"
+            "value" : "オンにすると、このiPhoneとペアリングされている%1$@上のほかのHermesプロファイルも、あなたの位置を読み取り、最新の位置を問い合わせられます。場所のルールは%2$@に残ります。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이 iPhone과 페어링된 %1$@의 다른 Hermes 프로필도 위치를 읽고 최신 위치를 요청할 수 있습니다. 장소 규칙은 %2$@에 남습니다."
+            "value" : "켜면 이 iPhone과 페어링된 %1$@의 다른 Hermes 프로필도 위치를 읽고 최신 위치를 요청할 수 있습니다. 장소 규칙은 %2$@에 남습니다."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Inne profile Hermes na %1$@ sparowane z tym iPhone’em mogą odczytywać Twoją lokalizację i prosić o świeżą. Reguły miejsc zostają przy %2$@."
+            "value" : "Gdy to jest włączone, inne profile Hermes na %1$@ sparowane z tym iPhone’em mogą odczytywać Twoją lokalizację i prosić o świeżą. Reguły miejsc zostają przy %2$@."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Outros perfis do Hermes em %1$@ pareados com este iPhone podem ler sua localização e pedir uma atual. As regras de lugar ficam com %2$@."
+            "value" : "Com isto ativado, outros perfis do Hermes em %1$@ pareados com este iPhone podem ler sua localização e pedir uma atual. As regras de lugar ficam com %2$@."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Другие профили Hermes на %1$@, связанные с этим iPhone, могут читать вашу геопозицию и запрашивать свежую. Правила мест остаются у %2$@."
+            "value" : "Когда это включено, другие профили Hermes на %1$@, связанные с этим iPhone, могут читать вашу геопозицию и запрашивать свежую. Правила мест остаются у %2$@."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ üzerinde bu iPhone ile eşlenmiş diğer Hermes profilleri konumunu okuyabilir ve yenisini isteyebilir. Yer kuralları %2$@ profilinde kalır."
+            "value" : "Bu açıkken %1$@ üzerinde bu iPhone ile eşlenmiş diğer Hermes profilleri konumunu okuyabilir ve yenisini isteyebilir. Yer kuralları %2$@ profilinde kalır."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ 上与这台 iPhone 配对的其他 Hermes 配置文件可以读取你的位置并请求最新位置。地点规则仍留在 %2$@。"
+            "value" : "开启后，%1$@ 上与这台 iPhone 配对的其他 Hermes 配置文件可以读取你的位置并请求最新位置。地点规则仍留在 %2$@。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$@ 上與這部 iPhone 配對的其他 Hermes 設定檔可以讀取你的位置並要求最新位置。地點規則仍留在 %2$@。"
+            "value" : "開啟後，%1$@ 上與這部 iPhone 配對的其他 Hermes 設定檔可以讀取你的位置並要求最新位置。地點規則仍留在 %2$@。"
           }
         }
       }

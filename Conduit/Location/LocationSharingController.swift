@@ -513,7 +513,7 @@ final class LocationSharingController: ObservableObject {
     /// Turns a layer on for `destination`: asks iOS for permission (When In
     /// Use, then Always for the background), binds sharing to the dashboard
     /// and profile in use when nothing is on yet, and tells the host.
-    func turnOn(_ layer: Layer, destination: LocationBinding, otherProfiles: Bool = false) async throws {
+    func turnOn(_ layer: Layer, destination: LocationBinding, otherProfiles: Bool) async throws {
         guard readConfigIfNeeded() else { throw LocationSharingError.unreadable }
         let status: CLAuthorizationStatus
         switch layer {
@@ -531,15 +531,13 @@ final class LocationSharingController: ObservableObject {
             // Precise Location off is kept only once there's a binding.
             refreshAuthorization()
         }
-        // The first layer on: the consent sheet said whether the host's
-        // other profiles read it too.
-        let firstLayer = !settings.isOn
+        let sharesWithOtherProfiles = Self.otherProfiles(turningOn: settings, offered: otherProfiles)
         save { config in
             switch layer {
             case .talking: config.settings.talking = true
             case .background: config.settings.background = true
             }
-            if firstLayer { config.settings.otherProfiles = otherProfiles }
+            config.settings.otherProfiles = sharesWithOtherProfiles
         }
         reconfigureMonitors()
         await flush(settingsOnly: true)
@@ -579,6 +577,13 @@ final class LocationSharingController: ObservableObject {
         guard settings.mapsHost != allowed else { return }
         save { $0.settings.mapsHost = allowed }
         await flush(settingsOnly: true)
+    }
+
+    /// Whether the host's other profiles read the location once a layer goes
+    /// on: the consent sheet for the first layer said so (`offered`); a
+    /// second layer keeps what the user has.
+    static func otherProfiles(turningOn settings: LocationSharingSettings, offered: Bool) -> Bool {
+        settings.isOn ? settings.otherProfiles : offered
     }
 
     /// "Share with this host's other profiles".
