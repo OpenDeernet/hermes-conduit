@@ -892,7 +892,8 @@ enum GroupRoomTurns {
     static func members(_ members: [GroupMember], namedBy roster: [BotProfile]) -> [GroupMember] {
         guard !roster.isEmpty else { return members }
         return members.map { member in
-            if member.target?["kind"]?.stringValue == "peer" { return member }
+            let kind = member.target?["kind"]?.stringValue
+            guard kind == nil || kind == "local" else { return member }
             guard let profile = member.profile?.trimmingCharacters(in: .whitespacesAndNewlines), !profile.isEmpty,
                   let bot = roster.first(where: { $0.name.caseInsensitiveCompare(profile) == .orderedSame })
             else { return member }
