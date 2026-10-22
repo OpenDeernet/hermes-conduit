@@ -615,8 +615,11 @@ struct ComposerBar: View, Equatable {
                     // tap on the field first. Starting it expands the composer,
                     // whose controls row has the same button.
                     if rests && showsRestingDictateButton {
+                        // Spaced like the controls row, so its widened hit
+                        // shape stays clear of the field and Stop.
                         dictateButton
-                            .padding(.trailing, stopOnly ? 0 : 4)
+                            .padding(.leading, 6)
+                            .padding(.trailing, stopOnly ? 6 : 4)
                             .transition(.opacity)
                     }
                     if rests && stopOnly {
@@ -1694,6 +1697,7 @@ struct ComposerBar: View, Equatable {
             }
         }
         .accessibilityLabel(dictateTitle(isCapturing: isCapturing))
+        .accessibilityIdentifier("composer.dictate")
         .accessibilityHint(isCapturing
             ? AppLocalization.string("Stops dictating; the words stay in the message")
             : (dictation.isStarting || dictation.isTranscribing ? "" : (appState.isVoiceInUse

@@ -342,8 +342,15 @@ struct V2VoiceButton: View {
                         voiceMessages.cancel()
                         return
                     }
-                    guard voiceMessages.phase == .recording,
-                          await voiceMessages.stop() != nil else { return }
+                    if voiceMessages.phase == .recording {
+                        await voiceMessages.stop()
+                    }
+                    // Already stopping on its own (the length cap, or the
+                    // microphone went away): still let go to send.
+                    while voiceMessages.phase == .finishing {
+                        try? await Task.sleep(for: .milliseconds(50))
+                    }
+                    guard voiceMessages.phase == .recorded else { return }
                     await appState.sendRecordedVoiceMessage()
                 }
             }

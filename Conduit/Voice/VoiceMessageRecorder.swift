@@ -76,6 +76,8 @@ final class VoiceMessageRecorder: ObservableObject {
     private var audioObservers: [NSObjectProtocol] = []
     private var recognizer: (any DictationRecognizer)?
     private var writer: VoiceMessageFileWriter?
+    /// The stopped file while its last words settle, before `recording`.
+    private var pendingURL: URL?
     private var startedAt: Date?
     private var ticker: Task<Void, Never>?
     private var settling: Task<Void, Never>?
@@ -178,6 +180,9 @@ final class VoiceMessageRecorder: ObservableObject {
             return nil
         }
         writer = nil
+        // Until the preview takes it, so a cancel while the last words
+        // settle still removes the file.
+        pendingURL = url
         guard duration >= Self.minimumDuration else {
             recognizer?.cancel()
             recognizer = nil
@@ -204,6 +209,7 @@ final class VoiceMessageRecorder: ObservableObject {
             transcript: meter.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         )
         self.recording = recording
+        pendingURL = nil
         phase = .recorded
         return recording
     }
@@ -211,7 +217,7 @@ final class VoiceMessageRecorder: ObservableObject {
     /// Throws the message away, recorded or not.
     func cancel() {
         generation &+= 1
-        let url = recording?.url ?? writer?.url
+        let url = recording?.url ?? writer?.url ?? pendingURL
         ticker?.cancel()
         ticker = nil
         settling?.cancel()
@@ -240,6 +246,7 @@ final class VoiceMessageRecorder: ObservableObject {
         meter.levels = []
         meter.transcript = ""
         recording = nil
+        pendingURL = nil
         startedAt = nil
         sessionID = nil
     }
