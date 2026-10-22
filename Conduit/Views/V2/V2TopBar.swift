@@ -29,21 +29,24 @@ struct V2TopBar<Trailing: View, LowerLeading: View>: View {
     }
 
     var body: some View {
+        // Read once: it walks the catalog, and the bar measures both its
+        // layouts.
+        let unread = V2ProfileStrip.unreadProfiles(appState)
         Group {
             if Trailing.self == EmptyView.self {
-                V2ProfileStrip(scrolls: true, onManage: { showProfileManager = true })
+                V2ProfileStrip(scrolls: true, unread: unread, onManage: { showProfileManager = true })
             } else {
                 // One row while every profile fits beside the controls
                 // (one or two, usually); otherwise the profiles get the
                 // whole width, where a cut-off one shows that they scroll.
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {
-                        V2ProfileStrip(scrolls: false, onManage: { showProfileManager = true })
+                        V2ProfileStrip(scrolls: false, unread: unread, onManage: { showProfileManager = true })
                         Spacer(minLength: 0)
                         trailing(false)
                     }
                     VStack(spacing: 6) {
-                        V2ProfileStrip(scrolls: true, onManage: { showProfileManager = true })
+                        V2ProfileStrip(scrolls: true, unread: unread, onManage: { showProfileManager = true })
                         HStack(spacing: 10) {
                             lowerLeading
                             Spacer(minLength: 0)
@@ -168,6 +171,9 @@ struct V2ProfileStrip: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let scrolls: Bool
+    /// Profiles other than the selected one with unread chats
+    /// (`unreadProfiles`).
+    let unread: Set<String>
     let onManage: () -> Void
 
     @Namespace private var selection
@@ -177,7 +183,17 @@ struct V2ProfileStrip: View {
     private let edgeBleed: CGFloat = 16
 
     private var profiles: [String] {
+        Self.profiles(appState)
+    }
+
+    private static func profiles(_ appState: AppState) -> [String] {
         appState.profiles.isEmpty ? [appState.activeProfile] : appState.profiles
+    }
+
+    /// The profiles that get a gold dot. The selected chip never shows one.
+    /// Exact match, as the chip's own `isSelected`.
+    static func unreadProfiles(_ appState: AppState) -> Set<String> {
+        appState.profilesWithUnread(among: profiles(appState).filter { $0 != appState.activeProfile })
     }
 
     var body: some View {
@@ -213,9 +229,6 @@ struct V2ProfileStrip: View {
 
     private var chips: some View {
         HStack(spacing: 8) {
-            // The selected chip never shows a dot. Exact match, as
-            // the chip's own `isSelected`.
-            let unread = appState.profilesWithUnread(among: profiles.filter { $0 != appState.activeProfile })
             ForEach(profiles, id: \.self) { profile in
                 chip(profile, unread: unread.contains(profile))
                     .id(profile)
