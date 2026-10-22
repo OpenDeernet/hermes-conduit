@@ -321,9 +321,13 @@ final class SyncedPreferencesController: ObservableObject {
         guard defaultsObserver == nil else { return }
         defaultsObserver = NotificationCenter.default.addObserver(
             // No object filter: which object posts it has varied by release.
-            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+            // No queue either: with `queue: .main` the posting thread waits
+            // for the block on main, so a UserDefaults write off the main
+            // thread blocked on it (and deadlocked a main thread waiting on
+            // that writer, Nightly 2026-10-22). Hop over instead.
+            forName: UserDefaults.didChangeNotification, object: nil, queue: nil
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
+            DispatchQueue.main.async {
                 // Most writes are other keys: one check per interval, not
                 // a new task per write.
                 guard let self, self.isEnabled, self.pendingUpload == nil else { return }

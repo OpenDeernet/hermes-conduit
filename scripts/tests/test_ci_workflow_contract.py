@@ -741,6 +741,86 @@ class SmokeSelectionTests(unittest.TestCase):
         self.assertIn("Hosted CI selection", summary.stdout)
         self.assertIn("nightly workflow", summary.stdout)
 
+    def _changed_selection(self, changed, mutate=None):
+        """Run `smoke --changed-files` on the shipped (or mutated) suite and
+        return (proc, selection document or None)."""
+        with open(SMOKE_SUITE, encoding="utf-8") as fh:
+            suite = json.load(fh)
+        if mutate:
+            mutate(suite)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "suite.json")
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(suite, fh)
+            listing = os.path.join(tmp, "changed.txt")
+            with open(listing, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(changed) + "\n")
+            out = os.path.join(tmp, "smoke.json")
+            proc = subprocess.run(
+                [sys.executable, os.path.join(SCRIPTS_DIR, "plan-tests.py"),
+                 "smoke", "--repo-root", REPO_ROOT, "--suite", path,
+                 "--out", out, "--changed-files", listing,
+                 "--hosted-suite", os.path.join(SCRIPTS_DIR, "hosted-suite.json"),
+                 "--baseline", os.path.join(SCRIPTS_DIR, "test-timings.json")],
+                capture_output=True, text=True)
+            doc = None
+            if os.path.exists(out):
+                with open(out, encoding="utf-8") as fh:
+                    doc = json.load(fh)
+        return proc, doc
+
+    def test_ci_passes_the_change_to_the_smoke_selection(self):
+        plan = _step_text(_job_text(WORKFLOW, "plan"),
+                          "Select the hosted smoke suite")
+        self.assertIn("--changed-from HEAD^1", plan)
+
+    def test_source_contracts_always_join_the_unit_invocation(self):
+        proc, doc = self._changed_selection([])
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        for name in ("AccessibilityLabelAuditTests", "LogRedactionTests"):
+            self.assertIn(name, doc["unit"])
+            self.assertIn(name, doc["unit_csv"].split(","))
+        self.assertEqual(doc["changed_unit"], [])
+
+    def test_a_changed_test_file_adds_its_classes(self):
+        proc, doc = self._changed_selection(["ConduitTests/SessionPresentationCacheTests.swift"])
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("SessionPresentationCacheTests", doc["changed_unit"])
+        self.assertEqual(doc["unit_csv"].split(","), doc["unit"])
+        self.assertEqual(doc["delegated_unit"] + len(doc["unit"]), doc["inventory_unit"])
+
+    def test_a_changed_app_file_adds_its_namesake_tests(self):
+        proc, doc = self._changed_selection(
+            ["Conduit/Services/ServerSignOut.swift", "README.md",
+             "ConduitUITests/ConnectionSetupUITests.swift"])
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(doc["changed_unit"], ["ServerSignOutTests"])
+        self.assertNotIn("ConnectionSetupUITests", doc["unit"])
+
+    def test_a_changed_timing_family_stays_nightly_only(self):
+        proc, doc = self._changed_selection(
+            ["ConduitTests/LongContextScalingFixtureTests.swift"])
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertNotIn("LongContextScalingFixtureTests", doc["unit"])
+
+    def test_changed_classes_over_the_budget_are_left_to_nightly(self):
+        def mutate(suite):
+            suite["changed_budget_s"] = 0
+        proc, doc = self._changed_selection(
+            ["ConduitTests/SessionPresentationCacheTests.swift"], mutate)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(doc["changed_unit"], [])
+        self.assertIn("SessionPresentationCacheTests", doc["changed_skipped"])
+        self.assertIn("changed classes left to nightly", proc.stdout)
+
+    def test_an_unknown_source_contract_fails_the_selection(self):
+        def mutate(suite):
+            suite["source_contracts"] = ["NoSuchAuditTests"]
+        proc, doc = self._changed_selection([], mutate)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("NoSuchAuditTests", proc.stdout)
+        self.assertIsNone(doc)
+
     def test_smoke_summary_rejects_an_empty_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
             empty = os.path.join(tmp, "empty.json")
