@@ -34707,8 +34707,9 @@ extension AppState {
     func refreshAllProfilesCatalog() {
         guard isAllProfilesChatsOn, allProfilesCatalogTask == nil, let bridge = dashboardTicketBridge else { return }
         let dashboardID = activeDashboardID
-        let task = Task { @MainActor [weak self] in
-            await self?.readAllProfilesCatalog(using: bridge, dashboardID: dashboardID)
+        let task = Task { @MainActor [weak self] () -> Void in
+            guard let self else { return }
+            await self.readAllProfilesCatalog(using: bridge, dashboardID: dashboardID)
         }
         allProfilesCatalogTask = task
         Task { @MainActor [weak self] in
