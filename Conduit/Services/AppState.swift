@@ -609,6 +609,8 @@ final class AppState: ObservableObject {
                 if !oldValue { noteChatListInteraction() }
             }
             if oldValue != isConnected { schedulePendingComposerSendCheck() }
+            // Nothing left to keep answering pings for off screen.
+            if oldValue, !isConnected { backgroundConnectionGrace.end() }
         }
     }
     @Published var isConnecting = false
@@ -4371,7 +4373,7 @@ final class AppState: ObservableObject {
     /// Keeps the chat socket answering Hermes' pings for a short while
     /// off screen, so a quick switch to another app comes back to the same
     /// connection (notifier #296).
-    let backgroundConnectionGrace = BackgroundConnectionGrace()
+    var backgroundConnectionGrace = BackgroundConnectionGrace()
     /// The first few seconds back on screen: a reconnect that finishes in
     /// that time doesn't flash "Reconnecting…" over the saved chat.
     @Published private(set) var isReturningQuietly = false

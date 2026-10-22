@@ -75,6 +75,31 @@ final class BackgroundConnectionGraceTests: XCTestCase {
         XCTAssertEqual(ended, [UIBackgroundTaskIdentifier(rawValue: 1), UIBackgroundTaskIdentifier(rawValue: 2)])
     }
 
+    func testALateExpiryForAnEarlierHoldLeavesTheNewOneRunning() {
+        let grace = makeGrace(sleep: Self.neverWakes)
+        grace.begin()
+        grace.begin()
+        expirations.first?()
+        XCTAssertTrue(grace.isHolding)
+        XCTAssertEqual(ended, [UIBackgroundTaskIdentifier(rawValue: 1)])
+    }
+
+    func testTheTaskStillEndsWhenTheGraceGoesAway() async {
+        let done = expectation(description: "task ended")
+        var grace: BackgroundConnectionGrace? = BackgroundConnectionGrace(
+            window: 25,
+            beginTask: { _ in UIBackgroundTaskIdentifier(rawValue: 9) },
+            endTask: { id in
+                XCTAssertEqual(id, UIBackgroundTaskIdentifier(rawValue: 9))
+                done.fulfill()
+            },
+            sleep: { _ in }
+        )
+        grace?.begin()
+        grace = nil
+        await fulfillment(of: [done], timeout: 5)
+    }
+
     func testNoHoldWhenIOSGivesNoTime() {
         let grace = makeGrace(sleep: Self.neverWakes, refuse: true)
         grace.begin()

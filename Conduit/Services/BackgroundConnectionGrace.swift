@@ -19,7 +19,11 @@ final class BackgroundConnectionGrace {
     private let endTask: (UIBackgroundTaskIdentifier) -> Void
     private let sleep: (TimeInterval) async -> Void
     private let window: TimeInterval
-    private var taskID = UIBackgroundTaskIdentifier.invalid
+    /// Ends the running hold's task; each hold owns its own, so a late
+    /// expiry or timer can only end the hold it belongs to, and the task
+    /// still ends if this object goes away first.
+    private var endCurrentTask: (() -> Void)?
+    private var holdGeneration = 0
     private var timer: Task<Void, Never>?
 
     init(
@@ -41,34 +45,54 @@ final class BackgroundConnectionGrace {
         }
     }
 
-    var isHolding: Bool { taskID != .invalid }
+    var isHolding: Bool { endCurrentTask != nil }
 
     /// Conduit left the screen with an open socket. A hold already running
     /// starts over.
     func begin() {
         end()
-        // iOS calls the expiration handler on the main queue.
-        let id = beginTask { [weak self] in
-            MainActor.assumeIsolated { self?.end() }
+        holdGeneration += 1
+        let generation = holdGeneration
+        var taskID = UIBackgroundTaskIdentifier.invalid
+        let endTask = endTask
+        let endThisTask = {
+            guard taskID != .invalid else { return }
+            endTask(taskID)
+            taskID = .invalid
         }
-        guard id != .invalid else { return }
-        taskID = id
+        let finish: @MainActor () -> Void = { [weak self] in
+            endThisTask()
+            guard let self, self.holdGeneration == generation else { return }
+            self.timer?.cancel()
+            self.timer = nil
+            self.endCurrentTask = nil
+        }
+        taskID = beginTask {
+            // UIKit delivers this on the main thread in practice, but it is
+            // not documented: hop rather than trap if it ever isn't.
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { finish() }
+            } else {
+                DispatchQueue.main.async { finish() }
+            }
+        }
+        guard taskID != .invalid else { return }
+        endCurrentTask = endThisTask
         let window = window
         let sleep = sleep
-        timer = Task { @MainActor [weak self] in
+        timer = Task { @MainActor in
             await sleep(window)
-            guard !Task.isCancelled, let self, self.taskID == id else { return }
-            self.end()
+            guard !Task.isCancelled else { return }
+            finish()
         }
     }
 
-    /// Back on screen, signed out, or the window ran out.
+    /// Back on screen, the socket dropped, or signed out.
     func end() {
         timer?.cancel()
         timer = nil
-        guard taskID != .invalid else { return }
-        let id = taskID
-        taskID = .invalid
-        endTask(id)
+        let endTask = endCurrentTask
+        endCurrentTask = nil
+        endTask?()
     }
 }
