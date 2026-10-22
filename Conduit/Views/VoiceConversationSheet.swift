@@ -751,7 +751,8 @@ struct VoicePushToTalkControl<Face: View>: View {
                             Haptics.medium()
                             announceListening()
                         }
-                        guard isPressed else { return }
+                        // Once sent (the length cap), letting go can't cancel.
+                        guard isPressed, controller.state == .listening else { return }
                         let slide = CGSize(
                             width: value.translation.width - pressOrigin.width,
                             height: value.translation.height - pressOrigin.height
@@ -824,6 +825,8 @@ struct VoicePushToTalkControl<Face: View>: View {
     }
 
     private func cancelHeldPress() {
+        // The touch is gone: the next one may start a turn.
+        claimedThisTouch = false
         guard isPressed else { return }
         isPressed = false
         isCancelling = false

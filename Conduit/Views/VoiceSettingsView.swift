@@ -2090,14 +2090,14 @@ private struct VoiceProviderFieldEditor: View {
     }
 }
 
-/// "Keep listening when locked" for classic Voice on this profile.
-/// Push to talk in Classic voice (#886).
+/// Push to talk in Classic voice (#886) on this profile.
 struct VoicePushToTalkSettingsModel {
     var enabled: Bool
     /// Returns false when the change couldn't be saved (disconnected).
     var setEnabled: (Bool) -> Bool
 }
 
+/// "Keep listening when locked" for classic Voice on this profile.
 struct VoiceLockedListeningSettingsModel {
     var enabled: Bool
     /// Returns false when the change couldn't be saved (disconnected).
