@@ -1074,7 +1074,9 @@ def load_smoke_extras(path: str) -> tuple:
 # A class with no baseline (about half of them, usually sub-second, or one
 # the PR adds) is charged this much of the changed-class budget.
 _UNKNOWN_CLASS_COST_S = 3.0
-_EXTENSION_RE = re.compile(r"^\s*(?:@\w+\s+)*extension\s+([A-Za-z_][A-Za-z0-9_]*)\b")
+_EXTENSION_RE = re.compile(
+    r"^\s*(?:(?:@\w+|private|fileprivate|internal|public|open)\s+)*"
+    r"extension\s+([A-Za-z_][A-Za-z0-9_]*)\b")
 
 
 def changed_files_since(repo_root: str, ref: str) -> list:

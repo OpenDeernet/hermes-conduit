@@ -23,6 +23,7 @@ final class SyncedPreferencesTests: XCTestCase {
         let name = "SyncedPreferencesTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defaults.removePersistentDomain(forName: name)
+        addTeardownBlock { defaults.removePersistentDomain(forName: name) }
         return defaults
     }
 
