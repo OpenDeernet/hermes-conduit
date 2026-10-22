@@ -54,6 +54,8 @@ struct V2VoiceButton: View {
     @State private var releaseCancels = false
     /// This press became a held recording (whether or not it started).
     @State private var holdStarted = false
+    /// Down on the button; resets on release and on a cancelled press.
+    @GestureState private var isPressing = false
 
     /// How long a press lasts before it records while held.
     static let holdToRecordDelay: TimeInterval = 0.3
@@ -221,6 +223,12 @@ struct V2VoiceButton: View {
             } else if recordsMessage {
                 face
                     .gesture(holdToRecord)
+                    // A press the system took away never reaches onEnded.
+                    // A turn later, so a normal release's onEnded goes first.
+                    .onChange(of: isPressing) { _, pressing in
+                        guard !pressing else { return }
+                        Task { @MainActor in finishPress(cancelled: true) }
+                    }
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction { tap() }
             } else {
@@ -318,42 +326,51 @@ struct V2VoiceButton: View {
                     Haptics.selection()
                 }
             }
-            .onEnded { _ in
-                let held = holdStarted
-                let cancels = releaseCancels
-                pressBegan = nil
-                releaseCancels = false
-                holdStarted = false
-                guard held else {
-                    // A tap, not a hold.
-                    if canAct { tap() }
-                    return
-                }
-                // The recording couldn't start: its reason is showing.
-                guard voiceMessages.isHeld else { return }
-                voiceMessages.isHeld = false
-                Task { @MainActor in
-                    // Let go while the microphone was still coming up.
-                    while voiceMessages.phase == .starting {
-                        try? await Task.sleep(for: .milliseconds(50))
-                    }
-                    if cancels {
-                        Haptics.light()
-                        voiceMessages.cancel()
-                        return
-                    }
-                    if voiceMessages.phase == .recording {
-                        await voiceMessages.stop()
-                    }
-                    // Already stopping on its own (the length cap, or the
-                    // microphone went away): still let go to send.
-                    while voiceMessages.phase == .finishing {
-                        try? await Task.sleep(for: .milliseconds(50))
-                    }
-                    guard voiceMessages.phase == .recorded else { return }
-                    await appState.sendRecordedVoiceMessage()
-                }
+            .updating($isPressing) { _, pressing, _ in pressing = true }
+            .onEnded { _ in finishPress(cancelled: false) }
+    }
+
+    /// The press ended: let go, or taken away by the system (an alert such
+    /// as the first microphone permission, a call, Control Center).
+    private func finishPress(cancelled: Bool) {
+        guard pressBegan != nil else { return }
+        let held = holdStarted
+        let cancels = releaseCancels
+        pressBegan = nil
+        releaseCancels = false
+        holdStarted = false
+        guard held else {
+            // A tap, not a hold.
+            if !cancelled, canAct { tap() }
+            return
+        }
+        // The recording couldn't start: its reason is showing.
+        guard voiceMessages.isHeld else { return }
+        voiceMessages.isHeld = false
+        // Nobody let go: the recording carries on with its Stop button,
+        // to preview before sending.
+        guard !cancelled else { return }
+        Task { @MainActor in
+            // Let go while the microphone was still coming up.
+            while voiceMessages.phase == .starting {
+                try? await Task.sleep(for: .milliseconds(50))
             }
+            if cancels {
+                Haptics.light()
+                voiceMessages.cancel()
+                return
+            }
+            if voiceMessages.phase == .recording {
+                await voiceMessages.stop()
+            }
+            // Already stopping on its own (the length cap, or the
+            // microphone went away): still let go to send.
+            while voiceMessages.phase == .finishing {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard voiceMessages.phase == .recorded else { return }
+            await appState.sendRecordedVoiceMessage()
+        }
     }
 
     /// Dictation in the open chat's composer, which expands to show it.

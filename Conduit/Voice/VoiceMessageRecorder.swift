@@ -171,7 +171,7 @@ final class VoiceMessageRecorder: ObservableObject {
         meter.elapsed = duration
         ticker?.cancel()
         ticker = nil
-        sink.stop()
+        let writeFailed = sink.stop()
         stopAudio()
         releaseAudio()
         writer?.close()
@@ -180,6 +180,14 @@ final class VoiceMessageRecorder: ObservableObject {
             return nil
         }
         writer = nil
+        guard !writeFailed else {
+            // A gap in the file: not something to send.
+            recognizer?.cancel()
+            recognizer = nil
+            try? FileManager.default.removeItem(at: url)
+            fail(AppLocalization.string("Couldn't save the voice message."))
+            return nil
+        }
         // Until the preview takes it, so a cancel while the last words
         // settle still removes the file.
         pendingURL = url
@@ -398,6 +406,7 @@ private final class VoiceMessageAudioSink: @unchecked Sendable {
         var writer: VoiceMessageFileWriter?
         var recognizer: (any DictationAudioInput)?
         var peak: Float = 0
+        var writeFailed = false
     }
 
     private let state = OSAllocatedUnfairLock<State>(uncheckedState: State())
@@ -407,13 +416,14 @@ private final class VoiceMessageAudioSink: @unchecked Sendable {
             state.writer = writer
             state.recognizer = recognizer
             state.peak = 0
+            state.writeFailed = false
         }
     }
 
     func append(_ buffer: AVAudioPCMBuffer) {
         let level = Self.peak(of: buffer)
         state.withLockUnchecked { state in
-            state.writer?.write(buffer)
+            if state.writer?.write(buffer) == false { state.writeFailed = true }
             state.recognizer?.append(buffer)
             state.peak = max(state.peak, level)
         }
@@ -435,12 +445,15 @@ private final class VoiceMessageAudioSink: @unchecked Sendable {
         }
     }
 
-    func stop() {
+    /// Returns whether any buffer failed to reach the file.
+    @discardableResult
+    func stop() -> Bool {
         state.withLockUnchecked { state in
             state.recognizer?.end()
             state.recognizer = nil
             state.writer = nil
             state.peak = 0
+            return state.writeFailed
         }
     }
 
@@ -478,9 +491,16 @@ final class VoiceMessageFileWriter: @unchecked Sendable {
         self.file.withLockUnchecked { $0 = file }
     }
 
-    func write(_ buffer: AVAudioPCMBuffer) {
+    /// False when the buffer couldn't be written.
+    func write(_ buffer: AVAudioPCMBuffer) -> Bool {
         file.withLockUnchecked { file in
-            try? file?.write(from: buffer)
+            guard let file else { return true }
+            do {
+                try file.write(from: buffer)
+                return true
+            } catch {
+                return false
+            }
         }
     }
 

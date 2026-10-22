@@ -441,6 +441,13 @@ struct ComposerBar: View, Equatable {
                 voiceMessages.cancel()
             }
         }
+        .onChange(of: voiceMessages.errorMessage) { _, message in
+            // A recording that couldn't start or save has no bar to show
+            // its reason in; the composer's own error line does.
+            guard let message, !voiceMessages.isActive else { return }
+            appState.errorMessage = message
+            voiceMessages.errorMessage = nil
+        }
         .onChange(of: photoItems) { _, _ in
             handlePhotoSelection()
         }

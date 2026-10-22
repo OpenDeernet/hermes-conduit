@@ -319403,7 +319403,7 @@
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Co robi okrągły przycisk obok czatów tego profilu. Ustawienie aplikacji stosuje Ustawienia > Wygląd."
+            "value" : "Co robi okrągły przycisk obok czatów tego profilu. Ustawienie aplikacji jest zgodne z wyborem w Ustawienia > Wygląd."
           }
         },
         "pt-BR" : {
@@ -320551,7 +320551,7 @@
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wiadomości głosowe wymagają dostępu do mikrofonu. Możesz go zezwolić w Ustawieniach."
+            "value" : "Wiadomości głosowe wymagają dostępu do mikrofonu. Możesz zezwolić na dostęp w Ustawieniach."
           }
         },
         "pt-BR" : {
@@ -320746,6 +320746,88 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "回覆結束後會傳送語音訊息。"
+          }
+        }
+      }
+    },
+    "Couldn't save the voice message." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Sprachnachricht konnte nicht gespeichert werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar el mensaje de voz."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d’enregistrer le message vocal."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak dapat menyimpan pesan suara."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile salvare il messaggio vocale."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ボイスメッセージを保存できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음성 메시지를 저장할 수 없습니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nie udało się zapisać wiadomości głosowej."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível salvar a mensagem de voz."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось сохранить голосовое сообщение."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sesli mesaj kaydedilemedi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存语音消息。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法儲存語音訊息。"
           }
         }
       }
