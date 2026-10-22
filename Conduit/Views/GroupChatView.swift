@@ -73,7 +73,9 @@ struct GroupChatView: View {
     }
 
     /// The member whose turn is running (memoized by AppState).
-    private var respondingMember: GroupMember? { appState.activeRoomResponder }
+    private var respondingMember: GroupMember? {
+        appState.activeRoomResponder.flatMap { GroupRoomTurns.members([$0], namedBy: appState.botRoster).first }
+    }
 
     // MARK: - Transcript
 
