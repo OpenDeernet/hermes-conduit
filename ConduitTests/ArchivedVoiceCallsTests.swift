@@ -1,7 +1,7 @@
 import XCTest
 @testable import Conduit
 
-/// Standalone calls the plugin archives when they end (#1124): Hermes
+/// Standalone calls and Classic voice chats archived when their call ends (#1124): Hermes
 /// Desktop leaves them out, Conduit keeps listing them with its calls. An
 /// extension of an existing class so the CI planner gets no new class to place.
 extension ChatReadStateTests {
@@ -43,7 +43,24 @@ extension ChatReadStateTests {
             ["id": "continued", "title": "Call", "message_count": 4, "archived": false, "auto_archived": 0,
              "profile": "default"],
         ])
-        XCTAssertEqual(sessions.filter(AppState.isArchivedVoiceCall).map(\.id), ["call"])
+        XCTAssertEqual(sessions.filter { AppState.isArchivedVoiceChat($0, tags: [:]) }.map(\.id), ["call"])
+    }
+
+    func testAClassicVoiceChatArchivedAtCallEndStaysListedByItsTag() {
+        let sessions = archivedCallRows([
+            ["id": "classic", "title": "Voice chat", "message_count": 4, "archived": true, "auto_archived": 1,
+             "profile": "default"],
+            ["id": "job", "title": "Job", "message_count": 4, "archived": true, "auto_archived": 1,
+             "profile": "default"],
+            ["id": "kept-away", "title": "Voice chat", "message_count": 4, "archived": true, "auto_archived": 0,
+             "profile": "default"],
+        ])
+        let tags: [String: VoiceSessionTag] = [
+            "classic": VoiceSessionTag(kind: .classic),
+            "job": VoiceSessionTag(kind: .job),
+            "kept-away": VoiceSessionTag(kind: .classic),
+        ]
+        XCTAssertEqual(sessions.filter { AppState.isArchivedVoiceChat($0, tags: tags) }.map(\.id), ["classic"])
     }
 
     func testArchivedCallsMergeIntoTheListByRecency() {
