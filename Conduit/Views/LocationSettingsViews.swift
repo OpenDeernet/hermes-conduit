@@ -153,7 +153,8 @@ struct LocationSettingsPage: View {
                 profile: appState.activeProfile,
                 host: hostLabel,
                 isHermesCloud: LocationSettingsText.isHermesCloud(host: hostLabel),
-                otherProfiles: !settings.isOn && pluginSharesProfiles
+                otherProfiles: !settings.isOn
+                    && LocationSharingController.otherProfiles(turningOn: settings, offered: pluginSharesProfiles)
             ) {
                 consentFor = nil
                 turnOn(layer == .talking ? .talking : .background)

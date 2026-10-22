@@ -580,16 +580,20 @@ final class LocationSharingController: ObservableObject {
     }
 
     /// Whether the host's other profiles read the location once a layer goes
-    /// on: the consent sheet for the first layer said so (`offered`); a
-    /// second layer keeps what the user has.
+    /// on: the consent sheet for the first layer said so (`offered`), unless
+    /// the user already chose in Settings; a second layer keeps what the
+    /// user has.
     static func otherProfiles(turningOn settings: LocationSharingSettings, offered: Bool) -> Bool {
-        settings.isOn ? settings.otherProfiles : offered
+        settings.isOn || settings.otherProfilesChosen ? settings.otherProfiles : offered
     }
 
     /// "Share with this host's other profiles".
     func setOtherProfiles(_ allowed: Bool) async {
         guard settings.otherProfiles != allowed else { return }
-        save { $0.settings.otherProfiles = allowed }
+        save {
+            $0.settings.otherProfiles = allowed
+            $0.settings.otherProfilesChosen = true
+        }
         await flush(settingsOnly: true)
     }
 

@@ -141,6 +141,10 @@ struct LocationSharingSettings: Codable, Equatable {
     /// paired with this iPhone read what the bound profile gets
     /// (`sharing.other_profiles`, notifier #287).
     var otherProfiles = false
+    /// The user set "Share with this host's other profiles" in Settings:
+    /// turning sharing on again keeps their choice instead of the consent
+    /// sheet's default. Stays on the phone.
+    var otherProfilesChosen = false
 
     var isOn: Bool { talking || background }
 
@@ -162,7 +166,8 @@ struct LocationSharingSettings: Codable, Equatable {
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case talking, talkingPrecision, background, backgroundPrecision, retentionDays, pausedUntil, mapsHost, otherProfiles
+        case talking, talkingPrecision, background, backgroundPrecision, retentionDays, pausedUntil, mapsHost, otherProfiles,
+             otherProfilesChosen
     }
 
     /// Missing or unknown values fall back to the defaults.
@@ -177,6 +182,7 @@ struct LocationSharingSettings: Codable, Equatable {
         pausedUntil = try? container.decodeIfPresent(Date.self, forKey: .pausedUntil)
         mapsHost = (try? container.decodeIfPresent(Bool.self, forKey: .mapsHost)) ?? defaults.mapsHost
         otherProfiles = (try? container.decodeIfPresent(Bool.self, forKey: .otherProfiles)) ?? defaults.otherProfiles
+        otherProfilesChosen = (try? container.decodeIfPresent(Bool.self, forKey: .otherProfilesChosen)) ?? defaults.otherProfilesChosen
     }
 
     /// The `sharing` object of a batch.

@@ -979,6 +979,12 @@ extension NotificationE2ETests {
         settings.otherProfiles = false
         XCTAssertFalse(LocationSharingController.otherProfiles(turningOn: settings, offered: true),
                        "turned off in Settings: a second layer doesn't turn it back on")
+        // Off in Settings, then sharing off and on again: the choice stands.
+        settings.otherProfilesChosen = true
+        settings.talking = false
+        XCTAssertFalse(LocationSharingController.otherProfiles(turningOn: settings, offered: true))
+        settings.otherProfiles = true
+        XCTAssertTrue(LocationSharingController.otherProfiles(turningOn: settings, offered: false))
     }
 
     func testEveryIngestSaysThePhoneAnswersMapsAndWhetherTheHostMayToo() throws {
