@@ -686,10 +686,10 @@ struct V2ChatsView: View, Equatable {
         // With Projects showing, the menu only makes projects.
         .accessibilityLabel(showingProjects ? AppLocalization.string("Projects") : AppLocalization.string("Filter"))
         .macTooltip(showingProjects ? AppLocalization.string("Projects") : AppLocalization.string("Filter"))
-        .accessibilityValue(showingProjects ? ""
-            : waitingApprovalCount > 0
-                ? spokenSelection + ", " + AppLocalization.string("\(waitingApprovalCount) waiting for approval")
-                : spokenSelection)
+        .accessibilityValue([
+            showingProjects ? nil : spokenSelection,
+            waitingApprovalCount > 0 ? AppLocalization.string("\(waitingApprovalCount) waiting for approval") : nil
+        ].compactMap { $0 }.joined(separator: ", "))
     }
 
     /// One filter as a checkable menu item, with the rows it would list
