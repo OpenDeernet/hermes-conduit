@@ -578,7 +578,8 @@ struct ComposerBar: View, Equatable {
 
             // The field spans the card; every control sits in the row
             // below it, so a long draft wraps across the full width (#335).
-            // Resting (V2), attach sits beside the field and the row waits.
+            // Resting (V2), attach and dictate sit beside the field and the
+            // row waits.
             HStack(spacing: 2) {
                 if rests {
                     attachmentButton
@@ -586,6 +587,14 @@ struct ComposerBar: View, Equatable {
                         .transition(.opacity)
                 }
                 composerField
+                // Resting, the plain mic stays in reach: dictating needs no
+                // tap on the field first. Starting it expands the composer,
+                // whose controls row has the same button.
+                if rests {
+                    dictateButton
+                        .padding(.trailing, stopOnly ? 0 : 4)
+                        .transition(.opacity)
+                }
                 if rests && stopOnly {
                     trailingSlot
                         .padding(.trailing, 4)
