@@ -969,22 +969,29 @@ extension NotificationE2ETests {
 
     @MainActor
     func testTheFirstLayerOnRecordsWhetherOtherProfilesMayReadAndASecondKeepsIt() {
+        let home = LocationBinding(dashboardID: LocationFixtures.dashboardID, profile: "default", host: "hermes.example.com")
+        let other = LocationBinding(dashboardID: UUID(), profile: "default", host: "other.example.com")
+        func decide(_ settings: LocationSharingSettings, to destination: LocationBinding? = nil, offered: Bool) -> Bool {
+            LocationSharingController.otherProfiles(turningOn: settings, bound: home, to: destination ?? home, offered: offered)
+        }
         var settings = LocationSharingSettings()
-        XCTAssertTrue(LocationSharingController.otherProfiles(turningOn: settings, offered: true))
-        XCTAssertFalse(LocationSharingController.otherProfiles(turningOn: settings, offered: false))
+        XCTAssertTrue(decide(settings, offered: true))
+        XCTAssertFalse(decide(settings, offered: false))
         settings.talking = true
         settings.otherProfiles = true
-        XCTAssertTrue(LocationSharingController.otherProfiles(turningOn: settings, offered: false),
-                      "the background layer keeps what the user agreed to")
+        XCTAssertTrue(decide(settings, offered: false), "the background layer keeps what the user agreed to")
         settings.otherProfiles = false
-        XCTAssertFalse(LocationSharingController.otherProfiles(turningOn: settings, offered: true),
-                       "turned off in Settings: a second layer doesn't turn it back on")
+        XCTAssertFalse(decide(settings, offered: true), "turned off in Settings: a second layer doesn't turn it back on")
         // Off in Settings, then sharing off and on again: the choice stands.
         settings.otherProfilesChosen = true
         settings.talking = false
-        XCTAssertFalse(LocationSharingController.otherProfiles(turningOn: settings, offered: true))
+        XCTAssertFalse(decide(settings, offered: true))
         settings.otherProfiles = true
-        XCTAssertTrue(LocationSharingController.otherProfiles(turningOn: settings, offered: false))
+        XCTAssertTrue(decide(settings, offered: false))
+        // On for another host: that host's profiles are asked about afresh.
+        XCTAssertFalse(decide(settings, to: other, offered: false))
+        settings.otherProfiles = false
+        XCTAssertTrue(decide(settings, to: other, offered: true))
     }
 
     func testEveryIngestSaysThePhoneAnswersMapsAndWhetherTheHostMayToo() throws {

@@ -525,13 +525,18 @@ final class LocationSharingController: ObservableObject {
         guard status == .authorizedWhenInUse || status == .authorizedAlways else {
             throw LocationSharingError.permissionDenied
         }
+        let sharesWithOtherProfiles = Self.otherProfiles(turningOn: settings, bound: config.binding, to: destination,
+                                                         offered: otherProfiles)
         if config.binding == nil || (!settings.isOn && config.binding != destination) {
             if config.binding != destination { engine.forgetHost() }
-            save { $0.binding = destination }
+            save {
+                // A choice about one host's profiles isn't another's.
+                if $0.binding != destination { $0.settings.otherProfilesChosen = false }
+                $0.binding = destination
+            }
             // Precise Location off is kept only once there's a binding.
             refreshAuthorization()
         }
-        let sharesWithOtherProfiles = Self.otherProfiles(turningOn: settings, offered: otherProfiles)
         save { config in
             switch layer {
             case .talking: config.settings.talking = true
@@ -582,9 +587,11 @@ final class LocationSharingController: ObservableObject {
     /// Whether the host's other profiles read the location once a layer goes
     /// on: the consent sheet for the first layer said so (`offered`), unless
     /// the user already chose in Settings; a second layer keeps what the
-    /// user has.
-    static func otherProfiles(turningOn settings: LocationSharingSettings, offered: Bool) -> Bool {
-        settings.isOn || settings.otherProfilesChosen ? settings.otherProfiles : offered
+    /// user has. Binding to another host asks afresh.
+    static func otherProfiles(turningOn settings: LocationSharingSettings, bound: LocationBinding?,
+                              to destination: LocationBinding?, offered: Bool) -> Bool {
+        if settings.isOn { return settings.otherProfiles }
+        return settings.otherProfilesChosen && bound == destination ? settings.otherProfiles : offered
     }
 
     /// "Share with this host's other profiles".

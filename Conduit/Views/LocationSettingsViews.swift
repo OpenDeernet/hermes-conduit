@@ -154,7 +154,9 @@ struct LocationSettingsPage: View {
                 host: hostLabel,
                 isHermesCloud: LocationSettingsText.isHermesCloud(host: hostLabel),
                 otherProfiles: !settings.isOn
-                    && LocationSharingController.otherProfiles(turningOn: settings, offered: pluginSharesProfiles)
+                    && LocationSharingController.otherProfiles(turningOn: settings, bound: controller.binding,
+                                                                to: appState.locationDestination,
+                                                                offered: pluginSharesProfiles)
             ) {
                 consentFor = nil
                 turnOn(layer == .talking ? .talking : .background)
@@ -789,7 +791,7 @@ struct LocationSharingConsentSheet: View {
     let isHermesCloud: Bool
     /// Turning on also shares with the host's other profiles paired with
     /// this iPhone.
-    var otherProfiles = false
+    let otherProfiles: Bool
     let accept: () -> Void
     let cancel: () -> Void
 
