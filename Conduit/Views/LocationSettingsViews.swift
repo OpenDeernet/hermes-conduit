@@ -92,6 +92,9 @@ struct LocationSettingsPage: View {
     }
 
     @State private var consentFor: PendingLayer?
+    /// Whether the host offered sharing with its other profiles when the
+    /// consent sheet opened: what the sheet says is what turning on records.
+    @State private var consentOffersProfiles = false
     @State private var editingPlace: LocationPlaceDraft?
     @State private var showsWipe = false
     @State private var isWorking = false
@@ -156,7 +159,7 @@ struct LocationSettingsPage: View {
                 otherProfiles: !settings.isOn
                     && LocationSharingController.otherProfiles(turningOn: settings, bound: controller.binding,
                                                                 to: appState.locationDestination,
-                                                                offered: pluginSharesProfiles)
+                                                                offered: consentOffersProfiles)
             ) {
                 consentFor = nil
                 turnOn(layer == .talking ? .talking : .background)
@@ -366,6 +369,7 @@ struct LocationSettingsPage: View {
             set: { on in
                 if on {
                     Haptics.selection()
+                    consentOffersProfiles = pluginSharesProfiles
                     consentFor = layer
                 } else {
                     Task { await controller.turnOff(layer == .talking ? .talking : .background); await loadFromHost() }
@@ -729,7 +733,7 @@ struct LocationSettingsPage: View {
         errorMessage = nil
         Task {
             do {
-                try await controller.turnOn(layer, destination: destination, otherProfiles: pluginSharesProfiles)
+                try await controller.turnOn(layer, destination: destination, otherProfiles: consentOffersProfiles)
                 // A first turn-on was just bound: store the host pass now, so
                 // a locate or background send doesn't wait for a reconnect.
                 await appState.locationHostConnected()

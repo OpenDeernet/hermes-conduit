@@ -591,7 +591,7 @@ final class LocationSharingController: ObservableObject {
     static func otherProfiles(turningOn settings: LocationSharingSettings, bound: LocationBinding?,
                               to destination: LocationBinding?, offered: Bool) -> Bool {
         if settings.isOn { return settings.otherProfiles }
-        return settings.otherProfilesChosen && bound == destination ? settings.otherProfiles : offered
+        return (settings.otherProfilesChosen && bound == destination) ? settings.otherProfiles : offered
     }
 
     /// "Share with this host's other profiles".
