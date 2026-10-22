@@ -41,7 +41,8 @@ touching them. The **change's own classes**: `plan-tests.py smoke
 --changed-from HEAD^1` adds every unit class declared or extended in a changed
 `ConduitTests/` file, and `<Stem>Tests` for a changed app file `<Stem>.swift`,
 cheapest first within `changed_budget_s` of baseline time (a class with no
-baseline counts 3 s); the rest are named in a notice and the step summary.
+baseline counts 3 s) and `changed_max_classes`; the rest are named in a
+notice and the step summary.
 Timing families are never added. Most red nights from 2026-10-19 to 10-22
 were tests a PR had added or edited and never run before merge.
 
@@ -620,10 +621,9 @@ not hold, a 30-class lane cap did not help, the reproducing set narrowed to
 back-to-back inside ONE job on ONE runner with ONE Simulator session: only
 the `xcodebuild`/XCTest/testhost process was fresh between them). Unit
 lanes therefore execute their planner-assigned classes as **sequential
-small batches**, and the hosted smoke job applies the same rule to its curated
-classes (`SMOKE_BATCH_SIZE`, fixed at the measured-safe 7 instead of
-planner-priced — the hosted selection is deliberately one class per risk area,
-i.e. exactly one batch):
+small batches**. (The hosted smoke job runs its classes as one invocation:
+the 7 curated, the source contracts and at most `changed_max_classes` of the
+change's own, within nightly's batch of 45; see below.)
 
 * `plan-tests.py` chunks each lane's class list, **in its stored (LPT)
   order**, into batches of at most

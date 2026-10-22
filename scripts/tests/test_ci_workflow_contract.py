@@ -816,6 +816,23 @@ class SmokeSelectionTests(unittest.TestCase):
         self.assertEqual(doc["changed_skipped"], ["DashboardTicketBridgeTests"])
         self.assertIn("changed classes left to nightly", proc.stdout)
 
+    def test_changed_classes_are_capped_by_count(self):
+        def mutate(suite):
+            suite["changed_max_classes"] = 1
+        proc, doc = self._changed_selection(
+            ["ConduitTests/SessionPresentationCacheTests.swift",
+             "Conduit/Services/ServerSignOut.swift"], mutate)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(len(doc["changed_unit"]), 1)
+        self.assertEqual(len(doc["changed_skipped"]), 1)
+
+    def test_shipped_smoke_invocation_fits_a_nightly_batch(self):
+        with open(SMOKE_SUITE, encoding="utf-8") as fh:
+            suite = json.load(fh)
+        total = (len(suite["unit"]) + len(suite.get("source_contracts", []))
+                 + suite.get("changed_max_classes", 0))
+        self.assertLessEqual(total, 45, "nightly.yml runs unit batches of 45")
+
     def test_an_unreadable_hosted_suite_adds_no_changed_classes(self):
         with tempfile.TemporaryDirectory() as tmp:
             listing = os.path.join(tmp, "changed.txt")

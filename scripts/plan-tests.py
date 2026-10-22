@@ -1049,12 +1049,14 @@ def load_smoke_suite(path: str) -> tuple:
 
 def load_smoke_extras(path: str) -> tuple:
     """Read the smoke suite's optional additions to the unit invocation.
-    Returns (source_contracts, changed_budget_s).
+    Returns (source_contracts, changed_budget_s, changed_max_classes).
 
     `source_contracts` are the static source scans (an accessibility audit,
     log redaction, the privacy manifest): seconds to run, and the classes a
     PR outside their area breaks without touching them. `changed_budget_s`
-    caps how much baseline test time the PR's own test classes may add.
+    caps how much baseline test time the PR's own test classes may add, and
+    `changed_max_classes` how many, so the one invocation stays within the
+    nightly batch size.
     """
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
@@ -1068,14 +1070,17 @@ def load_smoke_extras(path: str) -> tuple:
     budget = data.get("changed_budget_s", 0)
     if isinstance(budget, bool) or not isinstance(budget, (int, float)) or budget < 0:
         raise ValueError("smoke suite 'changed_budget_s' must be a non-negative number")
-    return list(contracts), float(budget)
+    most = data.get("changed_max_classes", 0)
+    if isinstance(most, bool) or not isinstance(most, int) or most < 0:
+        raise ValueError("smoke suite 'changed_max_classes' must be a non-negative integer")
+    return list(contracts), float(budget), most
 
 
 # A class with no baseline (about half of them, usually sub-second, or one
 # the PR adds) is charged this much of the changed-class budget.
 _UNKNOWN_CLASS_COST_S = 3.0
 _EXTENSION_RE = re.compile(
-    r"^\s*(?:(?:@\w+|private|fileprivate|internal|public|open)\s+)*"
+    r"^\s*(?:(?:@\w+(?:\([^)]*\))?|package|private|fileprivate|internal|public|open)\s+)*"
     r"extension\s+([A-Za-z_][A-Za-z0-9_]*)\b")
 
 
@@ -1184,8 +1189,9 @@ def cmd_smoke(args) -> int:
     unit_inventory = {entry["name"] for entry in discovery["unit"]}
     ui_inventory = {entry["name"] for entry in discovery["ui"]}
     try:
-        unit, ui = load_smoke_suite(args.suite)
-        contracts, changed_budget = load_smoke_extras(args.suite)
+        suite_path = _resolve_in_repo(args.repo_root, args.suite)
+        unit, ui = load_smoke_suite(suite_path)
+        contracts, changed_budget, changed_max = load_smoke_extras(suite_path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"::error::smoke suite unreadable: {exc}")
         return 1
@@ -1266,14 +1272,14 @@ def cmd_smoke(args) -> int:
 
         spent = 0.0
         for name in sorted(candidates, key=lambda n: (cost(n), n)):
-            if spent + cost(name) <= changed_budget:
+            if spent + cost(name) <= changed_budget and len(changed_unit) < changed_max:
                 changed_unit.append(name)
                 spent += cost(name)
             else:
                 changed_skipped.append(name)
         # The change's only heavy class still runs once: a slow new suite
         # is exactly what would otherwise first fail at night.
-        if not changed_unit and changed_skipped:
+        if not changed_unit and changed_skipped and changed_max > 0:
             cheapest = min(changed_skipped, key=lambda n: (cost(n), n))
             changed_skipped.remove(cheapest)
             changed_unit.append(cheapest)
@@ -1289,8 +1295,8 @@ def cmd_smoke(args) -> int:
                   f"(~{spent:.0f}s of {changed_budget:.0f}s)")
         if changed_skipped:
             print(f"::notice title=changed classes left to nightly::"
-                  f"{', '.join(changed_skipped)} exceed the {changed_budget:.0f}s "
-                  f"smoke budget")
+                  f"{', '.join(changed_skipped)} exceed the smoke budget "
+                  f"({changed_budget:.0f}s, {changed_max} classes)")
 
     delegated_unit = len(discovery["unit"]) - len(unit)
     delegated_ui = len(discovery["ui"]) - len(ui)

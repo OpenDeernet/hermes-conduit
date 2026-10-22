@@ -123,8 +123,9 @@ jobs:
           set -euo pipefail
           mkdir -p ci-artifacts
           # HEAD^1 is the base (a PR's merge commit) or the previous main
-          # commit (a push): the unit classes this change touches join the
-          # curated ones, so a PR's new or edited tests run before merge.
+          # commit (a push; main takes squash merges, one commit each): the
+          # unit classes this change touches join the curated ones, so a
+          # PR's new or edited tests run before merge.
           python3 scripts/plan-tests.py smoke --repo-root . \
             --suite scripts/smoke-suite.json --out ci-artifacts/smoke.json \
             --changed-from HEAD^1
