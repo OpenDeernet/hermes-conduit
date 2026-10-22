@@ -313387,7 +313387,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Les coûts sont des estimations de Hermes d’après les prix de chaque modèle, sauf si le fournisseur indique ce qu’il a facturé."
+            "value" : "Les coûts sont des estimations d’Hermes d’après les prix de chaque modèle, sauf si le fournisseur indique ce qu’il a facturé."
           }
         },
         "id" : {
@@ -314617,7 +314617,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ce Hermes n’indique pas l’utilisation. Mettez Hermes à jour pour la voir ici."
+            "value" : "Cet Hermes n’indique pas l’utilisation. Mettez Hermes à jour pour la voir ici."
           }
         },
         "id" : {

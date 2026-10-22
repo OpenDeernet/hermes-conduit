@@ -145,11 +145,14 @@ struct UsageSettingsDetail: View {
         case .failure(let error):
             failure = error
         }
+        // The report is in: Refresh works again while the quota comes.
+        isLoading = false
         // Offline, the page says to connect; no quota card under that.
         if case .failure(.notConnected) = result { return }
         let loadedQuotas = await appState.loadProviderQuotas()
         guard generation == mine, !Task.isCancelled else { return }
-        if let loadedQuotas { quotas = loadedQuotas }
+        // A quota that couldn't be read goes rather than stay up as current.
+        quotas = loadedQuotas
     }
 
     // MARK: Totals
@@ -162,8 +165,8 @@ struct UsageSettingsDetail: View {
                     .foregroundStyle(.secondary)
             } else {
                 SettingsMetricRow(
-                    label: report.totals.costIsEstimate ? AppLocalization.string("Estimated cost") : AppLocalization.string("Cost"),
-                    value: money(report.totals.cost)
+                    label: report.costIsEstimate ? AppLocalization.string("Estimated cost") : AppLocalization.string("Cost"),
+                    value: money(report.cost)
                 )
                 SettingsMetricRow(label: AppLocalization.string("Input"), value: tokens(report.totals.input))
                 SettingsMetricRow(label: AppLocalization.string("Output"), value: tokens(report.totals.output))
@@ -175,7 +178,7 @@ struct UsageSettingsDetail: View {
                 }
                 SettingsMetricRow(label: AppLocalization.string("Chats"), value: count(report.totals.sessions))
                 SettingsMetricRow(label: AppLocalization.string("API calls"), value: count(report.totals.apiCalls))
-                if report.totals.costIsEstimate {
+                if report.costIsEstimate {
                     Text("Costs are Hermes' estimates from each model's prices, unless the provider reports what it billed.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)

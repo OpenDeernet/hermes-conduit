@@ -64,6 +64,17 @@ extension HermesClientTests {
         XCTAssertEqual(report.models.map(\.id), ["anthropic/claude-sonnet", "openrouter/small"])
         XCTAssertEqual(report.models.first?.usage.cost ?? 0, 0.025, accuracy: 0.0001)
         XCTAssertEqual(report.models.first?.usage.costIsEstimate, false)
+        // The billed model plus the free one: the whole is billed.
+        XCTAssertEqual(report.cost, 0.025, accuracy: 0.0001)
+        XCTAssertFalse(report.costIsEstimate)
+
+        // One billed, one estimated: the total is the sum and says it's estimated.
+        let mixed = UsageReport.parse(usage: Self.usageResponse, models: ["models": [
+            ["model": "billed", "provider": "p", "input_tokens": 10, "estimated_cost": 0.5, "actual_cost": 0.4] as [String: Any],
+            ["model": "guessed", "provider": "p", "input_tokens": 5, "estimated_cost": 0.2, "actual_cost": 0] as [String: Any],
+        ] as [[String: Any]]], days: 7)
+        XCTAssertEqual(mixed.cost, 0.6, accuracy: 0.0001)
+        XCTAssertTrue(mixed.costIsEstimate)
     }
 
     func testUsageReportPathCarriesPeriodAndProfile() {

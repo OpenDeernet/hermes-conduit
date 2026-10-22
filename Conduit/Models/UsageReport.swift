@@ -78,6 +78,20 @@ struct UsageReport: Equatable {
     let daily: [UsageDay]
     let models: [ModelUsage]
 
+    /// The period's cost. With per-model rows, their sum: Hermes' billed
+    /// total covers only the models a provider billed, so a period that
+    /// mixes billed and estimated models must not show it as the whole.
+    var cost: Double {
+        models.isEmpty ? totals.cost : models.reduce(0) { $0 + $1.usage.cost }
+    }
+
+    /// True when any of that cost is Hermes' estimate.
+    var costIsEstimate: Bool {
+        guard !models.isEmpty else { return totals.costIsEstimate }
+        return models.allSatisfy(\.usage.costIsEstimate)
+            || models.contains { $0.usage.costIsEstimate && $0.usage.cost > 0 }
+    }
+
     /// The periods the page offers: the presets Hermes' own dashboard has.
     static let periods = [7, 30, 90]
     static let usagePath = "/api/analytics/usage"
