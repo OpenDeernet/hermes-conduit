@@ -150,13 +150,13 @@ private struct VoiceMessageRecordingRow: View {
             Text(verbatim: VoiceMessage.durationLabel(meter.elapsed))
                 .font(.subheadline.monospacedDigit().weight(.semibold))
             if isHeld {
-                Text("Release to send, slide away to cancel")
+                Text(AppLocalization.string("Release to send, slide away to cancel"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             } else if phase == .starting {
-                Text("Starting…")
+                Text(AppLocalization.string("Starting…"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {

@@ -211,7 +211,7 @@ struct V2VoiceButton: View {
                     Button {
                         dictate()
                     } label: {
-                        Label("Dictate", systemImage: "mic")
+                        Label(AppLocalization.string("Dictate"), systemImage: "mic")
                     }
                     .disabled(!appState.composerIsEnabled || appState.isVoiceInUse)
                 } label: {
@@ -351,8 +351,12 @@ struct V2VoiceButton: View {
         // to preview before sending.
         guard !cancelled else { return }
         Task { @MainActor in
-            // Let go while the microphone was still coming up.
+            // Let go while the microphone was still coming up. Not for
+            // long: a start that waits on longer is left to its Stop
+            // button rather than sent much later.
+            let deadline = Date().addingTimeInterval(5)
             while voiceMessages.phase == .starting {
+                guard Date() < deadline else { return }
                 try? await Task.sleep(for: .milliseconds(50))
             }
             if cancels {
