@@ -272,9 +272,10 @@ enum WatchJobAnswer {
         return News(items: items, running: body["running"] as? Int ?? 0, more: body["more"] as? Bool ?? false, openApprovals: open)
     }
 
-    /// A card's key in the host's list of open requests.
+    /// A card's key in the host's list of open requests. The host gives
+    /// the same fingerprint in a request's news and in that list.
     static func openKey(jobID: String, requestID: String, fingerprint: String) -> String {
-        "\(jobID)\n\(requestID)\n\(fingerprint)"
+        [jobID, requestID, fingerprint].joined(separator: "\u{0}")
     }
 
     /// answer_approval's arguments for the card the user read.
@@ -286,7 +287,9 @@ enum WatchJobAnswer {
 
     /// Hermes took the answer: not refused, failed, or held back because
     /// the request changed after the card was shown (its new card follows
-    /// with the next news).
+    /// with the next news). "not_pending" counts as taken: the request was
+    /// settled elsewhere, so the card stays gone and the model doesn't ask
+    /// again.
     static func answerTaken(_ result: [String: String]) -> Bool {
         result["error"] == nil && result["status"] != "failed" && result["status"] != "changed"
     }

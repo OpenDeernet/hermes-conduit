@@ -413,12 +413,19 @@ final class WatchBridgeCallModel: ObservableObject {
             }
             var taken = false
             // Hermes answered, and turned it down (already handled, or
-            // expired): asking again can't change that.
+            // expired), or the plugin held it back because the request
+            // changed (its new card comes with news): asking again can't
+            // change that.
             var refused = false
             if case .answered(let body) = outcome {
                 let result = WatchJobAnswer.result(body: body)
                 taken = WatchJobAnswer.answerTaken(result)
                 refused = !taken
+                // Job news has stopped (the calls left are kept for
+                // answers), so the new request's card can't follow.
+                if result["status"] == "changed", !self.followingJobs {
+                    self.caption = String(localized: "The job's request changed. Answer it in Conduit on your iPhone.")
+                }
             }
             self.note("bridgeApproval", ["choice": choice, "taken": taken, "outcome": outcome.logLabel])
             if taken {

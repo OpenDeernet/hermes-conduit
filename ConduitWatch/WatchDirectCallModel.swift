@@ -2321,7 +2321,9 @@ final class WatchDirectCallModel: ObservableObject {
             let result: [String: String]
             var taken = false
             // Hermes answered, and turned it down (already handled, or
-            // expired): asking again can't change that.
+            // expired), or the plugin held it back because the request
+            // changed (its new card comes with news): asking again can't
+            // change that.
             var refused = false
             switch outcome {
             case .answered(let body):
