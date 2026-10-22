@@ -407,7 +407,9 @@ struct V2ChatsView: View, Equatable {
             .v2ProfileSwitchContent()
         }
         .v2EdgeBar(.top) {
-            V2TopBar { trailingControls }
+            V2TopBar(lowerLeading: { filterPill }) { stacked in
+                trailingControls(stacked: stacked)
+            }
                 .withoutScrollEdge()
                 .modifier(V2LegacyScrollEdge())
         }
@@ -533,8 +535,9 @@ struct V2ChatsView: View, Equatable {
     // MARK: - Top bar controls
 
     /// One glass capsule: Sessions/Projects toggle, Artifacts, Filter (amber
-    /// dot while approvals wait), New chat.
-    private var trailingControls: some View {
+    /// dot while approvals wait), New chat. Under a row of profiles
+    /// (`stacked`) Filter leaves it for the labeled pill on the left.
+    private func trailingControls(stacked: Bool) -> some View {
         V2ControlCapsule {
             Button {
                 Haptics.selection()
@@ -555,7 +558,9 @@ struct V2ChatsView: View, Equatable {
             .accessibilityLabel(AppLocalization.string("Artifacts"))
             .macTooltip(AppLocalization.string("Artifacts"))
 
-            filterMenu
+            if !stacked {
+                filterMenu { filterIcon(waitingApprovalCount: $0) }
+            }
 
             // The gold button beside the tabs makes new chats instead
             // (Settings > Appearance): voice takes New chat's place here.
@@ -581,7 +586,47 @@ struct V2ChatsView: View, Equatable {
         return sourceRows(nil).filter { appState.sessionLiveStatus($0) == .needsInput }.count
     }
 
-    private var filterMenu: some View {
+    /// The filter menu's button where the bar stacks: what the list shows,
+    /// by name, so the filters aren't hidden behind an icon.
+    private var filterPill: some View {
+        filterMenu { waitingApprovalCount in
+            HStack(spacing: 6) {
+                Image(systemName: showingProjects ? "folder" : "line.3.horizontal.decrease")
+                    .font(.system(size: 14, weight: .semibold))
+                    .conduitFixedGlyph()
+                Text(showingProjects ? AppLocalization.string("Projects") : selectionTitles(separator: ", "))
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .conduitFixedGlyph()
+                if waitingApprovalCount > 0 {
+                    Circle()
+                        .fill(Color.conduitAttention)
+                        .frame(width: 8, height: 8)
+                }
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .conduitGlassControl(cornerRadius: 22, interactive: false)
+            .contentShape(Capsule())
+        }
+    }
+
+    private func filterIcon(waitingApprovalCount: Int) -> some View {
+        V2CapsuleIcon(
+            systemImage: selection.isEmpty
+                ? "line.3.horizontal.decrease"
+                : "line.3.horizontal.decrease.circle.fill",
+            dot: waitingApprovalCount > 0 ? Color.conduitAttention : nil
+        )
+    }
+
+    /// The filter menu behind `button`, which gets the number of chats
+    /// waiting for approval.
+    private func filterMenu<MenuButton: View>(@ViewBuilder button: (Int) -> MenuButton) -> some View {
         // Read once: it walks the catalog.
         let waitingApprovalCount = self.waitingApprovalCount
         return Menu {
@@ -635,12 +680,7 @@ struct V2ChatsView: View, Equatable {
                 }
             }
         } label: {
-            V2CapsuleIcon(
-                systemImage: selection.isEmpty
-                    ? "line.3.horizontal.decrease"
-                    : "line.3.horizontal.decrease.circle.fill",
-                dot: waitingApprovalCount > 0 ? Color.conduitAttention : nil
-            )
+            button(waitingApprovalCount)
         }
         .menuOrder(.fixed)
         .accessibilityLabel(AppLocalization.string("Filter"))
