@@ -27528,7 +27528,7 @@ final class AppState: ObservableObject {
         var isAuthoritative = false
         // Sent alongside the live list: the plugin archives a standalone
         // call when it ends, which Conduit still lists with its calls.
-        async let archivedCalls = archivedVoiceCallSessions(profile: profile, using: bridge)
+        async let archivedCalls = archivedVoiceCallSessions(profile: profile, maximumPages: maximumPages, using: bridge)
 
         for page in 0..<maximumPages {
             let offset = page * 200
@@ -27562,9 +27562,11 @@ final class AppState: ObservableObject {
             }
         }
 
-        // A failed read keeps the call rows the list showed before.
-        guard let calls = await archivedCalls else {
-            return DashboardSessionCatalog(sessions: sessions, isAuthoritative: false)
+        // A failed read keeps the call rows the list showed before, so the
+        // live list's authority doesn't hang on this one.
+        let calls = await archivedCalls ?? (self.sessions + self.cronSessions).filter {
+            $0.isAutoArchived == true && $0.endReason == Self.voiceCallEndReason
+                && sessionBelongsToProfile($0, profile: profile)
         }
         return DashboardSessionCatalog(
             sessions: V2FilterSelection.mergedByRecency(sessions, calls),
@@ -27582,25 +27584,32 @@ final class AppState: ObservableObject {
         session.isArchived && session.isAutoArchived == true && session.endReason == voiceCallEndReason
     }
 
-    /// The newest archived page's call rows, listed as unarchived. Nil when
-    /// the read failed.
+    /// The archived pages' call rows, as deep as the live list reads,
+    /// listed as unarchived. Nil when a read failed or wasn't a listing.
     private func archivedVoiceCallSessions(
         profile: String,
+        maximumPages: Int,
         using bridge: DashboardTicketBridge
     ) async -> [SessionSummary]? {
+        var calls: [SessionSummary] = []
         do {
-            let response = try await bridge.requestJSON(path: archivedSessionsPath(profile))
-            let batch = response["sessions"] as? [Any] ?? []
-            return await dashboardOwnedSessions(batch, profile: profile)
-                .filter(Self.isArchivedVoiceCall)
-                .map { session in
-                    var listed = session
-                    listed.isArchived = false
-                    return listed
-                }
+            for page in 0..<maximumPages {
+                let response = try await bridge.requestJSON(path: archivedSessionsPath(profile, offset: page * 200))
+                guard let batch = response["sessions"] as? [Any] else { return nil }
+                calls += await dashboardOwnedSessions(batch, profile: profile)
+                    .filter(Self.isArchivedVoiceCall)
+                    .map { session in
+                        var listed = session
+                        listed.isArchived = false
+                        return listed
+                    }
+                let hasMore = booleanValue(response["has_more"] ?? response["hasMore"]) || batch.count == 200
+                if !hasMore || batch.isEmpty { break }
+            }
         } catch {
             return nil
         }
+        return calls
     }
 
     private func dashboardArchivedSessions(
