@@ -264,11 +264,13 @@ enum SessionContentSearch {
         return hits.compactMap { hit -> SessionContentSearchRow? in
             let profile = hit.profile ?? activeProfile
             let hitIDs = Set(scoped(profile, Array(hit.identities)))
-            guard !hit.isArchived, hitIDs.isDisjoint(with: listedIDs) else { return nil }
+            guard hitIDs.isDisjoint(with: listedIDs) else { return nil }
             if let allowedIDs, hitIDs.isDisjoint(with: allowedIDs) { return nil }
             let session = scoped(profile, [hit.sessionID] + (hit.lineageRootID.map { [$0] } ?? []))
                 .lazy.compactMap { knownByID[$0] }.first
-            if session?.isArchived == true { return nil }
+            // A call Hermes archived at its end is still a listed row here
+            // (#1124); a chat Conduit knows as archived stays out, as before.
+            if session?.isArchived ?? hit.isArchived { return nil }
             let row = SessionContentSearchRow(hit: hit, session: session)
             guard shown.insert(row.id).inserted else { return nil }
             return row
