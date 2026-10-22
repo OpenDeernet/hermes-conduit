@@ -604,7 +604,7 @@ struct V2ChatsView: View, Equatable {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .conduitFixedGlyph()
-                if waitingApprovalCount > 0 {
+                if waitingApprovalCount > 0 && !showingProjects {
                     Circle()
                         .fill(Color.conduitAttention)
                         .frame(width: 8, height: 8)
@@ -685,7 +685,7 @@ struct V2ChatsView: View, Equatable {
         .menuOrder(.fixed)
         // With Projects showing, the menu only makes projects.
         .accessibilityLabel(showingProjects ? AppLocalization.string("Projects") : AppLocalization.string("Filter"))
-        .macTooltip(AppLocalization.string("Filter"))
+        .macTooltip(showingProjects ? AppLocalization.string("Projects") : AppLocalization.string("Filter"))
         .accessibilityValue(showingProjects ? ""
             : waitingApprovalCount > 0
                 ? spokenSelection + ", " + AppLocalization.string("\(waitingApprovalCount) waiting for approval")

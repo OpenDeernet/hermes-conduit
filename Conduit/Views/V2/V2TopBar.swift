@@ -188,6 +188,9 @@ struct V2ProfileStrip: View {
                         .padding(.horizontal, edgeBleed)
                 }
                 .scrollClipDisabled()
+                // Too few to fill the row: they start at the leading edge
+                // instead of centering.
+                .defaultScrollAnchor(.leading)
                 .mask { edgeFade }
                 .padding(.horizontal, -edgeBleed)
                 // A new strip (launch, or the bar turning to two rows)
