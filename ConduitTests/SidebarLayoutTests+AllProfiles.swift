@@ -125,4 +125,15 @@ extension SidebarLayoutTests {
         cleared.save(to: defaults)
         XCTAssertNil(defaults.data(forKey: AllProfilesChatsSettings.storageKey))
     }
+
+    func testAllProfilesListIDsCarryTheRowsProfile() {
+        let nodes = [
+            SessionNesting.Node(session: allRow("same", profile: "default", at: 2), children: []),
+            SessionNesting.Node(session: allRow("same", profile: "atlas", at: 1), children: [])
+        ]
+        let ids = V2ChatsListItem.items(nodes, expanded: [], scope: { ($0.profile ?? "") + "|" }).map(\.id)
+        XCTAssertEqual(ids, ["default|same", "atlas|same"])
+        // Outside All the ids stay the chats' own.
+        XCTAssertEqual(V2ChatsListItem.items(nodes, expanded: []).map(\.id), ["same", "same"])
+    }
 }

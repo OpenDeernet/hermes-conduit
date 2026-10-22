@@ -374,6 +374,11 @@ struct V2ChatsView: View, Equatable {
         appState.isAllProfilesChatsOn && !appState.allProfilesGroupsByProfile
     }
 
+    /// What leads a row's list id: nothing outside All, else its profile.
+    private func rowScope(_ session: SessionSummary) -> String {
+        appState.isAllProfilesChatsOn ? appState.rowProfile(session) + "\u{1F}" : ""
+    }
+
     private func profileBadge(for session: SessionSummary) -> V2ProfileBadge? {
         guard badgesRows else { return nil }
         let profile = appState.rowProfile(session)
@@ -609,7 +614,12 @@ struct V2ChatsView: View, Equatable {
             } else {
                 Button {
                     Haptics.medium()
-                    appState.startNewChat()
+                    // All with one profile in it: that one.
+                    if appState.isAllProfilesChatsOn, let only = appState.allProfilesIncluded.first {
+                        appState.startNewChat(inProfile: only)
+                    } else {
+                        appState.startNewChat()
+                    }
                 } label: {
                     V2CapsuleIcon(systemImage: "square.and.pencil")
                 }
@@ -728,6 +738,7 @@ struct V2ChatsView: View, Equatable {
                         )) {
                             Label(AppLocalization.string("Group by profile"), systemImage: "rectangle.stack")
                         }
+                        .menuActionDismissBehavior(.disabled)
                     }
                 }
 
@@ -1097,6 +1108,7 @@ struct V2ChatsView: View, Equatable {
         .refreshable {
             appState.refreshAllProfilesCatalog()
             await appState.refreshSessionCatalog()
+            await appState.allProfilesCatalogTask?.value
         }
         .onAppear {
             revealActiveNestAncestors()
@@ -1149,7 +1161,7 @@ struct V2ChatsView: View, Equatable {
     ) -> some View {
         Section {
             if !isCollapsed(section) {
-                listRows(V2ChatsListItem.items(nodes, expanded: expanded))
+                listRows(V2ChatsListItem.items(nodes, expanded: expanded, scope: rowScope))
             }
         } header: {
             collapsibleHeader(section, count: nodes.count)
@@ -1173,8 +1185,8 @@ struct V2ChatsView: View, Equatable {
         sectionsCollapsible && collapsedProfiles.contains(profile)
     }
 
-    private func toggleProfileSection(_ profile: String) {
-        Haptics.selection()
+    private func toggleProfileSection(_ profile: String, haptic: Bool = true) {
+        if haptic { Haptics.selection() }
         var collapsed = collapsedProfiles
         if collapsed.contains(profile) { collapsed.remove(profile) } else { collapsed.insert(profile) }
         UserDefaults.standard.set(collapsed.sorted().joined(separator: "\n"), forKey: Self.collapsedProfilesKey)
@@ -1192,7 +1204,7 @@ struct V2ChatsView: View, Equatable {
     ) -> some View {
         Section {
             if !isProfileCollapsed(profile) {
-                listRows(V2ChatsListItem.items(nodes, expanded: expanded))
+                listRows(V2ChatsListItem.items(nodes, expanded: expanded, scope: rowScope))
             }
         } header: {
             profileSectionHeader(profile, count: nodes.count)
@@ -1306,7 +1318,16 @@ struct V2ChatsView: View, Equatable {
             pendingSectionReveal = nil
             return
         }
-        guard !showingProjects, sectionsCollapsible, !appState.allProfilesGroupsByProfile else { return }
+        guard !showingProjects, sectionsCollapsible else { return }
+        if appState.allProfilesGroupsByProfile {
+            // The open chat is always the profile in use's.
+            pendingSectionReveal = nil
+            if let profile = AllProfilesChats.profile(named: appState.activeProfile, in: appState.allProfilesIncluded),
+               collapsedProfiles.contains(profile) {
+                toggleProfileSection(profile, haptic: false)
+            }
+            return
+        }
         let sections = nestedSections(displayedSessions)
         guard let section = ChatListSection.section(
             of: active,
@@ -1357,7 +1378,7 @@ struct V2ChatsView: View, Equatable {
                 appState.openListedSession(session)
             } else if row.session != nil {
                 appState.requestOpenSession(row.openID)
-            } else if let owner = row.hit.profile, owner != appState.activeProfile {
+            } else if let owner = row.hit.profile, !AppState.profilesMatch(owner, appState.activeProfile) {
                 // Another profile's chat All hasn't listed: its link's way.
                 Task { await appState.routeLinkedSession(row.hit.sessionID, toProfile: owner) }
             } else {
@@ -1368,7 +1389,7 @@ struct V2ChatsView: View, Equatable {
         } label: {
             V2ContentMatchRow(
                 title: row.title,
-                time: row.session?.updatedLabel ?? "",
+                time: contentMatchTime(row),
                 snippet: row.hit.snippet,
                 isUnread: row.session.map { appState.isSessionUnread($0) } ?? false,
                 isStarred: row.session.map { appState.isSessionStarred($0) } ?? false,
@@ -1390,6 +1411,15 @@ struct V2ChatsView: View, Equatable {
         } else {
             button.v2ListRow()
         }
+    }
+
+    /// A match's time, led in All by the other profile it was found in.
+    private func contentMatchTime(_ row: SessionContentSearchRow) -> String {
+        let time = row.session?.updatedLabel ?? ""
+        let owner = row.session.map { appState.isOtherProfileRow($0) ? appState.rowProfile($0) : nil } ?? row.hit.profile
+        guard let owner, !AppState.profilesMatch(owner, appState.activeProfile) else { return time }
+        let name = appState.profileDisplayName(owner)
+        return time.isEmpty ? name : "\(name) · \(time)"
     }
 
     /// "Search Home" names the profile the list belongs to.
@@ -1728,19 +1758,26 @@ struct V2ChatsListItem: Identifiable {
     /// when it has children, and, when `expanded` holds its nest key, its
     /// descendants depth first. A conversation's row keeps its id whether
     /// it sits at the top or in a nest, so moving between them is a move.
-    static func items(_ nodes: [SessionNesting.Node], expanded: Set<String>) -> [V2ChatsListItem] {
+    /// `scope` leads every id: in All, the row's profile, since another
+    /// profile can hold a chat with the same id (a cloned profile).
+    static func items(
+        _ nodes: [SessionNesting.Node],
+        expanded: Set<String>,
+        scope: (SessionSummary) -> String = { _ in "" }
+    ) -> [V2ChatsListItem] {
         var items: [V2ChatsListItem] = []
         for node in nodes {
-            items.append(V2ChatsListItem(id: node.id, kind: .session(node)))
+            let prefix = scope(node.session)
+            items.append(V2ChatsListItem(id: prefix + node.id, kind: .session(node)))
             guard !node.children.isEmpty else { continue }
             let key = SessionNesting.nestKey(of: node.session)
             let isExpanded = expanded.contains(key)
-            items.append(V2ChatsListItem(id: "nest:" + node.id, kind: .nest(node, key: key, isExpanded: isExpanded)))
+            items.append(V2ChatsListItem(id: prefix + "nest:" + node.id, kind: .nest(node, key: key, isExpanded: isExpanded)))
             guard isExpanded else { continue }
             let descendants = descendants(of: node.children, depth: 0)
             for (index, entry) in descendants.enumerated() {
                 items.append(V2ChatsListItem(
-                    id: entry.session.id,
+                    id: prefix + entry.session.id,
                     kind: .child(
                         entry.session,
                         depth: entry.depth,
@@ -1823,7 +1860,7 @@ private struct V2ChatsRow: View {
                 status: appState.v2RowStatus(for: session),
                 isUnread: signals.isUnread,
                 isStarred: appState.isSessionStarred(session),
-                isSelected: session.id == appState.activeSessionId,
+                isSelected: session.id == appState.activeSessionId && !appState.isOtherProfileRow(session),
                 icon: appState.sessionCategory(for: session),
                 hasNestBelow: hasChildren,
                 profileBadge: profileBadge(session)

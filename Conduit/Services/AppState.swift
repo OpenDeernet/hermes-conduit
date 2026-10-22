@@ -5053,6 +5053,11 @@ final class AppState: ObservableObject {
         // the switch to its profile, then the chat.
         let owner = rowProfile(session)
         if owner != activeProfile {
+            // A switch ends a call: say so here, where the tap was.
+            guard !isVoiceCallInProgress else {
+                showSessionMutationNotice(AppLocalization.string("End the call to open a chat in another profile."))
+                return
+            }
             Task { @MainActor [weak self] in await self?.routeLinkedSession(session.id, toProfile: owner) }
             return
         }
@@ -34741,8 +34746,9 @@ extension AppState {
         }
         // Each other profile's rows are noted the way its own list notes
         // them, so a reply that lands there later lights its dot here.
+        // A row whose profile isn't listed goes in no group.
         let others = AllProfilesChats.groups(kept, profiles: profiles, fallback: "", owner: { $0.profile })
-            .filter { !Self.profilesMatch($0.profile, activeProfile) }
+            .filter { !$0.profile.isEmpty && !Self.profilesMatch($0.profile, activeProfile) }
         if !others.isEmpty {
             updateChatReadState { state in
                 for group in others { _ = state.observe(group.items, profile: group.profile) }
@@ -34754,7 +34760,7 @@ extension AppState {
 
     private func updateAllProfilesCatalogRow(_ session: SessionSummary, _ change: (inout SessionSummary) -> Void) {
         guard let index = allProfilesCatalog.sessions.firstIndex(where: {
-            $0.id == session.id && $0.profile == session.profile
+            $0.id == session.id && Self.profilesMatch($0.profile ?? "", session.profile ?? "")
         }) else { return }
         change(&allProfilesCatalog.sessions[index])
     }
@@ -34762,7 +34768,7 @@ extension AppState {
     private func removeFromAllProfilesCatalog(_ session: SessionSummary) {
         let ids = Set(session.nestingIDs)
         allProfilesCatalog.sessions.removeAll {
-            $0.profile == session.profile && !ids.isDisjoint(with: $0.nestingIDs)
+            Self.profilesMatch($0.profile ?? "", session.profile ?? "") && !ids.isDisjoint(with: $0.nestingIDs)
         }
     }
 
