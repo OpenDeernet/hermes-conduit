@@ -952,6 +952,21 @@ extension NotificationE2ETests {
         }
     }
 
+    func testEveryIngestSaysWhetherTheHostsOtherProfilesMayRead() throws {
+        var settings = LocationSharingSettings()
+        settings.talking = true
+        XCTAssertFalse(settings.otherProfiles, "only the bound profile reads unless the user says so")
+        var sharing = try XCTUnwrap(LocationBatch(sentAt: LocationFixtures.at, settings: settings).json()["sharing"] as? [String: Any])
+        XCTAssertEqual(sharing["other_profiles"] as? Bool, false)
+        settings.otherProfiles = true
+        sharing = try XCTUnwrap(LocationBatch(sentAt: LocationFixtures.at, settings: settings).json()["sharing"] as? [String: Any])
+        XCTAssertEqual(sharing["other_profiles"] as? Bool, true)
+        // Saved before the switch existed: the bound profile alone (notifier #287).
+        let old = try JSONDecoder().decode(LocationSharingSettings.self, from: Data(#"{"talking": true}"#.utf8))
+        XCTAssertFalse(old.otherProfiles)
+        XCTAssertTrue(try JSONDecoder().decode(LocationSharingSettings.self, from: JSONEncoder().encode(settings)).otherProfiles)
+    }
+
     func testEveryIngestSaysThePhoneAnswersMapsAndWhetherTheHostMayToo() throws {
         var settings = LocationSharingSettings()
         settings.background = true

@@ -110,6 +110,9 @@ struct LocationSettingsPage: View {
     private var settings: LocationSharingSettings { controller.settings }
     private var pluginServesLocation: Bool { appState.notifierPlugin.reports(LocationSharingController.capability) }
     private var canTurnOn: Bool { pluginServesLocation && appState.locationDestination != nil }
+    /// The host lets its other profiles paired with this iPhone read the
+    /// location (notifier #287).
+    private var pluginSharesProfiles: Bool { appState.notifierPlugin.reports(LocationSharingController.profilesCapability) }
 
     var body: some View {
         SettingsDetailContainer {
@@ -121,6 +124,7 @@ struct LocationSettingsPage: View {
                 if settings.isOn { pauseSection }
                 retentionSection
                 mapsSection
+                if settings.isOn, pluginSharesProfiles || settings.otherProfiles { profilesSection }
             }
             // Kept while a mode is allowed, even on an older plugin, so it can
             // still be turned off.
@@ -148,7 +152,8 @@ struct LocationSettingsPage: View {
             LocationSharingConsentSheet(
                 profile: appState.activeProfile,
                 host: hostLabel,
-                isHermesCloud: LocationSettingsText.isHermesCloud(host: hostLabel)
+                isHermesCloud: LocationSettingsText.isHermesCloud(host: hostLabel),
+                otherProfiles: !settings.isOn && pluginSharesProfiles
             ) {
                 consentFor = nil
                 turnOn(layer == .talking ? .talking : .background)
@@ -488,6 +493,23 @@ struct LocationSettingsPage: View {
         }
     }
 
+    private var profilesSection: some View {
+        ConduitSettingsSection(title: AppLocalization.string("Other profiles"), symbol: "person.2", tint: .conduitAccent) {
+            Toggle("Share with this host's other profiles", isOn: Binding(
+                get: { settings.otherProfiles },
+                set: { on in
+                    Haptics.selection()
+                    Task { await controller.setOtherProfiles(on) }
+                }
+            ))
+            .disabled(isWorking)
+            .accessibilityIdentifier("settings.location.other-profiles")
+            Text(AppLocalization.string("Other Hermes profiles on \(hostLabel) that are paired with this iPhone can read your location and ask for a fresh one. Place rules stay with \(controller.binding?.profile ?? appState.activeProfile)."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     // MARK: Live voice calls
 
     /// Which live voice modes may read the shared location on a call. Each
@@ -704,7 +726,7 @@ struct LocationSettingsPage: View {
         errorMessage = nil
         Task {
             do {
-                try await controller.turnOn(layer, destination: destination)
+                try await controller.turnOn(layer, destination: destination, otherProfiles: pluginSharesProfiles)
                 // A first turn-on was just bound: store the host pass now, so
                 // a locate or background send doesn't wait for a reconnect.
                 await appState.locationHostConnected()
@@ -764,6 +786,9 @@ struct LocationSharingConsentSheet: View {
     let profile: String
     let host: String
     let isHermesCloud: Bool
+    /// Turning on also shares with the host's other profiles paired with
+    /// this iPhone.
+    var otherProfiles = false
     let accept: () -> Void
     let cancel: () -> Void
 
@@ -778,6 +803,9 @@ struct LocationSharingConsentSheet: View {
                     Text("Share your location with Hermes?")
                         .font(.title2.weight(.semibold))
                     Label(AppLocalization.string("Conduit sends your location, at the detail you choose, to the \(profile) profile on \(host), sealed end to end. It never goes through Conduit's notification relay, and Conduit's developer can't see it."), systemImage: "lock.shield")
+                    if otherProfiles {
+                        Label(AppLocalization.string("Other Hermes profiles on \(host) that are paired with this iPhone can read it too. You can turn this off in Settings > Location."), systemImage: "person.2")
+                    }
                     Label("Your iPhone's time zone is always sent too, at every level of detail, so Hermes knows your local time. At Area and Precise, so are distances to your saved places, except private ones.", systemImage: "clock")
                     Label("Your agent reads it when you ask, or when a task or place rule needs it. Whatever it reads goes to the AI model provider your Hermes uses, under that provider's terms.", systemImage: "sparkles")
                     if isHermesCloud {

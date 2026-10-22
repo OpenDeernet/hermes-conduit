@@ -50,9 +50,11 @@ enum LocationTiming {
 final class LocationSharingController: ObservableObject {
     static let shared = LocationSharingController()
     /// The plugin keeps location (`location-sync`); it can also ask the
-    /// phone for a fresh fix (`location-locate`). Never gated on a version.
+    /// phone for a fresh fix (`location-locate`), and let the host's other
+    /// profiles read it (`location-profiles`). Never gated on a version.
     static let capability = "location-sync"
     static let locateCapability = "location-locate"
+    static let profilesCapability = "location-profiles"
     static let maxPlaces = LocationSavedPlace.maxCount
 
     @Published private(set) var config: LocationSharedConfig
@@ -511,7 +513,7 @@ final class LocationSharingController: ObservableObject {
     /// Turns a layer on for `destination`: asks iOS for permission (When In
     /// Use, then Always for the background), binds sharing to the dashboard
     /// and profile in use when nothing is on yet, and tells the host.
-    func turnOn(_ layer: Layer, destination: LocationBinding) async throws {
+    func turnOn(_ layer: Layer, destination: LocationBinding, otherProfiles: Bool = false) async throws {
         guard readConfigIfNeeded() else { throw LocationSharingError.unreadable }
         let status: CLAuthorizationStatus
         switch layer {
@@ -529,11 +531,15 @@ final class LocationSharingController: ObservableObject {
             // Precise Location off is kept only once there's a binding.
             refreshAuthorization()
         }
+        // The first layer on: the consent sheet said whether the host's
+        // other profiles read it too.
+        let firstLayer = !settings.isOn
         save { config in
             switch layer {
             case .talking: config.settings.talking = true
             case .background: config.settings.background = true
             }
+            if firstLayer { config.settings.otherProfiles = otherProfiles }
         }
         reconfigureMonitors()
         await flush(settingsOnly: true)
@@ -572,6 +578,13 @@ final class LocationSharingController: ObservableObject {
     func setMapsHost(_ allowed: Bool) async {
         guard settings.mapsHost != allowed else { return }
         save { $0.settings.mapsHost = allowed }
+        await flush(settingsOnly: true)
+    }
+
+    /// "Share with this host's other profiles".
+    func setOtherProfiles(_ allowed: Bool) async {
+        guard settings.otherProfiles != allowed else { return }
+        save { $0.settings.otherProfiles = allowed }
         await flush(settingsOnly: true)
     }
 
