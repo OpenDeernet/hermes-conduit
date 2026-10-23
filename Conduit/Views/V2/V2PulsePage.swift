@@ -91,6 +91,7 @@ struct V2PulsePage: View {
     @State private var sending = false
     @State private var ratingCards: Set<Int> = []
     @State private var actingCard: Int?
+    @State private var finishingCards: Set<Int> = []
 
     private var client: PulseClient { appState.pulseClient }
 
@@ -169,6 +170,9 @@ struct V2PulsePage: View {
             learnedNote = nil
             focusedCard = nil
             expandedWhy = []
+            ratingCards = []
+            finishingCards = []
+            actingCard = nil
         }
         .onChange(of: appState.pulseOpenRequest) { _, request in
             // Only the page on screen: one covered by a chat leaves it to the one pushed over it.
@@ -270,39 +274,22 @@ struct V2PulsePage: View {
             }
             Text(card.formattedNews)
                 .font(.body)
+                .strikethrough(card.doneAt != nil)
+                .foregroundStyle(card.doneAt == nil ? Color.primary : Color.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            if !card.quote.isEmpty {
+            if !card.quote.isEmpty, card.doneAt == nil {
                 Text(verbatim: "“\(card.quote)”")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if card.isActionable {
-                Button {
-                    Haptics.selection()
-                    let failure = AppLocalization.string("Couldn't open that chat. Try again.")
-                    let dashboard = appState.activeDashboardID
-                    actingCard = card.id
-                    Task {
-                        defer { actingCard = nil }
-                        let opened = await appState.actOnPulseCard(card)
-                        guard appState.activeDashboardID == dashboard else { return }
-                        if !opened {
-                            errorMessage = failure
-                        } else if errorMessage == failure {
-                            errorMessage = nil
-                        }
-                    }
-                } label: {
-                    Label(AppLocalization.string("Do it"), systemImage: "arrow.right.circle.fill")
-                        .font(.footnote.weight(.semibold))
+            if card.doneAt != nil {
+                doneRow(card)
+            } else if card.isActionable || canMarkDone(card) {
+                HStack(spacing: 8) {
+                    if card.isActionable { doItButton(card) }
+                    if canMarkDone(card) { doneButton(card) }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .tint(.conduitAccent)
-                .accessibilityHint(Text(AppLocalization.string("Opens the chat with this reminder ready to send")))
-                .disabled(actingCard != nil)
-                .accessibilityIdentifier("pulse.card.do-it")
             }
             if !card.chatID.isEmpty {
                 Button {
@@ -359,6 +346,86 @@ struct V2PulsePage: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(Color.conduitAccent.opacity(focusedCard == card.id ? 0.8 : 0), lineWidth: 1.5)
         )
+        // A done card steps back: struck through and faded.
+        .opacity(card.doneAt == nil ? 1 : 0.7)
+    }
+
+    private func doItButton(_ card: PulseCard) -> some View {
+        Button {
+            Haptics.selection()
+            let failure = AppLocalization.string("Couldn't open that chat. Try again.")
+            let dashboard = appState.activeDashboardID
+            actingCard = card.id
+            Task {
+                defer { actingCard = nil }
+                let opened = await appState.actOnPulseCard(card)
+                guard appState.activeDashboardID == dashboard else { return }
+                if !opened {
+                    errorMessage = failure
+                    return
+                }
+                if errorMessage == failure { errorMessage = nil }
+                // Pulse reads the chat once Hermes has answered and marks the card done itself.
+                if appState.notifierPlugin.reports(PulseClient.actedCapability) {
+                    try? await client.acted(card: card.id)
+                }
+            }
+        } label: {
+            Label(AppLocalization.string("Do it"), systemImage: "arrow.right.circle.fill")
+                .font(.footnote.weight(.semibold))
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .tint(.conduitAccent)
+        .accessibilityHint(Text(AppLocalization.string("Opens the chat with this reminder ready to send")))
+        .disabled(actingCard != nil)
+        .accessibilityIdentifier("pulse.card.do-it")
+    }
+
+    /// The plugin takes Done (0.64.0) and this card is a follow-up's.
+    private func canMarkDone(_ card: PulseCard) -> Bool {
+        card.canBeDone && appState.notifierPlugin.reports(PulseClient.doneCapability)
+    }
+
+    private func doneButton(_ card: PulseCard) -> some View {
+        Button {
+            Haptics.selection()
+            markDone(card, true)
+        } label: {
+            Label(AppLocalization.string("Done"), systemImage: "checkmark.circle")
+                .font(.footnote.weight(.semibold))
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(.conduitAccent)
+        .accessibilityHint(Text(AppLocalization.string("Tells Pulse this is taken care of, so it stops checking on it")))
+        .disabled(finishingCards.contains(card.id))
+        .accessibilityIdentifier("pulse.card.done")
+    }
+
+    private func doneRow(_ card: PulseCard) -> some View {
+        HStack(spacing: 8) {
+            Label(card.doneBy == "pulse" ? AppLocalization.string("Done, seen in the chat")
+                                         : AppLocalization.string("Done"),
+                  systemImage: "checkmark.circle.fill")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.green)
+            Spacer(minLength: 0)
+            if appState.notifierPlugin.reports(PulseClient.doneCapability) {
+                Button {
+                    Haptics.selection()
+                    markDone(card, false)
+                } label: {
+                    Text("Undo")
+                        .font(.footnote.weight(.medium))
+                }
+                .buttonStyle(.borderless)
+                .disabled(finishingCards.contains(card.id))
+                .accessibilityLabel(Text(AppLocalization.string("Undo Done")))
+                .accessibilityHint(Text(AppLocalization.string("Pulse checks on it again")))
+                .accessibilityIdentifier("pulse.card.undo-done")
+            }
+        }
     }
 
     private func thumb(_ card: PulseCard, up: Bool) -> some View {
@@ -454,6 +521,31 @@ struct V2PulsePage: View {
                 errorMessage = nil
                 learnedNote = lessons.isEmpty ? nil
                     : AppLocalization.string("Pulse learned: \(lessons.map(\.text).joined(separator: "; "))")
+            } catch {
+                guard appState.activeDashboardID == dashboard else { return }
+                errorMessage = PulseRefusal.message(for: error)
+            }
+        }
+    }
+
+    /// Done (or Undo) on a follow-up card: the promise closes or comes
+    /// back; the card shows it at once.
+    private func markDone(_ card: PulseCard, _ done: Bool) {
+        finishingCards.insert(card.id)
+        let dashboard = appState.activeDashboardID
+        Task {
+            defer { finishingCards.remove(card.id) }
+            do {
+                let changed = try await client.markDone(card: card.id, done: done)
+                guard appState.activeDashboardID == dashboard else { return }
+                // The plugin had nothing to change (the card or its item is
+                // gone): show what it has instead.
+                guard changed else { return await load() }
+                if let index = page?.cards.firstIndex(where: { $0.id == card.id }) {
+                    page?.cards[index].doneAt = done ? Date() : nil
+                    page?.cards[index].doneBy = done ? "user" : ""
+                }
+                errorMessage = nil
             } catch {
                 guard appState.activeDashboardID == dashboard else { return }
                 errorMessage = PulseRefusal.message(for: error)
