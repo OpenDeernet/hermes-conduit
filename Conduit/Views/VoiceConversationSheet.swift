@@ -861,3 +861,28 @@ private struct VoiceConversationTranscriptBubble: View {
         .accessibilityLabel("\(isUser ? AppLocalization.string("You") : AppLocalization.string("Hermes")): \(shownText)")
     }
 }
+
+/// An approval Hermes' turn waits on, over the Classic voice screen: its
+/// card is in the chat behind it, and the conversation sits on Thinking
+/// until it is answered. The same card as the chat's, so a tap here answers
+/// it the same way; a spoken yes or no also does.
+struct VoiceApprovalOverlay: View {
+    @EnvironmentObject private var appState: AppState
+    let approvals: [ChatMessage]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            // The oldest first: Hermes asks one at a time.
+            if let message = approvals.first {
+                ApprovalCard(message: message)
+                    .chatRows()
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .id(message.id)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: approvals.first?.id)
+    }
+}

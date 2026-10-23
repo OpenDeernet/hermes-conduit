@@ -30843,6 +30843,7 @@ final class AppState: ObservableObject {
         case .approval(_, let activity):
             applyApprovalActivity(activity, authoritative: false, commitsStreamedText: true)
             setRunning(true)
+            noteApprovalForClassicVoice(activity, sessionID: streamSessionId)
 
         case .inputPrompt(_, let activity):
             applyInputPromptActivity(activity, authoritative: false, commitsStreamedText: true)

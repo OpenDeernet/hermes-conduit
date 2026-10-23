@@ -299,6 +299,12 @@ struct MainView: View {
                 modeSwitch: appState.voiceModeSwitch(for: nil)
             )
                 .safeAreaInset(edge: .top, spacing: 0) { callTopBanners }
+                // The approval Hermes waits on, whose card is in the chat
+                // behind this screen.
+                .overlay(alignment: .bottom) {
+                    VoiceApprovalOverlay(approvals: appState.openChatWaitingApprovals)
+                        .environmentObject(appState)
+                }
                 .overlay(alignment: .bottom) { presentedConfirmOverlay(inCall: true) }
                 // What Hermes put on screen (conduit_show), over the conversation.
                 .sheet(item: $appState.classicVoiceCard) { card in

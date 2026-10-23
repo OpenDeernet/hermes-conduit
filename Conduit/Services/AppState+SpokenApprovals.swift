@@ -99,3 +99,43 @@ extension AppState {
                                                   choice: choice, profile: profile)
     }
 }
+
+extension AppState {
+    /// Hermes' turn in a Classic voice conversation stopped on an approval:
+    /// its card is in the chat behind the voice screen, so the conversation
+    /// says what it asks and listens for the yes or no, instead of sitting
+    /// on Thinking with nothing to say.
+    func noteApprovalForClassicVoice(_ activity: ApprovalActivity, sessionID: String) {
+        guard activity.status == .pending else { return }
+        let request = activity.requestId ?? "\(activity.sessionId)\n\(activity.command)\n\(activity.description)"
+        voiceConversationController.noteApprovalWaiting(
+            sessionID: sessionID,
+            request: request,
+            line: LocalLiveTurnRunner.approvalLine(activity),
+            stillWaiting: { [weak self] in
+                guard let self else { return false }
+                return self.messages.contains { message in
+                    guard let shown = message.approval, shown.status == .pending || shown.status == .error else { return false }
+                    return activity.requestId.map { shown.requestId == $0 } ?? shown.asksSameAs(activity)
+                }
+            }
+        )
+    }
+}
+
+extension AppState {
+    /// The open chat's approval cards still waiting on the user (or on
+    /// their answer reaching Hermes), for the Classic voice screen that
+    /// covers the chat.
+    var openChatWaitingApprovals: [ChatMessage] {
+        guard let sessionId = activeSessionId, !sessionId.isEmpty else { return [] }
+        let open = chatOwnSessionIDs(for: sessionId)
+        return messages.filter { message in
+            guard let approval = message.approval else { return false }
+            switch approval.status {
+            case .pending, .submitting, .error: return open.contains(approval.sessionId)
+            case .approved, .rejected, .expired: return false
+            }
+        }
+    }
+}
