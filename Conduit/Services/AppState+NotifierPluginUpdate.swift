@@ -76,6 +76,7 @@ extension AppState {
             // plugin's "restart to finish": ask once more (#299).
             if case .updated = outcome, self.notifierPlugin.restartPending, self.activeDashboardID == dashboardID {
                 try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
                 await self.refreshNotifierPluginStatus()
             }
         }
@@ -266,7 +267,7 @@ extension NotifierPluginStatus {
             // restart, whatever an update would offer.
             guard case .reported = state else { return false }
             return !updateAvailable && !restartPending
-        case .failed:
+        case .failed, .runningOnHost:
             guard !restartPending, let running = runtime?.loadedVersion else { return false }
             return !Self.isOlder(running, than: offeredVersion)
         default:

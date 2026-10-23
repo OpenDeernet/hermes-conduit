@@ -21,7 +21,9 @@ struct NotifierPluginChangelog: Equatable {
         var version: String
         var kind: Kind
         var text: String
-        var id: String { "\(version)|\(kind.rawValue)|\(text)" }
+        /// Its place in the version's entry, so repeated lines stay apart.
+        var position = 0
+        var id: String { "\(version)|\(position)" }
     }
 
     struct Entry: Equatable {
@@ -55,7 +57,8 @@ struct NotifierPluginChangelog: Equatable {
             } else if line.hasPrefix("- "), let kind, !entries.isEmpty {
                 let index = entries.count - 1
                 let text = line.dropFirst(2).trimmingCharacters(in: .whitespaces)
-                entries[index].changes.append(Change(version: entries[index].version, kind: kind, text: text))
+                entries[index].changes.append(Change(version: entries[index].version, kind: kind, text: text,
+                                                     position: entries[index].changes.count))
             } else if line.hasPrefix("  "), kind != nil, let index = entries.indices.last,
                       var last = entries[index].changes.popLast() {
                 // A wrapped change.
@@ -72,6 +75,8 @@ struct NotifierPluginChangelog: Equatable {
     private static func entry(fromHeading line: String) -> Entry? {
         // "## 0.63.0 (2026-10-23)"
         let parts = line.dropFirst(3).split(separator: " ", maxSplits: 1)
+        // A heading that isn't a dotted number (isOlder counts an unreadable
+        // version older than anything, "0" included) isn't a version.
         guard let version = parts.first.map(String.init),
               !NotifierPluginStatus.isOlder(version, than: "0") else { return nil }
         var released: Date?

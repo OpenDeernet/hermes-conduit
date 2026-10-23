@@ -436,6 +436,13 @@ struct NotifierPluginUpdateStatusView: View {
                 symbol: "exclamationmark.triangle.fill",
                 tint: .red
             )
+        case .runningOnHost:
+            return Row(
+                title: AppLocalization.string("Still updating on the host"),
+                detail: AppLocalization.string("The update is still running on the host. You'll get a notification when it's done."),
+                symbol: "clock",
+                tint: .secondary
+            )
         case .unsupported:
             return Row(
                 title: AppLocalization.string("This Hermes can't update plugins from Conduit"),
@@ -484,6 +491,9 @@ struct NotifierPluginUpdateBanner: View {
     @EnvironmentObject private var appState: AppState
     @State private var confirming = false
     @State private var showsNotes = false
+    /// The notes as they were when What's New was tapped: an hourly
+    /// changelog read can't empty the open sheet.
+    @State private var shownNotes: NotifierPluginReleaseNotes?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -498,8 +508,8 @@ struct NotifierPluginUpdateBanner: View {
         .animation(.snappy, value: appState.showsNotifierPluginUpdateNotice)
         .notifierPluginUpdateConfirmation(isPresented: $confirming, install: isInstall)
         .sheet(isPresented: $showsNotes) {
-            if let notes {
-                NotifierPluginChangesSheet(notes: notes)
+            if let shownNotes {
+                NotifierPluginChangesSheet(notes: shownNotes)
             }
         }
     }
@@ -543,7 +553,10 @@ struct NotifierPluginUpdateBanner: View {
                     let line = [notes.summary, notes.changes.isEmpty ? nil : AppLocalization.string("What's New")]
                         .compactMap { $0 }.joined(separator: " · ")
                     if !line.isEmpty {
-                        Button { showsNotes = true } label: {
+                        Button {
+                            shownNotes = notes
+                            showsNotes = true
+                        } label: {
                             Text(verbatim: line)
                                 .font(.footnote)
                                 .foregroundStyle(notes.hasSecurityFixes ? Color.orange : Color.secondary)
@@ -557,6 +570,12 @@ struct NotifierPluginUpdateBanner: View {
                 }
                 if case .updating(let step) = update {
                     NotifierPluginUpdateProgress(step: step, startedAt: appState.notifierPluginUpdate.startedAt)
+                }
+                if update == .runningOnHost, let detail = row?.detail {
+                    Text(verbatim: detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

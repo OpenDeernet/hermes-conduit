@@ -655,7 +655,8 @@ extension GatewayRestartTests {
         // Nothing run from here: the host did it.
         XCTAssertFalse(host.calls.contains("POST \(NotifierPluginUpdater.updatePath)"))
         XCTAssertFalse(host.calls.contains("POST \(GatewayRestarter.restartPath)"))
-        XCTAssertTrue(host.selfUpdatePaths.first?.contains("profile=coder") ?? false)
+        XCTAssertTrue(host.selfUpdatePaths.allSatisfy { $0.contains("profile=coder") })
+        XCTAssertGreaterThan(host.selfUpdatePaths.count, 1)
         XCTAssertEqual(reports.count, 1)
     }
 

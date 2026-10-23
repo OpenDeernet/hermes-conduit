@@ -25,6 +25,9 @@ enum NotifierPluginUpdateState: Equatable {
     /// Hermes refused it). `detail` is Hermes' own words when it gave any.
     case needsDashboardRestart(detail: String?)
     case failed(detail: String?)
+    /// Conduit stopped following an update the host still runs; the
+    /// host's notification says how it ends.
+    case runningOnHost
     /// This Hermes has no plugin routes on its dashboard.
     case unsupported
 
@@ -311,12 +314,20 @@ struct NotifierPluginUpdater {
                 return await finishHostUpdate(outcome, request: request)
             }
             guard now().timeIntervalSince(started) < Self.hostFollowLimit else {
-                return .failed(detail: AppLocalization.string("The update is still running on the host. You'll get a notification when it's done."))
+                return .runningOnHost
             }
             do { try await sleep(pollInterval) } catch { return .idle }
             if Task.isCancelled { return .idle }
-            // Requests fail while the dashboard restarts; the next poll asks again.
-            guard let json = try? await request(Self.selfUpdatePath, "GET", nil) else { continue }
+            // Requests fail while the dashboard restarts; the next poll asks
+            // again. A sign-in that couldn't be renewed won't come back.
+            let json: [String: Any]
+            do {
+                json = try await request(path, "GET", nil)
+            } catch DashboardTicketBridgeError.signInRequired {
+                return Self.outcome(forRequestError: DashboardTicketBridgeError.signInRequired)
+            } catch {
+                continue
+            }
             guard let latest = json["job"] as? [String: Any], latest["id"] as? String == jobID else {
                 // The restarted dashboard lost the job: its report says where it stands.
                 return await finishHostUpdate(nil, request: request)
