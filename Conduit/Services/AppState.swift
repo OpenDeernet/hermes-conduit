@@ -22742,13 +22742,8 @@ final class AppState: ObservableObject {
         }
 
         if isBusy {
-            guard attachments.isEmpty else {
-                errorMessage = AppLocalization.string("Attachments can only be sent in a new message, after the current response finishes.")
-                return false
-            }
-
             if let onBusy { onBusy(); return false }
-            return await submitWhileBusy(text, mode: busyMode, context: submissionContext)
+            return await submitWhileBusy(text, attachments: attachments, mode: busyMode, context: submissionContext)
         }
 
         // A lifecycle/recovery boundary (scene dip, reconnect, ambiguous
@@ -22760,13 +22755,9 @@ final class AppState: ObservableObject {
         // routing decision. Trusted state never pays for the probe.
         if turnState == .idle, turnStateIsStale,
            await correctStaleIdleTurnState(using: submissionContext) {
-            guard attachments.isEmpty else {
-                errorMessage = AppLocalization.string("Attachments can only be sent in a new message, after the current response finishes.")
-                return false
-            }
             if let onBusy { onBusy(); return false }
             lifecycleLog.notice("submitComposer: stale-idle corrected to running → busy \(busyMode.rawValue, privacy: .public)")
-            return await submitWhileBusy(text, mode: busyMode, context: submissionContext)
+            return await submitWhileBusy(text, attachments: attachments, mode: busyMode, context: submissionContext)
         }
 
         // The stale-idle probe above can lose a race with a live busy edge:
@@ -22775,13 +22766,9 @@ final class AppState: ObservableObject {
         // fall through to an ordinary prompt.submit into the now-running
         // turn — the same busy-edge rule the freshness gate enforces.
         if turnState.isRunning {
-            guard attachments.isEmpty else {
-                errorMessage = AppLocalization.string("Attachments can only be sent in a new message, after the current response finishes.")
-                return false
-            }
             if let onBusy { onBusy(); return false }
             lifecycleLog.notice("submitComposer: busy edge raced the stale-idle probe → busy \(busyMode.rawValue, privacy: .public)")
-            return await submitWhileBusy(text, mode: busyMode, context: submissionContext)
+            return await submitWhileBusy(text, attachments: attachments, mode: busyMode, context: submissionContext)
         }
 
         // Transcript freshness is a separate concern from turn-state
@@ -22802,15 +22789,11 @@ final class AppState: ObservableObject {
                 // The authoritative recovery revealed a live turn: the text
                 // routes through the configured busy submission, exactly like
                 // a stale-idle correction to running.
-                guard attachments.isEmpty else {
-                    errorMessage = AppLocalization.string("Attachments can only be sent in a new message, after the current response finishes.")
-                    return false
-                }
                 if let onBusy { onBusy(); return false }
                 lifecycleLog.notice(
                     "submitComposer: freshness recovery found live turn → busy \(busyMode.rawValue, privacy: .public)"
                 )
-                return await submitWhileBusy(text, mode: busyMode, context: submissionContext)
+                return await submitWhileBusy(text, attachments: attachments, mode: busyMode, context: submissionContext)
             case .blocked(let message):
                 errorMessage = message
                 return false
@@ -22834,12 +22817,17 @@ final class AppState: ObservableObject {
 
     /// A typed message while a turn runs, by `mode`: into the turn, as a
     /// new turn after stopping it, or kept by Hermes as the next turn
-    /// (#842), so it goes even if the app closes.
+    /// (#842), so it goes even if the app closes. Attachments always go
+    /// as Queue (#1146): steer and redirect take text alone.
     private func submitWhileBusy(
         _ text: String,
+        attachments: [Attachment] = [],
         mode: BusyInputMode,
         context: ComposerSubmissionContext
     ) async -> Bool {
+        if !attachments.isEmpty {
+            return await sendMessage(text, attachments: attachments, context: context, queued: true)
+        }
         switch mode {
         case .steer:
             return await steer(text, context: context)
@@ -23864,6 +23852,12 @@ final class AppState: ObservableObject {
         let submissionContext = context ?? composerSubmissionContext()
         guard isCurrentComposerSubmission(submissionContext) else { return false }
         guard let client, let sessionId = activeSessionId else { return false }
+        // Images staged for a Queue this Hermes refuses would ride on the
+        // next turn instead, so they never go up.
+        if queued, !attachments.isEmpty, client.refusesQueuedPrompts {
+            errorMessage = HermesClient.QueueUnsupportedError().errorDescription
+            return false
+        }
         let joinsRunningTurn = queued && turnState.isRunning
         cancelChatResumeRestoration()
         if !joinsRunningTurn { resetResponseHapticTurn() }
@@ -23920,14 +23914,22 @@ final class AppState: ObservableObject {
         if !joinsRunningTurn { clearStreamingText() }
         turnState = .running
 
+        // Images staged for a Queue, taken back if Hermes refuses it.
+        var stagedImagePaths: [String] = []
         // Every file that isn't an image (PDFs included) is staged as a file,
         // like Hermes Desktop does: Hermes' PDF route needs poppler on the
         // host and bounced the send without it. Whether the model can read
         // a file is up to the agent; the send never fails over its type.
-        let attachImage: @MainActor (HermesClient, String, String, String) async throws -> Void =
-            chatResumeLifecycleOperations.attachImageBytes ?? { client, session, base64, filename in
-                _ = try await client.attachImage(session, base64: base64, filename: filename)
+        // Returns the staged image's path, when Hermes names it.
+        let attachImageBytes = chatResumeLifecycleOperations.attachImageBytes
+        let attachImage: @MainActor (HermesClient, String, String, String) async throws -> String? = {
+            client, session, base64, filename in
+            if let attachImageBytes {
+                try await attachImageBytes(client, session, base64, filename)
+                return nil
             }
+            return try await client.attachImage(session, base64: base64, filename: filename)
+        }
         let attachFile: @MainActor (HermesClient, String, String, String) async throws -> String? =
             chatResumeLifecycleOperations.attachFileData ?? { client, session, dataUrl, name in
                 try await client.attachFile(session, dataUrl: dataUrl, name: name)
@@ -23944,7 +23946,8 @@ final class AppState: ObservableObject {
                     guard isCurrentComposerSubmission(submissionContext) else { return false }
                     guard !base64.isEmpty else { throw AttachmentError.unreadableFile(attachment.name) }
                     do {
-                        try await attachImage(client, sessionId, base64, attachment.name)
+                        let stagedPath = try await attachImage(client, sessionId, base64, attachment.name)
+                        if queued, let stagedPath { stagedImagePaths.append(stagedPath) }
                         fileReference = nil
                     } catch let error as RpcError where Self.isImageAttachRefusal(error) {
                         // Hermes won't take it as an image (a format it
@@ -24119,6 +24122,11 @@ final class AppState: ObservableObject {
             }
             return true
         } catch {
+            if error is HermesClient.QueueUnsupportedError {
+                for path in stagedImagePaths {
+                    try? await client.detachImage(sessionId, path: path)
+                }
+            }
             guard isCurrentComposerSubmission(submissionContext) else { return false }
             if Self.isAmbiguousPromptDelivery(error) {
                 lifecycleLog.notice(

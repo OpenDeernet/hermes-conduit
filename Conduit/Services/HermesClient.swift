@@ -2504,6 +2504,9 @@ final class HermesClient: ObservableObject {
     /// Set once this gateway refused `prompt.submit`'s `queued` key.
     private var gatewayRefusesQueued = false
 
+    /// This gateway is known to refuse Queue.
+    var refusesQueuedPrompts: Bool { gatewayRefusesQueued }
+
     /// Queue on a Hermes without `prompt.submit`'s `queued` key.
     struct QueueUnsupportedError: LocalizedError {
         var errorDescription: String? {
@@ -3072,6 +3075,15 @@ final class HermesClient: ObservableObject {
             "filename": filename
         ])
         return result.objectValue?["path"]?.stringValue
+    }
+
+    /// Takes back an image staged with `attachImage` before any prompt
+    /// used it.
+    func detachImage(_ sessionId: String, path: String) async throws {
+        _ = try await rpc("image.detach", params: [
+            "session_id": sessionId,
+            "path": path
+        ])
     }
 
     /// Stages any non-image file (PDFs included) in the session's

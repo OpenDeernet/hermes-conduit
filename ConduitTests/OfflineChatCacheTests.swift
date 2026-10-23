@@ -1654,6 +1654,57 @@ final class OfflineChatCacheTests: XCTestCase {
         XCTAssertNil(appState.pendingComposerSend, "Nothing waits on the phone")
     }
 
+    /// #1146: a photo sent while Hermes replies goes up and is queued as
+    /// the next turn, whatever the chat's busy mode.
+    func testAttachmentsWhileRunningGoAsQueue() async throws {
+        let plain = SentPrompts()
+        let queued = SentPrompts()
+        let uploads = SentPrompts()
+        let steers = SentPrompts()
+        var operations = ChatResumeLifecycleOperations(
+            sendPrompt: { _, sessionID, text in
+                plain.prompts.append((sessionID, text))
+                return .accepted
+            },
+            steer: { _, sessionID, text in steers.prompts.append((sessionID, text)) }
+        )
+        operations.sendQueuedPrompt = { _, sessionID, text in
+            queued.prompts.append((sessionID, text))
+            return .queued
+        }
+        operations.uploadAttachment = { _, sessionID, attachment in
+            uploads.prompts.append((sessionID, attachment.name))
+            return nil
+        }
+        let (appState, _, _) = makeAppState(lifecycleOperations: operations)
+        let connection = HermesConnection(baseUrl: "https://one.example", ticket: "ticket")
+        appState.connection = connection
+        appState.client = HermesClient(connection: connection, profile: "default")
+        appState.sessions = [session("stored-a")]
+        appState.activeSessionId = "stored-a"
+        appState.isConnected = true
+        appState.handleStreamEvent(.sessionBusy(sessionId: "stored-a", busy: true))
+        let photo = Attachment(
+            id: UUID().uuidString,
+            name: "photo.jpg",
+            uri: "file:///tmp/photo.jpg",
+            mimeType: "image/jpeg",
+            kind: .image
+        )
+
+        XCTAssertEqual(appState.composerAction(hasText: true, hasAttachments: true), .queue)
+        let sent = await appState.submitComposer(text: "What is this?", attachments: [photo])
+
+        XCTAssertTrue(sent)
+        XCTAssertEqual(uploads.prompts.map { $0.text }, ["photo.jpg"])
+        XCTAssertEqual(queued.prompts.map { $0.text }, ["What is this?"])
+        XCTAssertTrue(steers.prompts.isEmpty, "Steer takes text alone")
+        XCTAssertTrue(plain.prompts.isEmpty, "Never a plain send, which would steer or interrupt")
+        XCTAssertEqual(appState.messages.last?.attachments?.map(\.name), ["photo.jpg"])
+        XCTAssertEqual(appState.turnState, .running)
+        XCTAssertNil(appState.errorMessage)
+    }
+
     /// A message an earlier run left waiting comes back as a draft at
     /// launch and is never sent on its own.
     func testAMessageLeftWaitingComesBackAsADraftAtLaunch() throws {
