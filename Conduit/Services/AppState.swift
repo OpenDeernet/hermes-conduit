@@ -3845,6 +3845,10 @@ final class AppState: ObservableObject {
                 guard let self else { throw HermesError.notConnected }
                 return try await self.redirectLiveVoiceFollowUp(sessionID: sessionID, text: text)
             },
+            steer: { [weak self] sessionID, text in
+                guard let self else { throw HermesError.notConnected }
+                return try await self.steerLiveVoiceFollowUp(sessionID: sessionID, text: text)
+            },
             latestThreadReply: { [weak self] thread in
                 await self?.latestLiveVoiceThreadReply(thread)
             },
@@ -5896,6 +5900,7 @@ final class AppState: ObservableObject {
     }
 
     func persistPinnedReplies() {
+        PinnedRepliesRevision.value &+= 1
         guard let data = try? JSONEncoder().encode(pinnedRepliesByProfile) else { return }
         defaults.set(data, forKey: pinnedRepliesByProfileKey)
     }
@@ -6307,6 +6312,11 @@ final class AppState: ObservableObject {
     /// That call was answered here (not only ringing): see
     /// `isNativeCallVoiceSurfaceActive`.
     @Published internal(set) var isNativeHermesCallAnswered = false
+    /// Whether Conduit's phone screen is up, for a classic call's restart
+    /// after an interruption (#1145). Test seam.
+    var hermesCallPhoneOnScreen: @MainActor () -> Bool = { PhoneScenePresence.isInForeground }
+    /// Whether the answered call's own voice runs (HermesNativeCalls). Test seam.
+    var hermesCallVoiceRunning: @MainActor () -> Bool = { HermesNativeCalls.shared.isCallVoiceRunning }
     /// The call's CallKit mute: a classic voice the call opens while muted
     /// doesn't start listening on its own.
     internal(set) var isNativeHermesCallMuted = false
@@ -8033,6 +8043,28 @@ final class AppState: ObservableObject {
             if isOpenChat(target) { appendLocalSteerMessage(text, persistedTwinsBefore: persistedTwinsBefore) }
             return .redirected
         }
+    }
+
+    /// Adds a live-call follow-up to a running turn. Only an explicit gateway
+    /// refusal, or a gateway without `session.steer`, is eligible for the
+    /// supervisor's redirect fallback: a timeout leaves delivery unknown and
+    /// must not send the words a second time.
+    private func steerLiveVoiceFollowUp(sessionID: String, text: String) async throws -> VoiceRedirectResult {
+        let client = try await clientForVoiceRequest()
+        let target = VoiceThreadTarget(runtimeSessionID: sessionID, storedSessionID: nil, title: "")
+        let persistedTwinsBefore = persistedSteerIDs(matching: text)
+        do {
+            if let steer = chatResumeLifecycleOperations.steer {
+                try await steer(client, sessionID, text)
+            } else {
+                try await client.steer(sessionID, text: text)
+            }
+        } catch let error as RpcError where Self.isUnsupportedSteer(code: error.code, message: error.message) {
+            // Method not found: the words never arrived, so redirecting them is safe.
+            throw HermesError.steerRejected
+        }
+        if isOpenChat(target) { appendLocalSteerMessage(text, persistedTwinsBefore: persistedTwinsBefore) }
+        return .redirected
     }
 
     /// The chat's latest assistant reply, without starting a turn: from the
@@ -26491,6 +26523,15 @@ final class AppState: ObservableObject {
             // The TUI gateway's wording ("unknown method: session.redirect"):
             // only when it names this method.
             || (message.contains("unknown method") && message.contains("session.redirect"))
+    }
+
+    /// A gateway without `session.steer` answers JSON-RPC "method not found",
+    /// as isUnsupportedRedirect reads it for `session.redirect`.
+    nonisolated static func isUnsupportedSteer(code: Int?, message: String) -> Bool {
+        let message = message.lowercased()
+        return code == -32601
+            || message.contains("method not found")
+            || (message.contains("unknown method") && message.contains("session.steer"))
     }
 
     private func isSessionNotFound(_ error: RpcError) -> Bool {
