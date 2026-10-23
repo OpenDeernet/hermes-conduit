@@ -318,7 +318,8 @@ struct NotifierPluginUpdater {
             if let step = Self.hostStep(job) {
                 progress(.updating(step))
             } else if let outcome = Self.hostOutcome(job) {
-                return await finishHostUpdate(outcome, request: request)
+                return await finishHostUpdate(outcome, pullFailed: job["failed_step"] as? String == "downloading",
+                                              request: request)
             } else {
                 // A step this Conduit doesn't know (a newer plugin's).
                 progress(.updating(.downloading))
@@ -340,18 +341,18 @@ struct NotifierPluginUpdater {
             }
             guard let latest = json["job"] as? [String: Any], latest["id"] as? String == jobID else {
                 // The restarted dashboard lost the job: its report says where it stands.
-                return await finishHostUpdate(nil, request: request)
+                return await finishHostUpdate(nil, pullFailed: false, request: request)
             }
             job = latest
         }
     }
 
-    /// The host's last word, with the new plugin's report. A job that
-    /// can't pull this plugin (not cloned by Hermes, not installed) is
-    /// nil: the steps from here handle those.
-    private func finishHostUpdate(_ outcome: NotifierPluginUpdateState?,
+    /// The host's last word, with the new plugin's report. A pull that
+    /// failed because Hermes can't pull this plugin (not cloned by Hermes,
+    /// not installed) is nil: the steps from here handle those.
+    private func finishHostUpdate(_ outcome: NotifierPluginUpdateState?, pullFailed: Bool,
                                   request: Request) async -> NotifierPluginUpdateState? {
-        if case .failed(let detail)? = outcome, let detail {
+        if pullFailed, case .failed(let detail)? = outcome, let detail {
             let error = DashboardTicketBridgeError.http(status: 400, detail: detail)
             if Self.isNotInstalled(error) || Self.needsReinstall(error) { return nil }
         }

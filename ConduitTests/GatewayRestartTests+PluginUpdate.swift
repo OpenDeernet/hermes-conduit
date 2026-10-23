@@ -676,7 +676,7 @@ extension GatewayRestartTests {
 
     func testAHostThatCantPullThisPluginLeavesTheReinstallToConduit() async {
         let host = PluginHost()
-        host.selfUpdateJobs = [["id": "j1", "step": "failed",
+        host.selfUpdateJobs = [["id": "j1", "step": "failed", "failed_step": "downloading",
                                 "detail": "Plugin 'conduit_push' has no owned Git checkout; reinstall from its source."]]
         host.updateError = DashboardTicketBridgeError.http(status: 400, detail: "Plugin 'conduit_push' has no owned Git checkout; reinstall from its source.")
         host.capabilities = [
@@ -735,6 +735,19 @@ extension GatewayRestartTests {
         XCTAssertFalse(appState.notifierPlugin.restartPending)
         // refreshNotifierPluginStatus drops an answer whose generation isn't newer.
         XCTAssertLessThanOrEqual(inFlight, appState.notifierPluginStatusAcceptedGeneration)
+    }
+
+    func testAHostJobThatFailsAfterThePullDoesntRunTheStepsAgain() async {
+        let host = PluginHost()
+        host.selfUpdateJobs = [["id": "j1", "step": "failed", "failed_step": "restarting_gateway",
+                                "detail": "Gateway restart: unit not found"]]
+        host.capabilities = [Self.capabilities(loaded: "0.62.0", disk: "0.63.0", boot: "old")]
+        var updater = host.updater()
+        updater.onHost = true
+        let outcome = await updater.run { _ in }
+        XCTAssertEqual(outcome, .failed(detail: "Gateway restart: unit not found"))
+        XCTAssertFalse(host.calls.contains("POST \(NotifierPluginUpdater.updatePath)"))
+        XCTAssertFalse(host.calls.contains("POST \(NotifierPluginUpdater.installPath)"))
     }
 
     func testHostJobOutcomes() {
