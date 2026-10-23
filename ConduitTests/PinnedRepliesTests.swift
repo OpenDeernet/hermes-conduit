@@ -707,4 +707,16 @@ final class PinnedRepliesTests: XCTestCase {
         XCTAssertFalse(coordinator.hasActiveSelection)
         withExtendedLifetime(bridge) {}
     }
+
+    func testAPassagePinFindsTheReplyHoldingItAmongRepliesOpeningAlike() {
+        // Pinned as it arrived; after a reload two replies open the same
+        // way, and only the earlier one holds the passage.
+        let opening = String(repeating: "Same opening. ", count: 30)
+        let pinned = passagePin(reply("live-1", opening + "Rotate keys monthly."), "Rotate keys monthly.")
+        let reloaded = [
+            reply("r-1", opening + "Rotate keys monthly.", rowId: 1),
+            reply("r-2", opening + "Something else.", rowId: 2)
+        ]
+        XCTAssertEqual(PinnedReplies.messageID(for: pinned, in: reloaded), "r-1")
+    }
 }

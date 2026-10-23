@@ -392,6 +392,12 @@ struct PinnedReplyLabelEditor: ViewModifier {
             .onChange(of: pin?.id) { _, _ in
                 draft = pin?.label ?? ""
             }
+            // The limit shows as you type, not as a cut on save.
+            .onChange(of: draft) { _, text in
+                if text.count > PinnedReply.labelLength {
+                    draft = String(text.prefix(PinnedReply.labelLength))
+                }
+            }
     }
 }
 

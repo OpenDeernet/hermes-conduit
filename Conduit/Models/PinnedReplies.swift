@@ -165,7 +165,13 @@ enum PinnedReplies {
             } else {
                 exact = messages.first { pin.isExactly($0) }
             }
-            if let match = exact ?? messages.last(where: { pin.matchesText(of: $0) }) {
+            // Replies opening alike: the latest one holding the passage,
+            // else the latest (the reply's source can mark up the text).
+            let byText = exact == nil ? messages.filter { pin.matchesText(of: $0) } : []
+            let holding = byText.last { message in
+                pin.passage.map { !PinnedPassageMatch.ranges(of: $0, in: message.content).isEmpty } ?? false
+            }
+            if let match = exact ?? holding ?? byText.last {
                 result[pin.id] = match.id
             }
         }
