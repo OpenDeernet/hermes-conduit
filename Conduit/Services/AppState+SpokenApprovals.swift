@@ -107,7 +107,12 @@ extension AppState {
     /// on Thinking with nothing to say.
     func noteApprovalForClassicVoice(_ activity: ApprovalActivity, sessionID: String) {
         guard activity.status == .pending else { return }
-        let request = activity.requestId ?? "\(activity.sessionId)\n\(activity.command)\n\(activity.description)"
+        // Without a request id, the card it updated or added: a resend
+        // updates the same card, the next approval adds another.
+        guard let request = activity.requestId ?? messages.last(where: { message in
+            guard let shown = message.approval, shown.requestId == nil else { return false }
+            return shown.sessionId == activity.sessionId && shown.asksSameAs(activity)
+        })?.id else { return }
         voiceConversationController.noteApprovalWaiting(
             sessionID: sessionID,
             request: request,
@@ -116,7 +121,9 @@ extension AppState {
                 guard let self else { return false }
                 return self.messages.contains { message in
                     guard let shown = message.approval, shown.status == .pending || shown.status == .error else { return false }
-                    return activity.requestId.map { shown.requestId == $0 } ?? shown.asksSameAs(activity)
+                    // A request id is unique; without one, only this chat's card counts.
+                    return activity.requestId.map { shown.requestId == $0 }
+                        ?? (shown.sessionId == activity.sessionId && shown.asksSameAs(activity))
                 }
             }
         )

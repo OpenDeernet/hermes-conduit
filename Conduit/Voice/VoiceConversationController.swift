@@ -1826,6 +1826,9 @@ final class VoiceConversationController: ObservableObject {
         cachedRoutePolicy = nil
         isPlaybackCaptureSuspended = false
         state = .thinking
+        // A microphone the user paused can't hear the answer, and a window
+        // over it would hold the reply's speech with nothing to end it.
+        guard !isMicrophonePaused else { return }
         isSteeringTurn = true
         await startListening()
         guard isSteeringTurn else { return }
