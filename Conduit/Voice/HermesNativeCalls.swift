@@ -977,6 +977,7 @@ extension HermesNativeCalls: CXProviderDelegate {
             self.audioActive = true
             self.observeRoute()
             self.resumeAudioWaiters()
+            NotificationCenter.default.post(name: .hermesCallAudioActivated, object: nil)
         }
     }
 
@@ -986,12 +987,25 @@ extension HermesNativeCalls: CXProviderDelegate {
             VoiceAudioSessionCoordinator.shared.nativeCallAudioDeactivated()
             self.audioActive = false
             self.stopObservingRoute()
+            NotificationCenter.default.post(name: .hermesCallAudioDeactivated, object: nil)
         }
     }
 
     nonisolated func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
         action.fail()
     }
+}
+
+extension Notification.Name {
+    /// CallKit gave a call from Hermes its audio: at the answer, or back
+    /// after an interruption. Under CallKit the system's interruption end
+    /// isn't promised, so voice an interruption paused resumes on this.
+    /// Answered in the car, CallKit's audio can also come on after the
+    /// call's voice started on a session Conduit activated itself (#1145).
+    static let hermesCallAudioActivated = Notification.Name("conduit.hermesCall.audioActivated")
+    /// CallKit took the call's audio back (an interruption, or the call
+    /// ending): nothing plays or records until it's activated again.
+    static let hermesCallAudioDeactivated = Notification.Name("conduit.hermesCall.audioDeactivated")
 }
 
 /// Where a call's audio goes, in a call trace's words.

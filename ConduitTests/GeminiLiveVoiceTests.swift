@@ -2208,6 +2208,27 @@ extension VoiceConversationControllerTests {
         XCTAssertTrue(input.running)
         controller.stop()
     }
+
+    /// #1145: in a call from Hermes answered on CarPlay or locked, CallKit
+    /// gives the audio back with no interruption end and no app activation.
+    func testGeminiLivePausedCallResumesWhenCallKitGivesTheAudioBack() async {
+        struct CallKitHoldsTheAudio: Error {}
+        let center = NotificationCenter()
+        let (controller, session, input, _, _) = makeGeminiController(notificationCenter: center, clock: Date.init)
+        await controller.start()
+        session.becomeReady()
+        input.startError = CallKitHoldsTheAudio()
+        input.stop()
+        input.onInterrupted?()
+        XCTAssertEqual(controller.phase, .paused)
+
+        input.startError = nil
+        center.post(name: .hermesCallAudioActivated, object: nil)
+        for _ in 0..<50 where controller.phase == .paused { await settle() }
+        XCTAssertEqual(controller.phase, .listening)
+        XCTAssertTrue(input.running)
+        controller.stop()
+    }
 }
 
 // MARK: - Web lookups

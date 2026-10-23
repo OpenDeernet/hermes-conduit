@@ -783,6 +783,7 @@ final class GeminiLiveConversationController: ObservableObject {
             audioPaused = true
             audioReturnSeen = false
             geminiLiveLogger.notice("Live voice paused by an audio interruption")
+            HermesCallTrace.shared.note("Live voice audio paused")
             observeAudioReturn()
         }
         // Whatever the model was saying can't be heard: drop the rest of
@@ -804,8 +805,9 @@ final class GeminiLiveConversationController: ObservableObject {
         }
     }
 
-    /// The system's interruption end and the app coming back to the
-    /// foreground are the cues that the other sound let go.
+    /// The system's interruption end, the app coming back to the
+    /// foreground and CallKit giving a call its audio back are the cues
+    /// that the other sound let go.
     private func observeAudioReturn() {
         guard audioPauseObservers.isEmpty else { return }
         audioPauseObservers = [
@@ -815,6 +817,12 @@ final class GeminiLiveConversationController: ObservableObject {
                 Task { @MainActor [weak self] in self?.scheduleAudioResume(delays: Self.audioResumeDelays, audioReturned: true) }
             },
             notificationCenter.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.scheduleAudioResume(delays: Self.audioResumeDelays, audioReturned: true) }
+            },
+            // In a call from Hermes CallKit gives the audio back instead,
+            // with no interruption end promised, and off screen (on CarPlay,
+            // locked) no app activation follows (#1145).
+            notificationCenter.addObserver(forName: .hermesCallAudioActivated, object: nil, queue: nil) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.scheduleAudioResume(delays: Self.audioResumeDelays, audioReturned: true) }
             },
         ]
@@ -872,6 +880,7 @@ final class GeminiLiveConversationController: ObservableObject {
         }
         clearAudioPause()
         geminiLiveLogger.notice("Live voice resumed after an audio interruption")
+        HermesCallTrace.shared.note("Live voice audio back")
         return true
     }
 
