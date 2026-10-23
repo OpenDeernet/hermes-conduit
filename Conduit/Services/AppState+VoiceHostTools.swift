@@ -69,18 +69,17 @@ extension AppState {
         if phoneAllowed, !phoneSync.isSyncing { Task { await runPhoneSync(reason: .voiceCall) } }
         // This iPhone's id in each store: a call reads this iPhone alone, so
         // the host offers only what this iPhone shares.
-        let location = LocationSharingController.shared
-        let devices = [
-            "health_device": keys.contains("health") && healthSync.readStateIfNeeded() ? healthSync.state.deviceID : nil,
-            "location_device": keys.contains("location") ? location.config.deviceID : nil,
-            "phone_device": phoneAllowed && phoneSync.readStateIfNeeded() ? phoneSync.state.deviceID : nil,
-        ]
+        var devices: [String: String] = [:]
+        if keys.contains("health"), healthSync.readStateIfNeeded() { devices["health_device"] = healthSync.state.deviceID }
+        if keys.contains("location") { devices["location_device"] = LocationSharingController.shared.config.deviceID }
+        if phoneAllowed, phoneSync.readStateIfNeeded() { devices["phone_device"] = phoneSync.state.deviceID }
         do {
             let response = try await bridge.requestJSON(
                 path: Self.voiceToolsListPath(profile: activeProfile, devices: devices),
                 method: "GET", body: nil, timeoutMilliseconds: 5_000)
+            // A store whose id can't be read can't be read by voice either.
             let host = VoiceHostTool.tools(from: response).filter { tool in
-                keys.contains(tool.key) || (tool.key == "phone" && phoneAllowed)
+                devices["\(tool.key)_device"] != nil && (keys.contains(tool.key) || (tool.key == "phone" && phoneAllowed))
             }
             return (host, local)
         } catch {
@@ -91,11 +90,10 @@ extension AppState {
 
     /// GET /voice-tools for `profile`, naming this iPhone's device in each
     /// store it shares from (older plugins ignore the names).
-    static func voiceToolsListPath(profile: String, devices: [String: String?]) -> String {
+    static func voiceToolsListPath(profile: String, devices: [String: String]) -> String {
         var path = DashboardPath.withProfile(voiceToolsPath, profile: profile)
-        for name in devices.keys.sorted() {
-            guard let id = devices[name] ?? nil, !id.isEmpty,
-                  let encoded = DashboardPath.encodedQueryComponent(id) else { continue }
+        for (name, id) in devices.sorted(by: { $0.key < $1.key }) {
+            guard !id.isEmpty, let encoded = DashboardPath.encodedQueryComponent(id) else { continue }
             path += "\(path.contains("?") ? "&" : "?")\(name)=\(encoded)"
         }
         return path
