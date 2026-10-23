@@ -593,6 +593,10 @@ struct V2ChatsView: View, Equatable {
             .accessibilityLabel(showingProjects ? AppLocalization.string("Show sessions") : AppLocalization.string("Browse projects"))
             .macTooltip(showingProjects ? AppLocalization.string("Show sessions") : AppLocalization.string("Browse projects"))
 
+            if appState.showsPulseScreen {
+                V2PulseButton()
+            }
+
             NavigationLink(value: V2Route.artifacts) {
                 V2CapsuleIcon(systemImage: "square.grid.2x2")
             }
@@ -829,13 +833,25 @@ struct V2ChatsView: View, Equatable {
     private func sourceRows(_ source: SessionSource?) -> [SessionSummary] {
         renderMemo.sourceRows(source) {
             SidebarSourceRows.rows(
+<<<<<<< HEAD
                 sessions: listed.sessions,
                 cronSessions: listed.cron,
+=======
+                sessions: listedChats,
+                cronSessions: appState.listedCronSessions,
+>>>>>>> origin/pulse
                 source: source,
                 category: category,
                 isPinned: appState.isSessionPinned
             )
         }
+    }
+
+    /// The profile's chats but Pulse's own, which the Pulse screen stands in for.
+    private var listedChats: [SessionSummary] {
+        let sessions = appState.listedSessions
+        guard appState.pulseHomeChatID != nil else { return sessions }
+        return sessions.filter { !appState.isPulseHomeChat($0) }
     }
 
     /// The row's filter source, worked out once per render: it looks up
@@ -862,8 +878,13 @@ struct V2ChatsView: View, Equatable {
         }
         return selection.rows(
             everything: sourceRows(nil),
+<<<<<<< HEAD
             sessions: listed.sessions,
             cronSessions: listed.cron,
+=======
+            sessions: listedChats,
+            cronSessions: appState.listedCronSessions,
+>>>>>>> origin/pulse
             category: category,
             hasStatus: hasStatus
         )
@@ -958,8 +979,12 @@ struct V2ChatsView: View, Equatable {
     private func contentSearchRows(_ displayed: [SessionSummary]) -> [SessionContentSearchRow] {
         guard isSearching, !contentSearch.hits.isEmpty else { return [] }
         let known = appState.activeProfileSessions + appState.activeProfileCronSessions
+<<<<<<< HEAD
             + (appState.isAllProfilesChatsOn ? listed.sessions.filter(appState.isOtherProfileRow) : [])
         return SessionContentSearch.rows(
+=======
+        let rows = SessionContentSearch.rows(
+>>>>>>> origin/pulse
             hits: contentSearch.hits,
             listed: displayed,
             known: known,
@@ -967,6 +992,12 @@ struct V2ChatsView: View, Equatable {
             activeProfile: appState.isAllProfilesChatsOn ? appState.activeProfile : "",
             owner: { session in appState.isAllProfilesChatsOn ? appState.rowProfile(session) : "" }
         )
+        // Pulse's chat stays behind the Pulse screen, message matches too.
+        guard let home = appState.pulseHomeChatID else { return rows }
+        return rows.filter { row in
+            row.session.map { !appState.isPulseHomeChat($0) }
+                ?? (row.hit.sessionID != home && appState.canonicalSessionID(for: row.hit.sessionID) != home)
+        }
     }
 
     private func nestedSections(_ displayed: [SessionSummary]) -> (pinned: [SessionNesting.Node], recent: [SessionNesting.Node]) {
@@ -1060,7 +1091,11 @@ struct V2ChatsView: View, Equatable {
                         hasOfflineCopy: false,
                         catalogPhase: appState.sessionCatalogPhase,
                         isRefreshing: appState.isRefreshingSessionCatalog,
+<<<<<<< HEAD
                         filteredOutRows: !listed.sessions.isEmpty || !listed.cron.isEmpty
+=======
+                        filteredOutRows: !listedChats.isEmpty || !appState.listedCronSessions.isEmpty
+>>>>>>> origin/pulse
                     ),
                     emptyTitle: selection.emptyStateFilter.emptyTitle,
                     emptyDescription: isSearching
