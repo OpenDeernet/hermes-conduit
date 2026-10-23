@@ -138,6 +138,15 @@ final class GPTLiveAudioLink {
             if !resume() { scheduleResume(after: Self.resumeRetryDelays) }
             return
         }
+        // The call's policy on CallKit's session first, as a resume does.
+        do {
+            try audio.reassert()
+        } catch {
+            gptLiveAudioLogger.error("GPT-Live audio couldn't reapply on the call's audio: \(LogRedaction.describing(error), privacy: .public)")
+            pause()
+            scheduleResume(after: Self.resumeRetryDelays)
+            return
+        }
         audio.disableWebRTCAudio()
         audio.enableWebRTCAudio()
         HermesCallTrace.shared.note("GPT-Live audio restarted on the call's audio")

@@ -413,9 +413,9 @@ final class CarPlayVoiceCoordinator {
         // In a call from Hermes CallKit gives the audio back instead, and
         // the system's interruption end isn't promised (#1145).
         let callAudio = NotificationCenter.default.addObserver(
-            forName: .hermesCallAudioActivated, object: nil, queue: .main
+            forName: .hermesCallAudioActivated, object: nil, queue: nil
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.audioInterruptionEnded() }
+            Task { @MainActor [weak self] in self?.audioInterruptionEnded() }
         }
         interruptionObservers = [ended, callAudio]
     }

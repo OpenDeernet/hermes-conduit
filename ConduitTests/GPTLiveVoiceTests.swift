@@ -618,7 +618,7 @@ extension HermesVoiceGatewayTimeoutTests {
         // Conduit activated: WebRTC's audio restarts on CallKit's.
         let before = audio.events.count
         link.callAudioActivated()
-        XCTAssertEqual(Array(audio.events.dropFirst(before)), ["disable", "enable"])
+        XCTAssertEqual(Array(audio.events.dropFirst(before)), ["reassert", "disable", "enable"])
         XCTAssertEqual(paused, [true, false], "A restart isn't a pause")
 
         link.stop()
