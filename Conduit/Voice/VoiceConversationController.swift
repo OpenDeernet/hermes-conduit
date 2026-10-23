@@ -288,6 +288,8 @@ final class VoiceConversationController: ObservableObject {
         expectedAssistantSessionIDs = [sessionID]
         conversationTranscript.removeAll(keepingCapacity: true)
         activeAssistantTranscriptEntryID = nil
+        announcedApprovals = []
+        endApprovalNotice()
     }
 
     /// Adds session ids an admitted resume positively rebound to this
@@ -366,6 +368,16 @@ final class VoiceConversationController: ObservableObject {
 
     private func openPushToTalkWindow() async {
         isMicrophonePaused = false
+        if approvalNoticeOpensAnswerWindow {
+            // A press over an approval's notice answers it: the notice
+            // stops, the turn that waits on it doesn't.
+            approvalNoticeOpensAnswerWindow = false
+            playback.stop()
+            cancelSpeechDrainAndStream()
+            clearSpeechQueue()
+            isPlaybackCaptureSuspended = false
+            state = .thinking
+        }
         if isPlaybackCaptureSuspended || state == .speaking || state == .muted {
             await stopAssistantReplyAndListen()
         } else if state == .thinking {
@@ -1759,12 +1771,15 @@ final class VoiceConversationController: ObservableObject {
         }
         state = .thinking
         beginBargeInMonitoring()
-        if !speechDeltas.isEmpty || assistantFinished {
-            startSpeechDrainIfNeeded()
-        } else if let pending = pendingApprovalNotice {
+        if let pending = pendingApprovalNotice {
             pendingApprovalNotice = nil
-            if pending.stillWaiting() { sayApprovalNotice(pending.line) }
+            // Said after the reply speech held for the steer, if any.
+            if pending.stillWaiting() {
+                sayApprovalNotice(pending.line)
+                return
+            }
         }
+        if !speechDeltas.isEmpty || assistantFinished { startSpeechDrainIfNeeded() }
     }
 
     /// Hermes' running turn stopped on an approval in this conversation's
