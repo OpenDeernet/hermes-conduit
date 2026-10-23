@@ -412,6 +412,9 @@ struct RichContactCard: View {
                 ForEach(Array(card.people.enumerated()), id: \.offset) { index, person in
                     if index > 0 { Divider() }
                     RichPersonRow(person: person, known: person.match(in: shared))
+                        // A live card shown again with someone or a text that
+                        // changed is a new row: Sent belongs to the old text.
+                        .id(person)
                 }
             }
         }
