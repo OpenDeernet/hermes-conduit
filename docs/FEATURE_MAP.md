@@ -410,3 +410,31 @@ Settings > Notifications
 - "Notify me when" choices are one set per iPhone, not per dashboard: the relay keeps one set per installation (#395).
 
 **Checked:** 2026-10-23, seeded from main at 64d53c3.
+
+## Markdown lists in messages
+
+How a reply's lists read: numbering, loose lists, and the same list in every
+view that draws Markdown.
+
+**Siblings:** chat bubbles (block views and prose runs) · very long replies
+(chunked) · selection and Copy · group rooms · tool results · call job cards ·
+Read Aloud and live voice read-back · chat list previews and quotes
+
+**Code**
+- Parser and block views: `Conduit/Views/Components/MarkdownText.swift` (MarkdownParser, MarkdownList, MarkdownSelectionFormatter)
+- Prose runs: `Conduit/Views/Components/MarkdownProseRun.swift`
+- Long replies: `Conduit/Views/Components/MarkdownLargeDocument.swift` (splitListItems), `Conduit/Views/Components/MarkdownLargeDocumentView.swift`
+- Selection: `Conduit/Views/Components/MarkdownSelectionCoordinator.swift`
+- Other surfaces drawing MarkdownText: `Conduit/Views/GroupChatView.swift`, `Conduit/Views/ToolResultViews.swift`, `Conduit/Views/LiveVoiceCallJobs.swift`
+- Spoken text (source lines, not parsed blocks): `Conduit/Voice/VoiceReadBack.swift`, `Conduit/Voice/SpokenTextFilter.swift`
+- Previews and quotes: `Conduit/Services/PreviewText.swift`, `Conduit/Views/Components/ChatQuote.swift`
+
+**Rulings**
+- Ordered lists number as CommonMark and Hermes Desktop do: blank lines between items keep one list (2026-10-23, #1168), and a list starts at its first item's number, so steps split by a code block carry on (2026-10-23, Eric).
+- Every view that draws a list reads the parsed block, so a numbering change is a parser change plus each renderer's marker; long replies bake ordinals into continuation chunks (#1168).
+
+**Open gaps**
+- Nested lists are flattened: an indented sub-list draws as its own list at the left edge.
+- A marker past two digits ("100.") can crowd its column in the block view.
+
+**Checked:** 2026-10-23, at main fc9c388.

@@ -35,14 +35,14 @@ extension MarkdownRichContentPolicyTests {
     func testLooseOrderedListEndsAtADifferentDelimiter() {
         // CommonMark: "1." and "1)" are different lists.
         let blocks = MarkdownParser.parse("1. first\n\n2) second")
-        XCTAssertEqual(blocks, [.orderedList(["first"]), .orderedList(["second"])])
+        XCTAssertEqual(blocks, [.orderedList(["first"]), .orderedList(["second"], start: 2)])
     }
 
     func testLooseOrderedListComparesWithItsLastItem() {
         // A tight "2)" already joined the list; the blank line then needs
         // "3)" to go on, so "3." starts a new list.
         let blocks = MarkdownParser.parse("1. a\n2) b\n\n3. c")
-        XCTAssertEqual(blocks, [.orderedList(["a", "b"]), .orderedList(["c"])])
+        XCTAssertEqual(blocks, [.orderedList(["a", "b"]), .orderedList(["c"], start: 3)])
     }
 
     func testLooseOrderedListLeavesATableToTheTable() {
@@ -76,7 +76,7 @@ extension MarkdownRichContentPolicyTests {
 
     func testLooseOrderedListDrawsSequentialNumbers() {
         let blocks = MarkdownParser.parse((1...15).map { "\($0). Reference \($0)" }.joined(separator: "\n\n"))
-        guard blocks.count == 1, case .orderedList(let items) = blocks[0] else {
+        guard blocks.count == 1, case .orderedList(let items, _) = blocks[0] else {
             return XCTFail("Expected one ordered list, got \(blocks)")
         }
         XCTAssertEqual(items.count, 15)
