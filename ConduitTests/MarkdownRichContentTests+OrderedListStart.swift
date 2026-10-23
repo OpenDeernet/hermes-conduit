@@ -28,6 +28,7 @@ extension MarkdownRichContentPolicyTests {
         // CommonMark: a list marker has at most nine digits.
         XCTAssertEqual(MarkdownParser.parse("1234567890. far"), [.paragraph("1234567890. far")])
         XCTAssertEqual(MarkdownParser.parse("123456789. near"), [.orderedList(["near"], start: 123456789)])
+        XCTAssertEqual(MarkdownParser.parse("٤. four"), [.paragraph("٤. four")])
     }
 
     func testStepsSplitByACodeBlockCarryOn() {

@@ -3182,8 +3182,8 @@ enum MarkdownParser {
         return String(value.dropFirst(2))
     }
     private static func orderedItem(_ value: String) -> String? {
-        // CommonMark: at most nine digits, so a longer number is text.
-        guard let range = value.range(of: #"^\d{1,9}[.)]\s+"#, options: .regularExpression) else { return nil }
+        // CommonMark: one to nine ASCII digits, so anything else is text.
+        guard let range = value.range(of: #"^[0-9]{1,9}[.)]\s+"#, options: .regularExpression) else { return nil }
         return String(value[range.upperBound...])
     }
     /// The number an ordered item is written with.
