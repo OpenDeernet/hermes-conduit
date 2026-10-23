@@ -654,7 +654,7 @@ struct V2Shell: View {
                 // Only the list's own changes redraw it, not the shell's
                 // (`V2ShownUpdates`).
                 listRoot(tabBarClearance(V2ChatsView(appState: appState).equatable()), alone: canSplit)
-                    .navigationDestination(for: V2Route.self, destination: destination)
+                    .navigationDestination(for: V2Route.self) { destination($0, alone: canSplit) }
             }
         case .tasks:
             // Inside the stack, as on Chats and Bots: the lists in it stop
@@ -665,7 +665,7 @@ struct V2Shell: View {
         case .bots:
             NavigationStack(path: $botsPath) {
                 listRoot(tabBarClearance(V2BotsView()), alone: canSplit)
-                    .navigationDestination(for: V2Route.self, destination: destination)
+                    .navigationDestination(for: V2Route.self) { destination($0, alone: canSplit) }
             }
         case .settings:
             // Settings puts the clearance inside its own stack, on its home
@@ -675,10 +675,10 @@ struct V2Shell: View {
         }
     }
 
-    /// A Chats or Bots list in one column. `alone` is a wide window whose
-    /// user hid the list beside the chat: the list keeps to a readable
-    /// column rather than running the window's width. Inside the stack, so
-    /// a chat pushed over it keeps its own width.
+    /// A Chats or Bots list, or a page it pushes, in one column. `alone` is
+    /// a wide window whose user hid the list beside the chat: the list
+    /// keeps to a readable column rather than running the window's width.
+    /// Inside the stack, so a chat pushed over it keeps its own width.
     @ViewBuilder
     private func listRoot<Content: View>(_ content: Content, alone: Bool) -> some View {
         if alone {
@@ -702,7 +702,7 @@ struct V2Shell: View {
         return HStack(spacing: 0) {
             NavigationStack(path: V2SplitLayout.listPath(path)) {
                 list
-                    .navigationDestination(for: V2Route.self, destination: destination)
+                    .navigationDestination(for: V2Route.self) { destination($0) }
             }
             .frame(width: V2SplitLayout.listWidth)
             // Each column's backdrop stays in its own column.
@@ -732,15 +732,17 @@ struct V2Shell: View {
         }
     }
 
+    /// `alone`: a wide window with the list hidden, where the list's pages
+    /// keep to its readable column (`listRoot`); a chat caps itself.
     @ViewBuilder
-    private func destination(_ route: V2Route) -> some View {
+    private func destination(_ route: V2Route, alone: Bool = false) -> some View {
         switch route {
         case .conversation:
             V2ConversationScreen()
         case .project(let project):
-            tabBarClearance(V2ProjectPage(project: project))
+            listRoot(tabBarClearance(V2ProjectPage(project: project)), alone: alone)
         case .artifacts:
-            tabBarClearance(V2ArtifactsPage())
+            listRoot(tabBarClearance(V2ArtifactsPage()), alone: alone)
         }
     }
 
