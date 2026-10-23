@@ -549,8 +549,8 @@ struct V2Shell: View {
     /// for a separate circle: a search-role tab sat inside the bar as a
     /// second Voice item under the button.
     /// Split (a wide iPad window), the bar stays up under the list column,
-    /// beside the open chat, on every tab, and stays there when the user
-    /// hid the list.
+    /// beside the open chat, on every tab, and keeps that place when the
+    /// list shows alone (the user hid it beside the chat).
     private func tabs(split: Bool, canSplit: Bool) -> some View {
         ZStack {
             ForEach(V2Tab.destinations) { tab in
