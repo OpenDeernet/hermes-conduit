@@ -700,6 +700,43 @@ extension GatewayRestartTests {
         XCTAssertEqual(outcome, .runningOnHost)
     }
 
+    func testAStartWhoseAnswerIsLostFollowsTheJobInsteadOfUpdatingTwice() async {
+        let host = PluginHost()
+        host.selfUpdateStartError = URLError(.timedOut)
+        host.selfUpdateJobs = [
+            ["id": "j1", "step": "restarting_gateway"],
+            ["id": "j1", "step": "done", "loaded_version": "0.63.0"],
+        ]
+        host.capabilities = [Self.capabilities(loaded: "0.63.0", disk: "0.63.0", boot: "new")]
+        var updater = host.updater()
+        updater.onHost = true
+        let outcome = await updater.run { _ in }
+        XCTAssertEqual(outcome, .updated(version: "0.63.0"))
+        XCTAssertFalse(host.calls.contains("POST \(NotifierPluginUpdater.updatePath)"))
+    }
+
+    /// #299: the new plugin's report replaces the status at once, and a
+    /// status read already asked of the old plugin lands under it.
+    func testTheUpdatedPluginsReportWinsOverAStatusReadInFlight() {
+        let suite = "PluginUpdate.AppState.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let appState = AppState(
+            defaults: defaults,
+            loadSavedConnection: false,
+            clearSessionPresentationCache: {},
+            sessionPresentationCache: SessionPresentationCache(defaults: defaults)
+        )
+        // A read of the old plugin starts.
+        appState.notifierPluginStatusGeneration += 1
+        let inFlight = appState.notifierPluginStatusGeneration
+        appState.applyNotifierPluginReport(Self.capabilities(loaded: "0.63.0", disk: "0.63.0", boot: "new"))
+        XCTAssertEqual(appState.notifierPlugin.runningVersion, "0.63.0")
+        XCTAssertFalse(appState.notifierPlugin.restartPending)
+        // refreshNotifierPluginStatus drops an answer whose generation isn't newer.
+        XCTAssertLessThanOrEqual(inFlight, appState.notifierPluginStatusAcceptedGeneration)
+    }
+
     func testHostJobOutcomes() {
         XCTAssertNil(NotifierPluginUpdater.hostOutcome(["step": "restarting_gateway"]))
         XCTAssertEqual(NotifierPluginUpdater.hostStep(["step": "restarting_gateway"]), .restartingGateway(nil))

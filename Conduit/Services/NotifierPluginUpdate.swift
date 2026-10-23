@@ -304,7 +304,13 @@ struct NotifierPluginUpdater {
             return Self.outcome(forRequestError: DashboardTicketBridgeError.signInRequired)
         } catch {
             if Task.isCancelled { return .idle }
-            return nil
+            // No answer at all (a timeout, a dropped connection) may still
+            // have started the job: follow one that runs rather than start
+            // a second update from here.
+            guard Self.httpStatus(of: error) == nil,
+                  let probe = try? await request(path, "GET", nil),
+                  let running = probe["job"] as? [String: Any], Self.hostStep(running) != nil else { return nil }
+            job = running
         }
         guard let jobID = job["id"] as? String else { return nil }
         let started = now()
@@ -313,6 +319,9 @@ struct NotifierPluginUpdater {
                 progress(.updating(step))
             } else if let outcome = Self.hostOutcome(job) {
                 return await finishHostUpdate(outcome, request: request)
+            } else {
+                // A step this Conduit doesn't know (a newer plugin's).
+                progress(.updating(.downloading))
             }
             guard now().timeIntervalSince(started) < Self.hostFollowLimit else {
                 return .runningOnHost

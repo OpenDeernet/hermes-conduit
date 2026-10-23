@@ -616,7 +616,8 @@ struct NotifierPluginUpdateBanner: View {
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
-            .accessibilityLabel(Text(update.isInProgress ? AppLocalization.string("Cancel") : AppLocalization.string("Not now")))
+            .accessibilityLabel(Text(update.isInProgress ? AppLocalization.string("Cancel")
+                : update == .idle ? AppLocalization.string("Not now") : AppLocalization.string("Dismiss")))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
