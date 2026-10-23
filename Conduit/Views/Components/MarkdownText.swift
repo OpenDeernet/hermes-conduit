@@ -3182,15 +3182,13 @@ enum MarkdownParser {
         return String(value.dropFirst(2))
     }
     private static func orderedItem(_ value: String) -> String? {
-        guard let range = value.range(of: #"^\d+[.)]\s+"#, options: .regularExpression) else { return nil }
+        // CommonMark: at most nine digits, so a longer number is text.
+        guard let range = value.range(of: #"^\d{1,9}[.)]\s+"#, options: .regularExpression) else { return nil }
         return String(value[range.upperBound...])
     }
-    /// The number an ordered item is written with. CommonMark allows up to
-    /// nine digits; anything longer, or past Int, starts at 1.
+    /// The number an ordered item is written with.
     private static func orderedNumber(_ value: String) -> Int {
-        let digits = value.prefix { $0.isASCII && $0.isNumber }
-        guard digits.count <= 9, let number = Int(digits) else { return 1 }
-        return number
+        Int(value.prefix { $0.isASCII && $0.isNumber }) ?? 1
     }
     /// Whether `line` carries on the ordered list after its item `previous`:
     /// the same leading whitespace and the same "." or ")" after the number.
