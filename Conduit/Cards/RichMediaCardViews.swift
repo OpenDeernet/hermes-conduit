@@ -509,7 +509,9 @@ private struct RichPersonRow: View {
         .sheet(isPresented: $composesText) {
             if let dialable = person.dialable, let message = person.message {
                 RichTextComposeSheet(recipient: dialable, body: message) { result in
-                    if result == .sent { textSent = true }
+                    guard result == .sent else { return }
+                    textSent = true
+                    UIAccessibility.post(notification: .announcement, argument: AppLocalization.string("Sent"))
                 }
                 .ignoresSafeArea()
             }
@@ -525,6 +527,7 @@ private struct RichPersonRow: View {
         } else {
             UIPasteboard.general.string = message
             textCopied = true
+            UIAccessibility.post(notification: .announcement, argument: AppLocalization.string("Copied"))
             if let url = URL(string: "sms:\(dialable)") { openURL(url) }
         }
     }
