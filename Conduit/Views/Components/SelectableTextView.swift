@@ -1085,7 +1085,7 @@ private final class MarkdownSelectionTextView: UITextView {
             var actions = super.accessibilityCustomActions ?? []
             if let pin = (delegate as? SelectableTextView.Coordinator)?.pinReplyAction {
                 actions.append(UIAccessibilityCustomAction(
-                    name: AppLocalization.string(pin.isPinned ? "Unpin" : "Pin")
+                    name: AppLocalization.string(pin.isPinned ? "Unpin reply" : "Pin reply")
                 ) { _ in
                     pin()
                     return true

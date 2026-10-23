@@ -86,7 +86,14 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
     private var lastScrollPosition: CGPoint?
     /// The selection the pin pill's title was worked out for, so the
     /// repositioning layouts don't re-read the selected text each frame.
-    private var pinTitleSelection: (anchor: MarkdownSelectionEndpoint, focus: MarkdownSelectionEndpoint, pinned: Bool)?
+    /// Keyed by the pins' revision too, so a pin made elsewhere while the
+    /// selection shows flips the title.
+    private var pinTitleSelection: (
+        anchor: MarkdownSelectionEndpoint, focus: MarkdownSelectionEndpoint, revision: Int, pinned: Bool
+    )?
+    /// A handle is being dragged: the pin title waits for the drop rather
+    /// than reading the selected text every frame.
+    private var isDraggingHandle = false
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -404,6 +411,7 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
 
     func handleDragMoved(role: MarkdownSelectionHandleView.Role, windowPoint: CGPoint) {
         guard let coordinator else { return }
+        isDraggingHandle = true
         if role == .anchor {
             coordinator.updateAnchorSelection(windowPoint: windowPoint)
         } else {
@@ -413,6 +421,7 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
     }
 
     func handleDragEnded() {
+        isDraggingHandle = false
         coordinator?.endSelection()
         setNeedsLayout()
     }
@@ -457,12 +466,14 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
         anchor: MarkdownSelectionEndpoint,
         focus: MarkdownSelectionEndpoint
     ) {
+        let revision = PinnedRepliesRevision.value
         let pinned: Bool
-        if let cached = pinTitleSelection, cached.anchor == anchor, cached.focus == focus {
+        if let cached = pinTitleSelection,
+           isDraggingHandle || (cached.anchor == anchor && cached.focus == focus && cached.revision == revision) {
             pinned = cached.pinned
         } else {
             pinned = action.isPinned(passage: coordinator.copiedAttributedTextForActiveSelection().string)
-            pinTitleSelection = (anchor, focus, pinned)
+            pinTitleSelection = (anchor, focus, revision, pinned)
         }
         let title = AppLocalization.string(pinned ? "Unpin" : "Pin")
         guard pin.configuration?.title != title else { return }

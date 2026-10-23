@@ -410,6 +410,13 @@ extension View {
     }
 }
 
+/// Bumped whenever pins change, for UIKit chrome that caches whether a
+/// selection is pinned (the cross-block pill).
+@MainActor
+enum PinnedRepliesRevision {
+    static var value = 0
+}
+
 /// Flashes a pinned passage once its reply is on screen (#1147): finds the
 /// passage in the reply's text blocks, scrolls the first of them into view
 /// when the reply is taller than the screen, and lights the passage for a
@@ -425,25 +432,38 @@ enum PinnedPassageFlasher {
     /// Flashes `passage` in the reply `messageID` once the jump to its row
     /// has laid it out; looks once more if the row isn't drawn yet.
     static func flash(_ passage: String, inMessage messageID: String) {
-        // A newer jump replaces one still waiting for its row.
+        // A newer jump replaces one still waiting for its row or its
+        // scroll, so an older passage never lights after it.
         pending?.cancel()
         pending = Task { @MainActor in
             for delay in [0.3, 0.5] {
                 try? await Task.sleep(for: .seconds(delay))
                 guard !Task.isCancelled else { return }
-                if flashNow(passage, inMessage: messageID) { break }
+                guard let placed = place(passage, inMessage: messageID) else { continue }
+                if placed.scrolled { try? await Task.sleep(for: .seconds(0.35)) }
+                guard !Task.isCancelled else { return }
+                guard !placed.blocks.isEmpty else { return }
+                let reduceMotion = UIAccessibility.isReduceMotionEnabled
+                for entry in placed.blocks {
+                    entry.host.flashPassage(rects: entry.rects, reduceMotion: reduceMotion)
+                }
+                UIAccessibility.post(notification: .announcement, argument: AppLocalization.string("Pinned passage"))
+                return
             }
-            pending = nil
         }
     }
 
     private static var pending: Task<Void, Never>?
 
-    /// Whether the reply's text was on screen to flash.
-    @discardableResult
-    static func flashNow(_ passage: String, inMessage messageID: String) -> Bool {
+    /// Where the passage sits in the reply's blocks on screen, scrolled
+    /// into view; nil while the reply's text isn't on screen. No blocks
+    /// when the reply shows but not the passage.
+    private static func place(
+        _ passage: String,
+        inMessage messageID: String
+    ) -> (blocks: [(host: SelectableTextViewHostView, rects: [CGRect])], scrolled: Bool)? {
         let candidates = hosts.allObjects.filter { $0.replyMessageID == messageID && $0.window != nil }
-        guard !candidates.isEmpty else { return false }
+        guard !candidates.isEmpty else { return nil }
         var found: [(host: SelectableTextViewHostView, ranges: [NSRange])] = []
         for host in candidates {
             // Read without mounting a text view; only the blocks holding
@@ -455,17 +475,8 @@ enum PinnedPassageFlasher {
             let rects = entry.host.passageRects(for: entry.ranges)
             return rects.isEmpty ? nil : (entry.host, rects)
         }
-        guard !placed.isEmpty else { return true }
-        let scrolled = scrollIntoView(placed)
-        let reduceMotion = UIAccessibility.isReduceMotionEnabled
-        Task { @MainActor in
-            if scrolled { try? await Task.sleep(for: .seconds(0.35)) }
-            for entry in placed {
-                entry.host.flashPassage(rects: entry.rects, reduceMotion: reduceMotion)
-            }
-            UIAccessibility.post(notification: .announcement, argument: AppLocalization.string("Pinned passage"))
-        }
-        return true
+        guard !placed.isEmpty else { return ([], false) }
+        return (placed, scrollIntoView(placed))
     }
 
     /// Brings the top of the passage into view when it's off screen, a

@@ -5896,6 +5896,7 @@ final class AppState: ObservableObject {
     }
 
     func persistPinnedReplies() {
+        PinnedRepliesRevision.value &+= 1
         guard let data = try? JSONEncoder().encode(pinnedRepliesByProfile) else { return }
         defaults.set(data, forKey: pinnedRepliesByProfileKey)
     }
