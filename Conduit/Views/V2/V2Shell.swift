@@ -102,6 +102,10 @@ struct V2ShellContext: Equatable {
         /// True on a wide iPad window, where Chats and Bots show their list
         /// beside the open chat (`V2SplitLayout`).
         var isSplit = false
+        /// True on a window wide enough to split, whether or not the user
+        /// hid the list (`V2ChatListPreference`): the chat offers the
+        /// list's toggle.
+        var canSplit = false
         /// Split, with a chat open beside this tab's list.
         var hasChatBeside = false
     }
@@ -134,6 +138,11 @@ struct V2ShellContext: Equatable {
     var isSplit: Bool {
         get { values.isSplit }
         set { values.isSplit = newValue }
+    }
+
+    var canSplit: Bool {
+        get { values.canSplit }
+        set { values.canSplit = newValue }
     }
 
     var hasChatBeside: Bool {
@@ -382,6 +391,7 @@ struct V2Shell: View {
     /// voice button, with their bottom padding).
     @State private var tabBarHeight: CGFloat = 62
     @AppStorage(V2MainButtonPreference.key) private var mainButtonNewChat = V2MainButtonPreference.defaultValue
+    @AppStorage(V2ChatListPreference.key) private var chatListBeside = V2ChatListPreference.defaultValue
 
     /// Whether the visible tab shows the conversation.
     private var conversationVisible: Bool {
@@ -428,12 +438,15 @@ struct V2Shell: View {
     /// live, so a window resized across the threshold (Stage Manager, Split
     /// View) switches layout and rebuilds the tab's stacks: the paths, and
     /// so the open chat, carry over; the tab's own state (the list's scroll
-    /// position, its search) doesn't.
+    /// position, its search) doesn't. Hiding the list (the chat's toggle,
+    /// Settings > Appearance) gives a wide window the phone's one column
+    /// the same way.
     private var sizedTabs: some View {
         GeometryReader { proxy in
-            let split = V2SplitLayout.isSplit(width: proxy.size.width)
-            tabs(split: split)
-                .environment(\.v2Shell, V2ShellContext(pickProfile: pickProfile, showScheduledRuns: showScheduledRuns, values: .init(contentFaded: contentFaded, contentShift: contentShift, isSplit: split)))
+            let canSplit = V2SplitLayout.isSplit(width: proxy.size.width)
+            let split = V2SplitLayout.isSplit(width: proxy.size.width, showsList: chatListBeside)
+            tabs(split: split, canSplit: canSplit)
+                .environment(\.v2Shell, V2ShellContext(pickProfile: pickProfile, showScheduledRuns: showScheduledRuns, values: .init(contentFaded: contentFaded, contentShift: contentShift, isSplit: split, canSplit: canSplit)))
         }
     }
 
@@ -536,8 +549,9 @@ struct V2Shell: View {
     /// for a separate circle: a search-role tab sat inside the bar as a
     /// second Voice item under the button.
     /// Split (a wide iPad window), the bar stays up under the list column,
-    /// beside the open chat, on every tab.
-    private func tabs(split: Bool) -> some View {
+    /// beside the open chat, on every tab, and stays there when the user
+    /// hid the list.
+    private func tabs(split: Bool, canSplit: Bool) -> some View {
         ZStack {
             ForEach(V2Tab.destinations) { tab in
                 // The selected tab shows from the tap's own frame; it joins
@@ -546,7 +560,7 @@ struct V2Shell: View {
                     let isSelected = selectedTab == tab
                     let rootCovered = isRootCovered(tab, split: split)
                     let chatBeside = split && path(of: tab).contains(.conversation)
-                    tabRoot(tab, split: split)
+                    tabRoot(tab, split: split, canSplit: canSplit)
                         .transformEnvironment(\.v2Shell) {
                             $0.isTabActive = isSelected
                             $0.isRootCovered = rootCovered
@@ -578,7 +592,7 @@ struct V2Shell: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 6)
-                    .frame(width: split ? V2SplitLayout.listWidth : nil)
+                    .frame(width: canSplit ? V2SplitLayout.listWidth : nil)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onGeometryChange(for: CGFloat.self) { proxy in
                         proxy.size.height
@@ -625,7 +639,7 @@ struct V2Shell: View {
     }
 
     @ViewBuilder
-    private func tabRoot(_ tab: V2Tab, split: Bool) -> some View {
+    private func tabRoot(_ tab: V2Tab, split: Bool, canSplit: Bool) -> some View {
         switch tab {
         case .chats where split:
             splitColumns(path: $chatsPath, offersNewChat: true) {
@@ -639,7 +653,7 @@ struct V2Shell: View {
             NavigationStack(path: $chatsPath) {
                 // Only the list's own changes redraw it, not the shell's
                 // (`V2ShownUpdates`).
-                tabBarClearance(V2ChatsView(appState: appState).equatable())
+                listRoot(tabBarClearance(V2ChatsView(appState: appState).equatable()), alone: canSplit)
                     .navigationDestination(for: V2Route.self, destination: destination)
             }
         case .tasks:
@@ -650,7 +664,7 @@ struct V2Shell: View {
             }
         case .bots:
             NavigationStack(path: $botsPath) {
-                tabBarClearance(V2BotsView())
+                listRoot(tabBarClearance(V2BotsView()), alone: canSplit)
                     .navigationDestination(for: V2Route.self, destination: destination)
             }
         case .settings:
@@ -658,6 +672,19 @@ struct V2Shell: View {
             // and on every page it pushes (`v2TabBarClearance()`).
             V2SettingsTab(link: $settingsLink)
                 .environment(\.v2TabBarClearance, tabBarHeight)
+        }
+    }
+
+    /// A Chats or Bots list in one column. `alone` is a wide window whose
+    /// user hid the list beside the chat: the list keeps to a readable
+    /// column rather than running the window's width. Inside the stack, so
+    /// a chat pushed over it keeps its own width.
+    @ViewBuilder
+    private func listRoot<Content: View>(_ content: Content, alone: Bool) -> some View {
+        if alone {
+            content.readableContentWidth(ReadableWidth.list)
+        } else {
+            content
         }
     }
 
@@ -842,7 +869,8 @@ extension View {
 /// Manager) shows Chats and Bots as two columns: the list, and the open
 /// chat beside it. It follows the window's width rather than the device,
 /// so a narrow iPad window, or an unfolded iPhone Duo, keeps the phone's
-/// one column.
+/// one column. The user can hide the list on a wide window too
+/// (`V2ChatListPreference`).
 enum V2SplitLayout {
     /// The list column: the narrowest iPhone's width, which every V2 list
     /// screen already fits.
@@ -852,6 +880,12 @@ enum V2SplitLayout {
 
     static func isSplit(width: CGFloat) -> Bool {
         width >= listWidth + 1 + minimumChatWidth
+    }
+
+    /// Split, unless the user hid the list: then a wide window keeps one
+    /// column, the chat pushed over the list as on a phone.
+    static func isSplit(width: CGFloat, showsList: Bool) -> Bool {
+        showsList && isSplit(width: width)
     }
 
     /// The list column's stack: the tab's path without the conversation,
@@ -1022,6 +1056,14 @@ enum V2ShellPreference {
 enum V2MainButtonPreference {
     static let key = "conduit.v2.mainButtonNewChat"
     static let defaultValue = false
+}
+
+/// Whether a wide window shows the Chats or Bots list beside the open chat
+/// (#1164). Off, the chat takes the whole window, as on a phone. Kept on
+/// this device only: it depends on the screen, so it isn't synced.
+enum V2ChatListPreference {
+    static let key = "conduit.v2.chatListBeside"
+    static let defaultValue = true
 }
 
 private struct V2TabBarClearanceKey: EnvironmentKey {
