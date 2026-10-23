@@ -9443,16 +9443,20 @@ extension AppStateForegroundLifecycleTests {
         XCTAssertTrue(harness.appState.backgroundConnectionGrace.isHolding)
         XCTAssertFalse(harness.appState.isReturningQuietly)
 
-        await runSceneActivation(harness)
+        // Read before the foreground refresh runs: the quiet window is
+        // only a few seconds long.
+        let activation = harness.appState.handleScenePhase(.active)
         XCTAssertFalse(harness.appState.backgroundConnectionGrace.isHolding)
         XCTAssertEqual(ended, [UIBackgroundTaskIdentifier(rawValue: 7)])
         // Back from the background: a reconnect starting now stays quiet
         // for a moment.
         XCTAssertTrue(harness.appState.isReturningQuietly)
-        harness.appState.isConnected = false
         harness.appState.isConnecting = true
         XCTAssertTrue(harness.appState.hidesBriefReconnect)
         harness.appState.isConnecting = false
+        // The refresh itself isn't under test: an overlay dip stops it.
+        harness.appState.handleScenePhase(.inactive)
+        await activation?.value
     }
 
     func testAnOverlayDipIsNotAQuietReturn() async {
@@ -9466,11 +9470,13 @@ extension AppStateForegroundLifecycleTests {
 
         harness.appState.handleScenePhase(.inactive)
         XCTAssertFalse(harness.appState.backgroundConnectionGrace.isHolding)
-        await runSceneActivation(harness)
+        let activation = harness.appState.handleScenePhase(.active)
         XCTAssertFalse(harness.appState.isReturningQuietly)
         harness.appState.isConnecting = true
         XCTAssertFalse(harness.appState.hidesBriefReconnect)
         harness.appState.isConnecting = false
+        harness.appState.handleScenePhase(.inactive)
+        await activation?.value
     }
 
     func testLeavingWithoutAnOpenSocketHoldsNothing() {
