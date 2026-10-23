@@ -439,5 +439,6 @@ Read Aloud and live voice read-back · chat list previews and quotes
 - A reply that grows past the large-document size while streaming is parsed per promoted slice, so a list cut at a slice boundary carries on from the number written on the slice's first item (right when numbered 1, 2, 3; restarts for "1. 1. 1.").
 - A marker past two digits ("100.") can crowd its column in the block view.
 - A single list item too big for one long-reply chunk is split into paragraphs that each repeat its number.
+- A long reply's continuation chunks draw list items as paragraphs with the number baked in, so they lose the list's styled marker column.
 
 **Checked:** 2026-10-23, at #1175.

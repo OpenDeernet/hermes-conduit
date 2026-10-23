@@ -63,4 +63,38 @@ extension MarkdownRichContentPolicyTests {
         XCTAssertTrue(run.string.hasPrefix("7.\tseven"), run.string)
         XCTAssertTrue(run.string.contains("8.\teight"), run.string)
     }
+
+    func testLongListChunksCountFromItsStart() {
+        let items = (0..<900).map { "item \($0) \(String(repeating: "text ", count: 12))" }
+        let chunks = MarkdownLargeChunkPlanner.chunks(for: [.orderedList(items, start: 7)])
+        XCTAssertGreaterThan(chunks.count, 1, "the list must split across chunks")
+        var firstGroup: [String] = []
+        var bakedOrdinals: [Int] = []
+        for case .flow(let blocks) in chunks {
+            for block in blocks {
+                switch block {
+                case .orderedList(let group, let start):
+                    XCTAssertEqual(start, 7)
+                    firstGroup = group
+                case .paragraph(let text):
+                    if let ordinal = Int(text.prefix { $0.isNumber }) { bakedOrdinals.append(ordinal) }
+                default: break
+                }
+            }
+        }
+        XCTAssertFalse(firstGroup.isEmpty)
+        // Continuations carry on from 7 + the first group, one by one.
+        XCTAssertEqual(bakedOrdinals, Array((7 + firstGroup.count)..<(7 + items.count)))
+    }
+
+    func testOversizedFirstItemBakesItsStart() {
+        let huge = String(repeating: "item prose ", count: 900)
+        let chunks = MarkdownLargeChunkPlanner.chunks(for: [.orderedList([huge, "normal"], start: 7)])
+        let texts = chunks.flatMap { chunk -> [String] in
+            guard case .flow(let blocks) = chunk else { return [] }
+            return blocks.compactMap { if case .paragraph(let text) = $0 { return text }; return nil }
+        }
+        XCTAssertTrue(texts.first?.hasPrefix("7. ") == true, "\(texts.first ?? "")")
+        XCTAssertTrue(texts.contains { $0.hasPrefix("8. normal") }, "\(texts)")
+    }
 }
