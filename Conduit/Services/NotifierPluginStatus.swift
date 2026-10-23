@@ -179,13 +179,22 @@ struct NotifierPluginStatus: Equatable {
     }
 
     /// The version an update brings: the latest plugin, or this build's
-    /// recommended one when the latest isn't known or is older.
+    /// floor when the latest isn't known or is older.
     var offeredVersion: String {
         // Not older also means readable: an unreadable version counts as older.
-        guard let latestVersion, !Self.isOlder(latestVersion, than: Self.recommendedVersion) else {
-            return Self.recommendedVersion
+        guard let latestVersion, !Self.isOlder(latestVersion, than: floorVersion) else {
+            return floorVersion
         }
         return latestVersion
+    }
+
+    /// The least an update brings: this build's recommended version, or the
+    /// plugin it was archived with, which main had then.
+    var floorVersion: String {
+        guard let archivedVersion, !Self.isOlder(archivedVersion, than: Self.recommendedVersion) else {
+            return Self.recommendedVersion
+        }
+        return archivedVersion
     }
 
     /// The version below which the notice asks for an update: every
@@ -194,11 +203,9 @@ struct NotifierPluginStatus: Equatable {
     /// update brings).
     var noticeVersion: String {
         guard !followsMain else { return offeredVersion }
-        var target = Self.recommendedVersion
-        for candidate in [archivedVersion, stableVersion] {
-            if let candidate, !Self.isOlder(candidate, than: target) {
-                target = candidate
-            }
+        var target = floorVersion
+        if let stableVersion, !Self.isOlder(stableVersion, than: target) {
+            target = stableVersion
         }
         return Self.isOlder(offeredVersion, than: target) ? offeredVersion : target
     }

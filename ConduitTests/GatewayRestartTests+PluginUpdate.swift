@@ -252,6 +252,13 @@ extension GatewayRestartTests {
         status.stableVersion = "1.2.0"
         XCTAssertEqual(status.noticeVersion, "1.2.0")
 
+        // GitHub out of reach: the archived version still stands.
+        status.stableVersion = nil
+        status.latestVersion = nil
+        XCTAssertEqual(status.offeredVersion, "1.1.0")
+        XCTAssertEqual(status.noticeVersion, "1.1.0")
+        XCTAssertTrue(status.updateRecommended)
+
         // Up to date with the archive: no notice.
         status.stableVersion = nil
         status.state = .reported(version: "1.1.0", capabilities: Set(NotifierPluginStatus.usedCapabilities))
