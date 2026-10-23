@@ -908,8 +908,15 @@ struct SelectableTextView: UIViewRepresentable {
                         title: AppLocalization.string(isPinned ? "Unpin" : "Pin"),
                         image: UIImage(systemName: isPinned ? "pin.slash" : "pin")
                     ) { [weak textView] _ in
-                        if let textView { Self.dismissSelection(in: textView) }
-                        pinReplyAction.togglePassage(selected)
+                        guard let textView else { return }
+                        // The selection as it is now, should it have changed
+                        // under the open menu.
+                        let current = textView.selectedRange
+                        let passage = current.length > 0
+                            ? Self.selectedText(in: textView, range: current)
+                            : selected
+                        Self.dismissSelection(in: textView)
+                        pinReplyAction.togglePassage(passage)
                     })
                 }
                 let replyPinned = pinReplyAction.isPinned

@@ -2103,7 +2103,7 @@ struct AssistantMessageMoreMenu: View {
                 } label: {
                     Label(
                         AppLocalization.string(isPinned ? "Unpin reply" : "Pin reply"),
-                        systemImage: isPinned ? "pin.slash" : "pin"
+                        systemImage: isPinned ? "pin.slash.fill" : "pin.fill"
                     )
                 }
                 .disabled(!hasText)

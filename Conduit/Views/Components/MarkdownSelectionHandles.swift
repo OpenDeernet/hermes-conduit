@@ -84,6 +84,9 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
     private var lastAnchorCaret: CGRect?
     private var lastFocusCaret: CGRect?
     private var lastScrollPosition: CGPoint?
+    /// The selection the pin pill's title was worked out for, so the
+    /// repositioning layouts don't re-read the selected text each frame.
+    private var pinTitleSelection: (anchor: MarkdownSelectionEndpoint, focus: MarkdownSelectionEndpoint, pinned: Bool)?
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -116,8 +119,13 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
         focusHandle?.isHidden = false
         // Quote shows inside a chat while the composer takes input.
         let quote = quoteAction?.isAvailable == true ? quotePill : nil
-        // Pin shows on a reply whose passages can be pinned.
-        let pin = coordinator.pinReplyAction != nil ? pinPill : nil
+        // Pin shows on a reply whose passages can be pinned, as Unpin
+        // when the selection is a pinned passage.
+        let pinAction = coordinator.pinReplyAction
+        let pin = pinAction != nil ? pinPill : nil
+        if let pinAction, let pin {
+            updatePinTitle(pin, action: pinAction, coordinator: coordinator, anchor: anchor, focus: focus)
+        }
         copyPill?.isHidden = false
         quotePill?.isHidden = quote == nil
         pinPill?.isHidden = pin == nil
@@ -425,8 +433,9 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
         quoteAction(selected)
     }
 
-    /// Pins the whole cross-block selection as a passage of its reply
-    /// (#1147) and clears it, which hides this chrome.
+    /// Pins the whole cross-block selection as a passage of its reply, or
+    /// unpins it when it is one (#1147), and clears it, which hides this
+    /// chrome.
     func pinActiveSelection() {
         guard
             let coordinator,
@@ -436,8 +445,31 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
         let selected = coordinator.copiedAttributedTextForActiveSelection().string
         guard selected.contains(where: { !$0.isWhitespace }) else { return }
         coordinator.clearSelection()
+        pinTitleSelection = nil
         setNeedsLayout()
-        pinAction.pinPassage(selected)
+        pinAction.togglePassage(selected)
+    }
+
+    private func updatePinTitle(
+        _ pin: UIButton,
+        action: ChatPinReplyAction,
+        coordinator: MarkdownSelectionCoordinator,
+        anchor: MarkdownSelectionEndpoint,
+        focus: MarkdownSelectionEndpoint
+    ) {
+        let pinned: Bool
+        if let cached = pinTitleSelection, cached.anchor == anchor, cached.focus == focus {
+            pinned = cached.pinned
+        } else {
+            pinned = action.isPinned(passage: coordinator.copiedAttributedTextForActiveSelection().string)
+            pinTitleSelection = (anchor, focus, pinned)
+        }
+        let title = AppLocalization.string(pinned ? "Unpin" : "Pin")
+        guard pin.configuration?.title != title else { return }
+        var configuration = pin.configuration
+        configuration?.title = title
+        configuration?.image = UIImage(systemName: pinned ? "pin.slash" : "pin")
+        pin.configuration = configuration
     }
 
     private func copyActiveSelection() {

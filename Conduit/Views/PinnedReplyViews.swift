@@ -419,13 +419,19 @@ enum PinnedPassageFlasher {
     /// Flashes `passage` in the reply `messageID` once the jump to its row
     /// has laid it out; looks once more if the row isn't drawn yet.
     static func flash(_ passage: String, inMessage messageID: String) {
-        Task { @MainActor in
+        // A newer jump replaces one still waiting for its row.
+        pending?.cancel()
+        pending = Task { @MainActor in
             for delay in [0.3, 0.5] {
                 try? await Task.sleep(for: .seconds(delay))
-                if flashNow(passage, inMessage: messageID) { return }
+                guard !Task.isCancelled else { return }
+                if flashNow(passage, inMessage: messageID) { break }
             }
+            pending = nil
         }
     }
+
+    private static var pending: Task<Void, Never>?
 
     /// Whether the reply's text was on screen to flash.
     @discardableResult
