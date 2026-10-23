@@ -437,7 +437,8 @@ Read Aloud and live voice read-back · chat list previews and quotes
 **Open gaps**
 - Nested lists are flattened: an indented sub-list draws as its own list at the left edge.
 - Read Aloud and live read-back speak the numbers as written, so "1. 1. 1." is spoken 1, 1, 1 while the screen draws 1, 2, 3.
-- Copy response under a reply copies the Markdown source, so "1. 1. 1." copies as written while the screen draws 1, 2, 3; selection Copy matches the screen.
+- Copy response under a reply copies the Markdown source, so "1. 1. 1." copies as written while the screen draws 1, 2, 3; selection Copy matches the screen where the list is selectable text (prose runs, one text view).
+- A list drawn as a block view (outside a prose run, e.g. under VoiceOver or next to a task list) keeps its number outside the selectable text, so selection Copy leaves the number out.
 - A reply that grows past the large-document size while streaming is parsed per promoted slice, so a list cut at a slice boundary carries on from the number written on the slice's first item (right when numbered 1, 2, 3; restarts for "1. 1. 1.").
 - A marker past two digits ("100.") can crowd its column in the block view.
 - A single list item too big for one long-reply chunk is split into paragraphs that each repeat its number.
