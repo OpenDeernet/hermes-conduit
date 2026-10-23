@@ -833,13 +833,8 @@ struct V2ChatsView: View, Equatable {
     private func sourceRows(_ source: SessionSource?) -> [SessionSummary] {
         renderMemo.sourceRows(source) {
             SidebarSourceRows.rows(
-<<<<<<< HEAD
-                sessions: listed.sessions,
+                sessions: listedChats(listed.sessions),
                 cronSessions: listed.cron,
-=======
-                sessions: listedChats,
-                cronSessions: appState.listedCronSessions,
->>>>>>> origin/pulse
                 source: source,
                 category: category,
                 isPinned: appState.isSessionPinned
@@ -848,8 +843,7 @@ struct V2ChatsView: View, Equatable {
     }
 
     /// The profile's chats but Pulse's own, which the Pulse screen stands in for.
-    private var listedChats: [SessionSummary] {
-        let sessions = appState.listedSessions
+    private func listedChats(_ sessions: [SessionSummary]) -> [SessionSummary] {
         guard appState.pulseHomeChatID != nil else { return sessions }
         return sessions.filter { !appState.isPulseHomeChat($0) }
     }
@@ -878,13 +872,8 @@ struct V2ChatsView: View, Equatable {
         }
         return selection.rows(
             everything: sourceRows(nil),
-<<<<<<< HEAD
-            sessions: listed.sessions,
+            sessions: listedChats(listed.sessions),
             cronSessions: listed.cron,
-=======
-            sessions: listedChats,
-            cronSessions: appState.listedCronSessions,
->>>>>>> origin/pulse
             category: category,
             hasStatus: hasStatus
         )
@@ -979,12 +968,8 @@ struct V2ChatsView: View, Equatable {
     private func contentSearchRows(_ displayed: [SessionSummary]) -> [SessionContentSearchRow] {
         guard isSearching, !contentSearch.hits.isEmpty else { return [] }
         let known = appState.activeProfileSessions + appState.activeProfileCronSessions
-<<<<<<< HEAD
             + (appState.isAllProfilesChatsOn ? listed.sessions.filter(appState.isOtherProfileRow) : [])
-        return SessionContentSearch.rows(
-=======
         let rows = SessionContentSearch.rows(
->>>>>>> origin/pulse
             hits: contentSearch.hits,
             listed: displayed,
             known: known,
@@ -1091,11 +1076,7 @@ struct V2ChatsView: View, Equatable {
                         hasOfflineCopy: false,
                         catalogPhase: appState.sessionCatalogPhase,
                         isRefreshing: appState.isRefreshingSessionCatalog,
-<<<<<<< HEAD
-                        filteredOutRows: !listed.sessions.isEmpty || !listed.cron.isEmpty
-=======
-                        filteredOutRows: !listedChats.isEmpty || !appState.listedCronSessions.isEmpty
->>>>>>> origin/pulse
+                        filteredOutRows: !listedChats(listed.sessions).isEmpty || !listed.cron.isEmpty
                     ),
                     emptyTitle: selection.emptyStateFilter.emptyTitle,
                     emptyDescription: isSearching
