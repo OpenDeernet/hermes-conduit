@@ -1823,6 +1823,7 @@ final class VoiceConversationController: ObservableObject {
         guard isCurrent(operation), isAwaitingVoiceAssistant, !isSteeringTurn,
               !isDrainingSpeech, speechDeltas.isEmpty, speechStream == nil,
               utteranceTask == nil, bargeInTask == nil else { return }
+        approvalNoticeOpensAnswerWindow = false
         cachedRoutePolicy = nil
         isPlaybackCaptureSuspended = false
         state = .thinking
@@ -2240,10 +2241,10 @@ final class VoiceConversationController: ObservableObject {
             return
         }
         if approvalNoticeOpensAnswerWindow, !assistantFinished, speechDeltas.isEmpty, speechStream == nil {
-            approvalNoticeOpensAnswerWindow = false
             guard isSpeechDrainCurrent(operation: operation, revision: revision) else { return }
             // Once this drain has settled, so the turn's reply can start
-            // one of its own.
+            // one of its own. The notice stays the notice until then, so a
+            // Stop in between still keeps the turn.
             Task { @MainActor [weak self] in await self?.openApprovalAnswerWindow(operation: operation) }
             return
         }
