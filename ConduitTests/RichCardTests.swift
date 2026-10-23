@@ -178,7 +178,7 @@ extension AppStateVoiceCapabilityTests {
         XCTAssertNil(RichPerson(json: ["name": "Di", "message": "Hi"])?.message)
     }
 
-        func testAnEmailActionOnlyAddressesTheEmail() throws {
+    func testAnEmailActionOnlyAddressesTheEmail() throws {
         XCTAssertEqual(RichPerson.mailtoURL("first.last+tag@example.co.uk")?.absoluteString,
                        "mailto:first.last+tag@example.co.uk")
         // Whatever the schema lets through, the tail of an address never becomes mailto: headers.
