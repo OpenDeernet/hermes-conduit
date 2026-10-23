@@ -37,7 +37,7 @@ final class NotificationCopyTests: XCTestCase {
     }
 
     func testLabelledTitleJoinsTheChatTitle() {
-        let preview = NotificationCopy.preview(type: "approval.needed", content: [
+        let preview = NotificationCopy.preview([
             "title": "Approval needed · Deploy", "title_label": "approval.needed",
             "session_title": "Deploy", "body": "rm -rf build",
         ])
@@ -45,7 +45,7 @@ final class NotificationCopyTests: XCTestCase {
         XCTAssertEqual(preview.body, "rm -rf build")
 
         standardDefaults.set("zh-Hans", forKey: AppLanguageStore.defaultsKey)
-        let chinese = NotificationCopy.preview(type: "approval.needed", content: [
+        let chinese = NotificationCopy.preview([
             "title": "Approval needed · Deploy", "title_label": "approval.needed", "session_title": "Deploy",
         ])
         XCTAssertEqual(chinese.title, "需要批准 · Deploy")
@@ -53,35 +53,35 @@ final class NotificationCopyTests: XCTestCase {
     }
 
     func testReplyTitleIsTheChatTitleElseResponseReady() {
-        XCTAssertEqual(NotificationCopy.preview(type: "response.ready", content: [
+        XCTAssertEqual(NotificationCopy.preview([
             "title_label": "response.ready", "session_title": "Trip plan", "body": "Done.",
         ]).title, "Trip plan")
-        XCTAssertEqual(NotificationCopy.preview(type: "response.ready", content: [
+        XCTAssertEqual(NotificationCopy.preview([
             "title_label": "response.ready", "body": "Done.",
         ]).title, "Response ready")
     }
 
     func testUnlabelledPushKeepsTheHostText() {
         // An older plugin, or a title that is content (a tool's prompt).
-        let preview = NotificationCopy.preview(type: "phone.changes", content: ["title": "Head to the airport", "body": "Tap Go."])
+        let preview = NotificationCopy.preview(["title": "Head to the airport", "body": "Tap Go."])
         XCTAssertEqual(preview.title, "Head to the airport")
         XCTAssertEqual(preview.body, "Tap Go.")
-        XCTAssertNil(NotificationCopy.preview(type: "response.ready", content: [:]).title)
+        XCTAssertNil(NotificationCopy.preview([:]).title)
     }
 
     func testPhoneChangeLabels() {
-        XCTAssertEqual(NotificationCopy.preview(type: "phone.changes", content: [
+        XCTAssertEqual(NotificationCopy.preview([
             "title_label": "phone.add_event", "title": "Hermes wants to add an event", "body": "Lunch, Fri 12:00",
         ]).title, "Hermes wants to add an event")
-        XCTAssertEqual(NotificationCopy.preview(type: "phone.changes", content: ["title_label": "phone.auto.set_timer"]).title,
+        XCTAssertEqual(NotificationCopy.preview(["title_label": "phone.auto.set_timer"]).title,
                        "Hermes is starting a timer")
-        XCTAssertEqual(NotificationCopy.preview(type: "phone.changes", content: ["title_label": "phone.unknown", "title": "Host"]).title,
+        XCTAssertEqual(NotificationCopy.preview(["title_label": "phone.unknown", "title": "Host"]).title,
                        "Host", "an unknown label keeps the host's title")
     }
 
     func testCallLineComposesFromTheCall() {
         func line(_ call: [String: Any]) -> String? {
-            NotificationCopy.preview(type: "call.requested", content: [
+            NotificationCopy.preview([
                 "title_label": "call.requested", "body": "host line", "call": call,
             ]).body
         }
@@ -92,7 +92,7 @@ final class NotificationCopyTests: XCTestCase {
         XCTAssertEqual(line(["kind": "question"]), "Hermes has a question for you.")
         XCTAssertEqual(line(["kind": "failed", "origin": "alert"]), "Hermes ran into a problem with your request.")
         XCTAssertEqual(line(["title": "No kind"]), "host line", "a call without an outcome keeps the host's line")
-        XCTAssertEqual(NotificationCopy.preview(type: "call.requested", content: ["title_label": "call.requested"]).title,
+        XCTAssertEqual(NotificationCopy.preview(["title_label": "call.requested"]).title,
                        "Hermes wants to talk")
     }
 }

@@ -323529,13 +323529,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hermes 有一项更改要给你"
+            "value" : "Hermes 为你准备了一项更改"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hermes 有一項變更要給你"
+            "value" : "Hermes 為你準備了一項變更"
           }
         }
       }

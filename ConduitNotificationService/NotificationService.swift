@@ -48,9 +48,10 @@ final class NotificationService: UNNotificationServiceExtension {
             }
             let generic = NotificationCopy.generic(for: verified.type)
             content.title = generic.title
+            content.subtitle = ""
             content.body = generic.body
             if NotificationSharedSettings.showPreviews {
-                let preview = NotificationCopy.preview(type: verified.type, content: verified.content)
+                let preview = NotificationCopy.preview(verified.content)
                 if let title = preview.title { content.title = title }
                 if let body = preview.body { content.body = body }
             }

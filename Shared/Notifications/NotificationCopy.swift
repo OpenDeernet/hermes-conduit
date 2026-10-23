@@ -38,7 +38,7 @@ enum NotificationCopy {
     /// label's title, joined with the chat's title when the host sent one;
     /// a call composes its line from the call's outcome. Any other title or
     /// body is the host's own text (an older plugin, a tool's prompt title).
-    static func preview(type: String, content: [String: Any]) -> (title: String?, body: String?) {
+    static func preview(_ content: [String: Any]) -> (title: String?, body: String?) {
         let hostTitle = nonEmpty(content["title"])
         let hostBody = nonEmpty(content["body"])
         guard let label = nonEmpty(content["title_label"]) else { return (hostTitle, hostBody) }
