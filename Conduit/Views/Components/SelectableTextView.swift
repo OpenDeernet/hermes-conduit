@@ -155,6 +155,7 @@ struct SelectableTextView: UIViewRepresentable {
             drawsUntilTouched: drawsUntilTouched(in: context.environment)
         )
         hostView.selectionTint = context.environment.textSelectionTint
+        hostView.replyMessageID = context.environment.chatPinReplyAction?.messageID
         return hostView
     }
 
@@ -168,6 +169,7 @@ struct SelectableTextView: UIViewRepresentable {
         }
         updateUIViewForTests(uiView, coordinator: context.coordinator)
         uiView.selectionTint = context.environment.textSelectionTint
+        uiView.replyMessageID = context.environment.chatPinReplyAction?.messageID
     }
 
     /// Whether this text is drawn until something needs its text view: on
@@ -845,7 +847,7 @@ struct SelectableTextView: UIViewRepresentable {
         /// Set inside a chat: the selection menu then offers Quote (#385).
         var quoteAction: ChatQuoteAction?
         /// Set on a reply that can be pinned: the menu then offers Pin or
-        /// Unpin after Quote (#918).
+        /// Unpin for the selected passage after Quote (#918, #1147).
         var pinReplyAction: ChatPinReplyAction?
 
         init(
@@ -875,7 +877,8 @@ struct SelectableTextView: UIViewRepresentable {
         /// Inside a chat, the native selection menu gains Quote right after
         /// the standard edit group (Copy), which puts the selection in the
         /// composer as a `>` quote (#385), and on a reply that can be pinned,
-        /// Pin or Unpin after it (#918). Elsewhere the default menu shows.
+        /// Pin or Unpin for the selected passage after it (#918, #1147).
+        /// Elsewhere the default menu shows.
         func textView(
             _ textView: UITextView,
             editMenuForTextIn range: NSRange,
@@ -895,15 +898,19 @@ struct SelectableTextView: UIViewRepresentable {
                     Self.quoteSelection(in: textView, range: current.length > 0 ? current : range, with: quoteAction)
                 })
             }
+            // Pins the selected passage, not the whole reply (#1147).
             if let pinReplyAction {
-                let isPinned = pinReplyAction.isPinned
-                added.append(UIAction(
-                    title: AppLocalization.string(isPinned ? "Unpin" : "Pin"),
-                    image: UIImage(systemName: isPinned ? "pin.slash" : "pin")
-                ) { [weak textView] _ in
-                    if let textView { Self.dismissSelection(in: textView) }
-                    pinReplyAction()
-                })
+                let selected = Self.selectedText(in: textView, range: range)
+                if selected.contains(where: { !$0.isWhitespace }) {
+                    let isPinned = pinReplyAction.isPinned(passage: selected)
+                    added.append(UIAction(
+                        title: AppLocalization.string(isPinned ? "Unpin" : "Pin"),
+                        image: UIImage(systemName: isPinned ? "pin.slash" : "pin")
+                    ) { [weak textView] _ in
+                        if let textView { Self.dismissSelection(in: textView) }
+                        pinReplyAction.togglePassage(selected)
+                    })
+                }
             }
             guard !added.isEmpty else { return nil }
             return UIMenu(children: Self.editMenuElements(suggestedActions, adding: added))
@@ -924,6 +931,16 @@ struct SelectableTextView: UIViewRepresentable {
             textView.resignFirstResponder()
         }
 
+        /// The selected text as Copy would take it: all of a selection
+        /// spanning blocks.
+        @MainActor
+        static func selectedText(in textView: UITextView, range: NSRange) -> String {
+            let fullText = textView.attributedText ?? NSAttributedString()
+            let clamped = NSIntersectionRange(range, NSRange(location: 0, length: fullText.length))
+            return (textView as? MarkdownSelectionTextView)?.coordinatedCopiedAttributedText()?.string
+                ?? MarkdownProseRun.copyableText(fullText.attributedSubstring(from: clamped)).string
+        }
+
         /// Hands the selected text to the composer and clears the selection,
         /// which dismisses the menu. A selection spanning blocks quotes all
         /// of it, matching what Copy would take. Whitespace alone has nothing
@@ -932,8 +949,7 @@ struct SelectableTextView: UIViewRepresentable {
         static func quoteSelection(in textView: UITextView, range: NSRange, with quoteAction: ChatQuoteAction) {
             let fullText = textView.attributedText ?? NSAttributedString()
             let clamped = NSIntersectionRange(range, NSRange(location: 0, length: fullText.length))
-            let selected = (textView as? MarkdownSelectionTextView)?.coordinatedCopiedAttributedText()?.string
-                ?? MarkdownProseRun.copyableText(fullText.attributedSubstring(from: clamped)).string
+            let selected = selectedText(in: textView, range: range)
             guard selected.contains(where: { !$0.isWhitespace }) else { return }
             (textView as? MarkdownSelectionTextView)?.selectionCoordinator?.clearSelection()
             textView.selectedRange = NSRange(location: clamped.location, length: 0)
@@ -1046,8 +1062,8 @@ private final class MarkdownSelectionTextView: UITextView {
         super.touchesCancelled(touches, with: event)
     }
 
-    /// VoiceOver reaches the long-press menu's Pin as an action on the
-    /// reply's text (#918), named for the reply as it is now.
+    /// VoiceOver pins the whole reply from an action on its text (#918),
+    /// named for the reply as it is now.
     override var accessibilityCustomActions: [UIAccessibilityCustomAction]? {
         get {
             var actions = super.accessibilityCustomActions ?? []
@@ -1290,6 +1306,15 @@ final class SelectableTextViewHostView: UIView {
             guard selectionTint != oldValue else { return }
             // A drawn host's text view takes it when it mounts.
             textView?.tintColor = selectionTint
+        }
+    }
+
+    /// The reply this text belongs to, where its passages can be pinned:
+    /// a pinned passage's jump finds and flashes it here (#1147).
+    var replyMessageID: String? {
+        didSet {
+            guard replyMessageID != oldValue, replyMessageID != nil else { return }
+            PinnedPassageFlasher.register(self)
         }
     }
 

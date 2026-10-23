@@ -59,6 +59,8 @@ struct ChatView: View {
     @State private var latestAnimationTask: Task<Void, Never>?
     /// The overview of every pinned reply, from the pinned bar (#918).
     @State private var showsPinnedReplies = false
+    /// The pin whose label is being edited from the bar (#1147).
+    @State private var labelingPin: PinnedReply?
     /// Gives up on an overview reveal whose reply the opened chat hasn't
     /// loaded (an older part of it).
     @State private var pinnedRevealFallbackTask: Task<Void, Never>?
@@ -397,6 +399,9 @@ struct ChatView: View {
             PinnedRepliesSheet()
                 .environmentObject(appState)
         }
+        .pinnedReplyLabelEditor($labelingPin) { pin, label in
+            appState.setPinnedReplyLabel(pin, to: label)
+        }
     }
 
     // MARK: - Scroll construction (layered so the type-checker can cope)
@@ -699,7 +704,11 @@ struct ChatView: View {
         pinnedRevealFallbackTask = nil
         pinnedRevealFallbackReveal = nil
         appState.pendingPinnedReplyReveal = nil
-        DispatchQueue.main.async { scrollEngine.explicitMessageRequested(id: id) }
+        let passage = reveal.pin.passage
+        DispatchQueue.main.async {
+            scrollEngine.explicitMessageRequested(id: id)
+            if let passage { PinnedPassageFlasher.flash(passage, inMessage: id) }
+        }
     }
 
     /// The bar over the transcript while the open chat has pinned replies.
@@ -711,6 +720,7 @@ struct ChatView: View {
                 pins: pins,
                 jump: { pin in jumpToPinnedReply(pin) },
                 unpin: { pin in appState.unpinReply(pin) },
+                label: { pin in labelingPin = pin },
                 showAll: { showsPinnedReplies = true }
             )
             .id(appState.activeSessionId)
@@ -728,6 +738,7 @@ struct ChatView: View {
         if let id = PinnedReplies.messageID(for: pin, in: appState.messages, among: appState.openChatPinnedReplies) {
             ChatViewportTrace.shared.log("event explicitPinnedReply (bar)")
             scrollEngine.explicitMessageRequested(id: id)
+            if let passage = pin.passage { PinnedPassageFlasher.flash(passage, inMessage: id) }
         } else {
             ChatViewportTrace.shared.log("event explicitTop (pinned reply not loaded)")
             scrollEngine.explicitTopRequested()
@@ -2013,7 +2024,7 @@ struct SettledAssistantMessageContent: View, Equatable {
     }
 }
 
-/// The dynamic half of an assistant row: copy/quote/branch controls that depend
+/// The dynamic half of an assistant row: copy/quote/branch/pin controls that depend
 /// on busy state, kept small so their per-publish re-evaluation is cheap.
 struct AssistantMessageActions: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
@@ -2064,6 +2075,26 @@ struct AssistantMessageActions: View {
         .disabled(rowState.isBusy || rowState.isBranchingChat || rowState.isOffline)
         .opacity(rowState.isBusy || rowState.isBranchingChat || rowState.isOffline ? 0.45 : 1)
         .accessibilityLabel("Branch from this response")
+
+        // Pins the whole reply (#1147); a selection pins a passage.
+        if rowState.canPinReplies {
+            let isPinned = rowState.pinnedMessageIDs.contains(message.id)
+            Button {
+                Haptics.light()
+                appState.togglePinnedReply(appState.messages.first { $0.id == message.id } ?? message)
+            } label: {
+                Image(systemName: isPinned ? "pin.fill" : "pin")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(width: 34, height: 34)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(isPinned ? Color.conduitAccent : Color.secondary)
+            .disabled(!message.content.contains(where: { !$0.isWhitespace }))
+            .accessibilityLabel(isPinned
+                ? AppLocalization.string("Unpin this response")
+                : AppLocalization.string("Pin this response"))
+            .accessibilityIdentifier("chat.pinReplyButton")
+        }
     }
 
     private func copyResponse() {
@@ -2173,7 +2204,8 @@ struct AssistantBubble: View {
                 chatTextSize: chatTextSize
             )
             .equatable()
-            // Pin and Unpin sit in the reply's long-press menu (#918).
+            // A selection's menu pins the selected passage (#1147), and a
+            // pinned passage's jump flashes it in this reply's text.
             .environment(\.chatPinReplyAction, rowState.canPinReplies
                 ? ChatPinReplyAction(message: message, appState: appState)
                 : nil)

@@ -2,7 +2,8 @@ import SwiftUI
 import UIKit
 
 /// Cross-block selection chrome: draggable endpoint handles and a copy pill
-/// (with Quote beside Copy inside a chat, #385) positioned at the true
+/// (with Quote beside Copy inside a chat, #385, and Pin on a reply that can
+/// be pinned, #1147) positioned at the true
 /// selection endpoints anywhere in the message. The
 /// system's native handles cannot leave the text view that owns them, so a
 /// cross-segment selection takes over with coordinator-owned handles once
@@ -51,6 +52,7 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
     private(set) var focusHandle: MarkdownSelectionHandleView?
     private(set) var copyPill: UIButton?
     private(set) var quotePill: UIButton?
+    private(set) var pinPill: UIButton?
     private(set) var copyPillBackdrop: UIVisualEffectView?
     private(set) var copyFeedbackLabel: UILabel?
 
@@ -114,8 +116,11 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
         focusHandle?.isHidden = false
         // Quote shows inside a chat while the composer takes input.
         let quote = quoteAction?.isAvailable == true ? quotePill : nil
+        // Pin shows on a reply whose passages can be pinned.
+        let pin = coordinator.pinReplyAction != nil ? pinPill : nil
         copyPill?.isHidden = false
         quotePill?.isHidden = quote == nil
+        pinPill?.isHidden = pin == nil
         copyPillBackdrop?.isHidden = false
         startRepositioningDisplayLink()
 
@@ -127,9 +132,10 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
             let copyWidth = copyPillWidthDuringFeedback ?? copyFitted.width
             // Quote sits right of Copy on the same backdrop.
             let quoteFitted = quote?.intrinsicContentSize ?? .zero
+            let pinFitted = pin?.intrinsicContentSize ?? .zero
             let pillSize = CGSize(
-                width: copyWidth + quoteFitted.width,
-                height: max(32, copyFitted.height, quoteFitted.height)
+                width: copyWidth + quoteFitted.width + pinFitted.width,
+                height: max(32, copyFitted.height, quoteFitted.height, pinFitted.height)
             )
             // Anchor to the focus end — the endpoint the finger last touched
             // — so the pill is always near the user's hand. For selections
@@ -141,6 +147,12 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
             let pillY = min(max(4, focusLocal.minY - pillSize.height - 10), max(4, bounds.height - pillSize.height - 4))
             pill.frame = CGRect(x: pillX, y: pillY, width: copyWidth, height: pillSize.height)
             quote?.frame = CGRect(x: pill.frame.maxX, y: pillY, width: quoteFitted.width, height: pillSize.height)
+            pin?.frame = CGRect(
+                x: pill.frame.maxX + quoteFitted.width,
+                y: pillY,
+                width: pinFitted.width,
+                height: pillSize.height
+            )
             copyPillBackdrop?.frame = CGRect(origin: CGPoint(x: pillX, y: pillY), size: pillSize)
             if let feedback = copyFeedbackLabel {
                 feedback.sizeToFit()
@@ -226,13 +238,23 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
             self?.quoteActiveSelection()
         }, for: .touchUpInside)
 
+        var pinConfiguration = quoteConfiguration
+        pinConfiguration.title = AppLocalization.string("Pin")
+        pinConfiguration.image = UIImage(systemName: "pin")
+
+        let pin = UIButton(configuration: pinConfiguration)
+        pin.accessibilityIdentifier = "selection.pinPill"
+        pin.addAction(UIAction { [weak self] _ in
+            self?.pinActiveSelection()
+        }, for: .touchUpInside)
+
         let feedback = UILabel()
         feedback.text = AppLocalization.string("Copied")
         feedback.textColor = .label
         feedback.font = .systemFont(ofSize: 12, weight: .semibold)
         feedback.isHidden = true
 
-        [anchor, focus, pillBackdrop, pill, quote, feedback].forEach {
+        [anchor, focus, pillBackdrop, pill, quote, pin, feedback].forEach {
             $0.isHidden = true
             $0.translatesAutoresizingMaskIntoConstraints = true
             addSubview($0)
@@ -245,6 +267,7 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
         focusHandle = focus
         copyPill = pill
         quotePill = quote
+        pinPill = pin
         copyPillBackdrop = pillBackdrop
         copyFeedbackLabel = feedback
     }
@@ -400,6 +423,21 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
         coordinator.clearSelection()
         setNeedsLayout()
         quoteAction(selected)
+    }
+
+    /// Pins the whole cross-block selection as a passage of its reply
+    /// (#1147) and clears it, which hides this chrome.
+    func pinActiveSelection() {
+        guard
+            let coordinator,
+            let pinAction = coordinator.pinReplyAction,
+            coordinator.hasActiveSelection
+        else { return }
+        let selected = coordinator.copiedAttributedTextForActiveSelection().string
+        guard selected.contains(where: { !$0.isWhitespace }) else { return }
+        coordinator.clearSelection()
+        setNeedsLayout()
+        pinAction.pinPassage(selected)
     }
 
     private func copyActiveSelection() {
