@@ -487,6 +487,9 @@ extension VoiceAudioSessionCoordinatorTests {
     /// CallKit's Speaker button never learns of a move Conduit makes: a
     /// call Conduit put on the loudspeaker showed the button off.
     func testNativeCallStartsOnTheEarpieceForTheSpeakerButton() throws {
+        // A conversation before the call had moved to the loudspeaker.
+        try session.overrideOutputToSpeaker()
+        session.resetRecordings()
         coordinator.configureForIncomingCall()
         coordinator.nativeCallAudioActivated()
         _ = try coordinator.acquire(.conversationCapture)
