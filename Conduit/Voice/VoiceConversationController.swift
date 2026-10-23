@@ -368,16 +368,9 @@ final class VoiceConversationController: ObservableObject {
 
     private func openPushToTalkWindow() async {
         isMicrophonePaused = false
-        if approvalNoticeOpensAnswerWindow {
-            // A press over an approval's notice answers it: the notice
-            // stops, the turn that waits on it doesn't.
-            approvalNoticeOpensAnswerWindow = false
-            playback.stop()
-            cancelSpeechDrainAndStream()
-            clearSpeechQueue()
-            isPlaybackCaptureSuspended = false
-            state = .thinking
-        }
+        // A press over an approval's notice answers it: the turn that waits
+        // on it goes on.
+        stopApprovalNotice()
         if isPlaybackCaptureSuspended || state == .speaking || state == .muted {
             await stopAssistantReplyAndListen()
         } else if state == .thinking {
@@ -680,6 +673,13 @@ final class VoiceConversationController: ObservableObject {
     private func stopAssistantReplyAndListen() async {
         bargeInTask?.cancel()
         bargeInTask = nil
+        if approvalNoticeOpensAnswerWindow {
+            // Interrupt over an approval's notice: the notice stops and the
+            // microphone opens for the answer; the turn waiting on it goes on.
+            stopApprovalNotice()
+            await openApprovalAnswerWindow(operation: operationGeneration)
+            return
+        }
         cachedRoutePolicy = nil
         // Deliberately leaves lastBargeInState alone: that property records
         // acoustic barge-in provenance, and this path always lands in
@@ -1832,6 +1832,17 @@ final class VoiceConversationController: ObservableObject {
         if state != .listening { resumeTurnAfterSteer() }
     }
 
+    /// Cuts an approval's notice short, back to waiting on the turn.
+    private func stopApprovalNotice() {
+        guard approvalNoticeOpensAnswerWindow else { return }
+        approvalNoticeOpensAnswerWindow = false
+        playback.stop()
+        cancelSpeechDrainAndStream()
+        clearSpeechQueue()
+        isPlaybackCaptureSuspended = false
+        state = .thinking
+    }
+
     private func endApprovalNotice() {
         pendingApprovalNotice = nil
         approvalNoticeOpensAnswerWindow = false
@@ -2231,6 +2242,13 @@ final class VoiceConversationController: ObservableObject {
             // Once this drain has settled, so the turn's reply can start
             // one of its own.
             Task { @MainActor [weak self] in await self?.openApprovalAnswerWindow(operation: operation) }
+            return
+        }
+        if approvalNoticeOpensAnswerWindow, !speechDeltas.isEmpty {
+            // Reply text that arrived while the notice finished: said next,
+            // and the answer window opens after it.
+            guard isSpeechDrainCurrent(operation: operation, revision: revision) else { return }
+            Task { @MainActor [weak self] in self?.startSpeechDrainIfNeeded() }
             return
         }
         if assistantFinished && speechDeltas.isEmpty && speechStream == nil {

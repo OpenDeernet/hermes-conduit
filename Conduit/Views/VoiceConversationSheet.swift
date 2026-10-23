@@ -26,6 +26,9 @@ struct VoiceConversationSheet: View {
     var startsListening: Bool = true
     /// V2's voice mode menu under the title; nil shows none.
     var modeSwitch: VoiceModeSwitch? = nil
+    /// Approvals Hermes' turn waits on, whose cards are in the chat behind
+    /// this screen.
+    var approvals: [ChatMessage] = []
 
     @State private var didRequestStart = false
     /// V2 draws the conversation as a call screen, like the live modes.
@@ -69,6 +72,7 @@ struct VoiceConversationSheet: View {
                 ScrollView {
                     VStack(spacing: 22) {
                         statusCard
+                        if !approvals.isEmpty { approvalPanel }
                         conversationCard
                         backgroundJobsCard
                         controlsCard
@@ -85,6 +89,14 @@ struct VoiceConversationSheet: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 ConduitSheetHeader(title: AppLocalization.string("Voice conversation"), close: close)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var approvalPanel: some View {
+        if let appState {
+            VoiceApprovalPanel(approvals: approvals)
+                .environmentObject(appState)
         }
     }
 
@@ -446,6 +458,11 @@ extension VoiceConversationSheet {
                         .scrollBounceBehavior(.basedOnSize)
                 } else {
                     v2Stage
+                }
+                if !approvals.isEmpty {
+                    approvalPanel
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
                 }
                 v2Controls
             }
@@ -862,11 +879,11 @@ private struct VoiceConversationTranscriptBubble: View {
     }
 }
 
-/// An approval Hermes' turn waits on, over the Classic voice screen: its
-/// card is in the chat behind it, and the conversation sits on Thinking
-/// until it is answered. The same card as the chat's, so a tap here answers
-/// it the same way; a spoken yes or no also does.
-struct VoiceApprovalOverlay: View {
+/// An approval Hermes' turn waits on, on the Classic voice screen: its card
+/// is in the chat behind it, and the conversation sits on Thinking until it
+/// is answered. The same card as the chat's, so a tap here answers it the
+/// same way; a spoken yes or no also does.
+struct VoiceApprovalPanel: View {
     @EnvironmentObject private var appState: AppState
     let approvals: [ChatMessage]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -877,8 +894,6 @@ struct VoiceApprovalOverlay: View {
             if let message = approvals.first {
                 ApprovalCard(message: message)
                     .chatRows()
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
                     .id(message.id)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }

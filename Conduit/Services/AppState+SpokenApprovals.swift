@@ -128,7 +128,8 @@ extension AppState {
     /// their answer reaching Hermes), for the Classic voice screen that
     /// covers the chat.
     var openChatWaitingApprovals: [ChatMessage] {
-        guard let sessionId = activeSessionId, !sessionId.isEmpty else { return [] }
+        // A card left over from a turn that ended waits on nobody.
+        guard turnState.isRunning, let sessionId = activeSessionId, !sessionId.isEmpty else { return [] }
         let open = chatOwnSessionIDs(for: sessionId)
         return messages.filter { message in
             guard let approval = message.approval else { return false }

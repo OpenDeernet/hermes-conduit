@@ -584,6 +584,30 @@ final class VoiceConversationControllerTests: XCTestCase {
         XCTAssertEqual(controller.state, .thinking)
     }
 
+    func testStopOverAnApprovalNoticeListensForTheAnswerWithoutCancellingTheTurn() async {
+        let gateway = MockGateway(transcript: "Question", startsPlaybackOnOpen: true, blocksFirstStreamAppend: true)
+        let submitted = SubmitSpy()
+        let steers = SubmitSpy()
+        let interrupts = AwaitableCounter()
+        let controller = makeSteerController(
+            gateway: gateway, submitted: submitted, steers: steers, interrupts: interrupts
+        )
+        await driveToThinking(controller, submitted: submitted)
+
+        controller.noteApprovalWaiting(sessionID: "session", request: "req-1",
+                                       line: "Hermes needs your OK to go on: delete the logs.",
+                                       stillWaiting: { true })
+        // The notice is still being said.
+        await gateway.waitUntilSpeechAppended(1)
+        XCTAssertEqual(controller.state, .speaking)
+
+        await controller.stopAssistantReply()
+
+        XCTAssertEqual(interrupts.value, 0, "the turn waiting on the approval goes on")
+        XCTAssertEqual(controller.state, .listening)
+        XCTAssertTrue(controller.isSteeringTurn, "the words answer the approval")
+    }
+
     func testApprovalWithOutputMutedIsOnlyShown() async {
         let gateway = MockGateway(transcript: "Question", startsPlaybackOnOpen: true)
         let submitted = SubmitSpy()
