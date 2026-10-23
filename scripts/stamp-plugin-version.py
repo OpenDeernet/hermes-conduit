@@ -31,7 +31,8 @@ import urllib.request
 PLUGIN_YAML_URL = (
     "https://raw.githubusercontent.com/kaishi00/hermes-conduit-notifier/main/plugin.yaml")
 KEY = "ConduitArchivedPluginVersion"
-YAML_VERSION_RE = re.compile(r'^version:\s*["\']?([0-9]+(?:\.[0-9]+)*)["\']?\s*(?:#.*)?$', re.MULTILINE)
+# Leading spaces allowed, as NotifierPluginLatestVersion's parser does.
+YAML_VERSION_RE = re.compile(r'^[ \t]*version:\s*["\']?([0-9]+(?:\.[0-9]+)*)["\']?\s*(?:#.*)?$', re.MULTILINE)
 FETCH_ERRORS = (OSError, http.client.HTTPException, UnicodeDecodeError)
 
 

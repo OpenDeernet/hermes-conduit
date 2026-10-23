@@ -43,6 +43,16 @@ class StampPluginVersionTests(unittest.TestCase):
             self.assertEqual(info, {"CFBundleVersion": "230", stamp.KEY: "0.65.2"})
             self.assertEqual(data.startswith(b"bplist"), fmt == plistlib.FMT_BINARY)
 
+    def test_the_version_reads_as_the_app_reads_it(self):
+        self.assertEqual(stamp.plugin_version('  version: "0.65.2"\n'), "0.65.2")
+        self.assertEqual(stamp.plugin_version("version: '0.7'  # note\n"), "0.7")
+
+    def test_the_app_reads_the_key_this_writes(self):
+        swift = os.path.join(os.path.dirname(stamp.__file__), "..", "Conduit", "Services",
+                             "NotifierPluginStatus.swift")
+        with open(swift, encoding="utf-8") as handle:
+            self.assertIn(f'forInfoDictionaryKey: "{stamp.KEY}"', handle.read())
+
     def test_a_run_or_ci_build_is_left_alone(self):
         self.write(plistlib.FMT_XML)
         self.run_stamp("build", lambda: self.fail("a build must not ask GitHub"))
