@@ -5,7 +5,8 @@
 //  An ordered list with blank lines between its items is one list, as in
 //  CommonMark and Hermes Desktop, so it numbers 1, 2, 3 and not 1, 1, 1
 //  (#1163). Every place that shows Markdown numbers each list block from
-//  one, so the parser keeping the list whole is the fix for all of them.
+//  its own start, so the parser keeping the list whole is the fix for all
+//  of them.
 //
 
 import SwiftUI
