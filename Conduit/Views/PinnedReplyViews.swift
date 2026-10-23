@@ -2,8 +2,8 @@
 //  PinnedReplyViews.swift
 //  Conduit
 //
-//  Pinned replies (#918): Pin under a reply and in a selection's menu,
-//  which pins the selected passage (#1147), the bar over the open chat, the
+//  Pinned replies (#918): Pin and Pin reply in a reply's long-press menu,
+//  Pin taking just the selected passage (#1147), the bar over the open chat, the
 //  overview of every pin with its label editor, and the flash that shows a
 //  pinned passage after the jump (AppState+PinnedReplies).
 //
@@ -11,9 +11,10 @@
 import SwiftUI
 import UIKit
 
-/// Pins or unpins a reply from its text: the selection menu pins just the
-/// selected passage (#1147), and VoiceOver's action on the text pins the
-/// whole reply (#918). Only a reply in a chat that can pin provides one.
+/// Pins or unpins a reply from its text: the selection menu's Pin takes
+/// just the selected passage and Pin reply all of it (#1147), as does
+/// VoiceOver's action on the text (#918); the reply's action row has no
+/// Pin. Only a reply in a chat that can pin provides one.
 /// Equal by reply, so a re-created value does not re-run the text views'
 /// updates; whether something is pinned right now is asked when the menu
 /// opens, for the same reason.
@@ -253,7 +254,7 @@ struct PinnedRepliesSheet: View {
                         ContentUnavailableView(
                             AppLocalization.string("No pinned replies"),
                             systemImage: "pin",
-                            description: Text(AppLocalization.string("Tap Pin under a reply, or select text and choose Pin, to keep it at the top of its chat and find it here."))
+                            description: Text(AppLocalization.string("Long-press a reply and choose Pin for the selected text or Pin reply for all of it. It stays at the top of its chat and shows here."))
                         )
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)

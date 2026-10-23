@@ -323130,7 +323130,7 @@
         }
       }
     },
-    "Pin this response" : {
+    "Pin reply" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -323212,7 +323212,7 @@
         }
       }
     },
-    "Unpin this response" : {
+    "Unpin reply" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -323704,88 +323704,6 @@
         }
       }
     },
-    "Tap Pin under a reply, or select text and choose Pin, to keep it at the top of its chat and find it here." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tippe unter einer Antwort auf „Anheften“ oder markiere Text und wähle „Anheften“, damit er oben in seinem Chat bleibt und du ihn hier wiederfindest."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Toca Fijar debajo de una respuesta, o selecciona texto y elige Fijar, para mantenerlo arriba de su chat y encontrarlo aquí."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Touchez Épingler sous une réponse, ou sélectionnez du texte et choisissez Épingler, pour le garder en haut de sa conversation et le retrouver ici."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ketuk Sematkan di bawah balasan, atau pilih teks lalu pilih Sematkan, agar tetap di atas obrolannya dan bisa ditemukan di sini."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tocca Fissa sotto una risposta, oppure seleziona del testo e scegli Fissa, per tenerlo in cima alla sua chat e ritrovarlo qui."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "返信の下の「ピンで固定」をタップするか、テキストを選択して「ピンで固定」を選ぶと、チャットの上部に表示され、ここからも見つけられます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "답장 아래의 고정을 탭하거나 텍스트를 선택하고 고정을 선택하면 채팅 상단에 유지되고 여기에서 찾을 수 있습니다."
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stuknij Przypnij pod odpowiedzią albo zaznacz tekst i wybierz Przypnij, aby został na górze czatu i był dostępny tutaj."
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Toque em Fixar abaixo de uma resposta, ou selecione um texto e escolha Fixar, para mantê-lo no topo do chat e encontrá-lo aqui."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Нажмите «Закрепить» под ответом или выделите текст и выберите «Закрепить», чтобы он оставался вверху чата и был доступен здесь."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bir yanıtın altındaki Sabitle’ye dokunun ya da metin seçip Sabitle’yi seçin; sohbetinin üstünde kalır ve burada bulunur."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "轻点回复下方的“置顶”，或选择文本后选择“置顶”，即可将其固定在聊天顶部，并可在此处找到。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "點一下回覆下方的「釘選」，或選取文字後選擇「釘選」，即可將其固定在聊天頂端，並可在這裡找到。"
-          }
-        }
-      }
-    },
     "Pinned passage" : {
       "localizations" : {
         "de" : {
@@ -323864,6 +323782,88 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已釘選的段落"
+          }
+        }
+      }
+    },
+    "Long-press a reply and choose Pin for the selected text or Pin reply for all of it. It stays at the top of its chat and shows here." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Halte eine Antwort gedrückt und wähle „Anheften“ für den markierten Text oder „Diese Antwort anheften“ für die ganze Antwort. Sie bleibt oben in ihrem Chat und erscheint hier."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantén pulsada una respuesta y elige Fijar para el texto seleccionado o Fijar esta respuesta para toda ella. Se queda arriba de su chat y aparece aquí."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touchez longuement une réponse et choisissez Épingler pour le texte sélectionné ou Épingler cette réponse pour toute la réponse. Elle reste en haut de sa conversation et apparaît ici."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tekan lama sebuah balasan lalu pilih Sematkan untuk teks yang dipilih atau Sematkan balasan ini untuk seluruhnya. Sematan tetap di atas obrolannya dan muncul di sini."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tieni premuta una risposta e scegli Fissa per il testo selezionato o Fissa questa risposta per tutta la risposta. Resta in cima alla sua chat e compare qui."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返信を長押しして、選択したテキストなら「ピンで固定」、返信全体なら「この返信をピンで固定」を選びます。チャットの上部に表示され、ここにも表示されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "답장을 길게 누르고 선택한 텍스트는 고정, 답장 전체는 이 답장 고정을 선택하세요. 채팅 상단에 유지되고 여기에 표시됩니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przytrzymaj odpowiedź i wybierz Przypnij dla zaznaczonego tekstu lub Przypnij tę odpowiedź dla całości. Zostaje na górze czatu i pojawia się tutaj."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toque e segure uma resposta e escolha Fixar para o texto selecionado ou Fixar esta resposta para ela inteira. Ela fica no topo do chat e aparece aqui."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нажмите и удерживайте ответ и выберите «Закрепить» для выделенного текста или «Закрепить этот ответ» для всего ответа. Он останется вверху чата и появится здесь."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bir yanıta uzun basın; seçili metin için Sabitle’yi, yanıtın tamamı için Bu yanıtı sabitle’yi seçin. Sohbetinin üstünde kalır ve burada görünür."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "长按回复，选择“置顶”可置顶所选文本，选择“置顶此回复”可置顶整条回复。它会固定在聊天顶部，并显示在这里。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長按回覆，選擇「釘選」可釘選所選文字，選擇「釘選此回覆」可釘選整則回覆。它會固定在聊天頂端，並顯示在這裡。"
           }
         }
       }

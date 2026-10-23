@@ -210,11 +210,12 @@ final class PinnedRepliesTests: XCTestCase {
         bridge.pinReplyAction = try XCTUnwrap(ChatPinReplyAction(message: answer, appState: appState))
 
         let menu = try XCTUnwrap(editMenu(bridge))
-        XCTAssertEqual(menu.children.count, 3)
+        XCTAssertEqual(menu.children.count, 4)
         XCTAssertEqual((menu.children[0] as? UIMenu)?.identifier, .standardEdit)
         XCTAssertEqual((menu.children[1] as? UIAction)?.title, AppLocalization.string("Quote"))
         let pin = try XCTUnwrap(menu.children[2] as? UIAction)
         XCTAssertEqual(pin.title, AppLocalization.string("Pin"))
+        XCTAssertEqual((menu.children[3] as? UIAction)?.title, AppLocalization.string("Pin reply"))
 
         // The menu's selection is "Twenty".
         bridge.pinReplyAction?.togglePassage("Twenty")
@@ -223,15 +224,21 @@ final class PinnedRepliesTests: XCTestCase {
         XCTAssertEqual(pinned.shownText, "Twenty")
         XCTAssertTrue(appState.openChatPinnedMessageIDs.isEmpty, "the reply itself is not pinned whole")
         // The menu asks again when it next opens.
-        let unpin = try XCTUnwrap(editMenu(bridge)?.children.last as? UIAction)
+        let unpin = try XCTUnwrap(editMenu(bridge)?.children[2] as? UIAction)
         XCTAssertEqual(unpin.title, AppLocalization.string("Unpin"))
 
         bridge.pinReplyAction?.togglePassage("Twenty")
         XCTAssertTrue(appState.activePinnedReplies.isEmpty)
+
+        // Pin reply pins all of it, and offers Unpin reply after.
+        bridge.pinReplyAction?()
+        XCTAssertEqual(appState.openChatPinnedMessageIDs, ["a"])
+        let unpinReply = try XCTUnwrap(editMenu(bridge)?.children.last as? UIAction)
+        XCTAssertEqual(unpinReply.title, AppLocalization.string("Unpin reply"))
     }
 
     @MainActor
-    func testVoiceOversPinActionPinsTheWholeReply() throws {
+    func testPinReplyAndVoiceOversActionPinTheWholeReply() throws {
         let appState = makeAppState(freshDefaults())
         appState.activeSessionId = "chat-1"
         let answer = reply("a", "Twenty points", rowId: 7)
@@ -253,7 +260,10 @@ final class PinnedRepliesTests: XCTestCase {
         bridge.pinReplyAction = try XCTUnwrap(ChatPinReplyAction(message: answer, appState: appState))
 
         let menu = try XCTUnwrap(editMenu(bridge))
-        XCTAssertEqual(menu.children.map { ($0 as? UIAction)?.title }, [nil, AppLocalization.string("Pin")])
+        XCTAssertEqual(
+            menu.children.map { ($0 as? UIAction)?.title },
+            [nil, AppLocalization.string("Pin"), AppLocalization.string("Pin reply")]
+        )
     }
 
     @MainActor
@@ -609,7 +619,7 @@ final class PinnedRepliesTests: XCTestCase {
     }
 
     @MainActor
-    func testPinningAPassageTwiceKeepsOnePinAndTheButtonPinsTheWholeReply() {
+    func testPinningAPassageTwiceKeepsOnePinBesideTheWholeReply() {
         let appState = makeAppState(freshDefaults())
         appState.activeSessionId = "chat-1"
         let answer = reply("a", "Patch now. Rotate keys.", rowId: 7)

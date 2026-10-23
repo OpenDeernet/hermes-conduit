@@ -2024,7 +2024,7 @@ struct SettledAssistantMessageContent: View, Equatable {
     }
 }
 
-/// The dynamic half of an assistant row: copy/quote/branch/pin controls that depend
+/// The dynamic half of an assistant row: copy/quote/branch controls that depend
 /// on busy state, kept small so their per-publish re-evaluation is cheap.
 struct AssistantMessageActions: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
@@ -2076,25 +2076,6 @@ struct AssistantMessageActions: View {
         .opacity(rowState.isBusy || rowState.isBranchingChat || rowState.isOffline ? 0.45 : 1)
         .accessibilityLabel("Branch from this response")
 
-        // Pins the whole reply (#1147); a selection pins a passage.
-        if rowState.canPinReplies {
-            let isPinned = rowState.pinnedMessageIDs.contains(message.id)
-            Button {
-                Haptics.light()
-                appState.togglePinnedReply(appState.messages.first { $0.id == message.id } ?? message)
-            } label: {
-                Image(systemName: isPinned ? "pin.fill" : "pin")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(width: 34, height: 34)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(isPinned ? Color.conduitAccent : Color.secondary)
-            .disabled(!message.content.contains(where: { !$0.isWhitespace }))
-            .accessibilityLabel(isPinned
-                ? AppLocalization.string("Unpin this response")
-                : AppLocalization.string("Pin this response"))
-            .accessibilityIdentifier("chat.pinReplyButton")
-        }
     }
 
     private func copyResponse() {
@@ -2204,8 +2185,9 @@ struct AssistantBubble: View {
                 chatTextSize: chatTextSize
             )
             .equatable()
-            // A selection's menu pins the selected passage (#1147), and a
-            // pinned passage's jump flashes it in this reply's text.
+            // Pin sits in the reply's long-press menu, not its action row
+            // (#918): Pin for the selected passage, Pin reply for all of it
+            // (#1147). A pinned passage's jump flashes it in this text.
             .environment(\.chatPinReplyAction, rowState.canPinReplies
                 ? ChatPinReplyAction(message: message, appState: appState)
                 : nil)

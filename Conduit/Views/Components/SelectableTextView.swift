@@ -846,8 +846,8 @@ struct SelectableTextView: UIViewRepresentable {
         var openURL: OpenURLAction?
         /// Set inside a chat: the selection menu then offers Quote (#385).
         var quoteAction: ChatQuoteAction?
-        /// Set on a reply that can be pinned: the menu then offers Pin or
-        /// Unpin for the selected passage after Quote (#918, #1147).
+        /// Set on a reply that can be pinned: the menu then offers Pin for
+        /// the selected passage and Pin reply after Quote (#918, #1147).
         var pinReplyAction: ChatPinReplyAction?
 
         init(
@@ -877,7 +877,7 @@ struct SelectableTextView: UIViewRepresentable {
         /// Inside a chat, the native selection menu gains Quote right after
         /// the standard edit group (Copy), which puts the selection in the
         /// composer as a `>` quote (#385), and on a reply that can be pinned,
-        /// Pin or Unpin for the selected passage after it (#918, #1147).
+        /// Pin for the selected passage and Pin reply after it (#918, #1147).
         /// Elsewhere the default menu shows.
         func textView(
             _ textView: UITextView,
@@ -898,7 +898,8 @@ struct SelectableTextView: UIViewRepresentable {
                     Self.quoteSelection(in: textView, range: current.length > 0 ? current : range, with: quoteAction)
                 })
             }
-            // Pins the selected passage, not the whole reply (#1147).
+            // Pin takes the selected passage and Pin reply the whole reply
+            // (#1147); both live here, not in the reply's action row.
             if let pinReplyAction {
                 let selected = Self.selectedText(in: textView, range: range)
                 if selected.contains(where: { !$0.isWhitespace }) {
@@ -911,6 +912,14 @@ struct SelectableTextView: UIViewRepresentable {
                         pinReplyAction.togglePassage(selected)
                     })
                 }
+                let replyPinned = pinReplyAction.isPinned
+                added.append(UIAction(
+                    title: AppLocalization.string(replyPinned ? "Unpin reply" : "Pin reply"),
+                    image: UIImage(systemName: replyPinned ? "pin.slash.fill" : "pin.fill")
+                ) { [weak textView] _ in
+                    if let textView { Self.dismissSelection(in: textView) }
+                    pinReplyAction()
+                })
             }
             guard !added.isEmpty else { return nil }
             return UIMenu(children: Self.editMenuElements(suggestedActions, adding: added))
