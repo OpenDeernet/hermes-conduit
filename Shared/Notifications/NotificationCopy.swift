@@ -10,8 +10,10 @@ import Foundation
 /// `AppLocalization` over the app's String Catalog.
 enum NotificationCopy {
     /// The private fallback for a notification that shows no content: Show
-    /// previews off, or a push Conduit can't verify. The same messages as
-    /// the relay's generic copy, in the App Language.
+    /// previews off, or a push Conduit can't verify. Kept message for
+    /// message with the relay's generic copy (`genericCopy` in
+    /// hermes-conduit-notifier's relay/src/server.mjs), in the App Language:
+    /// a change there belongs here too.
     static func generic(for type: String?) -> (title: String, body: String) {
         switch type {
         case "approval.needed":
@@ -94,8 +96,8 @@ enum NotificationCopy {
     }
 
     /// A call request's line, as the app's own call notification says it
-    /// (HermesCallCopy.summary): what Hermes waits on, its reason, else how
-    /// the job ended.
+    /// (HermesCallCopy.summary, which the extension can't link): what Hermes
+    /// waits on, its reason, else how the job ended. Keep the two in step.
     static func callLine(_ call: [String: Any]) -> String? {
         let reason = nonEmpty(call["reason"])
         let job = nonEmpty(call["title"])
@@ -115,7 +117,8 @@ enum NotificationCopy {
             case ("failed", nil): return AppLocalization.string("Your job failed.")
             case ("stopped", let job?): return AppLocalization.string("“\(job)” stopped before finishing.")
             case ("stopped", nil): return AppLocalization.string("Your job stopped before finishing.")
-            default: return nil
+            case (_, let job?): return AppLocalization.string("“\(job)” ended.")
+            case (_, nil): return AppLocalization.string("Your job ended.")
             }
         case nil:
             return nil

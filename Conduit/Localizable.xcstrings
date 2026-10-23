@@ -323447,13 +323447,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hermes 有一项日程更改"
+            "value" : "Hermes 想更改一项日程"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hermes 有一項行事曆變更"
+            "value" : "Hermes 想變更一項行程"
           }
         }
       }

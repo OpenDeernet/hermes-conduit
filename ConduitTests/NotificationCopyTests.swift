@@ -92,6 +92,7 @@ final class NotificationCopyTests: XCTestCase {
         XCTAssertEqual(line(["kind": "question"]), "Hermes has a question for you.")
         XCTAssertEqual(line(["kind": "failed", "origin": "alert"]), "Hermes ran into a problem with your request.")
         XCTAssertEqual(line(["title": "No kind"]), "host line", "a call without an outcome keeps the host's line")
+        XCTAssertEqual(line(["kind": "paused", "title": "Backup"]), "“Backup” ended.", "as HermesCallCopy.outcome says it")
         XCTAssertEqual(NotificationCopy.preview(["title_label": "call.requested"]).title,
                        "Hermes wants to talk")
     }
