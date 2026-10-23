@@ -323803,7 +323803,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ce Hermes ne peut pas mettre de pièces jointes en file d'attente. Mettez Hermes à jour, ou envoyez-les une fois la réponse terminée."
+            "value" : "Cet Hermes ne peut pas mettre de pièces jointes en file d'attente. Mettez Hermes à jour, ou envoyez-les une fois la réponse terminée."
           }
         },
         "id" : {

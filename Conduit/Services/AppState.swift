@@ -23975,7 +23975,7 @@ final class AppState: ObservableObject {
                     fileReference = try await upload(client, sessionId, attachment)
                 } else if attachment.kind == .image {
                     let base64 = await AttachmentHelper.toBase64(attachment)
-                    guard isCurrentComposerSubmission(submissionContext) else { return false }
+                    guard isCurrentComposerSubmission(submissionContext) else { throw CancellationError() }
                     guard !base64.isEmpty else { throw AttachmentError.unreadableFile(attachment.name) }
                     do {
                         let stagedPath = try await attachImage(client, sessionId, base64, attachment.name)
@@ -23985,7 +23985,7 @@ final class AppState: ObservableObject {
                         // Hermes won't take it as an image (a format it
                         // doesn't list, or past its image size cap): it
                         // still goes up, as a file.
-                        guard isCurrentComposerSubmission(submissionContext) else { return false }
+                        guard isCurrentComposerSubmission(submissionContext) else { throw CancellationError() }
                         stagedAsFile = true
                         fileReference = try await attachFile(
                             client,
@@ -23996,12 +23996,12 @@ final class AppState: ObservableObject {
                     }
                 } else {
                     let dataUrl = await AttachmentHelper.toDataUrl(attachment)
-                    guard isCurrentComposerSubmission(submissionContext) else { return false }
+                    guard isCurrentComposerSubmission(submissionContext) else { throw CancellationError() }
                     guard !dataUrl.isEmpty else { throw AttachmentError.unreadableFile(attachment.name) }
                     stagedAsFile = true
                     fileReference = try await attachFile(client, sessionId, dataUrl, attachment.name)
                 }
-                guard isCurrentComposerSubmission(submissionContext) else { return false }
+                guard isCurrentComposerSubmission(submissionContext) else { throw CancellationError() }
                 if let fileReference {
                     fileReferences.append(fileReference)
                 } else if stagedAsFile {
@@ -24012,7 +24012,8 @@ final class AppState: ObservableObject {
                     )
                 }
             } catch {
-                // Images already staged for this Queue would ride on a later turn.
+                // Images already staged for this Queue would ride on a later
+                // turn; a superseded submission (CancellationError) too.
                 for path in stagedImagePaths {
                     try? await client.detachImage(sessionId, path: path)
                 }
