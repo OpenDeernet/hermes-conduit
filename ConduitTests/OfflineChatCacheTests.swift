@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import Conduit
 
 /// Read-only offline chat copy (#99): what is stored, how it is protected,
@@ -1727,10 +1728,15 @@ final class OfflineChatCacheTests: XCTestCase {
             kind: .image
         )
 
+        // The chat re-sync after the refusal may post its own error later.
+        var shown: [String?] = []
+        let subscription = appState.$errorMessage.dropFirst().sink { shown.append($0) }
+        defer { subscription.cancel() }
+
         let sent = await appState.submitComposer(text: "", attachments: [photo])
 
         XCTAssertFalse(sent, "The composer keeps the files")
-        XCTAssertEqual(appState.errorMessage, HermesClient.QueueUnsupportedError.attachmentsMessage)
+        XCTAssertTrue(shown.contains(HermesClient.QueueUnsupportedError.attachmentsMessage), "\(shown)")
     }
 
     /// A message an earlier run left waiting comes back as a draft at
