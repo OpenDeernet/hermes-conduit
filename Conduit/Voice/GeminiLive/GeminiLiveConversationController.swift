@@ -850,7 +850,8 @@ final class GeminiLiveConversationController: ObservableObject {
         }
         guard inputRunning else { return }
         stopInput()
-        startInput(pausingOnFailure: true)
+        // One that can't start pauses, and its trace says so.
+        guard startInput(pausingOnFailure: true) else { return }
         HermesCallTrace.shared.note("Live voice microphone restarted on the call's audio")
     }
 
