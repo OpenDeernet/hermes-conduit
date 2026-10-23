@@ -335,6 +335,8 @@ final class GeminiLiveConversationController: ObservableObject {
     /// so a later nudge (an unmute) can't replace that proof.
     private var audioReturnSeen = false
     private var audioPauseObservers: [NSObjectProtocol] = []
+    /// CallKit's audio coming on, for the whole call (#1145).
+    private var callAudioObserver: NSObjectProtocol?
     private let notificationCenter: NotificationCenter
     /// Tries to restart the microphone after the system says the other
     /// sound ended: the session can still be settling right after it.
@@ -451,6 +453,7 @@ final class GeminiLiveConversationController: ObservableObject {
     /// another voice mode on its own.
     func start() async {
         guard !isActive else { return }
+        observeCallAudio()
         let widgetAuthorization = initialWidgetCaptureAuthorization
         // A mute belongs to the conversation it was set in: a new one (one
         // started from CarPlay, which has no mute control, included) is heard.
@@ -572,6 +575,8 @@ final class GeminiLiveConversationController: ObservableObject {
         lateEndPhraseTask?.cancel()
         lateEndPhraseTask = nil
         clearAudioPause()
+        if let callAudioObserver { notificationCenter.removeObserver(callAudioObserver) }
+        callAudioObserver = nil
         session?.stop()
         session = nil
         stopInput()
@@ -805,9 +810,9 @@ final class GeminiLiveConversationController: ObservableObject {
         }
     }
 
-    /// The system's interruption end, the app coming back to the
-    /// foreground and CallKit giving a call its audio back are the cues
-    /// that the other sound let go.
+    /// The system's interruption end and the app coming back to the
+    /// foreground are the cues that the other sound let go (CallKit giving
+    /// a call its audio back is another: `observeCallAudio`).
     private func observeAudioReturn() {
         guard audioPauseObservers.isEmpty else { return }
         audioPauseObservers = [
@@ -819,13 +824,34 @@ final class GeminiLiveConversationController: ObservableObject {
             notificationCenter.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.scheduleAudioResume(delays: Self.audioResumeDelays, audioReturned: true) }
             },
-            // In a call from Hermes CallKit gives the audio back instead,
-            // with no interruption end promised, and off screen (on CarPlay,
-            // locked) no app activation follows (#1145).
-            notificationCenter.addObserver(forName: .hermesCallAudioActivated, object: nil, queue: nil) { [weak self] _ in
-                Task { @MainActor [weak self] in self?.scheduleAudioResume(delays: Self.audioResumeDelays, audioReturned: true) }
-            },
         ]
+    }
+
+    /// In a call from Hermes CallKit gives the audio back with no
+    /// interruption end promised, and off screen (on CarPlay, locked) no
+    /// app activation follows (#1145). Watched for the whole call: CallKit's
+    /// audio can also come on after the call's microphone started.
+    private func observeCallAudio() {
+        guard callAudioObserver == nil else { return }
+        callAudioObserver = notificationCenter.addObserver(forName: .hermesCallAudioActivated, object: nil, queue: nil) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.callAudioActivated() }
+        }
+    }
+
+    /// CallKit activated the call's audio. Paused, the call resumes.
+    /// Listening, the microphone started before CallKit's audio was on
+    /// (answered in the car, it can come after the call's wait for it):
+    /// it restarts on the session CallKit activated.
+    func callAudioActivated() {
+        guard isActive, endRequestedAt == nil else { return }
+        if audioPaused {
+            scheduleAudioResume(delays: Self.audioResumeDelays, audioReturned: true)
+            return
+        }
+        guard inputRunning else { return }
+        stopInput()
+        startInput(pausingOnFailure: true)
+        HermesCallTrace.shared.note("Live voice microphone restarted on the call's audio")
     }
 
     /// Tries to bring the microphone back after each delay in turn,

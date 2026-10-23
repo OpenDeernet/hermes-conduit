@@ -2227,7 +2227,16 @@ extension VoiceConversationControllerTests {
         for _ in 0..<50 where controller.phase == .paused { await settle() }
         XCTAssertEqual(controller.phase, .listening)
         XCTAssertTrue(input.running)
+
+        // CallKit's audio comes on under a running microphone: it restarts.
+        let starts = input.starts
+        controller.callAudioActivated()
+        XCTAssertEqual(input.starts, starts + 1)
+        XCTAssertTrue(input.running)
+        XCTAssertEqual(controller.phase, .listening)
         controller.stop()
+        controller.callAudioActivated()
+        XCTAssertEqual(input.starts, starts + 1, "Nothing after stop")
     }
 }
 
