@@ -1125,7 +1125,7 @@ final class WatchDirectCallModel: ObservableObject {
             // not on the bridge once its grant is over, which its bridge was.
             let grantOver = engine.usesBridge && (toolRelay.map { $0.isGone || $0.expires(within: Self.grantEndMargin) } ?? true)
             if streamsSpent {
-                finish(WatchCallEnd.streamsSpent)
+                finish(endRequestedAt == nil ? WatchCallEnd.streamsSpent : WatchCallEnd.byUser)
             } else if firstReadyAt != nil, endRequestedAt == nil, rejoins < Self.maxRejoins, !grantOver {
                 waitToRejoin(message)
             } else {

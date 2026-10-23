@@ -792,7 +792,7 @@ final class WatchBridgeCallModel: ObservableObject {
             note("bridgeHostError", ["code": code as Any, "message": String(message.prefix(200)), "live": live])
             if code == WatchAudioBridgeWire.streamsSpent {
                 // No stream left to rejoin on: waiting for a start is pointless.
-                finish(WatchCallEnd.streamsSpent)
+                finish(endRequestedAt == nil ? WatchCallEnd.streamsSpent : WatchCallEnd.byUser)
                 return
             }
             let text = message.isEmpty ? String(localized: "GPT-Live failed on Hermes.") : message
