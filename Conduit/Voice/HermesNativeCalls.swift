@@ -944,6 +944,7 @@ extension HermesNativeCalls: CXProviderDelegate {
             self.audioActive = false
             VoiceAudioSessionCoordinator.shared.nativeCallAudioDeactivated()
             self.stopObservingRoute()
+            NotificationCenter.default.post(name: .hermesCallAudioDeactivated, object: nil)
             self.resumeAudioWaiters()
             for target in answered { self.endVoice(of: target) }
             self.settle()

@@ -1294,6 +1294,19 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
         XCTAssertFalse(harness.controller.failedForAudioInterruption)
     }
 
+    /// #1145: in a call from Hermes CallKit gives the audio back with no
+    /// interruption end; the car listens again on CallKit's cue.
+    func testTheCarListensAgainWhenCallKitGivesAHermesCallItsAudioBack() async {
+        let harness = await interruptedConversation()
+        defer { harness.coordinator.handleDisconnect() }
+
+        NotificationCenter.default.post(name: .hermesCallAudioActivated, object: nil)
+
+        let listening = await harness.controller.waitForState(.listening)
+        XCTAssertTrue(listening, "listening again with no interruption end")
+        XCTAssertFalse(harness.controller.failedForAudioInterruption)
+    }
+
     /// Without shouldResume (the other app still wants the audio), with
     /// the phone's screen showing the conversation, after End or once the
     /// car has gone, nothing listens.
