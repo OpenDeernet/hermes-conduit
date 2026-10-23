@@ -24159,10 +24159,13 @@ final class AppState: ObservableObject {
             }
             return true
         } catch {
+            // Images staged for a Queue that didn't land would ride on a
+            // later turn. One Hermes took was already claimed by it, so
+            // taking it back then changes nothing.
+            for path in stagedImagePaths {
+                try? await client.detachImage(sessionId, path: path)
+            }
             if error is HermesClient.QueueUnsupportedError, !attachments.isEmpty {
-                for path in stagedImagePaths {
-                    try? await client.detachImage(sessionId, path: path)
-                }
                 guard isCurrentComposerSubmission(submissionContext) else { return false }
                 errorMessage = HermesClient.QueueUnsupportedError.attachmentsMessage
                 await recoverComposerSubmission(using: submissionContext)
