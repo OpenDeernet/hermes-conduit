@@ -259,6 +259,8 @@ final class CarPlayVoiceCoordinator {
     /// Test seam: how long after another app gives the audio back a
     /// classic conversation it interrupted listens again.
     var resumeAfterInterruptionDelay: Duration = .milliseconds(800)
+    /// Whether an answered Hermes call's own voice runs. Test seam.
+    var hermesCallVoiceRunning: @MainActor () -> Bool = { HermesNativeCalls.shared.isCallVoiceRunning }
     private var interruptionObservers: [NSObjectProtocol] = []
 
     internal init() {}
@@ -415,7 +417,12 @@ final class CarPlayVoiceCoordinator {
         let callAudio = NotificationCenter.default.addObserver(
             forName: .hermesCallAudioActivated, object: nil, queue: nil
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.audioInterruptionEnded() }
+            Task { @MainActor [weak self] in
+                // Only the call's own voice: one from before the call would
+                // take its place.
+                guard let self, self.hermesCallVoiceRunning() else { return }
+                self.audioInterruptionEnded()
+            }
         }
         interruptionObservers = [ended, callAudio]
     }

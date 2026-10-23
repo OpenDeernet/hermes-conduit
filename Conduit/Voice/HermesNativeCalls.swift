@@ -162,6 +162,8 @@ final class HermesNativeCalls: NSObject {
         /// Telling the relay this phone answered it.
         var settling: Task<HermesRingSettleResult, Never>? = nil
         var answered = false
+        /// The voice conversation the answer opened is running.
+        var voiceStarted = false
         var unanswered: Task<Void, Never>?
         var work: Task<Void, Never>?
     }
@@ -555,6 +557,11 @@ final class HermesNativeCalls: NSObject {
         await keepCallWhileVoiceRuns(id, appState: appState, startTimeout: Self.voiceStartTimeout)
     }
 
+    /// An answered call's own voice conversation is running. Until then,
+    /// voice an interruption ended isn't the call's, and restarting it
+    /// would take the call's place (its open finds voice in use).
+    var isCallVoiceRunning: Bool { calls.values.contains { $0.voiceStarted } }
+
     /// Opens the call as its notification's Talk button would, then keeps
     /// the CallKit call while the voice it opens runs.
     private func openThroughRoute(_ id: UUID, target: ConduitNotificationTarget, appState: AppState) async {
@@ -592,6 +599,7 @@ final class HermesNativeCalls: NSObject {
             if appState.isVoiceInUse {
                 if !started { HermesCallTrace.shared.note("Voice in use", since: voiceWait) }
                 started = true
+                calls[id]?.voiceStarted = true
             } else if started || ContinuousClock.now > startBy {
                 break
             }

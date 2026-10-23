@@ -6310,6 +6310,8 @@ final class AppState: ObservableObject {
     /// Whether Conduit's phone screen is up, for a classic call's restart
     /// after an interruption (#1145). Test seam.
     var hermesCallPhoneOnScreen: @MainActor () -> Bool = { PhoneScenePresence.isInForeground }
+    /// Whether the answered call's own voice runs (HermesNativeCalls). Test seam.
+    var hermesCallVoiceRunning: @MainActor () -> Bool = { HermesNativeCalls.shared.isCallVoiceRunning }
     /// The call's CallKit mute: a classic voice the call opens while muted
     /// doesn't start listening on its own.
     internal(set) var isNativeHermesCallMuted = false

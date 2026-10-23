@@ -2234,9 +2234,21 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(input.starts, starts + 1)
         XCTAssertTrue(input.running)
         XCTAssertEqual(controller.phase, .listening)
+
+        // CallKit takes the audio with no interruption: the call pauses,
+        // and comes back when CallKit gives it back.
+        controller.callAudioDeactivated()
+        XCTAssertEqual(controller.phase, .paused)
+        XCTAssertFalse(input.running)
+        controller.callAudioActivated()
+        for _ in 0..<50 where controller.phase == .paused { await settle() }
+        XCTAssertEqual(controller.phase, .listening)
+        XCTAssertTrue(input.running)
+
+        let afterResume = input.starts
         controller.stop()
         controller.callAudioActivated()
-        XCTAssertEqual(input.starts, starts + 1, "Nothing after stop")
+        XCTAssertEqual(input.starts, afterResume, "Nothing after stop")
     }
 }
 

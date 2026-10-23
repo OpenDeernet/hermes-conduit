@@ -1300,6 +1300,14 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
         let harness = await interruptedConversation()
         defer { harness.coordinator.handleDisconnect() }
 
+        // Before the call's own voice runs, a conversation from before the
+        // call stays as it was: listening would take the call's place.
+        harness.coordinator.hermesCallVoiceRunning = { false }
+        NotificationCenter.default.post(name: .hermesCallAudioActivated, object: nil)
+        await Self.settle()
+        XCTAssertTrue(harness.controller.failedForAudioInterruption)
+
+        harness.coordinator.hermesCallVoiceRunning = { true }
         NotificationCenter.default.post(name: .hermesCallAudioActivated, object: nil)
 
         let listening = await harness.controller.waitForState(.listening)
@@ -1312,6 +1320,7 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
     func testAnAnsweredHermesCallListensAgainWhenCallKitGivesTheAudioBack() async {
         let harness = makeHarness()
         harness.appState.hermesCallPhoneOnScreen = { false }
+        harness.appState.hermesCallVoiceRunning = { true }
         harness.openVoice(session: "existing-session")
         harness.appState.setNativeHermesCallAnswered(true)
         defer { harness.appState.setNativeHermesCallAnswered(false) }

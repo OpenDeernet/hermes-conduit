@@ -611,7 +611,7 @@ extension AppState {
     /// silent. In the car CarPlay restarts it; on screen the sheet's
     /// Listen is there.
     func hermesCallAudioActivated(after delay: Duration = .milliseconds(800)) {
-        guard isNativeHermesCallAnswered, showVoiceSheet,
+        guard isNativeHermesCallAnswered, showVoiceSheet, hermesCallVoiceRunning(),
               !CarPlayVoiceCoordinator.shared.isConnected, !hermesCallPhoneOnScreen() else { return }
         let controller = voiceConversationController
         guard Self.listensAgainAfterInterruption(controller) else { return }
@@ -620,6 +620,7 @@ extension AppState {
             // Still the same call's conversation, and nothing moved it on.
             guard let self, self.isNativeHermesCallAnswered, self.showVoiceSheet,
                   !self.isNativeHermesCallMuted, !self.hermesCallPhoneOnScreen(),
+                  !CarPlayVoiceCoordinator.shared.isConnected,
                   self.voiceConversationController === controller,
                   Self.listensAgainAfterInterruption(controller) else { return }
             if controller.hasLiveVoiceSession {

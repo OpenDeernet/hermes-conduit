@@ -335,8 +335,8 @@ final class GeminiLiveConversationController: ObservableObject {
     /// so a later nudge (an unmute) can't replace that proof.
     private var audioReturnSeen = false
     private var audioPauseObservers: [NSObjectProtocol] = []
-    /// CallKit's audio coming on, for the whole call (#1145).
-    private var callAudioObserver: NSObjectProtocol?
+    /// CallKit's audio going and coming, for the whole call (#1145).
+    private var callAudioObservers: [NSObjectProtocol] = []
     private let notificationCenter: NotificationCenter
     /// Tries to restart the microphone after the system says the other
     /// sound ended: the session can still be settling right after it.
@@ -575,8 +575,8 @@ final class GeminiLiveConversationController: ObservableObject {
         lateEndPhraseTask?.cancel()
         lateEndPhraseTask = nil
         clearAudioPause()
-        if let callAudioObserver { notificationCenter.removeObserver(callAudioObserver) }
-        callAudioObserver = nil
+        callAudioObservers.forEach(notificationCenter.removeObserver)
+        callAudioObservers = []
         session?.stop()
         session = nil
         stopInput()
@@ -832,10 +832,25 @@ final class GeminiLiveConversationController: ObservableObject {
     /// app activation follows (#1145). Watched for the whole call: CallKit's
     /// audio can also come on after the call's microphone started.
     private func observeCallAudio() {
-        guard callAudioObserver == nil else { return }
-        callAudioObserver = notificationCenter.addObserver(forName: .hermesCallAudioActivated, object: nil, queue: nil) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.callAudioActivated() }
-        }
+        guard callAudioObservers.isEmpty else { return }
+        callAudioObservers = [
+            notificationCenter.addObserver(forName: .hermesCallAudioActivated, object: nil, queue: nil) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.callAudioActivated() }
+            },
+            // CallKit taking the audio needn't come with an interruption:
+            // the microphone would run on a dead session.
+            notificationCenter.addObserver(forName: .hermesCallAudioDeactivated, object: nil, queue: nil) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.callAudioDeactivated() }
+            },
+        ]
+    }
+
+    /// CallKit took the call's audio: the call pauses as for an
+    /// interruption, until CallKit gives it back.
+    func callAudioDeactivated() {
+        guard isActive, endRequestedAt == nil, inputRunning else { return }
+        input.stop()
+        captureInterrupted()
     }
 
     /// CallKit activated the call's audio. Paused, the call resumes.
