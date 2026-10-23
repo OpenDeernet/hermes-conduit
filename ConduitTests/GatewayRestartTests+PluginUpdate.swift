@@ -690,6 +690,16 @@ extension GatewayRestartTests {
         XCTAssertTrue(host.calls.contains("POST \(NotifierPluginUpdater.installPath)"))
     }
 
+    func testConduitStopsFollowingALongHostUpdateWithoutCallingItFailed() async {
+        let host = PluginHost()
+        host.selfUpdateJobs = [["id": "j1", "step": "waiting_for_chats", "running_chats": 1]]
+        var updater = host.updater()
+        updater.onHost = true
+        updater.sleep = { [unowned host] _ in host.clock += 120 }
+        let outcome = await updater.run { _ in }
+        XCTAssertEqual(outcome, .runningOnHost)
+    }
+
     func testHostJobOutcomes() {
         XCTAssertNil(NotifierPluginUpdater.hostOutcome(["step": "restarting_gateway"]))
         XCTAssertEqual(NotifierPluginUpdater.hostStep(["step": "restarting_gateway"]), .restartingGateway(nil))

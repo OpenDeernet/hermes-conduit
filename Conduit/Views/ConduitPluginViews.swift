@@ -552,7 +552,11 @@ struct NotifierPluginUpdateBanner: View {
                 if update == .idle, offer == .update, let notes {
                     let line = [notes.summary, notes.changes.isEmpty ? nil : AppLocalization.string("What's New")]
                         .compactMap { $0 }.joined(separator: " · ")
-                    if !line.isEmpty {
+                    if notes.changes.isEmpty, !line.isEmpty {
+                        Text(verbatim: line)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if !line.isEmpty {
                         Button {
                             shownNotes = notes
                             showsNotes = true
@@ -564,7 +568,6 @@ struct NotifierPluginUpdateBanner: View {
                                 .multilineTextAlignment(.leading)
                         }
                         .buttonStyle(.plain)
-                        .disabled(notes.changes.isEmpty)
                         .accessibilityIdentifier("pluginUpdate.whatsNew")
                     }
                 }
@@ -710,7 +713,10 @@ struct NotifierPluginReleaseNotes: Equatable {
         guard let changelog else { return nil }
         version = status.offeredVersion
         released = changelog.released(version)
-        changes = changelog.updateChanges(after: status.runningVersion ?? status.version, through: version)
+        // A host whose version isn't known gets what this build's floor
+        // brought on, not the whole history.
+        changes = changelog.updateChanges(after: status.runningVersion ?? status.version ?? NotifierPluginStatus.recommendedVersion,
+                                          through: version)
         if released == nil && changes.isEmpty { return nil }
     }
 

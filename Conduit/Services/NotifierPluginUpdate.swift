@@ -84,7 +84,8 @@ struct NotifierPluginUpdateSlot: Equatable {
     }
 
     mutating func update(_ newState: NotifierPluginUpdateState, run id: UUID) {
-        guard runID == id else { return }
+        // Polls repeat the same step: only a change is published.
+        guard runID == id, state != newState else { return }
         state = newState
     }
 
