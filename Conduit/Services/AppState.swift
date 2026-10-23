@@ -23980,6 +23980,10 @@ final class AppState: ObservableObject {
                     )
                 }
             } catch {
+                // Images already staged for this Queue would ride on a later turn.
+                for path in stagedImagePaths {
+                    try? await client.detachImage(sessionId, path: path)
+                }
                 guard isCurrentComposerSubmission(submissionContext) else { return false }
                 errorMessage = AppLocalization.string("Attachment failed: \(UserFacingError.message(for: error))")
                 await recoverComposerSubmission(using: submissionContext)

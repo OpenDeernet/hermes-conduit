@@ -1185,7 +1185,8 @@ struct ComposerBar: View, Equatable {
                 .contentShape(Self.controlHitShape)
         }
         .accessibilityLabel(Text("Attach"))
-        .disabled(!appState.composerIsEnabled || appState.isBusy)
+        // Open while Hermes replies: the files go as Queue (#1146).
+        .disabled(!appState.composerIsEnabled)
         .conduitGlassControl(cornerRadius: Self.controlSize / 2, tint: .conduitAccent.opacity(0.08))
         .accessibilityShowsLargeContentViewer {
             Label("Attach", systemImage: "plus")
