@@ -7,8 +7,8 @@
 //  the promise was made in, says why Pulse spoke up, and takes a thumbs up
 //  or down; a thumbs down asks why, and each answer changes what Pulse does
 //  on the host (PulseFeed.swift). What Pulse learned is listed, with each
-//  kind's loudness, and every lesson can be undone. A reply box at the
-//  bottom talks to Pulse in its own chat.
+//  kind's loudness, and every lesson can be undone. Pulse's own chat, where
+//  its hidden turns run, isn't shown: the cards are the way to answer it.
 //
 
 import SwiftUI
@@ -74,9 +74,6 @@ struct V2PulsePage: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
 
     @State private var page: PulseFeedPage?
-    @State private var homeChatID: String?
-    /// The last feed named Pulse's chat: one that stops naming it lost it.
-    @State private var pulseFeedNamedChat = false
     @State private var loadError: String?
     @State private var errorMessage: String?
     /// A note on what the last rating changed.
@@ -87,8 +84,6 @@ struct V2PulsePage: View {
     @State private var reasonCard: PulseCard?
     @State private var showsLearned = false
     @State private var expandedWhy: Set<Int> = []
-    @State private var reply = ""
-    @State private var sending = false
     @State private var ratingCards: Set<Int> = []
     @State private var actingCard: Int?
     @State private var finishingCards: Set<Int> = []
@@ -107,16 +102,6 @@ struct V2PulsePage: View {
         .navigationTitle(Text("Pulse"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
-            if let homeChatID {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        appState.openAppLink(.session(id: homeChatID, profile: AppState.pulseHomeProfile))
-                    } label: {
-                        Label(AppLocalization.string("Open the Pulse chat"), systemImage: "bubble.left.and.text.bubble.right")
-                    }
-                    .accessibilityIdentifier("pulse.chat")
-                }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showsLearned = true
@@ -127,10 +112,7 @@ struct V2PulsePage: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                if homeChatID != nil { replyBar }
-                MinimisedLiveVoiceBar()
-            }
+            MinimisedLiveVoiceBar()
         }
         .sheet(isPresented: $showsLearned) {
             PulseLearnedSheet {
@@ -164,12 +146,9 @@ struct V2PulsePage: View {
         .onDisappear { isShown = false }
         .onChange(of: appState.activeDashboardID) { _, _ in
             reasonCard = nil
-            reply = ""
             errorMessage = nil
-            // Another dashboard: its own cards and Pulse chat.
+            // Another dashboard: its own cards.
             page = nil
-            homeChatID = nil
-            pulseFeedNamedChat = false
             loadError = nil
             learnedNote = nil
             focusedCard = nil
@@ -360,7 +339,7 @@ struct V2PulsePage: View {
                     if canMarkDone(card) { doneButton(card) }
                 }
             }
-            if !card.chatID.isEmpty {
+            if appState.pulseCardHasChat(card) {
                 Button {
                     appState.openPulseCardChat(card)
                 } label: {
@@ -525,29 +504,6 @@ struct V2PulsePage: View {
         .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 
-    private var replyBar: some View {
-        HStack(spacing: 8) {
-            TextField(AppLocalization.string("Reply to Pulse"), text: $reply, axis: .vertical)
-                .lineLimit(1...4)
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Capsule().fill(.thinMaterial))
-                .accessibilityIdentifier("pulse.reply")
-            Button {
-                send()
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(Color.conduitAccent)
-            }
-            .disabled(sending || reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .accessibilityLabel(AppLocalization.string("Send"))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-    }
-
     // MARK: Actions
 
     private func load() async {
@@ -560,9 +516,6 @@ struct V2PulsePage: View {
             errorMessage = nil
             learnedNote = nil
             appState.applyPulseFeed(loaded)
-            // A feed that names no chat (none made, or an older plugin) asks the state below.
-            if let home = loaded.homeChatID { homeChatID = home } else if pulseFeedNamedChat { homeChatID = nil }
-            pulseFeedNamedChat = loaded.homeChatID != nil
             if let request = appState.pulseOpenRequest, isShown { focus(request) }
             if isShown, loaded.unseen > 0, (try? await client.markSeen(nil)) != nil,
                appState.activeDashboardID == dashboard {
@@ -571,9 +524,6 @@ struct V2PulsePage: View {
         } catch {
             guard appState.activeDashboardID == dashboard else { return }
             if page == nil { loadError = PulseRefusal.message(for: error) }
-        }
-        if homeChatID == nil, let state = try? await client.state(), appState.activeDashboardID == dashboard {
-            homeChatID = state.homeChat?.id
         }
     }
 
@@ -630,24 +580,6 @@ struct V2PulsePage: View {
             } catch {
                 guard appState.activeDashboardID == dashboard else { return }
                 errorMessage = PulseRefusal.message(for: error)
-            }
-        }
-    }
-
-    private func send() {
-        guard let homeChatID else { return }
-        let text = reply
-        sending = true
-        let dashboard = appState.activeDashboardID
-        Task {
-            defer { sending = false }
-            let sent = await appState.replyInPulseChat(text, chatID: homeChatID)
-            guard appState.activeDashboardID == dashboard else { return }
-            if sent {
-                reply = ""
-                errorMessage = nil
-            } else {
-                errorMessage = AppLocalization.string("Couldn't send that to Pulse. Try again.")
             }
         }
     }

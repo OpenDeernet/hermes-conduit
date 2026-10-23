@@ -369,7 +369,8 @@ extension AppState {
 
     /// Pulse's own chat: Conduit shows it as the Pulse screen, not in Chats.
     func isPulseHomeChat(_ session: SessionSummary) -> Bool {
-        guard let home = pulseHomeChatID, showsPulseScreen, profilesMatch(activeProfile, Self.pulseHomeProfile) else {
+        // By the row's own profile: in All a row can be another profile's.
+        guard let home = pulseHomeChatID, showsPulseScreen, profilesMatch(rowProfile(session), Self.pulseHomeProfile) else {
             return false
         }
         return session.nestingIDs.contains(home)
@@ -403,23 +404,15 @@ extension AppState {
     }
 
     /// Opens the chat a card came from.
-    func openPulseCardChat(_ card: PulseCard) {
-        guard !card.chatID.isEmpty else { return }
-        openAppLink(.session(id: card.chatID, profile: card.profile.isEmpty ? Self.pulseHomeProfile : card.profile))
+    /// The card links a chat to open: not Pulse's own, which is hidden (a
+    /// report's or brief's cards point there).
+    func pulseCardHasChat(_ card: PulseCard) -> Bool {
+        !card.chatID.isEmpty && card.chatID != pulseHomeChatID
     }
 
-    /// Opens Pulse's own chat and sends `text` there once it's open (or
-    /// leaves it in that chat's composer); false when the chat didn't open.
-    func replyInPulseChat(_ text: String, chatID: String) async -> Bool {
-        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty else { return false }
-        let dashboard = activeDashboardID
-        openAppLink(.session(id: chatID, profile: Self.pulseHomeProfile))
-        guard await waitForOpenChat(chatID, on: dashboard) else { return false }
-        // The chat is open: a send it refused waits in its composer.
-        let sent = await sendMessage(message)
-        if !sent { prefillComposer(message) }
-        return true
+    func openPulseCardChat(_ card: PulseCard) {
+        guard pulseCardHasChat(card) else { return }
+        openAppLink(.session(id: card.chatID, profile: card.profile.isEmpty ? Self.pulseHomeProfile : card.profile))
     }
 
     /// Do it on a follow-up card: opens the chat the promise or to-do came
