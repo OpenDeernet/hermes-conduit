@@ -979,6 +979,7 @@ extension HermesNativeCalls: CXProviderDelegate {
             self.observeRoute()
             self.resumeAudioWaiters()
             NotificationCenter.default.post(name: .hermesCallAudioActivated, object: nil)
+            AppStateRuntimeRegistry.shared.existing?.hermesCallAudioActivated()
         }
     }
 
