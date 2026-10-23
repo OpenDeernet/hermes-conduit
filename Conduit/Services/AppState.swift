@@ -23855,7 +23855,7 @@ final class AppState: ObservableObject {
         // Images staged for a Queue this Hermes refuses would ride on the
         // next turn instead, so they never go up.
         if queued, !attachments.isEmpty, client.refusesQueuedPrompts {
-            errorMessage = HermesClient.QueueUnsupportedError().errorDescription
+            errorMessage = HermesClient.QueueUnsupportedError.attachmentsMessage
             return false
         }
         let joinsRunningTurn = queued && turnState.isRunning
@@ -24126,10 +24126,14 @@ final class AppState: ObservableObject {
             }
             return true
         } catch {
-            if error is HermesClient.QueueUnsupportedError {
+            if error is HermesClient.QueueUnsupportedError, !attachments.isEmpty {
                 for path in stagedImagePaths {
                     try? await client.detachImage(sessionId, path: path)
                 }
+                guard isCurrentComposerSubmission(submissionContext) else { return false }
+                errorMessage = HermesClient.QueueUnsupportedError.attachmentsMessage
+                await recoverComposerSubmission(using: submissionContext)
+                return false
             }
             guard isCurrentComposerSubmission(submissionContext) else { return false }
             if Self.isAmbiguousPromptDelivery(error) {

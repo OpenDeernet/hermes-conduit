@@ -1705,6 +1705,34 @@ final class OfflineChatCacheTests: XCTestCase {
         XCTAssertNil(appState.errorMessage)
     }
 
+    /// A Hermes without Queue can't take the files mid-reply, and has no
+    /// steer or interrupt to point at for them.
+    func testAttachmentsWhileRunningOnAHermesWithoutQueueSayWhy() async throws {
+        var operations = ChatResumeLifecycleOperations(sendPrompt: { _, _, _ in .accepted })
+        operations.sendQueuedPrompt = { _, _, _ in throw HermesClient.QueueUnsupportedError() }
+        operations.uploadAttachment = { _, _, _ in nil }
+        let (appState, _, _) = makeAppState(lifecycleOperations: operations)
+        let connection = HermesConnection(baseUrl: "https://one.example", ticket: "ticket")
+        appState.connection = connection
+        appState.client = HermesClient(connection: connection, profile: "default")
+        appState.sessions = [session("stored-a")]
+        appState.activeSessionId = "stored-a"
+        appState.isConnected = true
+        appState.handleStreamEvent(.sessionBusy(sessionId: "stored-a", busy: true))
+        let photo = Attachment(
+            id: UUID().uuidString,
+            name: "photo.jpg",
+            uri: "file:///tmp/photo.jpg",
+            mimeType: "image/jpeg",
+            kind: .image
+        )
+
+        let sent = await appState.submitComposer(text: "", attachments: [photo])
+
+        XCTAssertFalse(sent, "The composer keeps the files")
+        XCTAssertEqual(appState.errorMessage, HermesClient.QueueUnsupportedError.attachmentsMessage)
+    }
+
     /// A message an earlier run left waiting comes back as a draft at
     /// launch and is never sent on its own.
     func testAMessageLeftWaitingComesBackAsADraftAtLaunch() throws {

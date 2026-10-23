@@ -2512,6 +2512,11 @@ final class HermesClient: ObservableObject {
         var errorDescription: String? {
             AppLocalization.string("This Hermes can't queue messages. Update Hermes, or touch and hold send to steer or interrupt instead.")
         }
+
+        /// Attachments have no steer or interrupt to fall back on.
+        static var attachmentsMessage: String {
+            AppLocalization.string("This Hermes can't queue attachments. Update Hermes, or send them once the reply has finished.")
+        }
     }
 
     /// Read-only liveness probe against the gateway's in-memory runtime
