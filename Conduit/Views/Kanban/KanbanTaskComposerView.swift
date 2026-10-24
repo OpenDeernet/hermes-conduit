@@ -643,8 +643,7 @@ struct KanbanSkillsPickerSheet: View {
     /// The skills Capabilities last read, while they're this dashboard's
     /// and profile's: another dashboard's names are no suggestion here.
     private var availableSkills: [CapabilitySkill] {
-        CapabilityLoadPolicy.shouldPresentRows(snapshot: appState.capabilitiesOwner, active: appState.currentCapabilitiesOwner)
-            ? appState.skills : []
+        appState.capabilitiesAreCurrent ? appState.skills : []
     }
 
     private var filteredSkills: [CapabilitySkill] {

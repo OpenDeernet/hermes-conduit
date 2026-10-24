@@ -30004,6 +30004,12 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// Whether the installed skills and toolsets are the current dashboard's
+    /// and profile's: anything that shows them checks this first.
+    var capabilitiesAreCurrent: Bool {
+        CapabilityLoadPolicy.shouldPresentRows(snapshot: capabilitiesOwner, active: currentCapabilitiesOwner)
+    }
+
     /// Whether a switch flipped in `rows` (nil: the rows showing) may still
     /// act: they are the rows showing, and those are the current
     /// dashboard's and profile's.

@@ -274,7 +274,10 @@ struct CapabilitySkillDetailPage: View {
     @State private var document: SkillFrontmatter?
     @State private var loadError: String?
 
-    private var skill: CapabilitySkill? { appState.skills.first { $0.name == name } }
+    /// Only while the list is this dashboard's and profile's.
+    private var skill: CapabilitySkill? {
+        appState.capabilitiesAreCurrent ? appState.skills.first { $0.name == name } : nil
+    }
 
     var body: some View {
         SettingsDetailContainer {

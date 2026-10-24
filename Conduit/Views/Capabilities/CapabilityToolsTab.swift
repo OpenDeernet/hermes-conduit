@@ -203,7 +203,10 @@ struct CapabilityToolsetDetailPage: View {
     @State private var keyValue = ""
     @State private var backendToConfirm: TerminalBackendOption?
 
-    private var toolset: CapabilityToolset? { appState.toolsets.first { $0.name == name } }
+    /// Only while the list is this dashboard's and profile's.
+    private var toolset: CapabilityToolset? {
+        appState.capabilitiesAreCurrent ? appState.toolsets.first { $0.name == name } : nil
+    }
 
     var body: some View {
         SettingsDetailContainer {
