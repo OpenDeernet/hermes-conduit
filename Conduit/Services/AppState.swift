@@ -14126,6 +14126,13 @@ final class AppState: ObservableObject {
                     // workspace: the conversation's authoritative absence is
                     // not evidence about which surface it belonged to.
                     chatResumeCoordinator.rememberSession(nil, for: profile)
+                    // Gone for the rest of this run, as a listed row that
+                    // answers 4007: a message waiting for it doesn't go back
+                    // into its draft (#996).
+                    deadResumeRowIDs[
+                        Self.deadResumeRowKey(dashboardID: dashboardID, profile: profile),
+                        default: []
+                    ].insert(missingSavedSessionID)
                     // Its agents go with it, whichever conversation (or new
                     // chat) is opened instead.
                     keepDelegateAgents(of: [])
