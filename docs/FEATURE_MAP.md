@@ -610,11 +610,13 @@ Whether a transcript keeps itself at the newest message as replies and
 events arrive, or stays where the user scrolled to read.
 
 **Siblings:** chats, project chats and Bot Chat (one scroll engine) · group
-rooms · the jump-to-latest button · how much history an open transcript keeps
+rooms · a delegate agent's live tail sheet · the jump-to-latest button · how
+much history an open transcript keeps
 
 **Code**
 - Chats: `Conduit/Services/ChatScrollEngine.swift`, `Conduit/Views/ChatScrollSurfaceLocator.swift`, `Conduit/Views/ChatView.swift` (jumpToLatest)
 - Group rooms: `Conduit/Views/GroupRoomScrollFollow.swift` (GroupRoomFollow, GroupRoomScrollLocator), `Conduit/Views/GroupChatView.swift` (isFollowingLatest, jumpToLatestButton)
+- Delegate tail sheet (its own follow state and Latest button): `Conduit/Views/ChatSupportSheets.swift` (DelegateAgentTailSheet)
 - Room history kept: `Conduit/Services/GroupChatModels.swift` (GroupRoomReplay tailWindow, retainedLimit), `Conduit/Services/AppState.swift` (the open and resync tail windows)
 
 **Rulings**
@@ -623,6 +625,7 @@ rooms · the jump-to-latest button · how much history an open transcript keeps
 
 **Open gaps**
 - Group rooms have no "Load earlier messages", so history above the 200-event tail isn't reachable in the app.
+- The Responding row reads the kept tail, so a discussion longer than 200 events (when opened, or after a trim) can lose it while a member still works.
 - Trimming a busy room's tail moves rows above a reader scrolled to its top, once per 200 new events.
 - Group rooms keep the scroll position by row id (ScrollViewReader), not by the chat engine's same-pass layout, so a follow can animate where a chat snaps.
 

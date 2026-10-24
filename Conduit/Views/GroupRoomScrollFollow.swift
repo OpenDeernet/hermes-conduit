@@ -25,18 +25,27 @@ enum GroupRoomFollow {
     }
 }
 
+/// The follow decision, shared by reference: the transcript's scroll gates
+/// read it in the same turn a drag changes it, while the jump button waits
+/// for the published copy.
+final class GroupRoomFollowFlag {
+    var isFollowing = true
+}
+
 /// Placed behind the room's transcript stack inside its ScrollView. Finds
 /// the UIScrollView SwiftUI renders it with and reports follow changes from
 /// the user's drags (iOS 17 has no SwiftUI API for scroll geometry).
 struct GroupRoomScrollLocator: UIViewRepresentable {
+    let flag: GroupRoomFollowFlag
+    /// The published copy, for what the view draws.
     @Binding var isFollowing: Bool
 
     func makeUIView(context: Context) -> GroupRoomScrollLocatorView {
-        GroupRoomScrollLocatorView()
+        GroupRoomScrollLocatorView(flag: flag)
     }
 
     func updateUIView(_ view: GroupRoomScrollLocatorView, context: Context) {
-        view.isFollowing = isFollowing
+        view.flag = flag
         let binding = $isFollowing
         view.onChange = { following in
             // KVO can land mid-update; write the binding after it.
@@ -50,13 +59,14 @@ struct GroupRoomScrollLocator: UIViewRepresentable {
 }
 
 final class GroupRoomScrollLocatorView: UIView {
-    var isFollowing = true
+    var flag: GroupRoomFollowFlag
     var onChange: ((Bool) -> Void)?
 
     private weak var scrollView: UIScrollView?
     private var observations: [NSKeyValueObservation] = []
 
-    init() {
+    init(flag: GroupRoomFollowFlag) {
+        self.flag = flag
         super.init(frame: .zero)
         isUserInteractionEnabled = false
         backgroundColor = .clear
@@ -121,12 +131,12 @@ final class GroupRoomScrollLocatorView: UIView {
         let distance = scrollView.contentSize.height + scrollView.adjustedContentInset.bottom
             - (scrollView.contentOffset.y + scrollView.bounds.height)
         let next = GroupRoomFollow.following(
-            current: isFollowing,
+            current: flag.isFollowing,
             userScrolling: scrollView.isTracking || scrollView.isDecelerating,
             distanceFromBottom: distance
         )
-        guard next != isFollowing else { return }
-        isFollowing = next
+        guard next != flag.isFollowing else { return }
+        flag.isFollowing = next
         onChange?(next)
     }
 }

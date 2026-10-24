@@ -15,6 +15,8 @@ struct GroupChatView: View {
     @State private var showingDisbandConfirmation = false
     @State private var choosingPicture: GroupRoomPictureRequest?
     /// Following the latest event, or browsing history (GroupRoomFollow).
+    /// The flag decides scrolling; the published copy draws the button.
+    @State private var followFlag = GroupRoomFollowFlag()
     @State private var isFollowingLatest = true
     /// Bumped by the jump-to-latest button; the transcript scrolls on it.
     @State private var latestJumps = 0
@@ -73,7 +75,7 @@ struct GroupChatView: View {
     /// Shown while browsing, as on the chat screen.
     private var jumpToLatestButton: some View {
         Button {
-            isFollowingLatest = true
+            followLatest()
             latestJumps += 1
         } label: {
             Image(systemName: "arrow.down")
@@ -154,7 +156,7 @@ struct GroupChatView: View {
                         emptyState
                     }
                 }
-                .background { GroupRoomScrollLocator(isFollowing: $isFollowingLatest) }
+                .background { GroupRoomScrollLocator(flag: followFlag, isFollowing: $isFollowingLatest) }
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 18)
@@ -170,27 +172,27 @@ struct GroupChatView: View {
             // New events and a member starting its turn move the transcript
             // only while it follows the latest; a reader scrolled up stays.
             .onChange(of: appState.activeRoomReplay.cursor) { _, _ in
-                guard isFollowingLatest else { return }
+                guard followFlag.isFollowing else { return }
                 withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
             }
             .onChange(of: respondingMember?.identityKey) { _, _ in
-                guard isFollowingLatest else { return }
+                guard followFlag.isFollowing else { return }
                 withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
             }
             // Sending returns to the latest, as in a chat.
             .onChange(of: appState.pendingRoomMessage?.eventID) { _, eventID in
                 guard eventID != nil else { return }
-                isFollowingLatest = true
+                followLatest()
                 withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
             }
             .onChange(of: latestJumps) { _, _ in
                 withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
             }
             .onChange(of: appState.activeRoomSurface?.room.roomID) { _, _ in
-                isFollowingLatest = true
+                followLatest()
             }
             .onAppear {
-                isFollowingLatest = true
+                followLatest()
                 scrollToBottom(proxy)
             }
         }
@@ -225,6 +227,11 @@ struct GroupChatView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 48)
+    }
+
+    private func followLatest() {
+        followFlag.isFollowing = true
+        isFollowingLatest = true
     }
 
     /// The bottom-most row: the responding member, else the pending send,
