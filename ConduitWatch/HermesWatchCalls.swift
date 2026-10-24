@@ -338,9 +338,13 @@ final class HermesWatchCalls: NSObject {
         guard let ring = calls[id]?.ring, calls[id]?.following == nil else { return }
         WatchCallLog.shared.note("hermesCallOnPhone")
         calls[id]?.following = Task {
-            await HermesRingControl.follow(ring, after: 0) { state in
+            await HermesRingControl.follow(ring, after: 0, rewrite: {
+                // The relay restarted: this call's mute again.
+                guard let muted = self.calls[id]?.controlMuted else { return false }
+                return await HermesRingControl.set(ring, by: .watch, muted: muted, attempts: 5) != nil
+            }, changed: { state in
                 self.phoneControlChanged(id, state: state)
-            }
+            })
         }
     }
 
@@ -364,7 +368,7 @@ final class HermesWatchCalls: NSObject {
         guard let id = voiceCall, let call = calls[id], call.following != nil, call.controlMuted != muted else { return }
         calls[id]?.controlMuted = muted
         WatchCallLog.shared.note("hermesCallMuteToPhone", ["muted": muted])
-        Task { _ = await HermesRingControl.set(call.ring, by: .watch, muted: muted) }
+        Task { _ = await HermesRingControl.set(call.ring, by: .watch, muted: muted, attempts: 5) }
     }
 
     /// The call the iPhone kept ended here: so does the iPhone's.
@@ -378,7 +382,7 @@ final class HermesWatchCalls: NSObject {
             guard !expired else { return }
             let finished = DispatchSemaphore(value: 0)
             Task {
-                _ = await HermesRingControl.set(ring, by: .watch, ended: true)
+                _ = await HermesRingControl.set(ring, by: .watch, ended: true, attempts: 5)
                 finished.signal()
             }
             _ = finished.wait(timeout: .now() + 12)

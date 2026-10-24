@@ -180,6 +180,9 @@ final class HermesNativeCalls: NSObject {
         /// brought isn't posted back.
         var controlMuted = false
         var controlEnded = false
+        /// The call's voice's own mute as last seen (`nativeCallVoiceMuted`):
+        /// only a change of it is the user's, and reaches the Watch.
+        var inAppMuted: Bool? = nil
         /// Reads the Watch's Mute and End.
         var following: Task<Void, Never>? = nil
     }
@@ -617,6 +620,7 @@ final class HermesNativeCalls: NSObject {
                 if !started { HermesCallTrace.shared.note("Voice in use", since: voiceWait) }
                 started = true
                 calls[id]?.voiceStarted = true
+                inAppMuteChanged(id, muted: appState.nativeCallVoiceMuted)
             } else if started || ContinuousClock.now > startBy {
                 break
             }
@@ -867,9 +871,13 @@ final class HermesNativeCalls: NSObject {
         log.note("watchAnswerKept", ["ok": status == 200, "status": status])
         guard calls[id] != nil else { return }
         calls[id]?.following = Task {
-            await HermesRingControl.follow(ring, after: control.seq) { state in
+            await HermesRingControl.follow(ring, after: control.seq, rewrite: {
+                // The relay restarted: this call's mute again, or its end.
+                guard let call = self.calls[id] else { return await HermesRingControl.set(ring, by: .phone, ended: true, attempts: 5) != nil }
+                return await HermesRingControl.set(ring, by: .phone, muted: call.controlMuted, attempts: 5) != nil
+            }, changed: { state in
                 await self.watchControlChanged(id, state: state)
-            }
+            })
         }
     }
 
@@ -908,7 +916,20 @@ final class HermesNativeCalls: NSObject {
     private func muteOnWatch(_ id: UUID, muted: Bool) {
         guard let call = calls[id], call.keptFromWatch, let ring = call.ring, call.controlMuted != muted else { return }
         calls[id]?.controlMuted = muted
-        Task { _ = await HermesRingControl.set(ring, by: .phone, muted: muted) }
+        Task { _ = await HermesRingControl.set(ring, by: .phone, muted: muted, attempts: 5) }
+    }
+
+    /// The call's voice was muted or unmuted by its own controls in
+    /// Conduit (the call screen's Mute, the minimised bar, Classic's
+    /// microphone): the Watch hears it, and CallKit's Mute shows it.
+    private func inAppMuteChanged(_ id: UUID, muted: Bool?) {
+        guard let muted, let call = calls[id], call.keptFromWatch else { return }
+        let before = call.inAppMuted
+        calls[id]?.inAppMuted = muted
+        guard let before, before != muted, call.controlMuted != muted else { return }
+        HermesCallTrace.shared.note(muted ? "Muted in Conduit" : "Unmuted in Conduit")
+        muteOnWatch(id, muted: muted)
+        callController.request(CXTransaction(action: CXSetMutedCallAction(call: id, muted: muted))) { _ in }
     }
 
     /// A call kept from the Watch's answer ended here: so does the Watch's.
@@ -924,7 +945,7 @@ final class HermesNativeCalls: NSObject {
         }
         taskID = UIApplication.shared.beginBackgroundTask(withName: "conduit.hermesCall.endOnWatch", expirationHandler: end)
         Task {
-            _ = await HermesRingControl.set(ring, by: .phone, ended: true)
+            _ = await HermesRingControl.set(ring, by: .phone, ended: true, attempts: 10)
             end()
         }
     }

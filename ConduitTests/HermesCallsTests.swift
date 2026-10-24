@@ -1577,6 +1577,7 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(muteBody["token"] as? String, Self.ringToken)
         XCTAssertEqual(muteBody["by"] as? String, "watch")
         XCTAssertEqual(muteBody["muted"] as? Bool, true)
+        XCTAssertEqual(muteBody["adopt"] as? Bool, true, "A ring a relay restart dropped comes back")
         XCTAssertNil(muteBody["ended"])
         let end = HermesRingControl.setRequest(ring, by: .phone, ended: true)
         let endBody = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(end.httpBody)) as? [String: Any])
@@ -1609,19 +1610,53 @@ extension VoiceConversationControllerTests {
         await HermesRingControl.follow(ring, after: 1, send: { request in
             asked.append(request.url?.query ?? "")
             return answers.removeFirst()
-        }) { seen.append($0) }
+        }, rewrite: { true }, changed: { seen.append($0) })
         XCTAssertEqual(seen, [.init(seq: 2, muted: true, ended: false), .init(seq: 3, muted: true, ended: true)], "Each change once, until the end")
         XCTAssertEqual(asked, ["after=1&wait=20", "after=1&wait=20", "after=2&wait=20", "after=2&wait=20"])
 
+        // The relay restarted: written again, then read from the start.
+        answers = [
+            (Data(), 404),
+            (Data(#"{"seq":1,"muted":false,"ended":false}"#.utf8), 200),
+            (Data(), 404),
+            (Data(), 404),
+        ]
+        asked = []
+        seen = []
+        var rewrites = 0
+        await HermesRingControl.follow(ring, after: 7, send: { request in
+            asked.append(request.url?.query ?? "")
+            return answers.removeFirst()
+        }, rewrite: {
+            rewrites += 1
+            return true
+        }, changed: { seen.append($0) })
+        XCTAssertEqual(seen, [.init(seq: 1, muted: false, ended: false)])
+        XCTAssertEqual(asked, ["after=7&wait=20", "after=0&wait=20", "after=1&wait=20", "after=0&wait=20"], "Gone twice with nothing between: it stops")
+        XCTAssertEqual(rewrites, 2)
+
         answers = [(Data(), 404)]
         seen = []
-        await HermesRingControl.follow(ring, after: 0, send: { _ in answers.removeFirst() }) { seen.append($0) }
-        XCTAssertEqual(seen, [], "A relay with no control stops the reads")
+        await HermesRingControl.follow(ring, after: 0, send: { _ in answers.removeFirst() }, rewrite: { false }, changed: { seen.append($0) })
+        XCTAssertEqual(seen, [], "A ring that can't be written again stops the reads")
 
         let posted = await HermesRingControl.set(ring, by: .phone, muted: false) { _ in (Data(#"{"seq":1,"muted":false,"ended":false}"#.utf8), 200) }
         XCTAssertEqual(posted, .init(seq: 1, muted: false, ended: false))
-        let refused = await HermesRingControl.set(ring, by: .phone, muted: false) { _ in (Data(), 404) }
+        var tries = 0
+        let refused = await HermesRingControl.set(ring, by: .phone, muted: false, attempts: 3, retryDelay: 0) { _ in
+            tries += 1
+            return (Data(), 404)
+        }
         XCTAssertNil(refused, "An older relay: the Watch keeps the call")
+        XCTAssertEqual(tries, 1, "A refusal isn't tried again")
+        tries = 0
+        let retried = await HermesRingControl.set(ring, by: .watch, ended: true, attempts: 3, retryDelay: 0) { _ in
+            tries += 1
+            if tries < 3 { throw URLError(.cannotConnectToHost) }
+            return (Data(#"{"seq":2,"muted":false,"ended":true}"#.utf8), 200)
+        }
+        XCTAssertEqual(retried, .init(seq: 2, muted: false, ended: true), "A restarting relay is tried again")
+        XCTAssertEqual(tries, 3)
     }
 
     // MARK: Ringing the Watch only while its voice can start

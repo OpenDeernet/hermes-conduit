@@ -458,7 +458,9 @@ extension WatchVoiceWire.Message {
 /// Mute and End. The iPhone's call keeps their link down, so the two share
 /// them through the relay (0.17+, `ring-controls`): each posts its change to
 /// the ring's control and long-polls it for the other's. Only the two flags
-/// go through; the ring's token guards them.
+/// go through; the ring's token guards them. A relay restart drops the
+/// ring: every write may adopt it back (`adopt`), and a device whose read
+/// finds it gone writes its state again and reads on.
 enum HermesRingControl {
     struct State: Equatable {
         /// The relay's count of changes, which a read waits past.
@@ -491,7 +493,7 @@ enum HermesRingControl {
         var request = URLRequest(url: url(ring), timeoutInterval: 10)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        var body: [String: Any] = ["token": ring.token, "by": device.rawValue]
+        var body: [String: Any] = ["token": ring.token, "by": device.rawValue, "adopt": true]
         if let muted { body["muted"] = muted }
         if ended { body["ended"] = true }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -523,27 +525,43 @@ enum HermesRingControl {
     }
 
     /// Posts a change: the control after it, nil when the relay refused it
-    /// or couldn't be reached.
+    /// or couldn't be reached in `attempts` tries (2 s apart: a restarting
+    /// relay is back within seconds).
     static func set(
         _ ring: HermesRing,
         by device: HermesRingDevice,
         muted: Bool? = nil,
         ended: Bool = false,
+        attempts: Int = 1,
+        retryDelay: UInt64 = 2_000_000_000,
         send: (URLRequest) async throws -> (Data, Int) = HermesRingHandoff.send
     ) async -> State? {
-        guard let answer = try? await send(setRequest(ring, by: device, muted: muted, ended: ended)), answer.1 == 200 else { return nil }
-        return state(answer.0)
+        for attempt in 1...max(1, attempts) {
+            let answer = try? await send(setRequest(ring, by: device, muted: muted, ended: ended))
+            if let answer, answer.1 == 200 { return state(answer.0) }
+            // Refused: trying again won't help.
+            if let status = answer?.1, (400..<500).contains(status), status != 429 { return nil }
+            guard attempt < attempts, !Task.isCancelled else { break }
+            try? await Task.sleep(nanoseconds: retryDelay)
+        }
+        return nil
     }
 
     /// Reads the control past `seq` until it ends, the ring goes, or the
-    /// task is cancelled, handing each change to `changed`.
+    /// task is cancelled, handing each change to `changed`. A ring the relay
+    /// lost (a restart) is written again with `rewrite`, this device's state,
+    /// and read from its start: once each time it's lost, and the reads
+    /// stop when it can't be written.
     static func follow(
         _ ring: HermesRing,
         after seq: Int,
+        retryDelay: UInt64 = 2_000_000_000,
         send: (URLRequest) async throws -> (Data, Int) = HermesRingHandoff.send,
+        rewrite: @MainActor () async -> Bool,
         changed: @MainActor (State) async -> Void
     ) async {
         var seen = seq
+        var rewritten = false
         while !Task.isCancelled {
             let read: Read
             do {
@@ -554,6 +572,7 @@ enum HermesRingControl {
             }
             switch read {
             case .state(let state):
+                rewritten = false
                 guard state.seq > seen else { continue }
                 seen = state.seq
                 await changed(state)
@@ -561,9 +580,11 @@ enum HermesRingControl {
             case .notYet:
                 continue
             case .gone:
-                return
+                guard !rewritten, await rewrite() else { return }
+                rewritten = true
+                seen = 0
             case .retry:
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                try? await Task.sleep(nanoseconds: retryDelay)
             }
         }
     }
