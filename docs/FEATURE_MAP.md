@@ -156,7 +156,7 @@ the saved transcript's job cards · `docs/VOICE_BACKGROUND_JOBS.md`
 | Classic | Hermes summarizes it in the call's own session; failures and questions are short spoken notices |
 | Gemini | on the job's own tool call once the model is quiet; sent again as text after 6 s of silence |
 | Grok | a text turn, sent only while quiet; sent once more if the model says nothing for 6 s |
-| GPT-Live | on the delegation, after the user has finished talking |
+| GPT-Live | on the delegation, after the user has finished talking; sent once more if the model says nothing for 6 s |
 | Local Live agent | an update, as in Grok, checked the same way |
 | Local Live, Hermes turns | dropped: Hermes' reply is already the call's turn |
 | Watch | the relay's job news, at the next quiet moment; sent once more if the model says nothing for 6 s |
@@ -164,7 +164,7 @@ the saved transcript's job cards · `docs/VOICE_BACKGROUND_JOBS.md`
 **Code**
 - All modes: `Conduit/Voice/VoiceBackgroundJobs.swift` (takeNotice, outcomePrompt, showOnScreen, VoiceJobCallAnchor)
 - Gemini and Grok: `Conduit/Voice/GeminiLive/GeminiLiveConversationController.swift`, `Conduit/Voice/GeminiLive/GeminiLiveToolBridge.swift`
-- GPT-Live: `Conduit/Voice/GPTLive/GPTLiveConversationController.swift` (userQuietInterval), `Conduit/Voice/GPTLive/GPTLiveDelegationBridge.swift`
+- GPT-Live: `Conduit/Voice/GPTLive/GPTLiveConversationController.swift` (userQuietInterval, confirmResultSaid), `Conduit/Voice/GPTLive/GPTLiveDelegationBridge.swift`
 - Local Live: `Conduit/Voice/LocalLive/LocalLiveNoticeRoute.swift`
 - Classic: `Conduit/Voice/VoiceConversationController.swift`
 - Call screen: `Conduit/Views/LiveVoiceCallJobs.swift` (LiveVoiceJobCard, LiveVoiceCallTimeline), `Conduit/Services/AppState+PresentedScreens.swift` (cards Hermes shows)
@@ -182,7 +182,7 @@ the saved transcript's job cards · `docs/VOICE_BACKGROUND_JOBS.md`
 **Open gaps**
 - GPT-Live's model can't put a card on the call screen: Gemini, Grok and Local Live agent have `show_on_screen`, GPT-Live has no marker for it. Cards Hermes shows still appear (#366).
 
-**Checked:** 2026-10-24, at #1224: a result counts as told only once the model says something after it (one resend, Watch included), and a job stays on the job lists until its result is said (#1210). Earlier at #1191.
+**Checked:** 2026-10-24, at #1224: a result counts as told only once the model says something after it (one resend, GPT-Live and Watch included), and a job stays on the job lists until its result is said (#1210). Earlier at #1191.
 
 ## Tools and consent in calls
 

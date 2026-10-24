@@ -196,6 +196,9 @@ final class GPTLiveConversationController: ObservableObject {
     static let userQuietInterval: TimeInterval = 2
     /// Quiet time after the model's last turn before a job update.
     static let modelQuietInterval: TimeInterval = 1
+    /// How long a job's result may go unspoken after it went out before it
+    /// is sent once more (GeminiLiveConversationController.outcomeSpeechGrace).
+    static let outcomeSpeechGrace: TimeInterval = 6
     /// An open user turn with no new words for this long no longer holds
     /// job updates back (its `turn.done` may never come).
     static let userTurnStaleInterval: TimeInterval = 6
@@ -326,6 +329,17 @@ final class GPTLiveConversationController: ObservableObject {
     /// Idle-only sends (job notices, delegation results, typed exchanges)
     /// waiting to go out.
     private var pendingContext: [PendingSend] = []
+    /// Job results that went out and aren't yet known to be said, by text:
+    /// `settle` marks the job told once the model has said something
+    /// since, or after one more try (#1210).
+    private struct UnconfirmedResult {
+        let sentAt: Date
+        let resent: Bool
+        let settle: @MainActor () -> Void
+    }
+    private var unconfirmedResults: [String: UnconfirmedResult] = [:]
+    /// Results the model let pass, queued once more with how to settle them.
+    private var resendSettles: [String: @MainActor () -> Void] = [:]
     /// The user's transcript entries when each open delegation was made:
     /// an entry not among them is something they said after asking. The
     /// request's own late words land in its entries, not new ones.
@@ -755,6 +769,11 @@ final class GPTLiveConversationController: ObservableObject {
         let unsent = pendingContext
         pendingContext = []
         delegationUserEntries = [:]
+        // Sent once already: it counts as said, as on the other live modes.
+        let settles = Array(resendSettles.values) + unconfirmedResults.values.map(\.settle)
+        resendSettles = [:]
+        unconfirmedResults = [:]
+        settles.forEach { $0() }
         for item in unsent {
             if let delegationID = item.delegationID {
                 bridge.replyUndelivered(delegationID: delegationID)
@@ -1185,11 +1204,22 @@ final class GPTLiveConversationController: ObservableObject {
                 pendingContext.insert(item, at: 0)
                 return
             }
+            // A job's result counts as told once the model has said
+            // something since; one it lets pass goes out once more (#1210).
+            let sentAt = now()
             if let delegationID = item.delegationID {
                 if !isStatus {
-                    bridge.replyDelivered(delegationID: delegationID)
                     delegationUserEntries[delegationID] = nil
+                    if item.channel == .speakable, bridge.carriesJobResult(delegationID: delegationID) {
+                        awaitSaid(item.text, since: sentAt) { [bridge] in bridge.replyDelivered(delegationID: delegationID) }
+                    } else {
+                        bridge.replyDelivered(delegationID: delegationID)
+                    }
                 }
+            } else if let settle = resendSettles.removeValue(forKey: item.text) {
+                awaitSaid(item.text, since: sentAt, resent: true, settle: settle)
+            } else if item.channel == .speakable, let jobID = item.jobID {
+                awaitSaid(item.text, since: sentAt) { [bridge] in bridge.contextDelivered(jobID: jobID) }
             } else {
                 bridge.contextDelivered(jobID: item.jobID)
             }
@@ -1202,6 +1232,34 @@ final class GPTLiveConversationController: ObservableObject {
                 return
             }
         }
+    }
+
+    private func awaitSaid(_ text: String, since sentAt: Date, resent: Bool = false, settle: @escaping @MainActor () -> Void) {
+        unconfirmedResults[text] = UnconfirmedResult(sentAt: sentAt, resent: resent, settle: settle)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.outcomeSpeechGrace))
+            guard let self else {
+                settle()
+                return
+            }
+            self.confirmResultSaid(text)
+        }
+    }
+
+    /// Settles a result that went out `outcomeSpeechGrace` ago: said if the
+    /// model spoke since (or the call is over), else queued once more.
+    func confirmResultSaid(_ text: String) {
+        guard let result = unconfirmedResults.removeValue(forKey: text) else { return }
+        let spoke = lastModelOutputAt.map { $0 >= result.sentAt } ?? false
+        guard isActive, endRequestedAt == nil, !spoke, !result.resent else {
+            result.settle()
+            return
+        }
+        // No answer came, so no turn is running for it.
+        modelTurnActive = false
+        resendSettles[text] = result.settle
+        pendingContext.append(PendingSend(text: text, channel: .speakable, jobID: nil, delegationID: nil))
+        scheduleIdleFlush()
     }
 
     /// Whether the user said more after the delegation was made (beyond

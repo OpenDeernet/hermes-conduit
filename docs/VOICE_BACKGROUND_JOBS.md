@@ -111,7 +111,8 @@ reply pending or playing):
   result, the only way Grok Live and Local Live hear one, counts as told once
   the model has said something since; if it hasn't within 6 seconds, the
   result goes out once more, never a third time. The same goes for Gemini's
-  text updates and for job news on Apple Watch calls.
+  text updates, GPT-Live's delegation results and job notices, and job news
+  on Apple Watch calls.
 - `list_jobs` (and Classic's job status, GPT-Live's status note and the
   Watch's job list) names a finished job until its result has been said: a
   result waiting for a quiet moment, or sent and not yet said, keeps the job

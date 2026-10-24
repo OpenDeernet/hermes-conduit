@@ -1416,6 +1416,11 @@ final class GPTLiveDelegationBridge {
     /// Settled delegations whose answer is on its way, by delegation.
     private var deliveredReplies: [String: UUID] = [:]
 
+    /// Whether this delegation's answer is a job's result.
+    func carriesJobResult(delegationID: String) -> Bool {
+        deliveredReplies[delegationID] != nil
+    }
+
     /// How a "call me" went, for the model as quiet context (#449).
     private static func callRequestNote(_ text: String) -> Outgoing {
         .sessionContext(text: "[Call request: \(text)]", channel: .commentary, whenIdle: false, jobID: nil)
