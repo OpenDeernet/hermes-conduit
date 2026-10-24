@@ -58,6 +58,7 @@ final class LogRedactionTests: XCTestCase {
             "GET <host> failed (retry)."
         )
         XCTAssertEqual(LogRedaction.redactingURLs("backup.example.com/dump.json"), "<host>")
+        XCTAssertEqual(LogRedaction.redactingURLs("example.com?token=abc and my_host.lan"), "<host> and <host>")
     }
 
     func testTypeNamesVersionsAndFileNamesAreKept() {

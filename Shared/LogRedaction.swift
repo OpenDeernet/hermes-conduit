@@ -43,7 +43,7 @@ enum LogRedaction {
         for match in matches.reversed() {
             let token = nsText.substring(with: match.range)
             // The extension of the name itself, not of a path after it.
-            let name = token.prefix { $0 != "/" }
+            let name = token.prefix { $0 != "/" && $0 != "?" }
             if !name.contains(":"), let last = name.split(separator: ".").last,
                fileExtensions.contains(last.lowercased()) { continue }
             guard let range = Range(match.range, in: result) else { continue }
@@ -68,10 +68,10 @@ enum LogRedaction {
             + #"|(?<![\w.\-:/])(?:"#
             + #"\[[0-9A-Fa-f.%]*:[0-9A-Za-z:.%]*\](?::\d{1,5})?"#
             + #"|(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?"#
-            + #"|(?:[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9\-]*[A-Za-z0-9])?:\d{1,5}"#
-            + #"|(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{2,63}"#
+            + #"|(?:[A-Za-z0-9_](?:[A-Za-z0-9_\-]*[A-Za-z0-9_])?\.)+[A-Za-z](?:[A-Za-z0-9\-]*[A-Za-z0-9])?:\d{1,5}"#
+            + #"|(?:[a-z0-9_](?:[a-z0-9_\-]*[a-z0-9_])?\.)+[a-z]{2,63}"#
             + #")(?![\w\-]|\.[A-Za-z0-9])"#
-            + #"(?:/[^\s"'<>{}]*[^\s"'<>{},;.)\]])?"#
+            + #"(?:[/?][^\s"'<>{}]*[^\s"'<>{},;.)\]])?"#
     )
 
     /// Extensions of files an error may name that no domain ends in
