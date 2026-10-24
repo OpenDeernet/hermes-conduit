@@ -562,23 +562,31 @@ enum HermesRingControl {
     ) async {
         var seen = seq
         var rewritten = false
+        let clock = ContinuousClock()
         while !Task.isCancelled {
             let read: Read
+            let asked = clock.now
             do {
                 let (data, status) = try await send(readRequest(ring, after: seen))
                 read = readResult(status: status, data: data)
             } catch {
                 read = .retry
             }
+            // Nothing new, at once: something on the way doesn't wait, so
+            // reads pause rather than spin.
+            let early = clock.now - asked < .seconds(1)
             switch read {
             case .state(let state):
                 rewritten = false
-                guard state.seq > seen else { continue }
+                guard state.seq > seen else {
+                    if early { try? await Task.sleep(nanoseconds: retryDelay) }
+                    continue
+                }
                 seen = state.seq
                 await changed(state)
                 if state.ended { return }
             case .notYet:
-                continue
+                if early { try? await Task.sleep(nanoseconds: retryDelay) }
             case .gone:
                 guard !rewritten, await rewrite() else { return }
                 rewritten = true

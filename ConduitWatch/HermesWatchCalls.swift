@@ -365,7 +365,10 @@ final class HermesWatchCalls: NSObject {
 
     /// Muted or unmuted here, on the call the iPhone kept: it hears.
     func phoneCallMuted(_ muted: Bool) {
-        guard let id = voiceCall, let call = calls[id], call.following != nil, call.controlMuted != muted else { return }
+        guard let id = voiceCall, calls[id]?.ring != nil else { return }
+        // Tapped before the call screen's phase change reached here.
+        followPhone(id)
+        guard let call = calls[id], call.following != nil, call.controlMuted != muted else { return }
         calls[id]?.controlMuted = muted
         WatchCallLog.shared.note("hermesCallMuteToPhone", ["muted": muted])
         Task { _ = await HermesRingControl.set(call.ring, by: .watch, muted: muted, attempts: 5) }

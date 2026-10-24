@@ -1607,7 +1607,7 @@ extension VoiceConversationControllerTests {
         ]
         var asked: [String] = []
         var seen: [HermesRingControl.State] = []
-        await HermesRingControl.follow(ring, after: 1, send: { request in
+        await HermesRingControl.follow(ring, after: 1, retryDelay: 0, send: { request in
             asked.append(request.url?.query ?? "")
             return answers.removeFirst()
         }, rewrite: { true }, changed: { seen.append($0) })
