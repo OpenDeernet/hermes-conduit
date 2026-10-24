@@ -1143,10 +1143,10 @@ def unit_classes_for_changes(repo_root: str, changed: list, unit_entries: list) 
         # `<Stem>` followed by a new word: AppState reaches AppStateChatResume
         # but not AppStatement.
         for name in sorted(by_name):
+            if not (name.startswith(stem) and name.endswith("Tests")):
+                continue
             topic = name[len(stem):-len("Tests")]
-            if (name.startswith(stem) and name.endswith("Tests")
-                    and topic[:1].isupper()
-                    and name not in picked and name not in related):
+            if topic[:1].isupper() and name not in picked and name not in related:
                 related.append(name)
     return picked, related
 
