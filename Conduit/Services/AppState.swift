@@ -8192,7 +8192,8 @@ final class AppState: ObservableObject {
         }) else { return nil }
         var reply = messages[index]
         reply.content = reply.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let prompt = messages[..<index].last(where: { $0.role == .user })?
+        // A steer is part of the turn, not what started it.
+        let prompt = messages[..<index].last(where: { $0.role == .user && !$0.isSteer })?
             .content.trimmingCharacters(in: .whitespacesAndNewlines)
         return (reply, prompt)
     }

@@ -512,8 +512,12 @@ struct ComposerBar: View, Equatable {
             // The room surface unmounts this composer's subtree. Persist the
             // typed draft BEFORE it goes, so returning to the session
             // restores exactly what the user had typed.
-            if roomActive {
-                saveDraft(for: activeDraftKey)
+            if roomActive, let key = Self.draftKeyToKeep(
+                loaded: loadedDraftKey,
+                loadedClearCount: loadedDraftClearCount,
+                storeClearCount: draftStore.clearCount
+            ) {
+                saveDraft(for: key)
             }
         }
         .onChange(of: updates.inputs.takesText) { _, takesText in
@@ -1528,6 +1532,7 @@ struct ComposerBar: View, Equatable {
         let submittedAction = choice.map { $0.busyInputMode?.composerAction ?? .send } ?? action
         let submittedDraftKey = loadedDraftKey ?? activeDraftKey
         let submittedDraftBucket = draftStore.submissionBucket(for: submittedDraftKey)
+        let submittedClearCount = draftStore.clearCount
         let submissionContext = appState.composerSubmissionContext()
         rotateAttachmentGeneration()
         collapseSubmittedDraft(clearingReply: submittedReply != nil)
@@ -1551,7 +1556,8 @@ struct ComposerBar: View, Equatable {
                     text: submittedText,
                     attachments: submittedAttachments,
                     replyReference: submittedReply,
-                    for: submittedDraftKey
+                    for: submittedDraftKey,
+                    clearCount: submittedClearCount
                 )
                 Haptics.error()
                 return
@@ -1863,8 +1869,14 @@ struct ComposerBar: View, Equatable {
         text submittedText: String,
         attachments submittedAttachments: [Attachment],
         replyReference submittedReply: ComposerReplyReference?,
-        for key: ComposerDraftKey
+        for key: ComposerDraftKey,
+        clearCount: UInt64
     ) {
+        // A sign-out or server switch cleared the drafts while it was on
+        // its way: the outgoing account's words don't come back.
+        guard Self.draftKeyToKeep(loaded: key, loadedClearCount: clearCount, storeClearCount: draftStore.clearCount) != nil else {
+            return
+        }
         let failed = ComposerDraft(
             text: submittedText,
             attachments: submittedAttachments,

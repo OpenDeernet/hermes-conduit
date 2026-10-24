@@ -627,7 +627,7 @@ group rooms · the full editor · the notices that say where words went
 - Tests: `ConduitTests/ComposerDraftStoreTests.swift`, `ConduitTests/GroupChatSessionSafetyTests.swift`, `ConduitTests/OfflineChatCacheTests.swift`
 
 **Rulings**
-- Drafts live in memory per (profile, chat), and a sign-out or server switch clears them on purpose; a composer that goes away after the clear doesn't put its draft back (2026-10-24, #1185).
+- Drafts live in memory per (profile, chat), and a sign-out or server switch clears them on purpose; nothing the composer held before the clear goes back in after it: not when it goes away, hands off to another chat or a room, nor when a send that was on its way fails (2026-10-24, #1185).
 - A waiting message is never sent on its own after it's handed back. When Hermes says its chat is gone, its words go into the composer on screen, unsent, with a notice saying so (2026-10-24, #1185).
 
 **Open gaps**
