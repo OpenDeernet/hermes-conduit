@@ -18,6 +18,8 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
         UNUserNotificationCenter.current().delegate = self
         // A "Hermes wants to talk" notification's Talk button (#449).
         HermesCallNotifications.registerCategory()
+        // Workspace files a previous run prepared for Save to Files.
+        Task.detached(priority: .utility) { _ = WorkspaceDownloads.root }
         // Set up before launch returns: a call the Apple Watch starts can
         // launch Conduit in the background, and its message waits on this.
         MainActor.assumeIsolated {
@@ -268,6 +270,8 @@ struct ConduitApp: App {
                 // The Notification Service Extension writes banners in it.
                 NotificationSharedSettings.appLanguage = AppLanguage.current.rawValue
                 HermesCallNotifications.registerCategory()
+        // Workspace files a previous run prepared for Save to Files.
+        Task.detached(priority: .utility) { _ = WorkspaceDownloads.root }
             }
             .preferredColorScheme(appState.themePreference.colorScheme)
             .tint(.conduitAccent)
