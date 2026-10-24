@@ -199,6 +199,203 @@ extension BotModeTests {
         )
     }
 
+    // MARK: - Create options
+
+    func testCreateParamsCloneTheMainProfileAndShareKeysByDefault() {
+        let params = BotCreateRequest.params(slug: "scout", description: "Deals", soul: "# Scout", draft: BotEditorDraft())
+        XCTAssertEqual(params["name"] as? String, "scout")
+        XCTAssertEqual(params["clone_from"] as? String, "default", "Desktop copies the main profile's settings")
+        XCTAssertEqual(params["share_auth"] as? Bool, true)
+        XCTAssertEqual(params["no_skills"] as? Bool, false)
+        XCTAssertNil(params["model"], "no pick inherits the main profile's model")
+        XCTAssertNil(params["provider"])
+    }
+
+    func testCreateParamsCarryAFreshStartAndAModelPin() {
+        var draft = BotEditorDraft()
+        draft.cloneFrom = ""
+        draft.shareAuth = false
+        draft.noSkills = true
+        draft.provider = "openrouter"
+        draft.model = " anthropic/claude-sonnet "
+        let params = BotCreateRequest.params(slug: "scout", description: "", soul: "", draft: draft)
+        XCTAssertNil(params["clone_from"], "omitted = a fresh profile with the bundled skills")
+        XCTAssertEqual(params["share_auth"] as? Bool, false)
+        XCTAssertEqual(params["no_skills"] as? Bool, true)
+        XCTAssertEqual(params["provider"] as? String, "openrouter")
+        XCTAssertEqual(params["model"] as? String, "anthropic/claude-sonnet")
+
+        draft.provider = ""
+        let half = BotCreateRequest.params(slug: "scout", description: "", soul: "", draft: draft)
+        XCTAssertNil(half["model"], "the gateway pins only a provider and a model together")
+    }
+
+    func testCreateReportsAModelPinOnlyTheGatewayRefused() {
+        let pinned: [String: Any] = ["name": "scout", "provider": "openrouter", "model": "anthropic/claude-sonnet"]
+        XCTAssertFalse(BotCreateRequest.modelPinned(pinned, result: .object(["ok": .bool(true), "model_set": .bool(false)])))
+        XCTAssertTrue(BotCreateRequest.modelPinned(pinned, result: .object(["ok": .bool(true), "model_set": .bool(true)])))
+        XCTAssertTrue(BotCreateRequest.modelPinned(pinned, result: .object(["ok": .bool(true)])), "an older gateway omits the key")
+        XCTAssertTrue(
+            BotCreateRequest.modelPinned(["name": "scout"], result: .object(["model_set": .bool(false)])),
+            "no pick asked for, so nothing failed"
+        )
+    }
+
+    func testRuntimeCheckNeedsModelOnlyOnAnExplicitRefusal() {
+        XCTAssertTrue(BotRuntimeCheck.needsModel(.object(["ok": .bool(false), "error": .string("No usable credentials")])))
+        XCTAssertFalse(BotRuntimeCheck.needsModel(.object(["ok": .bool(true)])))
+        XCTAssertFalse(BotRuntimeCheck.needsModel(nil), "an older gateway without the check goes ahead")
+        XCTAssertFalse(BotRuntimeCheck.needsModel(.object([:])))
+    }
+
+    func testModelConfirmationReadsTheGatewaysGuardMessage() {
+        XCTAssertEqual(
+            BotModelConfirmation.message(in: .object([
+                "ok": .bool(true),
+                "applied": .object([:]),
+                "confirm_required": .bool(true),
+                "confirm_message": .string("This model costs $15 per million tokens.")
+            ])),
+            "This model costs $15 per million tokens."
+        )
+        XCTAssertEqual(
+            BotModelConfirmation.message(in: .object([
+                "confirm_required": .bool(true),
+                "warning": .string("This model may train on your data.")
+            ])),
+            "This model may train on your data.",
+            "older gateways name the text `warning`"
+        )
+        XCTAssertNotNil(BotModelConfirmation.message(in: .object(["confirm_required": .bool(true)])))
+        XCTAssertNil(BotModelConfirmation.message(in: .object(["ok": .bool(true), "applied": .object(["model": .bool(true)])])))
+    }
+
+    // MARK: - Skills, tools and MCP
+
+    func testCapabilitiesDecodeTheDescribeLists() {
+        let caps = BotCapabilities(describe: [
+            "skills": .array([
+                .object(["name": .string("web-search"), "enabled": .bool(true)]),
+                .object(["name": .string("arxiv"), "enabled": .bool(false)])
+            ]),
+            "toolsets": .array([
+                .object(["name": .string("terminal"), "label": .string("Terminal"), "description": .string("Shell"),
+                         "tool_count": .number(3), "enabled": .bool(true)])
+            ]),
+            "mcp_servers": .array([.object(["name": .string("github"), "transport": .string("http")])])
+        ])
+        XCTAssertEqual(caps.skills.map(\.name), ["arxiv", "web-search"], "skills list alphabetically")
+        XCTAssertEqual(caps.toolsets.first?.label, "Terminal")
+        XCTAssertEqual(caps.toolsets.first?.toolCount, 3)
+        XCTAssertEqual(caps.mcpServers.first?.enabled, true, "an MCP entry without the flag is on")
+    }
+
+    func testCapabilityParamsWriteOnlyChangedSections() {
+        let original = BotCapabilities(
+            skills: [BotCapability(name: "a", enabled: true), BotCapability(name: "b", enabled: true)],
+            toolsets: [BotCapability(name: "web", enabled: true), BotCapability(name: "terminal", enabled: true)],
+            mcpServers: [BotCapability(name: "github", enabled: false)]
+        )
+        XCTAssertTrue(BotCapabilities.configureParams(original: original, edited: original).isEmpty)
+
+        var edited = original
+        edited.skills[1].enabled = false
+        let skillsOnly = BotCapabilities.configureParams(original: original, edited: edited)
+        XCTAssertEqual(skillsOnly["disabled_skills"] as? [String], ["b"])
+        XCTAssertNil(skillsOnly["enabled_toolsets"])
+        XCTAssertNil(skillsOnly["enabled_mcp_servers"])
+        XCTAssertEqual(BotCapabilities.appliedSections(for: skillsOnly), ["skills"])
+
+        edited.toolsets[1].enabled = false
+        edited.mcpServers[0].enabled = true
+        let all = BotCapabilities.configureParams(original: original, edited: edited)
+        XCTAssertEqual(all["enabled_toolsets"] as? [String], ["web"])
+        XCTAssertEqual(all["enabled_mcp_servers"] as? [String], ["github"])
+        XCTAssertEqual(BotCapabilities.appliedSections(for: all), ["skills", "toolsets", "mcp_servers"])
+
+        var pinned = original
+        pinned.toolsets[1].enabled = false
+        var everyToolBack = pinned
+        everyToolBack.toolsets[1].enabled = true
+        XCTAssertEqual(
+            BotCapabilities.configureParams(original: pinned, edited: everyToolBack)["enabled_toolsets"] as? [String],
+            [],
+            "every tool on clears the pin"
+        )
+    }
+
+    func testTheLastToolOnCannotBeTurnedOff() {
+        var capabilities = BotCapabilities(
+            skills: [],
+            toolsets: [BotCapability(name: "web", enabled: true), BotCapability(name: "terminal", enabled: true)],
+            mcpServers: []
+        )
+        XCTAssertTrue(capabilities.canTurnOffToolset(at: 0))
+        capabilities.toolsets[1].enabled = false
+        XCTAssertFalse(capabilities.canTurnOffToolset(at: 0), "no tools on would save as Hermes' defaults")
+        XCTAssertTrue(capabilities.canTurnOffToolset(at: 1), "an off tool can always be turned back on")
+    }
+
+    func testEveryMCPServerOffSendsAnEmptyList() {
+        let original = BotCapabilities(mcpServers: [BotCapability(name: "github", enabled: true)])
+        var edited = original
+        edited.mcpServers[0].enabled = false
+        XCTAssertEqual(
+            BotCapabilities.configureParams(original: original, edited: edited)["enabled_mcp_servers"] as? [String],
+            [],
+            "the gateway turns off every server not listed"
+        )
+    }
+
+    // MARK: - Generated pictures
+
+    func testPictureGenerationProbeNeedsAnExplicitYes() {
+        XCTAssertEqual(PictureGeneration.isAvailable(probe: .object(["available": .bool(true)])), true)
+        XCTAssertEqual(PictureGeneration.isAvailable(probe: .object(["available": .bool(false)])), false)
+        XCTAssertNil(PictureGeneration.isAvailable(probe: nil), "an older gateway without image.generate didn't say")
+        XCTAssertEqual(PictureGeneration.params(prompt: "x")["aspect_ratio"] as? String, "square")
+    }
+
+    func testPictureGenerationPromptsFollowDesktop() {
+        XCTAssertEqual(
+            PictureGeneration.botPrompt(name: "Scout", description: "Finds deals"),
+            "Cute minimal robot avatar for an AI agent named \"Scout — Finds deals\". "
+                + "Friendly simple mascot face, bold flat vector style, solid color background, centered, no text."
+        )
+        XCTAssertTrue(PictureGeneration.botPrompt(name: " ", description: "").contains("named \"agent\""))
+        XCTAssertNil(PictureGeneration.customPrompt("  ", forGroup: false), "an empty description uses the default prompt")
+        XCTAssertEqual(
+            PictureGeneration.customPrompt("A fox", forGroup: false),
+            "A fox. Avatar for an AI agent: centered, bold flat vector style, solid color background, no text."
+        )
+        XCTAssertTrue(PictureGeneration.groupPrompt(name: "Trip", members: ["Atlas", "Scout"]).contains("named \"Trip\" (Atlas, Scout)"))
+    }
+
+    func testPictureGenerationOutcomePrefersTheInlineImage() throws {
+        let png = Data([0x89, 0x50, 0x4E, 0x47])
+        let dataURL = "data:image/png;base64," + png.base64EncodedString()
+        XCTAssertEqual(
+            PictureGeneration.outcome(of: .object([
+                "success": .bool(true), "image_data": .string(dataURL), "image": .string("https://cdn.example/a.png")
+            ])),
+            .image(png)
+        )
+        XCTAssertEqual(
+            PictureGeneration.outcome(of: .object(["success": .bool(true), "image": .string("https://cdn.example/a.png")])),
+            .remote(try XCTUnwrap(URL(string: "https://cdn.example/a.png")))
+        )
+        XCTAssertEqual(
+            PictureGeneration.outcome(of: .object(["success": .bool(true), "image": .string("/home/me/.hermes/cache/a.png")])),
+            .failed(nil),
+            "a path on the Hermes machine can't be read from the phone"
+        )
+        XCTAssertEqual(
+            PictureGeneration.outcome(of: .object(["success": .bool(false), "error": .string("No image backend")])),
+            .failed("No image backend")
+        )
+        XCTAssertNil(PictureGeneration.imageData(fromDataURL: "data:text/plain;base64,aGk="))
+    }
+
     // MARK: - Avatar images
 
     func testGetAssetResultDecodesTheDataURL() {

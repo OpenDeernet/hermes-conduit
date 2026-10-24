@@ -1998,38 +1998,77 @@ final class HermesClient: ObservableObject {
     // sent UNSCOPED, like `profiles.list`: the dashboard's own profile
     // context must never redirect a write meant for another bot.
 
-    /// `profiles.create`. A fresh profile (bundled skills) that inherits the
-    /// launch profile's model and credentials (the gateway's default).
-    func createBotProfile(name: String, description: String, soul: String) async throws {
-        _ = try await rpc("profiles.create", params: [
-            "name": name,
-            "description": description,
-            "soul": soul
-        ], timeout: 60, scoped: false)
+    /// `profiles.create` with `BotCreateRequest.params`. A cloning create
+    /// copies the source's config, so it can take longer than a fresh one.
+    @discardableResult
+    func createBotProfile(params: [String: Any]) async throws -> AnyCodable {
+        try await rpc("profiles.create", params: params, timeout: 60, scoped: false)
     }
 
-    /// `profiles.describe`: the editor snapshot (description + SOUL.md).
+    /// `setup.runtime_check` for one profile: whether its sessions can reach
+    /// a model. Nil when the gateway lacks the method.
+    func botRuntimeCheck(profile: String) async -> AnyCodable? {
+        try? await rpc("setup.runtime_check", params: ["profile": profile], timeout: 30, scoped: false)
+    }
+
+    /// `image.generate` probe: whether Hermes has an image backend set up.
+    /// Nil when it didn't say (an older gateway without the method).
+    func imageGenerationAvailable() async -> Bool? {
+        let result = try? await rpc(
+            "image.generate",
+            params: PictureGeneration.probeParams,
+            timeout: PictureGeneration.probeTimeoutSeconds,
+            scoped: false
+        )
+        return PictureGeneration.isAvailable(probe: result)
+    }
+
+    /// `image.generate`: one square picture from `prompt`.
+    func generateImage(prompt: String) async throws -> AnyCodable {
+        try await rpc(
+            "image.generate",
+            params: PictureGeneration.params(prompt: prompt),
+            timeout: PictureGeneration.timeoutSeconds,
+            scoped: false
+        )
+    }
+
+    /// `profiles.describe`: the editor snapshot (description, SOUL.md, the
+    /// profile's own model pin, and its skills, toolsets and MCP servers).
     func describeBotProfile(name: String) async throws -> BotProfileDetails {
         let result = try await rpc("profiles.describe", params: ["name": name], scoped: false)
         guard let object = result.objectValue else { throw HermesError.invalidResponse }
+        let model = object["model"]?.objectValue ?? [:]
         return BotProfileDetails(
             description: object["description"]?.stringValue ?? "",
-            soul: object["soul"]?.stringValue ?? ""
+            soul: object["soul"]?.stringValue ?? "",
+            provider: model["provider"]?.stringValue ?? "",
+            model: model["default"]?.stringValue ?? "",
+            capabilities: BotCapabilities(describe: object)
         )
+    }
+
+    /// `profiles.configure` model pin. `confirmed` resends a pick the
+    /// gateway first answered with `confirm_required`.
+    func configureBotModel(name: String, provider: String, model: String, confirmed: Bool) async throws -> AnyCodable {
+        var params: [String: Any] = ["name": name, "provider": provider, "model": model]
+        if confirmed { params["confirm_expensive_model"] = true }
+        return try await rpc("profiles.configure", params: params, scoped: false)
     }
 
     /// `profiles.configure`. Sections are independent; the answer's
     /// `applied` reports each. `expectedMetaRevision` turns the ui_meta
     /// write into a compare-and-swap against the roster snapshot it was
-    /// built from.
+    /// built from. `sections` carries `BotCapabilities.configureParams`.
     func configureBotProfile(
         name: String,
         botMeta: [String: Any]? = nil,
         expectedMetaRevision: Int? = nil,
         description: String? = nil,
-        soul: String? = nil
+        soul: String? = nil,
+        sections: [String: Any] = [:]
     ) async throws -> AnyCodable {
-        var params: [String: Any] = ["name": name]
+        var params: [String: Any] = sections.merging(["name": name]) { _, new in new }
         if let botMeta {
             params["ui_meta"] = [BotManagement.uiMetaKey: botMeta]
             if let expectedMetaRevision {
