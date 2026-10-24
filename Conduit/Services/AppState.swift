@@ -2309,9 +2309,11 @@ final class AppState: ObservableObject {
     private var toolCatalogOwner: String?
     private var toolCatalogFetched: Set<String> = []
     private var toolCatalogLoading: Set<String> = []
-    /// Profile that owns the currently displayed skills/toolsets. Rows are
-    /// only presentable while this equals the active profile.
-    @Published private(set) var capabilitiesProfile: String?
+    /// The dashboard, bridge and profile the installed skills/toolsets were
+    /// read from. Rows are only presentable, and their switches only act,
+    /// while this equals `currentCapabilitiesOwner`: two dashboards can have
+    /// a profile of the same name.
+    @Published private(set) var capabilitiesOwner: CapabilitySnapshotOwner?
     /// Monotonic request token for capability loads; older requests can never
     /// commit over newer ones (protects the A -> B -> A race).
     private var capabilityLoadGeneration: UInt64 = 0
@@ -12991,6 +12993,7 @@ final class AppState: ObservableObject {
         voiceConversationController.setGateway(nil)
         voiceCapabilitySnapshot = .unavailable
         isVoiceEnabled = false
+        retireCapabilitySnapshot()
         retireOutstandingPreferredReturnSurfaceRequests()
         // An open call transcript is the outgoing dashboard's, and its fetch
         // still in flight must not open one over the next.
@@ -29894,17 +29897,19 @@ final class AppState: ObservableObject {
         capabilityLoadGeneration &+= 1
         let generation = capabilityLoadGeneration
         let profile = activeProfile
+        let owner = currentCapabilitiesOwner
         guard let dashboardTicketBridge else { return .unavailable(profile: profile) }
         async let skillsResult = dashboardTicketBridge.requestJSON(path: dashboardPath("/api/skills", profile: profile))
         async let toolsetsResult = dashboardTicketBridge.requestJSON(path: dashboardPath("/api/tools/toolsets", profile: profile))
         // Commit gate: this exact request must still be the newest one AND
-        // target the still-active profile (A -> B -> A stale commits rejected).
+        // target the still-active dashboard and profile (A -> B -> A stale
+        // commits rejected).
         func ownsRequest() -> Bool {
             CapabilityLoadPolicy.canCommit(
                 generation: generation,
                 latestGeneration: capabilityLoadGeneration,
-                requestedProfile: profile,
-                activeProfile: activeProfile
+                requested: owner,
+                active: currentCapabilitiesOwner
             )
         }
         do {
@@ -29922,7 +29927,7 @@ final class AppState: ObservableObject {
             self.toolsets = toolsetsValues.compactMap(decodeCapabilityToolset)
                 .sorted { ($0.label ?? $0.name) < ($1.label ?? $1.name) }
             adoptToolCatalog(ToolCatalog(toolsets: self.toolsets), key: toolCatalogKey)
-            capabilitiesProfile = profile
+            capabilitiesOwner = owner
             return .success(profile: profile)
         } catch {
             guard ownsRequest() else { return .superseded(requestedProfile: profile, activeProfile: activeProfile) }
@@ -29931,9 +29936,11 @@ final class AppState: ObservableObject {
         }
     }
 
-    func toggleSkill(name: String, enabled: Bool) async {
+    /// `rows` is the snapshot the switch was flipped in (a bulk change's
+    /// first one); nothing is sent once it is no longer the one showing.
+    func toggleSkill(name: String, enabled: Bool, rows: CapabilitySnapshotOwner? = nil) async {
         let profile = activeProfile
-        guard let owner = currentDashboardRuntimeOwner() else { return }
+        guard capabilityRowsAreCurrent(rows), let owner = currentDashboardRuntimeOwner() else { return }
         let dashboardTicketBridge = owner.bridge
         let current = skills.first(where: { $0.name == name })?.enabled ?? !enabled
         // Optimistic update. A list read still on its way was read before
@@ -29958,9 +29965,11 @@ final class AppState: ObservableObject {
         errorMessage = AppLocalization.string("Could not update skill: \(UserFacingError.message(for: error))")
     }
 
-    func toggleToolset(name: String, enabled: Bool) async {
+    /// `rows` is the snapshot the switch was flipped in (a bulk change's
+    /// first one); nothing is sent once it is no longer the one showing.
+    func toggleToolset(name: String, enabled: Bool, rows: CapabilitySnapshotOwner? = nil) async {
         let profile = activeProfile
-        guard let owner = currentDashboardRuntimeOwner() else { return }
+        guard capabilityRowsAreCurrent(rows), let owner = currentDashboardRuntimeOwner() else { return }
         let dashboardTicketBridge = owner.bridge
         let current = toolsets.first(where: { $0.name == name })?.enabled ?? !enabled
         // Optimistic update. A list read still on its way was read before
@@ -29983,6 +29992,34 @@ final class AppState: ObservableObject {
             toolsets[index].enabled = restore
         }
         errorMessage = AppLocalization.string("Could not update toolset: \(UserFacingError.message(for: error))")
+    }
+
+    /// The dashboard, bridge and profile a capability read made now would
+    /// belong to.
+    var currentCapabilitiesOwner: CapabilitySnapshotOwner {
+        CapabilitySnapshotOwner(
+            dashboardID: activeDashboardID,
+            bridge: dashboardTicketBridge.map { ObjectIdentifier($0) },
+            profile: activeProfile
+        )
+    }
+
+    /// Whether a switch flipped in `rows` (nil: the rows showing) may still
+    /// act: they are the rows showing, and those are the current
+    /// dashboard's and profile's.
+    private func capabilityRowsAreCurrent(_ rows: CapabilitySnapshotOwner?) -> Bool {
+        guard let rows = rows ?? capabilitiesOwner else { return false }
+        return rows == capabilitiesOwner && rows == currentCapabilitiesOwner
+    }
+
+    /// The installed skills and toolsets belong to the dashboard switched
+    /// away from: a read still on its way commits nothing, and its rows
+    /// never show (or act) under the next one.
+    private func retireCapabilitySnapshot() {
+        capabilityLoadGeneration &+= 1
+        capabilitiesOwner = nil
+        skills = []
+        toolsets = []
     }
 
     private func decodeCapabilitySkill(_ value: Any) -> CapabilitySkill? {
@@ -35679,23 +35716,35 @@ enum KeychainHelper {
 
 // MARK: - Attachment Helper
 
+/// Whose installed skills and toolsets a capability read holds: the
+/// dashboard, the bridge it went through (as Capabilities' own scope) and
+/// the profile.
+struct CapabilitySnapshotOwner: Equatable {
+    let dashboardID: UUID?
+    let bridge: ObjectIdentifier?
+    let profile: String
+}
+
 /// Pure ownership rules for capability loads, extracted for deterministic
 /// testing of the rapid-profile-switch races.
 enum CapabilityLoadPolicy {
     /// A finished request may commit only while it is still the newest load
-    /// AND its profile is still active (A -> B -> A stale commits rejected).
+    /// AND its dashboard and profile are still active (A -> B -> A stale
+    /// commits rejected, and so is one from a dashboard switched away from
+    /// that has a profile of the same name).
     static func canCommit(
         generation: UInt64,
         latestGeneration: UInt64,
-        requestedProfile: String,
-        activeProfile: String
+        requested: CapabilitySnapshotOwner,
+        active: CapabilitySnapshotOwner
     ) -> Bool {
-        generation == latestGeneration && requestedProfile == activeProfile
+        generation == latestGeneration && requested == active
     }
 
-    /// Rows may render only when the snapshot belongs to the active profile.
-    static func shouldPresentRows(snapshotProfile: String?, activeProfile: String) -> Bool {
-        snapshotProfile == activeProfile
+    /// Rows may render only when the snapshot belongs to the active
+    /// dashboard and profile.
+    static func shouldPresentRows(snapshot: CapabilitySnapshotOwner?, active: CapabilitySnapshotOwner) -> Bool {
+        snapshot == active
     }
 
     /// Final rendering boundary for the Capabilities screen. Foreign or absent
@@ -35709,16 +35758,13 @@ enum CapabilityLoadPolicy {
     }
 
     static func resolvePresentation(
-        snapshotProfile: String?,
-        activeProfile: String,
+        snapshot: CapabilitySnapshotOwner?,
+        active: CapabilitySnapshotOwner,
         isLoading: Bool,
         loadError: String?,
         hasRows: Bool
     ) -> PresentationState {
-        let ownsSnapshot = shouldPresentRows(
-            snapshotProfile: snapshotProfile,
-            activeProfile: activeProfile
-        )
+        let ownsSnapshot = shouldPresentRows(snapshot: snapshot, active: active)
 
         // The view's request token guarantees a settled error belongs to the
         // CURRENT request/profile - never to a foreign one. So errors surface

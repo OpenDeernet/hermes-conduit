@@ -142,15 +142,16 @@ struct CapabilitySkillsTab: View {
     }
 
     /// One switch at a time, as Hermes takes them; skills already in that
-    /// state are left alone.
+    /// state are left alone. A dashboard or profile switch midway stops it:
+    /// the rest were this list's, not the next one's.
     private func setAll(_ skills: [CapabilitySkill], enabled: Bool) {
         let targets = skills.filter { $0.enabled != enabled }.map(\.name)
-        guard !bulkRunning, !targets.isEmpty else { return }
+        guard !bulkRunning, !targets.isEmpty, let rows = appState.capabilitiesOwner else { return }
         Haptics.selection()
         bulkRunning = true
         Task {
             for name in targets {
-                await appState.toggleSkill(name: name, enabled: enabled)
+                await appState.toggleSkill(name: name, enabled: enabled, rows: rows)
             }
             bulkRunning = false
         }

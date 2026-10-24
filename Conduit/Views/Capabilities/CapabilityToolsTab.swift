@@ -95,14 +95,15 @@ struct CapabilityToolsTab: View {
         .accessibilityLabel(Text("Tool options"))
     }
 
+    /// One switch at a time; a dashboard or profile switch midway stops it.
     private func setAll(enabled: Bool) {
         let targets = visible.filter { $0.enabled != enabled }.map(\.name)
-        guard !bulkRunning, !targets.isEmpty else { return }
+        guard !bulkRunning, !targets.isEmpty, let rows = appState.capabilitiesOwner else { return }
         Haptics.selection()
         bulkRunning = true
         Task {
             for name in targets {
-                await appState.toggleToolset(name: name, enabled: enabled)
+                await appState.toggleToolset(name: name, enabled: enabled, rows: rows)
             }
             bulkRunning = false
         }

@@ -640,8 +640,10 @@ struct KanbanSkillsPickerSheet: View {
     @State private var query = ""
     @State private var customName = ""
 
+    /// The skills Capabilities last read, while they're this dashboard's
+    /// and profile's: another dashboard's names are no suggestion here.
     private var availableSkills: [CapabilitySkill] {
-        appState.skills
+        appState.capabilitiesOwner == appState.currentCapabilitiesOwner ? appState.skills : []
     }
 
     private var filteredSkills: [CapabilitySkill] {
