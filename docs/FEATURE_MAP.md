@@ -8,8 +8,11 @@ already known.
 
 Before changing a feature, read its entry and put every sibling on the plan.
 In the PR, say for each sibling whether it's done, not needed (and why), or
-left as a gap, and update the entry in the same PR.
-[CONTRIBUTING.md](../CONTRIBUTING.md) has the rules.
+left as a gap, and update the entry in the same PR. Nobody tends the map
+separately: a feature with siblings and no entry gets one in the PR that
+changes it, and a fix that brings a sibling in line with a change it missed
+adds that sibling to the entry. [CONTRIBUTING.md](../CONTRIBUTING.md) has the
+rules.
 
 An entry holds the current state only; history stays in the PRs it cites.
 Keep each to about a screen, and split one that grows past that. Every entry
