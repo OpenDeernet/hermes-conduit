@@ -899,7 +899,7 @@ final class WatchDirectBroker {
             // answered the call itself, and nothing reads this answer. What
             // comes after the call's own answer waits for the next poll.
             let late = await handled.value
-            if callID == id { lateOutgoing += late.filter { !$0.answers(call.id) } }
+            if callID == id { lateOutgoing += lateAnswers(late, to: call, in: id, isJob: isJob) }
             var fields: [String: Any] = [
                 "name": call.name,
                 "ms": Self.milliseconds(since: startedAt),
@@ -920,7 +920,7 @@ final class WatchDirectBroker {
             Task {
                 let late = await handled.value
                 guard self.callID == id else { return }
-                self.lateOutgoing += late.filter { !$0.answers(call.id) }
+                self.lateOutgoing += self.lateAnswers(late, to: call, in: id, isJob: isJob)
             }
             let result: [String: String] = isJob ? Self.jobAccepted : WatchToolAnswer.tookTooLong
             outgoing = [.toolResponse(id: call.id, name: call.name, result: result, scheduling: isJob ? nil : .whenIdle)]
@@ -936,6 +936,36 @@ final class WatchDirectBroker {
         fields.merge(Self.answerSummary(outgoing, answering: call.id)) { first, _ in first }
         link.log.note("watchDirectTool", fields)
         return result(outgoing, bridge: bridge)
+    }
+
+    /// What a call's answer brought after the call was answered without
+    /// it, minus that answer, which went already. A start_job Hermes then
+    /// refused was answered as accepted: the refusal follows as news, so
+    /// the model takes back what it said, and a repeat may be sent again
+    /// since nothing started (#1008).
+    private func lateAnswers(_ late: [GeminiLiveToolBridge.Outgoing], to call: WatchVoiceWire.DirectToolCall, in id: UInt32, isJob: Bool) -> [GeminiLiveToolBridge.Outgoing] {
+        let rest = late.filter { !$0.answers(call.id) }
+        guard isJob, let refusal = Self.jobRefusal(in: late, answering: call.id) else { return rest }
+        ledger.forgetJob(call.id, in: id)
+        link.log.note("watchDirectLateJobRefusal", ["chars": refusal.count, "appState": WatchVoiceLink.appStateName])
+        return [.textWhenIdle(Self.lateJobRefusalText(refusal))] + rest
+    }
+
+    /// The reason in a start_job's answer when the job didn't start; nil
+    /// when it did (its answer names the job) or nothing answered it.
+    static func jobRefusal(in outgoing: [GeminiLiveToolBridge.Outgoing], answering id: String) -> String? {
+        for case .toolResponse(let responseID, _, let result, _) in outgoing where responseID == id {
+            guard result["job_id"] == nil else { return nil }
+            if let error = result["error"], !error.isEmpty { return error }
+            guard let status = result["status"], status == "not_started" || status == "not_sent" else { return nil }
+            return result["message"] ?? "Hermes didn't take the job."
+        }
+        return nil
+    }
+
+    /// Written for the model, not shown.
+    static func lateJobRefusalText(_ reason: String) -> String {
+        GeminiLiveToolBridge.relayPrompt("The job you said Hermes was starting didn't start after all: \(reason) Don't start it again unless the user asks.")
     }
 
     private func rememberJobCall(_ task: Task<[GeminiLiveToolBridge.Outgoing], Never>, key: String) {
@@ -1639,6 +1669,13 @@ struct WatchDirectCallLedger {
         guard let index = calls.lastIndex(where: { $0.id == id }), !calls[index].jobs.contains(toolID) else { return }
         calls[index].jobs.append(toolID)
         if calls[index].jobs.count > Self.jobLimit { calls[index].jobs.removeFirst() }
+        store()
+    }
+
+    /// Hermes refused the job: a repeat of its start may go again.
+    mutating func forgetJob(_ toolID: String, in id: UInt32) {
+        guard let index = calls.lastIndex(where: { $0.id == id }), let job = calls[index].jobs.firstIndex(of: toolID) else { return }
+        calls[index].jobs.remove(at: job)
         store()
     }
 

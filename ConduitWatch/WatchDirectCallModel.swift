@@ -336,6 +336,8 @@ final class WatchDirectCallModel: ObservableObject {
     @Published private(set) var transcript: [WatchVoiceWire.DirectTurn] = []
     private var openUserLine: Int?
     private var openAssistantLine: Int?
+    /// Settled lines dropped from the front to keep the call's tail.
+    private var transcriptLinesDropped = 0
 
     // Tools
     private var toolsInFlight: Set<String> = []
@@ -1584,6 +1586,20 @@ final class WatchDirectCallModel: ObservableObject {
             openAssistantLine = transcript.count - 1
             openUserLine = nil
         }
+        trimTranscript()
+    }
+
+    /// Keeps the settled lines to what the saved call can hold (#1008):
+    /// the oldest go once a turn settles, never a line still in use.
+    private func trimTranscript() {
+        let inUse = [openUserLine, openAssistantLine, exchangeUserLine].compactMap { $0 }.min()
+        let dropped = WatchVoiceWire.DirectTranscript.overflow(transcript, protected: inUse)
+        guard dropped > 0 else { return }
+        transcript.removeFirst(dropped)
+        openUserLine = openUserLine.map { $0 - dropped }
+        openAssistantLine = openAssistantLine.map { $0 - dropped }
+        exchangeUserLine = exchangeUserLine.map { $0 - dropped }
+        transcriptLinesDropped += dropped
     }
 
     static func samples(_ pcm: Data) -> [Int16] {
@@ -2614,18 +2630,36 @@ final class WatchDirectCallModel: ObservableObject {
             startJobsTakenSilently += 1
             item = .toolResponse(id: id, name: name, result: result, scheduling: silent, fallback: fallback)
         }
-        guard case .toolResponse(_, _, _, let scheduling, let fallback) = item, let message = item.clientMessage else { return }
+        guard case .toolResponse(_, let name, let result, let scheduling, let fallback) = item, let message = item.clientMessage else { return }
+        // A started job the model already announced owes nothing more;
+        // any other answer is said as a text update once it can't go on
+        // its call, even one that came without a fallback (#1008).
+        let speaks = scheduling != GeminiLiveProtocol.Scheduling.silent.rawValue
+        let lost: String? = speaks ? fallback ?? Self.lostAnswerText(name: name, result: result) : nil
         guard let session, session.isReady, generation == nil || liveGeneration == generation else {
-            if let fallback { quietQueue.append(.textWhenIdle(fallback)) }
+            if let lost { quietQueue.append(.textWhenIdle(lost)) }
+            WatchCallLog.shared.note("directAnswerQueued", ["name": name, "asText": lost != nil, "ready": self.session?.isReady == true])
             return
         }
-        // The model talks about it next: job news waits for that.
-        if scheduling != GeminiLiveProtocol.Scheduling.silent.rawValue { awaitingAnswerSince = now }
+        if speaks {
+            // The model talks about it next: job news waits for that, and
+            // a turn that never comes is prompted for as the user's are.
+            awaitingAnswerSince = now
+            if replyOwedSince == nil { replyOwedSince = now }
+        }
         let id = callID
         session.send(message, onSent: nil, onFailure: { [weak self] in
-            guard let self, self.callID == id, let fallback else { return }
-            self.quietQueue.append(.textWhenIdle(fallback))
+            guard let self, self.callID == id, let lost else { return }
+            self.quietQueue.append(.textWhenIdle(lost))
         })
+    }
+
+    /// A tool's answer that couldn't go on its call (the session was
+    /// resuming, or a fresh one took over), for one that came without a
+    /// fallback of its own. Not UI copy.
+    static func lostAnswerText(name: String, result: [String: String]) -> String {
+        let lines = result.keys.sorted().map { "\($0): \(result[$0] ?? "")" }.joined(separator: "\n")
+        return "[The \(name) you called earlier answered while the call was reconnecting. Its answer:\n\(lines)\nIf the user is still waiting on it, tell them in a sentence or two.]"
     }
 
     /// Gemini heard the user and has said nothing since, with nothing else
@@ -3269,6 +3303,7 @@ final class WatchDirectCallModel: ObservableObject {
         transcript = []
         openUserLine = nil
         openAssistantLine = nil
+        transcriptLinesDropped = 0
         toolsInFlight = []
         toolCalledAt = [:]
         toolCallsSpokenFor = []
@@ -3518,6 +3553,7 @@ final class WatchDirectCallModel: ObservableObject {
             "watchGaps": watchGaps,
             "reachabilityChanges": link.reachabilityChanges - reachabilityChangesAtStart,
             "transcriptLines": saved.count,
+            "transcriptLinesDropped": transcriptLinesDropped,
             "transcriptQueued": queued,
             "batteryStart": batteryAtStart,
             "batteryEnd": battery,
