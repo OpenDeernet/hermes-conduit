@@ -725,7 +725,7 @@ struct V2ChatsView: View, Equatable {
         barSearchOpen = false
     }
 
-    /// A change (rotation, a profile added) slides the list's search row in
+    /// A change (rotation, a profile added) fades the list's search row in
     /// or out with the bar instead of jumping it.
     private func setBarStacked(_ stacked: Bool) {
         guard stacked != barStacked else { return }
