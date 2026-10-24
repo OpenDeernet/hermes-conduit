@@ -144,19 +144,6 @@ struct V2VoiceButton: View {
         return AppLocalization.string("Talk in this conversation")
     }
 
-    /// Touch and hold on the chat's big button: a live call or dictation,
-    /// whichever the tap doesn't do.
-    private var showsChatMenu: Bool { isChatButton && !returnsToCall && !recordsMessage }
-
-    /// The call's label in the chat, whatever the button's tap does.
-    private var conversationCallLabel: String {
-        if appState.openChatCallToResume != nil { return AppLocalization.string("Resume call") }
-        if appState.activeBotChatProfile != nil {
-            return AppLocalization.string("Call \(appState.conversationAgentIdentity.name)")
-        }
-        return AppLocalization.string("Talk in this conversation")
-    }
-
     private var label: String {
         if returnsToCall { return AppLocalization.string("Return to call") }
         if dictates { return AppLocalization.string("Dictate") }
