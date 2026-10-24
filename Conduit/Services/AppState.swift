@@ -12266,6 +12266,12 @@ final class AppState: ObservableObject {
         // the tested URL counts as changed (remember it) and whether the
         // Cloudflare token needs a same-origin re-bind.
         let failedTarget = connection?.baseUrl
+        // A sign-in's address was checked before its sheet registered it
+        // (ConnectionSetupView.beginRepairSignIn); a tested password
+        // reconnect is checked here, before its cookies are committed.
+        if case .native = handoff, let owner = repairAddressOwner(handoff.baseURL, repairing: failedTarget) {
+            return .addressBelongsToDashboard(id: owner.id, label: owner.label)
+        }
         cancelChatResumeTransportRecovery()
         let outcome: ConnectionRepairActivationOutcome
         switch handoff {
@@ -12319,6 +12325,19 @@ final class AppState: ObservableObject {
         guard outcome == .activated else { return outcome }
         persistActivatedRepair(handoff, failedTarget: failedTarget)
         return outcome
+    }
+
+    /// The saved dashboard other than the one being repaired that already
+    /// has this address, if any. Repair never writes onto it: its saved
+    /// password, Face ID choice, Cloudflare token and sign-in cookies stay
+    /// its own, as in Edit Connection.
+    func repairAddressOwner(_ baseURL: String, repairing failedTarget: String?) -> SavedDashboard? {
+        let normalized = (try? ConnectionURLPolicy.normalizedBaseURL(baseURL))
+            ?? baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let owner = savedDashboardRegistry.dashboard(claiming: normalized) else { return nil }
+        let repairing = failedTarget.flatMap { resolveDashboardID(forURL: $0, registerIfMissing: false) }
+            ?? activeDashboardID
+        return owner.id == repairing ? nil : owner
     }
 
     /// Activates a normal-login native OAuth result transactionally. The

@@ -74,6 +74,9 @@ struct ConnectionSetupView: View {
     /// (and registered) before the sheet opens: its WebKit store or native
     /// session belongs to that dashboard alone.
     @State private var repairDashboardID = UUID()
+    /// Another saved dashboard that already has the repaired address: the
+    /// repair stops and offers to switch to it instead.
+    @State private var repairAddressOwner: SavedDashboard?
     private let onComplete: (ConnectionSetupResult) -> Void
     /// Round 6 (Repair): the explicit activation boundary. Nil outside
     /// Repair mode, in which case the Review shows its normal context action.
@@ -169,6 +172,18 @@ struct ConnectionSetupView: View {
             }
             .sheet(isPresented: $showRepairSignIn) {
                 repairSignInSheet
+            }
+            .alert("Already a Saved Dashboard", isPresented: Binding(
+                get: { repairAddressOwner != nil },
+                set: { if !$0 { repairAddressOwner = nil } }
+            ), presenting: repairAddressOwner) { owner in
+                Button("Switch") {
+                    dismiss()
+                    Task { await appState.switchDashboard(to: owner.id) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { owner in
+                Text(AppLocalization.string("This address is your saved dashboard “\(owner.label)”. Repair won't change its sign-in; switch to it instead."))
             }
         }
     }
@@ -302,6 +317,13 @@ struct ConnectionSetupView: View {
     private func beginRepairSignIn() {
         guard !isActivating, flow.canUseSettings, onRepair != nil else { return }
         guard let result = flow.complete() else { return }
+        // Before the sign-in registers the address: one this sheet
+        // registered on an earlier try is the repair's own.
+        if let owner = appState.repairAddressOwner(result.serverURL, repairing: appState.connection?.baseUrl),
+           owner.id != repairDashboardID {
+            repairAddressOwner = owner
+            return
+        }
         // The staged test already decided the sign-in through the shared
         // resolver; a choice's browser sign-in checks native capability now
         // that it is picked. That answer counts only for the draft and test
@@ -385,6 +407,9 @@ struct ConnectionSetupView: View {
             // renders the classified failure with Test Connection Again —
             // which invalidates the staged result only when the user asks.
             activationFailure = failure
+        case .addressBelongsToDashboard(let id, _):
+            // Nothing was connected or written; the candidate is spent.
+            repairAddressOwner = appState.savedDashboardRegistry.dashboard(with: id)
         }
     }
 

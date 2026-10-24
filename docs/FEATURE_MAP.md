@@ -1224,6 +1224,29 @@ workflow table
 
 **Checked:** 2026-10-24, at #1216.
 
+## Another saved dashboard's address
+
+When the address typed while editing or repairing one dashboard is already
+saved as another.
+
+**Siblings:** Settings' Edit Connection · Repair's password reconnect
+(Reconnect Now) · Repair's sign-in (browser and native OAuth) · Settings'
+Sign In Again
+
+**Code**
+- Edit Connection: `Conduit/Services/ConnectionSetupApplication.swift` (perform, addressBelongsToDashboard), `Conduit/Views/AuxiliaryViews.swift` (the Settings not applied alert)
+- Repair: `Conduit/Services/AppState.swift` (performConnectionRepair, repairAddressOwner), `Conduit/Services/ConnectionRepair.swift` (ConnectionRepairActivationOutcome), `Conduit/Views/ConnectionSetupView.swift` (beginRepairSignIn, activate, the Already a Saved Dashboard alert)
+- Tests: `ConduitTests/ConnectionRepairTests.swift`
+
+**Rulings**
+- The two never merge: nothing of the other dashboard's (password, Face ID choice, Cloudflare token, sign-in cookies) is written. Edit Connection says so; Repair stops before connecting and offers to switch to it (2026-10-24, #995, #1219, Eric).
+- Repair's sign-in is checked before its sheet registers the address, so a new address registered by an earlier try of the same repair still counts as the repair's own (#1219).
+
+**Open gaps**
+- Settings' Sign In Again only offers the active dashboard's own address, so it never meets this case; it shares Repair's activation and would refuse the same way.
+
+**Checked:** 2026-10-24, at #1219.
+
 ## Feature map rules
 
 How a change brings its connected features along, and how this map stays
