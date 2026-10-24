@@ -14,6 +14,10 @@ struct GroupChatView: View {
     @Environment(\.v2ComposerRests) private var isV2
     @State private var showingDisbandConfirmation = false
     @State private var choosingPicture: GroupRoomPictureRequest?
+    /// Following the latest event, or browsing history (GroupRoomFollow).
+    @State private var isFollowingLatest = true
+    /// Bumped by the jump-to-latest button; the transcript scrolls on it.
+    @State private var latestJumps = 0
 
     var body: some View {
         Group {
@@ -58,6 +62,27 @@ struct GroupChatView: View {
             MinimisedLiveVoiceBar()
             GroupRoomComposer(members: members)
         }
+        .overlay(alignment: .topTrailing) {
+            if !isFollowingLatest {
+                jumpToLatestButton
+                    .alignmentGuide(.top) { $0[.bottom] + 10 }
+            }
+        }
+    }
+
+    /// Shown while browsing, as on the chat screen.
+    private var jumpToLatestButton: some View {
+        Button {
+            isFollowingLatest = true
+            latestJumps += 1
+        } label: {
+            Image(systemName: "arrow.down")
+                .font(.system(size: 15, weight: .bold))
+                .frame(width: 44, height: 44)
+        }
+        .conduitGlassControl(cornerRadius: 22, tint: Color.conduitAccent.opacity(0.14))
+        .accessibilityLabel(AppLocalization.string("Scroll to latest message"))
+        .padding(.trailing, 18)
     }
 
     private var surface: AppState.GroupRoomSurface? { appState.activeRoomSurface }
@@ -129,6 +154,7 @@ struct GroupChatView: View {
                         emptyState
                     }
                 }
+                .background { GroupRoomScrollLocator(isFollowing: $isFollowingLatest) }
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 18)
@@ -141,13 +167,32 @@ struct GroupChatView: View {
                     #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
                 )
             })
+            // New events and a member starting its turn move the transcript
+            // only while it follows the latest; a reader scrolled up stays.
             .onChange(of: appState.activeRoomReplay.cursor) { _, _ in
+                guard isFollowingLatest else { return }
                 withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
             }
             .onChange(of: respondingMember?.identityKey) { _, _ in
+                guard isFollowingLatest else { return }
                 withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
             }
-            .onAppear { scrollToBottom(proxy) }
+            // Sending returns to the latest, as in a chat.
+            .onChange(of: appState.pendingRoomMessage?.eventID) { _, eventID in
+                guard eventID != nil else { return }
+                isFollowingLatest = true
+                withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
+            }
+            .onChange(of: latestJumps) { _, _ in
+                withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
+            }
+            .onChange(of: appState.activeRoomSurface?.room.roomID) { _, _ in
+                isFollowingLatest = true
+            }
+            .onAppear {
+                isFollowingLatest = true
+                scrollToBottom(proxy)
+            }
         }
         .background(Color.clear)
         // Cross-block selection chrome, and Quote on selected text into the

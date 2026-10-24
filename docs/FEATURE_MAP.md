@@ -604,6 +604,30 @@ Read Aloud and live voice read-back · chat list previews and quotes
 
 **Checked:** 2026-10-23, at #1175.
 
+## Following the latest message
+
+Whether a transcript keeps itself at the newest message as replies and
+events arrive, or stays where the user scrolled to read.
+
+**Siblings:** chats, project chats and Bot Chat (one scroll engine) · group
+rooms · the jump-to-latest button · how much history an open transcript keeps
+
+**Code**
+- Chats: `Conduit/Services/ChatScrollEngine.swift`, `Conduit/Views/ChatScrollSurfaceLocator.swift`, `Conduit/Views/ChatView.swift` (jumpToLatest)
+- Group rooms: `Conduit/Views/GroupRoomScrollFollow.swift` (GroupRoomFollow, GroupRoomScrollLocator), `Conduit/Views/GroupChatView.swift` (isFollowingLatest, jumpToLatestButton)
+- Room history kept: `Conduit/Services/GroupChatModels.swift` (GroupRoomReplay tailWindow, retainedLimit)
+
+**Rulings**
+- Only the user's own scroll leaves following; new content never does. Scrolling back near the bottom (40 pt), the jump button or sending returns to it (chats: ChatScrollEngine; group rooms 2026-10-24, #998).
+- An open group room keeps a bounded tail: it opens on the last 200 events, and polling trims back to 200 once it holds 400 (2026-10-24, #998).
+
+**Open gaps**
+- Group rooms have no "Load earlier messages", so history above the 200-event tail isn't reachable in the app.
+- Trimming a busy room's tail moves rows above a reader scrolled to its top, once per 200 new events.
+- Group rooms keep the scroll position by row id (ScrollViewReader), not by the chat engine's same-pass layout, so a follow can animate where a chat snaps.
+
+**Checked:** 2026-10-24, at #998.
+
 ## Feature map rules
 
 How a change brings its connected features along, and how this map stays
