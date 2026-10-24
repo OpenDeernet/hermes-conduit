@@ -823,6 +823,13 @@ struct V2ChatsView: View, Equatable {
 
     // MARK: - Rows
 
+    /// The listed rows with Pulse's own chat removed: the Pulse screen
+    /// stands in for it.
+    private func listedChats(_ sessions: [SessionSummary]) -> [SessionSummary] {
+        guard appState.pulseHomeChatID != nil else { return sessions }
+        return sessions.filter { !appState.isPulseHomeChat($0) }
+    }
+
     /// The rows a source lists (cron runs only under Scheduled, plus the
     /// pinned ones in All, #485). Until this profile's live list lands,
     /// the rows it showed last time.
