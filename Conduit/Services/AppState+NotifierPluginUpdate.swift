@@ -121,7 +121,9 @@ extension AppState {
             if notifierPlugin.restartPending { return .needsDashboardRestart(detail: nil) }
             updated = true
         case .failed, .runningOnHost:
-            updated = notifierPlugin.settles(outcome)
+            // The new version runs and nothing is left to update (a plugin
+            // missing capabilities still needs one).
+            updated = notifierPlugin.settles(outcome) && !notifierPlugin.updateAvailable
         default:
             updated = false
         }
@@ -181,12 +183,21 @@ extension AppState {
     }
 
     /// "Restart the dashboard to finish" is stale once the plugin reports
-    /// nothing left to do: the user restarted Hermes. So is a failure once
-    /// the offered version is running, e.g. a comeback wait the phone slept
-    /// through. Either way the update is done, and the notice says so.
+    /// nothing left to do: the user restarted Hermes. So is "still updating
+    /// on the host" once the offered version is running: the host finished
+    /// after Conduit stopped following it. Either way the update is done, and
+    /// the notice says so. A failure stays until it's closed: the run's own
+    /// end already checked the plugin and the gateway (an update that landed
+    /// reads as ready there), so what's left is a failure that still holds.
     func clearSettledNotifierPluginUpdateOutcome() {
-        guard notifierPlugin.settles(activeNotifierPluginUpdate) else { return }
-        notifierPluginUpdate.settle(as: .updated(version: notifierPlugin.runningVersion))
+        let outcome = activeNotifierPluginUpdate
+        if case .failed = outcome { return }
+        guard notifierPlugin.settles(outcome) else { return }
+        if notifierPlugin.updateAvailable {
+            dismissNotifierPluginUpdateOutcome()
+        } else {
+            notifierPluginUpdate.settle(as: .updated(version: notifierPlugin.runningVersion))
+        }
     }
 
     /// Stops following a running update (Cancel). Hermes finishes whatever
