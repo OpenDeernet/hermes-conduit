@@ -305,15 +305,15 @@ Pulse (it may call only once the user opts in)
 - The call screen names the calling profile; the main profile goes by its Conduit name (2026-10-11, #541).
 - A call about an approval or question is briefed from the chat's card, not the push's short reason, and answered by voice everywhere it can be (see "Hermes is waiting on you"; 2026-10-24, #1194, notifier #343).
 - A Watch that answers starts the call through the relay, since its link to the iPhone is down under the call screen (2026-10-11, #526, notifier #82).
-- Answered on the Watch while the iPhone has a headset on (AirPods, wired), the call stays on the iPhone and plays there, whatever the Watch's voice: the iPhone answers its own ring with its own voice mode, and the Watch's call screen keeps Mute and End, shared through the relay's ring control. With no headset on the iPhone, or a relay older than 0.17, the Watch takes it as before (Eric 2026-10-24, #1204, notifier #354).
+- Answered on the Watch while the iPhone has a headset on (AirPods, wired), the call stays on the iPhone and plays there, whatever the Watch's voice: the iPhone answers its own ring with its own voice mode, and the Watch's call screen keeps Mute and End, shared through the relay's ring control. With no headset on the iPhone, or a relay older than 0.17, the Watch takes it as before (Eric 2026-10-24, #1225, notifier #354).
 - In the car, CarPlay rings and the Watch stays quiet (2026-10-14, #602).
 
 **Open gaps**
 - A sealed push carries no profile to the Watch, so its call screen says "Hermes" (#541).
-- A call kept on the iPhone's headset hears a mute from CallKit's Mute (the Watch's or the iPhone's call screen) on both devices; the iPhone's in-app Mute doesn't reach the Watch. A relay restart mid-call drops the shared controls, and each device then ends its own side (#1204).
+- A call kept on the iPhone's headset hears a mute from CallKit's Mute (the Watch's or the iPhone's call screen) on both devices; the iPhone's in-app Mute doesn't reach the Watch. A relay restart mid-call drops the shared controls: End on either device then ends only its own side (#1225).
 - The first push after install, before the first status read, can still switch dashboards, and missed-call outcomes are keyed by the pushed dashboard id (#1096).
 
-**Checked:** 2026-10-24, at #1194.
+**Checked:** 2026-10-24, #1225: a call answered on the Watch stays on the iPhone's headset (#1204); at #1194.
 
 ## Audio route, Speaker and mute
 
@@ -338,13 +338,13 @@ kept on the iPhone's headset (the Watch's Mute and End)
 - A conversation's replies move from the earpiece to the speaker, never during a CallKit call (2026-10-19, #943).
 - Silence mutes the assistant's voice apart from the microphone; its speech is dropped, not held, and job news waits for unmute (2026-10-09, #488).
 - An alarm or phone call pauses a live call, which comes back when the audio does (2026-10-04, #380).
-- A call from Hermes answered on the Watch plays on the iPhone's headset when one is on there (AirPods, wired, never the car's); the Watch's Mute and End control it like a phone call's (Eric 2026-10-24, #1204).
+- A call from Hermes answered on the Watch plays on the iPhone's headset when one is on there (AirPods, wired, never the car's); the Watch's Mute and End control it like a phone call's (Eric 2026-10-24, #1225).
 
 **Open gaps**
 - Silence isn't on CarPlay or the minimised bar (#488).
 - Classic still ends with "Audio was interrupted." when an alarm or phone call takes the audio, where live calls pause; only CarPlay and calls from Hermes restart it (#380, #1155).
 
-**Checked:** 2026-10-23, seeded from main at 64d53c3.
+**Checked:** 2026-10-24, #1225: the Watch's Mute and End for a call kept on the iPhone's headset; seeded from main at 64d53c3.
 
 ## Talking over Hermes
 
