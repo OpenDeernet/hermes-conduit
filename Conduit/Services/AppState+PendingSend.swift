@@ -339,8 +339,10 @@ extension AppState {
         guard !pending.isNewChat,
               pending.dashboardID == activeDashboardID,
               pending.profile == activeProfile else { return false }
+        // By its durable id only: a runtime alias says nothing about
+        // whether the conversation itself is gone.
         return conversationIsGone(
-            sessionIDs: pending.chatSessionIDs,
+            sessionIDs: [pending.draftSessionID],
             dashboardID: pending.dashboardID,
             profile: pending.profile
         )
