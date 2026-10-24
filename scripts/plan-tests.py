@@ -1298,10 +1298,11 @@ def cmd_smoke(args) -> int:
                 else:
                     changed_skipped.append(name)
             # The change's only heavy class still runs once, ahead of any
-            # family member: a slow new suite is exactly what would
-            # otherwise first fail at night.
-            if (tier is direct and not changed_unit and changed_skipped
-                    and changed_max > 0):
+            # family member (or the cheapest family member when the change
+            # has no class of its own): a slow new suite is exactly what
+            # would otherwise first fail at night.
+            if ((tier is direct or not direct) and not changed_unit
+                    and changed_skipped and changed_max > 0):
                 cheapest = min(changed_skipped, key=lambda n: (cost(n), n))
                 changed_skipped.remove(cheapest)
                 changed_unit.append(cheapest)
@@ -1316,7 +1317,7 @@ def cmd_smoke(args) -> int:
             print(f"changed unit classes added: {', '.join(changed_unit)} "
                   f"(~{spent:.0f}s of {changed_budget:.0f}s)")
         if changed_skipped:
-            print(f"::notice title=changed classes left to nightly::"
+            print(f"::notice title=classes related to this change left to nightly::"
                   f"{', '.join(changed_skipped)} exceed the smoke budget "
                   f"({changed_budget:.0f}s, {changed_max} classes)")
 

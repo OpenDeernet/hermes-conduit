@@ -830,6 +830,15 @@ class SmokeSelectionTests(unittest.TestCase):
         self.assertIn("DashboardTicketBridgeTests", doc["changed_unit"])
         self.assertIn("runs anyway", proc.stdout)
 
+    def test_a_family_only_change_still_runs_one_class(self):
+        def mutate(suite):
+            suite["changed_budget_s"] = 0
+        proc, doc = self._changed_selection(
+            ["Conduit/Services/AppState.swift"], mutate)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(len(doc["changed_unit"]), 1)
+        self.assertTrue(doc["changed_unit"][0].startswith("AppState"))
+
     def test_a_changed_timing_family_stays_nightly_only(self):
         proc, doc = self._changed_selection(
             ["ConduitTests/LongContextScalingFixtureTests.swift"])
@@ -846,7 +855,7 @@ class SmokeSelectionTests(unittest.TestCase):
         # The cheapest still runs, so a change always gets one of its own.
         self.assertEqual(doc["changed_unit"], ["SessionPresentationCacheTests"])
         self.assertEqual(doc["changed_skipped"], ["DashboardTicketBridgeTests"])
-        self.assertIn("changed classes left to nightly", proc.stdout)
+        self.assertIn("classes related to this change left to nightly", proc.stdout)
 
     def test_changed_classes_are_capped_by_count(self):
         def mutate(suite):
