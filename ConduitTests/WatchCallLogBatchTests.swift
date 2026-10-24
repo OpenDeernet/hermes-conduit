@@ -192,6 +192,10 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(WatchVoiceWire.DirectTranscript.overflow(turns), 2)
         XCTAssertEqual(WatchVoiceWire.DirectTranscript.overflow(turns, protected: 1), 1)
         XCTAssertEqual(WatchVoiceWire.DirectTranscript.overflow(turns, protected: 0), 0)
+        // A newest turn too long on its own stays, for the saved call to clip.
+        let long = [turn(quarter), turn(String(repeating: "b", count: limit + 1))]
+        XCTAssertEqual(WatchVoiceWire.DirectTranscript.overflow(long), 1)
+        XCTAssertEqual(WatchVoiceWire.DirectTranscript.overflow([]), 0)
         // What stays is what the saved call keeps.
         let kept = Array(turns.dropFirst(WatchVoiceWire.DirectTranscript.overflow(turns)))
         XCTAssertEqual(WatchVoiceWire.DirectTranscript.capped(turns).count, kept.count)

@@ -270,10 +270,11 @@ enum WatchVoiceWire {
         /// How many of the oldest turns a running call drops so the rest
         /// fit `bytes`, as the saved call would keep them: a long call
         /// holds no more on the Watch than it can send. Turns from
-        /// `protected` on (a line still open) stay, whatever their size.
+        /// `protected` on (a line still open) stay, whatever their size,
+        /// and so does the newest, which `capped` clips rather than drops.
         static func overflow(_ turns: [DirectTurn], bytes: Int = maxTextBytes, protected: Int? = nil) -> Int {
             var total = turns.reduce(0) { $0 + $1.text.utf8.count }
-            let limit = min(protected ?? turns.count, turns.count)
+            let limit = max(0, min(protected ?? turns.count, turns.count - 1))
             var dropped = 0
             while total > bytes, dropped < limit {
                 total -= turns[dropped].text.utf8.count

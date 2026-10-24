@@ -914,6 +914,8 @@ final class WatchDirectBroker {
         let outgoing: [GeminiLiveToolBridge.Outgoing]
         if let answered = await Self.value(of: handled, within: isJob ? Self.jobStartWait : Self.toolWait) {
             outgoing = answered
+            // Refused at once: nothing started, so a repeat may go again.
+            if isJob, Self.jobRefusal(in: answered, answering: call.id) != nil { ledger.forgetJob(call.id, in: id) }
         } else {
             // Still running: answer now, and keep whatever it gives later
             // except the answer to this call, which went already.

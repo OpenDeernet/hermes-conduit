@@ -349,6 +349,8 @@ final class WatchDirectCallModel: ObservableObject {
     private var startJobsTakenSilently = 0
     private var withdrawnToolIDs: Set<String> = []
     private var quietQueue: [WatchVoiceWire.DirectOutgoing] = []
+    /// The queued texts that carry a tool's answer lost to a reconnect.
+    private var lostAnswers: Set<String> = []
     private var toolCalls = 0
     private var toolsAnsweredLive = 0
     private var toolsUnreachable = 0
@@ -2637,7 +2639,10 @@ final class WatchDirectCallModel: ObservableObject {
         let speaks = scheduling != GeminiLiveProtocol.Scheduling.silent.rawValue
         let lost: String? = speaks ? fallback ?? Self.lostAnswerText(name: name, result: result) : nil
         guard let session, session.isReady, generation == nil || liveGeneration == generation else {
-            if let lost { quietQueue.append(.textWhenIdle(lost)) }
+            if let lost {
+                quietQueue.append(.textWhenIdle(lost))
+                lostAnswers.insert(lost)
+            }
             WatchCallLog.shared.note("directAnswerQueued", ["name": name, "asText": lost != nil, "ready": self.session?.isReady == true])
             return
         }
@@ -2651,6 +2656,7 @@ final class WatchDirectCallModel: ObservableObject {
         session.send(message, onSent: nil, onFailure: { [weak self] in
             guard let self, self.callID == id, let lost else { return }
             self.quietQueue.append(.textWhenIdle(lost))
+            self.lostAnswers.insert(lost)
         })
     }
 
@@ -2761,6 +2767,9 @@ final class WatchDirectCallModel: ObservableObject {
         switch item {
         case .textWhenIdle(let text):
             awaitingAnswerSince = now
+            // A tool's answer said as text owes a reply as it would on
+            // its call.
+            if lostAnswers.remove(text) != nil, replyOwedSince == nil { replyOwedSince = now }
             noteTextSent("update", text)
         case .contextWhenIdle(let text):
             noteTextSent("context", text)
@@ -3310,6 +3319,7 @@ final class WatchDirectCallModel: ObservableObject {
         startJobsTakenSilently = 0
         withdrawnToolIDs = []
         quietQueue = []
+        lostAnswers = []
         toolCalls = 0
         toolsAnsweredLive = 0
         toolsUnreachable = 0
