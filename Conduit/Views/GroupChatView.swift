@@ -134,6 +134,10 @@ struct GroupChatView: View {
                                 // event id, so the gateway deduplicates —
                                 // never a twin message.
                                 Button {
+                                    // A retry keeps its event id, so the
+                                    // send observer won't see it.
+                                    followLatest()
+                                    latestJumps += 1
                                     Task { await appState.sendGroupRoomMessage(pending.text) }
                                 } label: {
                                     Label(
