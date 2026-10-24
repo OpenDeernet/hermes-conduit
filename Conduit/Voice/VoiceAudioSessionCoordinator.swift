@@ -219,6 +219,11 @@ final class VoiceAudioSessionCoordinator {
     /// call is gone: the conversation then uses the call's policy, whose
     /// speaker the call screen can turn off.
     private(set) var isInNativeCall = false
+<<<<<<< HEAD
+=======
+    /// The call's audio has had its one move to the loudspeaker.
+    private var nativeCallSpeakerChosen = false
+>>>>>>> origin/pulse
     /// CallKit activated the call's audio and hasn't taken it back. The
     /// session is then CallKit's to keep active: activating it again from
     /// here (every acquire and every route change's reassert did) flipped
@@ -373,6 +378,10 @@ final class VoiceAudioSessionCoordinator {
     /// CallKit activated.
     func configureForIncomingCall() {
         isInNativeCall = true
+<<<<<<< HEAD
+=======
+        nativeCallSpeakerChosen = false
+>>>>>>> origin/pulse
         isNativeCallAudioActive = false
         // Raised first: a conversation already holding the session must
         // move onto the call's policy even if this category change fails.
@@ -394,6 +403,31 @@ final class VoiceAudioSessionCoordinator {
     func nativeCallAudioActivated() {
         guard isInNativeCall else { return }
         isNativeCallAudioActive = true
+<<<<<<< HEAD
+    }
+
+    /// CallKit took the call's audio back (an interruption, the call
+    /// ending): the next acquire or reassert activates the session itself.
+    func nativeCallAudioDeactivated() {
+        guard isNativeCallAudioActive else { return }
+        isNativeCallAudioActive = false
+        // Even an acquire whose policy is already applied.
+        needsReapply = true
+=======
+        guard !nativeCallSpeakerChosen else { return }
+        guard session.isOutputOnBuiltInReceiver else {
+            nativeCallSpeakerChosen = true
+            return
+        }
+        do {
+            try session.overrideOutputToSpeaker()
+            // Only once it took: a failed move retries on the next
+            // activation rather than leaving the call on the earpiece.
+            nativeCallSpeakerChosen = true
+        } catch {
+            audioSessionLogger.error("call speaker override failed: \(LogRedaction.describing(error), privacy: .public)")
+        }
+>>>>>>> origin/pulse
     }
 
     /// CallKit took the call's audio back (an interruption, the call

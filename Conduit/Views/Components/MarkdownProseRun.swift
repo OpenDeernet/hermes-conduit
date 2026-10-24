@@ -205,7 +205,11 @@ enum MarkdownProseRun {
             return style
         }
 
+<<<<<<< HEAD
         func listItems(_ items: [String], ordered: Bool, start: Int = 1) -> [Paragraph] {
+=======
+        func listItems(_ items: [String], ordered: Bool) -> [Paragraph] {
+>>>>>>> origin/pulse
             let markerColumn = ChatTypography.dimension(ordered ? 24 : 12, appearance: chatTextSize)
             return items.enumerated().map { (index, item) -> Paragraph in
                 let marker = ordered ? "\(start + index)." : "•"

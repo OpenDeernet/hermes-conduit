@@ -829,7 +829,7 @@ struct V2ChatsView: View, Equatable {
     private func sourceRows(_ source: SessionSource?) -> [SessionSummary] {
         renderMemo.sourceRows(source) {
             SidebarSourceRows.rows(
-                sessions: listed.sessions,
+                sessions: listedChats(listed.sessions),
                 cronSessions: listed.cron,
                 source: source,
                 category: category,
@@ -862,7 +862,7 @@ struct V2ChatsView: View, Equatable {
         }
         return selection.rows(
             everything: sourceRows(nil),
-            sessions: listed.sessions,
+            sessions: listedChats(listed.sessions),
             cronSessions: listed.cron,
             category: category,
             hasStatus: hasStatus
@@ -959,7 +959,7 @@ struct V2ChatsView: View, Equatable {
         guard isSearching, !contentSearch.hits.isEmpty else { return [] }
         let known = appState.activeProfileSessions + appState.activeProfileCronSessions
             + (appState.isAllProfilesChatsOn ? listed.sessions.filter(appState.isOtherProfileRow) : [])
-        return SessionContentSearch.rows(
+        let rows = SessionContentSearch.rows(
             hits: contentSearch.hits,
             listed: displayed,
             known: known,
@@ -967,6 +967,12 @@ struct V2ChatsView: View, Equatable {
             activeProfile: appState.isAllProfilesChatsOn ? appState.activeProfile : "",
             owner: { session in appState.isAllProfilesChatsOn ? appState.rowProfile(session) : "" }
         )
+        // Pulse's chat stays behind the Pulse screen, message matches too.
+        guard let home = appState.pulseHomeChatID else { return rows }
+        return rows.filter { row in
+            row.session.map { !appState.isPulseHomeChat($0) }
+                ?? (row.hit.sessionID != home && appState.canonicalSessionID(for: row.hit.sessionID) != home)
+        }
     }
 
     private func nestedSections(_ displayed: [SessionSummary]) -> (pinned: [SessionNesting.Node], recent: [SessionNesting.Node]) {
@@ -1060,7 +1066,7 @@ struct V2ChatsView: View, Equatable {
                         hasOfflineCopy: false,
                         catalogPhase: appState.sessionCatalogPhase,
                         isRefreshing: appState.isRefreshingSessionCatalog,
-                        filteredOutRows: !listed.sessions.isEmpty || !listed.cron.isEmpty
+                        filteredOutRows: !listedChats(listed.sessions).isEmpty || !listed.cron.isEmpty
                     ),
                     emptyTitle: selection.emptyStateFilter.emptyTitle,
                     emptyDescription: isSearching

@@ -52,6 +52,11 @@ enum NotificationCopy {
             title = sessionTitle.map { "\(heading) · \($0)" } ?? heading
         } else if let phoneTitle = phoneTitle(for: label) {
             title = phoneTitle
+<<<<<<< HEAD
+=======
+        } else if let pulse = pulseTitle(for: label, count: content["count"] as? Int) {
+            title = pulse
+>>>>>>> origin/pulse
         } else {
             title = hostTitle
         }
@@ -72,6 +77,22 @@ enum NotificationCopy {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /// What Pulse brings (`pulse.<kind>`), titled by itself: its chat is
+    /// hidden. A report says how many things it noticed (`count`).
+    private static func pulseTitle(for label: String, count: Int?) -> String? {
+        switch label {
+        case "pulse.noticed":
+            guard let count, count > 1 else { return AppLocalization.string("Pulse noticed something") }
+            return AppLocalization.string("Pulse noticed \(count) things")
+        case "pulse.brief": return AppLocalization.string("Your morning brief")
+        case "pulse.followup": return AppLocalization.string("Pulse · Follow-up")
+        default: return nil
+        }
+    }
+
+>>>>>>> origin/pulse
     /// A calendar, reminder or alarm change Hermes asks for
     /// (`phone.<kind>`) or makes on its own (`phone.auto.<kind>`).
     private static func phoneTitle(for label: String) -> String? {

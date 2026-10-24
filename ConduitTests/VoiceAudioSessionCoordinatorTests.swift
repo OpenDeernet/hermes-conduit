@@ -676,7 +676,10 @@ extension VoiceAudioSessionCoordinatorTests {
         coordinator.configureForIncomingCall()
         coordinator.nativeCallAudioActivated()
         let capture = try coordinator.acquire(.conversationCapture)
+<<<<<<< HEAD
         session.speakerButtonTurnedOn()
+=======
+>>>>>>> origin/pulse
         session.resetRecordings()
 
         coordinator.release(capture)

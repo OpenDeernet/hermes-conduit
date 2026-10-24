@@ -1326,7 +1326,11 @@ private struct MarkdownList: View {
                             .frame(width: ChatTypography.dimension(16, appearance: chatTextSize), alignment: .trailing)
                             .frame(minHeight: markerFont.lineHeight)
                     } else {
+<<<<<<< HEAD
                         Text(ordered ? "\(start + index)." : "•")
+=======
+                        Text(ordered ? "\(index + 1)." : "•")
+>>>>>>> origin/pulse
                             .font(.system(size: markerFont.pointSize, weight: .semibold, design: chatTextSize.style.fontDesign))
                             .foregroundStyle(usesAccentSurface ? Color.white.opacity(0.92) : Color.conduitAccent)
                             .frame(width: ChatTypography.dimension(ordered ? 24 : 12, appearance: chatTextSize), alignment: .trailing)
