@@ -276,11 +276,18 @@ extension AppState {
         guard pendingComposerSendFiles(dashboardID: pending.dashboardID).contains(where: { $0.id == pending.id }),
               !composerRestoreRequests.contains(where: { $0.pending?.id == pending.id }) else { return }
         let onScreen = isOnScreen(pending)
+        // Its chat went while it was being sent: as when it's handed back.
+        let chatIsGone = !onScreen && pendingComposerSendChatIsGone(pending)
         composerRestoreRequests.append(
-            restoreRequest(for: pending, key: submittedDraftKey, focuses: false)
+            restoreRequest(
+                for: pending,
+                key: chatIsGone ? durableComposerDraftKeyOnScreen : submittedDraftKey,
+                redirects: chatIsGone,
+                focuses: false
+            )
         )
         if !onScreen, pending.dashboardID == activeDashboardID, pending.profile == activeProfile {
-            composerNotice = pendingComposerSendNotice(for: pending, onScreen: false)
+            composerNotice = pendingComposerSendNotice(for: pending, onScreen: false, chatIsGone: chatIsGone)
         }
     }
 
