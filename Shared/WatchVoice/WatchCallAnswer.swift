@@ -82,6 +82,8 @@ enum WatchCallAnswer {
         let message = body["message"] as? String
         switch status {
         case "answered":
+            // An approval's "answered" comes once Hermes took it (plugin
+            // 0.70.1); one it didn't take reads not_waiting or failed.
             if let choice = body["choice"] as? String {
                 let said = choice == "once"
                     ? "Approved once: Hermes runs it now."
@@ -100,6 +102,10 @@ enum WatchCallAnswer {
             return result
         case "refused":
             return ["error": message ?? "That can't be answered on the Watch. The user can answer it in Conduit on their iPhone."]
+        case "failed", "unconfirmed":
+            // An approval Hermes didn't take, or hasn't yet (plugin 0.70.1):
+            // never "approved" then.
+            return ["status": status, "message": (message ?? "It didn't go through. The user can answer it in Conduit on their iPhone.") + " Tell the user in a few words."]
         default:
             return ["status": "not_pending", "message": message ?? "Hermes isn't waiting on the user any more."]
         }
