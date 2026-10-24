@@ -1545,6 +1545,7 @@ extension VoiceConversationControllerTests {
         XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.bluetoothA2DP]))
         XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.bluetoothLE]))
         XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.headphones]), "Wired too")
+        XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.usbAudio]), "USB-C too")
         XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.builtInReceiver]), "No headset: the Watch has it")
         XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.builtInSpeaker]))
         XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: []))
@@ -1657,6 +1658,10 @@ extension VoiceConversationControllerTests {
         }
         XCTAssertEqual(retried, .init(seq: 2, muted: false, ended: true), "A restarting relay is tried again")
         XCTAssertEqual(tries, 3)
+
+        var bodies = [Data("garbled".utf8), Data(#"{"seq":3,"muted":true,"ended":false}"#.utf8)]
+        let reread = await HermesRingControl.set(ring, by: .phone, muted: true, attempts: 2, retryDelay: 0) { _ in (bodies.removeFirst(), 200) }
+        XCTAssertEqual(reread, .init(seq: 3, muted: true, ended: false), "A 200 it can't read is tried again")
     }
 
     // MARK: Ringing the Watch only while its voice can start

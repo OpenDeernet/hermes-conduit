@@ -538,7 +538,8 @@ enum HermesRingControl {
     ) async -> State? {
         for attempt in 1...max(1, attempts) {
             let answer = try? await send(setRequest(ring, by: device, muted: muted, ended: ended))
-            if let answer, answer.1 == 200 { return state(answer.0) }
+            // A 200 it can't read is tried again like a lost one.
+            if let answer, answer.1 == 200, let state = state(answer.0) { return state }
             // Refused: trying again won't help.
             if let status = answer?.1, (400..<500).contains(status), status != 429 { return nil }
             guard attempt < attempts, !Task.isCancelled else { break }

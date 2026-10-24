@@ -794,7 +794,7 @@ final class HermesNativeCalls: NSObject {
     /// Where this phone's audio goes that keeps a call the Watch answered
     /// here: a headset, wired or Bluetooth (AirPods), which also says the
     /// phone is near. Never the car's (there the Watch doesn't ring).
-    nonisolated static let headsetPorts: Set<AVAudioSession.Port> = [.headphones, .bluetoothHFP, .bluetoothA2DP, .bluetoothLE]
+    nonisolated static let headsetPorts: Set<AVAudioSession.Port> = [.headphones, .usbAudio, .bluetoothHFP, .bluetoothA2DP, .bluetoothLE]
 
     nonisolated static func keepsWatchAnswer(watchControls: Bool, outputs: [AVAudioSession.Port]) -> Bool {
         watchControls && outputs.contains(where: headsetPorts.contains) && !outputs.contains(.carAudio)
@@ -916,7 +916,10 @@ final class HermesNativeCalls: NSObject {
     private func muteOnWatch(_ id: UUID, muted: Bool) {
         guard let call = calls[id], call.keptFromWatch, let ring = call.ring, call.controlMuted != muted else { return }
         calls[id]?.controlMuted = muted
-        Task { _ = await HermesRingControl.set(ring, by: .phone, muted: muted, attempts: 5) }
+        Task {
+            guard await HermesRingControl.set(ring, by: .phone, muted: muted, attempts: 5) == nil else { return }
+            HermesCallTrace.shared.note("The Watch didn't hear the \(muted ? "mute" : "unmute")")
+        }
     }
 
     /// The call's voice was muted or unmuted by its own controls in
