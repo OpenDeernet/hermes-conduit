@@ -243,9 +243,9 @@ extension GatewayRestartTests {
     /// A Bot Chat has no row in the chat list: its ⋯ menu still finds the
     /// chat's ids, so Artifacts isn't greyed out. An unlisted chat that isn't
     /// a bot's has none.
-    func testABotChatsMenuFindsItsArtifactIDs() {
+    func testABotChatsMenuFindsItsArtifactIDs() throws {
         let suite = "Artifacts.AppState.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let appState = AppState(
             defaults: defaults,
@@ -258,7 +258,7 @@ extension GatewayRestartTests {
 
         appState.activeSessionId = "bot-runtime"
         appState.noteBotChatSessionForTesting("bot-runtime", profile: "atlas")
-        XCTAssertTrue(appState.activeChatArtifactSessionIDs.contains("bot-runtime"))
+        XCTAssertEqual(appState.activeChatArtifactSessionIDs, ["bot-runtime"])
         XCTAssertEqual(appState.artifactSources(for: .chat(appState.activeChatArtifactSessionIDs)).map(\.profile),
                        ["atlas"])
     }

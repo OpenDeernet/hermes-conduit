@@ -64,7 +64,8 @@ extension AppState {
         }
         guard activeRoomSurface == nil, offlineChatPresentation == nil, !showsPendingNewChat,
               let sessionID = activeSessionId, !sessionID.isEmpty,
-              let profile = botStoreProfile(forSessionIDs: [sessionID]) else { return [] }
+              let profile = botStoreProfile(forSessionIDs: [sessionID]) ?? reboundBotChatProfile(sessionID)
+        else { return [] }
         // The open id is the runtime one; its store keeps the durable id,
         // confirmed under the bot's profile even when the registry hasn't
         // noted the chat yet (after a relaunch).
@@ -114,6 +115,15 @@ extension AppState {
             }
             return sources
         }
+    }
+
+    /// The bot whose Bot Chat a runtime id was rebound to (a shortcut
+    /// reopening a dead runtime records only its durable id).
+    private func reboundBotChatProfile(_ sessionID: String) -> String? {
+        botRoster.first { bot in
+            guard let durable = confirmedDurableSessionID(forRuntime: sessionID, profile: bot.name) else { return false }
+            return Self.botChatIDs(bot).contains(durable)
+        }?.name
     }
 
     /// A bot's Bot Chat by its registry id and lineage tip.
