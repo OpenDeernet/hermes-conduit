@@ -284,12 +284,14 @@ struct V2ChatsView: View, Equatable {
     @FocusState private var searchFocused: Bool
     /// The bar is stacked (profiles on their own row): search is a button
     /// in the controls and opens over the filter row, so the list doesn't
-    /// carry a third row of chrome. It starts from the last layout seen
-    /// (`barStackedKey`): the bar only reports its layout once it appears,
-    /// and a guess the other way showed the list's search row for a frame
-    /// on launch.
-    @State private var barStacked = UserDefaults.standard.bool(forKey: V2ChatsView.barStackedKey)
-    private static let barStackedKey = "v2.chats.barStacked"
+    /// carry a third row of chrome. The bar only reports its layout once it
+    /// appears, so this starts from the last layout seen (`barStackedKey`),
+    /// and is nil before any: the list leaves its search row out until the
+    /// bar says it's one row, rather than show it for a frame and take it
+    /// away. Read into state like `collapsedSections`; nothing observes the
+    /// key, so it stays out of `updates`.
+    @State private var barStacked = UserDefaults.standard.object(forKey: V2ChatsView.barStackedKey) as? Bool
+    private static let barStackedKey = "conduit.v2.barStacked"
     /// The magnifier was tapped: the stacked bar shows the field.
     @State private var barSearchOpen = false
     /// The tap that opened the field also focuses it, once; coming back
@@ -1124,7 +1126,7 @@ struct V2ChatsView: View, Equatable {
             isLoadingList: appState.isLoadingChatList
         )
         return List {
-            if !barStacked {
+            if barStacked == false {
                 searchField
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -1713,7 +1715,7 @@ struct V2ChatsView: View, Equatable {
             matches: sessionMatches
         )
         return List {
-            if !barStacked {
+            if barStacked == false {
                 searchField
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)

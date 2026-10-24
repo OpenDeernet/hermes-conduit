@@ -853,10 +853,10 @@ row) · iPad and Mac (same view) · searching messages ("In messages")
 - The profiles get their own row when they don't fit beside the controls, and the filter becomes a labeled pill under them (2026-10-22, #1117, Eric).
 - In the stacked bar, search is a magnifier leading the controls. Tapping it turns the whole second row (filter and controls) into the field with Cancel until the search is cancelled, the list has no search row, and the filter pill fills the row up to the controls. The one-row bar keeps the field as the list's first row (2026-10-24, #1199, Eric).
 - Going from the stacked bar to the one-row bar carries a query over to the list's field and closes an empty open field (2026-10-24, #1199).
-- The list's search row follows the bar's layout from the last layout seen (`barStackedKey`), so launch doesn't show it for a frame, and a change of layout (rotation, a profile added) slides it in or out with the bar (2026-10-24, #1206).
+- The list's search row follows the bar's layout, starting from the last layout seen (`barStackedKey`). Before any layout is known (first launch) the row stays out until the one-row bar appears; a change of layout (rotation, a profile added) animates it in or out (2026-10-24, #1206: implementation of #1199's open gap).
 
 **Open gaps**
-- None known.
+- A launch whose layout differs from the last one seen (the iPad was rotated, or profiles were added elsewhere, while Conduit was closed) still starts from the old layout, so the row can show for a frame or arrive a frame late. Closing it needs the bar's choice before the first frame, which `ViewThatFits` doesn't expose.
 
 **Checked:** 2026-10-24, at #1206.
 
