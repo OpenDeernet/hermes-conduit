@@ -1297,17 +1297,18 @@ def cmd_smoke(args) -> int:
                     spent += cost(name)
                 else:
                     changed_skipped.append(name)
-        # The change's only heavy class still runs once: a slow new suite
-        # is exactly what would otherwise first fail at night.
-        if not changed_unit and changed_skipped and changed_max > 0:
-            pool = [n for n in changed_skipped if n in direct] or changed_skipped
-            cheapest = min(pool, key=lambda n: (cost(n), n))
-            changed_skipped.remove(cheapest)
-            changed_unit.append(cheapest)
-            spent = cost(cheapest)
-            print(f"::notice title=changed class over the smoke budget::"
-                  f"{cheapest} (~{spent:.0f}s) runs anyway: nothing else of the "
-                  f"change fit")
+            # The change's only heavy class still runs once, ahead of any
+            # family member: a slow new suite is exactly what would
+            # otherwise first fail at night.
+            if (tier is direct and not changed_unit and changed_skipped
+                    and changed_max > 0):
+                cheapest = min(changed_skipped, key=lambda n: (cost(n), n))
+                changed_skipped.remove(cheapest)
+                changed_unit.append(cheapest)
+                spent = cost(cheapest)
+                print(f"::notice title=changed class over the smoke budget::"
+                      f"{cheapest} (~{spent:.0f}s) runs anyway: nothing else of the "
+                      f"change fit")
         changed_unit.sort()
         changed_skipped.sort()
         unit = unit + changed_unit

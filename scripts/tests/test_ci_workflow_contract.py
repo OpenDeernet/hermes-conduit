@@ -820,6 +820,16 @@ class SmokeSelectionTests(unittest.TestCase):
         self.assertEqual(doc["changed_unit"], ["SessionPresentationCacheTests"])
         self.assertIn("AppStateChatResumeTests", doc["changed_skipped"])
 
+    def test_a_heavy_own_class_still_runs_before_a_family_member(self):
+        def mutate(suite):
+            suite["changed_budget_s"] = 0.5
+        proc, doc = self._changed_selection(
+            ["Conduit/Services/AppState.swift",
+             "ConduitTests/DashboardTicketBridgeTests.swift"], mutate)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("DashboardTicketBridgeTests", doc["changed_unit"])
+        self.assertIn("runs anyway", proc.stdout)
+
     def test_a_changed_timing_family_stays_nightly_only(self):
         proc, doc = self._changed_selection(
             ["ConduitTests/LongContextScalingFixtureTests.swift"])
