@@ -295,7 +295,7 @@ Log in Voice settings > Apple Watch · the iPhone's own Watch-call lines
 
 **Rulings**
 - Lines travel in batches of up to 50 lines or 32 KB, about 30 seconds after the oldest, and at once around a call's end.
-- While WatchConnectivity can't deliver, the waiting lines keep to 600 lines and 300 KB in memory, in the unsent file and when the next run restores them; past that the oldest go, and a first `watchLogDropped` line says how many (2026-10-24, #1221).
+- While WatchConnectivity can't deliver, the waiting lines keep to 600 lines and 300 KB in memory and when the next run restores them, and the unsent file is written again from them once it passes twice that; past the budget the oldest go, and a first `watchLogDropped` line says how many (2026-10-24, #1221).
 - The iPhone appends whatever lines arrive, the dropped line included.
 
 **Open gaps**

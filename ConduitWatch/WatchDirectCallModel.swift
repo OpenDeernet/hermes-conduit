@@ -349,8 +349,9 @@ final class WatchDirectCallModel: ObservableObject {
     private var startJobsTakenSilently = 0
     private var withdrawnToolIDs: Set<String> = []
     private var quietQueue: [WatchVoiceWire.DirectOutgoing] = []
-    /// The queued texts that carry a tool's answer lost to a reconnect.
-    private var lostAnswers: Set<String> = []
+    /// The queued texts that carry a tool's answer lost to a reconnect,
+    /// each counted as often as it waits.
+    private var lostAnswers: [String: Int] = [:]
     private var toolCalls = 0
     private var toolsAnsweredLive = 0
     private var toolsUnreachable = 0
@@ -2641,7 +2642,7 @@ final class WatchDirectCallModel: ObservableObject {
         guard let session, session.isReady, generation == nil || liveGeneration == generation else {
             if let lost {
                 quietQueue.append(.textWhenIdle(lost))
-                lostAnswers.insert(lost)
+                lostAnswers[lost, default: 0] += 1
             }
             WatchCallLog.shared.note("directAnswerQueued", ["name": name, "asText": lost != nil, "ready": self.session?.isReady == true])
             return
@@ -2656,7 +2657,7 @@ final class WatchDirectCallModel: ObservableObject {
         session.send(message, onSent: nil, onFailure: { [weak self] in
             guard let self, self.callID == id, let lost else { return }
             self.quietQueue.append(.textWhenIdle(lost))
-            self.lostAnswers.insert(lost)
+            self.lostAnswers[lost, default: 0] += 1
         })
     }
 
@@ -2767,9 +2768,6 @@ final class WatchDirectCallModel: ObservableObject {
         switch item {
         case .textWhenIdle(let text):
             awaitingAnswerSince = now
-            // A tool's answer said as text owes a reply as it would on
-            // its call.
-            if lostAnswers.remove(text) != nil, replyOwedSince == nil { replyOwedSince = now }
             noteTextSent("update", text)
         case .contextWhenIdle(let text):
             noteTextSent("context", text)
@@ -2777,7 +2775,14 @@ final class WatchDirectCallModel: ObservableObject {
             break
         }
         let id = callID
-        session.send(message, onSent: nil, onFailure: { [weak self] in
+        session.send(message, onSent: { [weak self] in
+            // A tool's answer said as text owes a reply as it would on
+            // its call, once it went.
+            guard let self, self.callID == id, case .textWhenIdle(let text) = item,
+                  let waiting = self.lostAnswers[text] else { return }
+            self.lostAnswers[text] = waiting > 1 ? waiting - 1 : nil
+            if self.replyOwedSince == nil { self.replyOwedSince = self.now }
+        }, onFailure: { [weak self] in
             guard let self, self.callID == id else { return }
             self.quietQueue.insert(item, at: 0)
         })

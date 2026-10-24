@@ -915,13 +915,13 @@ final class WatchDirectBroker {
         if let answered = await Self.value(of: handled, within: isJob ? Self.jobStartWait : Self.toolWait) {
             outgoing = answered
             // Refused at once: nothing started, so a repeat may go again.
-            if isJob, Self.jobRefusal(in: answered, answering: call.id) != nil { ledger.forgetJob(call.id, in: id) }
+            if isJob, Self.refusedBeforeStarting(answered, answering: call.id) { ledger.forgetJob(call.id, in: id) }
         } else {
             // Still running: answer now, and keep whatever it gives later
             // except the answer to this call, which went already.
-            Task {
+            Task { [weak self] in
                 let late = await handled.value
-                guard self.callID == id else { return }
+                guard let self, self.callID == id else { return }
                 self.lateOutgoing += self.lateAnswers(late, to: call, in: id, isJob: isJob)
             }
             let result: [String: String] = isJob ? Self.jobAccepted : WatchToolAnswer.tookTooLong
@@ -948,7 +948,7 @@ final class WatchDirectBroker {
     private func lateAnswers(_ late: [GeminiLiveToolBridge.Outgoing], to call: WatchVoiceWire.DirectToolCall, in id: UInt32, isJob: Bool) -> [GeminiLiveToolBridge.Outgoing] {
         let rest = late.filter { !$0.answers(call.id) }
         guard isJob, let refusal = Self.jobRefusal(in: late, answering: call.id) else { return rest }
-        ledger.forgetJob(call.id, in: id)
+        if Self.refusedBeforeStarting(late, answering: call.id) { ledger.forgetJob(call.id, in: id) }
         link.log.note("watchDirectLateJobRefusal", ["chars": refusal.count, "appState": WatchVoiceLink.appStateName])
         return [.textWhenIdle(Self.lateJobRefusalText(refusal))] + rest
     }
@@ -966,6 +966,16 @@ final class WatchDirectBroker {
             return result["message"] ?? "Hermes didn't take the job."
         }
         return nil
+    }
+
+    /// A start_job whose answer says Hermes never took it: its receipt
+    /// may go. Any other error might have come after Hermes took the
+    /// turn, so a repeat of it still isn't sent.
+    static func refusedBeforeStarting(_ outgoing: [GeminiLiveToolBridge.Outgoing], answering id: String) -> Bool {
+        for case .toolResponse(let responseID, _, let result, _) in outgoing where responseID == id {
+            return result["job_id"] == nil && (result["status"] == "not_started" || result["status"] == "not_sent")
+        }
+        return false
     }
 
     /// Written for the model, not shown.
