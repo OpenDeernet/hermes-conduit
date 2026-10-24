@@ -35721,6 +35721,9 @@ enum KeychainHelper {
 /// the profile.
 struct CapabilitySnapshotOwner: Equatable {
     let dashboardID: UUID?
+    /// Only meaningful with `dashboardID`: an identifier can be reused once
+    /// its bridge is gone, which is why a dashboard switch also clears the
+    /// snapshot (`retireCapabilitySnapshot`).
     let bridge: ObjectIdentifier?
     let profile: String
 }

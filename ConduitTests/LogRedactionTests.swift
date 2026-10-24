@@ -53,6 +53,11 @@ final class LogRedactionTests: XCTestCase {
             "<host> refused; <host> and <host>."
         )
         XCTAssertEqual(LogRedaction.redactingURLs("foo.tail1234.ts.net timed out"), "<host> timed out")
+        XCTAssertEqual(
+            LogRedaction.redactingURLs("GET backup.example.com/dump?token=abc failed (retry)."),
+            "GET <host> failed (retry)."
+        )
+        XCTAssertEqual(LogRedaction.redactingURLs("backup.example.com/dump.json"), "<host>")
     }
 
     func testTypeNamesVersionsAndFileNamesAreKept() {
@@ -61,6 +66,7 @@ final class LogRedactionTests: XCTestCase {
             "Swift.DecodingError.keyNotFound(CodingKeys(stringValue: \"session_id\", intValue: nil))",
             "The file “config.yaml” couldn’t be opened.",
             "Version 1.2.3 at 12:30, item [0], e.g. this.",
+            "Could not read data.xml or Base.xcconfig",
             "Error Domain=NSURLErrorDomain Code=-1200 UserInfo={_kCFStreamErrorCodeKey=-9813}",
         ] {
             XCTAssertEqual(LogRedaction.redactingURLs(text), text)

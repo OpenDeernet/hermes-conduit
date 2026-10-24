@@ -32,16 +32,19 @@ enum LogRedaction {
     /// Hosts named without a scheme: the one a TLS error says is
     /// "pretending to be “host”", an IPv4 or bracketed IPv6 address, a
     /// dotted name with a port (any case), and a lowercase dotted name
-    /// ending in letters. Type names (`HermesClientError.timeout`), versions
-    /// and prose are kept; a file name whose extension is no domain
-    /// (`config.yaml`) is kept too.
+    /// ending in letters, each with the path and query after it. Type names
+    /// (`HermesClientError.timeout`), versions of up to three parts and
+    /// prose are kept, and so is a file name with one of the extensions
+    /// below (`config.yaml`); any other file name reads as a host.
     static func redactingHosts(_ text: String) -> String {
         let nsText = text as NSString
         var result = text
         let matches = hostPattern.matches(in: text, range: NSRange(location: 0, length: nsText.length))
         for match in matches.reversed() {
             let token = nsText.substring(with: match.range)
-            if let last = token.split(separator: ".").last,
+            // The extension of the name itself, not of a path after it.
+            let name = token.prefix { $0 != "/" }
+            if !name.contains(":"), let last = name.split(separator: ".").last,
                fileExtensions.contains(last.lowercased()) { continue }
             guard let range = Range(match.range, in: result) else { continue }
             result.replaceSubrange(range, with: "<host>")
@@ -68,11 +71,13 @@ enum LogRedaction {
             + #"|(?:[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9\-]*[A-Za-z0-9])?:\d{1,5}"#
             + #"|(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{2,63}"#
             + #")(?![\w\-]|\.[A-Za-z0-9])"#
+            + #"(?:/[^\s"'<>{}]*[^\s"'<>{},;.)\]])?"#
     )
 
-    /// Extensions of files an error may name that no domain ends in.
+    /// Extensions of files an error may name that no domain ends in
+    /// (`md`, `py` and `zip` are domains, so those names are redacted).
     private static let fileExtensions: Set<String> = [
-        "caf", "csv", "heic", "html", "jpeg", "jpg", "json", "log", "pdf", "plist",
-        "png", "sqlite", "swift", "toml", "txt", "wav", "yaml", "yml",
+        "caf", "csv", "gif", "heic", "html", "jpeg", "jpg", "json", "log", "pdf", "plist",
+        "png", "sqlite", "swift", "tar", "toml", "txt", "wav", "xcconfig", "xml", "yaml", "yml",
     ]
 }
