@@ -65,8 +65,15 @@ extension AppState {
         guard activeRoomSurface == nil, offlineChatPresentation == nil, !showsPendingNewChat,
               let sessionID = activeSessionId, !sessionID.isEmpty,
               let profile = botStoreProfile(forSessionIDs: [sessionID]) else { return [] }
-        // The open id is the runtime one; its store keeps the durable id.
-        var ids = chatOwnSessionIDs(for: sessionID).union([sessionID])
+        // The open id is the runtime one; its store keeps the durable id,
+        // confirmed under the bot's profile even when the registry hasn't
+        // noted the chat yet (after a relaunch).
+        var ids = chatOwnSessionIDs(for: sessionID)
+        if let durable = ChatScrollIdentityNormalization.sessionID(
+            confirmedDurableSessionID(forRuntime: sessionID, profile: profile)
+        ) {
+            ids.insert(durable)
+        }
         if let bot = botRoster.first(where: { Self.profilesMatch($0.name, profile) }) {
             ids.formUnion(Self.botChatIDs(bot))
         }
