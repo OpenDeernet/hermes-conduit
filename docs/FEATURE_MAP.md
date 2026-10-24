@@ -627,15 +627,15 @@ group rooms · the full editor · the notices that say where words went
 - Tests: `ConduitTests/ComposerDraftStoreTests.swift`, `ConduitTests/GroupChatSessionSafetyTests.swift`, `ConduitTests/OfflineChatCacheTests.swift`
 
 **Rulings**
-- Drafts live in memory per (profile, chat), and a sign-out or server switch clears them on purpose; a composer that goes away after the clear doesn't put its draft back (2026-10-24, #996).
-- A waiting message is never sent on its own after it's handed back. When Hermes says its chat is gone, its words go into the composer on screen, unsent, with a notice saying so (2026-10-24, #996).
+- Drafts live in memory per (profile, chat), and a sign-out or server switch clears them on purpose; a composer that goes away after the clear doesn't put its draft back (2026-10-24, #1185).
+- A waiting message is never sent on its own after it's handed back. When Hermes says its chat is gone, its words go into the composer on screen, unsent, with a notice saying so (2026-10-24, #1185).
 
 **Open gaps**
 - Drafts don't outlive Conduit being stopped; only a waiting message does (as a file).
 - A waiting message left from an earlier run whose chat is gone still goes back into that chat's draft: the gone chats are only known for this run.
 - A room's quoted message and its "To" picks aren't kept when the room is left.
 
-**Checked:** 2026-10-24, at #996's fix.
+**Checked:** 2026-10-24, at #1185.
 
 ## Feature map rules
 
