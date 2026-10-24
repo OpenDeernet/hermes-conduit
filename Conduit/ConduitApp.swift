@@ -270,8 +270,6 @@ struct ConduitApp: App {
                 // The Notification Service Extension writes banners in it.
                 NotificationSharedSettings.appLanguage = AppLanguage.current.rawValue
                 HermesCallNotifications.registerCategory()
-        // Workspace files a previous run prepared for Save to Files.
-        Task.detached(priority: .utility) { _ = WorkspaceDownloads.root }
             }
             .preferredColorScheme(appState.themePreference.colorScheme)
             .tint(.conduitAccent)

@@ -1206,24 +1206,27 @@ that looks for one.
 
 **Siblings:** chat bubbles (block views) · very long replies (sliced) · a call
 screen card cut to its limit · a call turn cut to the plugin's limit · group
-room mention links · Local Live's spoken and shown split · Read Aloud and live
-read-back · chat list previews and quotes
+room mention links · Bot Chat mention routing · Local Live's spoken and shown
+split · Read Aloud and live read-back · chat list previews and quotes
 
 **Code**
 - The rule: `Conduit/Views/Components/MarkdownText.swift` (MarkdownFence, MarkdownParser)
 - Long replies: `Conduit/Views/Components/MarkdownLargeDocument.swift`
 - Cuts: `Conduit/Voice/VoiceBackgroundJobs.swift` (clippedScreenMarkdown, fenceClosedPrefix, closingCutFence), `Conduit/Voice/VoiceHistory.swift` (VoiceTranscriptRecorder.clipped)
 - Group rooms: `Conduit/Services/GroupChatModels.swift` (GroupRoomMentions.linkingMarkdown)
+- Bot Chat routing: `Conduit/Services/BotMentions.swift` (proseStrippingCode)
 - Spoken text: `Conduit/Voice/LocalLive/SpokenVisualSplitter.swift`, `Conduit/Voice/VoiceReadBack.swift`
 - Previews and quotes: `Conduit/Services/PreviewText.swift`, `Conduit/Views/Components/ChatQuote.swift`
 - Tests: `ConduitTests/VoiceBackgroundJobTests.swift`, `ConduitTests/VoiceHistoryTests.swift`, `ConduitTests/GroupChatModelsTests.swift`
 
 **Rulings**
-- A fence is three or more backticks or tildes; only a line of the same mark, at least as long and with nothing after it, closes it, so a ```` block can show ``` lines (#893). Code that tracks blocks uses `MarkdownFence` rather than its own reading (2026-10-24, #1220, from #1002).
+- A fence is three or more backticks or tildes; only a line of the same mark, at least as long and with nothing after it, closes it, so a ```` block can show ``` lines (#893). The cuts and group room mention links read fences with `MarkdownFence`; the spoken-text readers follow the same rule in their own line-by-line code (2026-10-24, #1220, from #1002).
+- Bot Chat mention routing strips code with Hermes' own pattern (the first ``` closes a block), not this rule, so Conduit picks the same bot Hermes would.
 - A cut that leaves a block open closes it with a fence as long as the opener, and the closer's room comes off the cut, so the result stays within its limit however long the fence (2026-10-24, #1220).
 
 **Open gaps**
-- None known. Previews and quotes only drop fence lines and track no block, so they need no closing rule.
+- Previews and quotes only drop fence lines and track no block, so they need no closing rule (not a gap, noted so nobody adds one).
+- A ```` block holding a ``` line in a Bot Chat can route a mention after that line, as Hermes does; changing it starts in Hermes.
 
 **Checked:** 2026-10-24, at #1220.
 

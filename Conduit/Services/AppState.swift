@@ -6305,6 +6305,14 @@ final class AppState: ObservableObject {
         voiceCallRecorder?.capture(turns, unsettled: [])
         voiceCallRecorder?.jobSessionIDs += jobs
     }
+
+    /// Test seam: the running call's checkpoint, as the 15-second timer
+    /// takes it, once `turns` have settled.
+    func checkpointVoiceCallForTesting(adding turns: [VoiceConversationTranscriptEntry] = []) {
+        guard let recorder = voiceCallRecorder else { return }
+        recorder.capture(turns, unsettled: [])
+        checkpointVoiceCall(recorder)
+    }
     #endif
     private var voiceTagsFetchedAt: [String: Date] = [:]
     private var voiceTagRefreshTask: Task<Void, Never>?
