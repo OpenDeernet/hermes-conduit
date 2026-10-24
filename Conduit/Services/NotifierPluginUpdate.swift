@@ -48,6 +48,9 @@ enum NotifierPluginUpdateStep: Equatable {
     case waitingForChats(count: Int)
     /// The dashboard restarts to load the plugin's routes.
     case restartingDashboard
+    /// Done on the host: Conduit reconnects and reads the new plugin's
+    /// report before it says so, so the notice stays until it's back.
+    case reconnecting
 
     /// Where the step falls in the update, for "Step 2 of 3".
     static let count = 3
@@ -55,7 +58,7 @@ enum NotifierPluginUpdateStep: Equatable {
         switch self {
         case .downloading, .installing: return 1
         case .restartingGateway: return 2
-        case .waitingForChats, .restartingDashboard: return 3
+        case .waitingForChats, .restartingDashboard, .reconnecting: return 3
         }
     }
 }
@@ -97,6 +100,13 @@ struct NotifierPluginUpdateSlot: Equatable {
         } else {
             clear()
         }
+    }
+
+    /// Replaces how the update ended, when the plugin's report shows it
+    /// ended otherwise (AppState.clearSettledNotifierPluginUpdateOutcome).
+    mutating func settle(as outcome: NotifierPluginUpdateState) {
+        guard state != .idle, !state.isInProgress, !outcome.isInProgress, outcome != .idle else { return }
+        state = outcome
     }
 
     mutating func dismiss() {

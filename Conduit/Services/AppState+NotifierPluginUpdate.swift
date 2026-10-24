@@ -66,20 +66,77 @@ extension AppState {
                 self.notifierPluginUpdate.update(state, run: runID)
             }
             guard let self, !Task.isCancelled else { return }
+            guard self.activeDashboardID == dashboardID else {
+                self.notifierPluginUpdateTask = nil
+                self.notifierPluginUpdate.finish(outcome, run: runID, activeDashboardID: self.activeDashboardID)
+                return
+            }
+            // The dashboard restart dropped the chat connection: the notice
+            // keeps its progress until Conduit is back and has read the new
+            // plugin, so "ready" means ready.
+            self.notifierPluginUpdate.update(.updating(.reconnecting), run: runID)
+            let ended = await self.reconnectAfterNotifierPluginUpdate(outcome, dashboardID: dashboardID)
+            guard !Task.isCancelled else { return }
             self.notifierPluginUpdateTask = nil
-            self.notifierPluginUpdate.finish(outcome, run: runID, activeDashboardID: self.activeDashboardID)
-            guard self.activeDashboardID == dashboardID else { return }
-            // The dashboard restart drops the chat connection.
-            if !self.isConnected { await self.reconnect() }
-            await self.refreshNotifierPluginStatus()
+            self.notifierPluginUpdate.finish(ended, run: runID, activeDashboardID: self.activeDashboardID)
+        }
+    }
+
+    /// How long Conduit waits for the gateway after an update before it
+    /// says the gateway didn't come back.
+    static let notifierPluginGatewayWaitLimit: TimeInterval = 180
+
+    /// Reconnects after an update and reads the new plugin's report, then
+    /// says how the update ended. A failure the report contradicts (the new
+    /// plugin runs) is an update: Hermes' gateway restart can take the
+    /// dashboard down with it, and the job that dashboard ran with it. An
+    /// update is ready once the gateway serves again too.
+    private func reconnectAfterNotifierPluginUpdate(_ outcome: NotifierPluginUpdateState,
+                                                    dashboardID: UUID?) async -> NotifierPluginUpdateState {
+        if !isConnected { await reconnect() }
+        guard !Task.isCancelled, activeDashboardID == dashboardID else { return outcome }
+        await refreshNotifierPluginStatus()
+        let updated: Bool
+        switch outcome {
+        case .updated:
             // A read that failed right after the restart keeps the old
             // plugin's "restart to finish": ask once more (#299).
-            if case .updated = outcome, self.notifierPlugin.restartPending, self.activeDashboardID == dashboardID {
+            if notifierPlugin.restartPending {
                 try? await Task.sleep(for: .seconds(3))
-                guard !Task.isCancelled else { return }
-                await self.refreshNotifierPluginStatus()
+                guard !Task.isCancelled, activeDashboardID == dashboardID else { return outcome }
+                await refreshNotifierPluginStatus()
             }
+            if notifierPlugin.restartPending { return .needsDashboardRestart(detail: nil) }
+            updated = true
+        case .failed, .runningOnHost:
+            updated = notifierPlugin.settles(outcome)
+        default:
+            updated = false
         }
+        guard updated else { return outcome }
+        guard await waitForGatewayAfterNotifierPluginUpdate(dashboardID: dashboardID) else {
+            if Task.isCancelled || activeDashboardID != dashboardID { return outcome }
+            return .failed(detail: AppLocalization.string("The plugin is updated, but the gateway didn't come back. Run hermes gateway status on the host."))
+        }
+        if case .updated(let version?) = outcome { return .updated(version: version) }
+        return .updated(version: notifierPlugin.runningVersion)
+    }
+
+    /// Whether the gateway serves again (Hermes' `/api/status`), polling
+    /// until `notifierPluginGatewayWaitLimit`. A Hermes that doesn't report
+    /// its gateway there counts as serving.
+    private func waitForGatewayAfterNotifierPluginUpdate(dashboardID: UUID?) async -> Bool {
+        let started = Date()
+        while Date().timeIntervalSince(started) < Self.notifierPluginGatewayWaitLimit {
+            if activeDashboardID == dashboardID, let bridge = dashboardTicketBridge,
+               let json = try? await bridge.requestJSON(path: GatewayRestarter.statusPath) {
+                guard let gateway = GatewayRestartGatewayStatus(json: json) else { return true }
+                if gateway.isServing { return true }
+            }
+            try? await Task.sleep(for: .seconds(2))
+            if Task.isCancelled || activeDashboardID != dashboardID { return false }
+        }
+        return false
     }
 
     /// Signs in to the dashboard in use again with its saved password, the
@@ -114,10 +171,10 @@ extension AppState {
     /// "Restart the dashboard to finish" is stale once the plugin reports
     /// nothing left to do: the user restarted Hermes. So is a failure once
     /// the offered version is running, e.g. a comeback wait the phone slept
-    /// through.
+    /// through. Either way the update is done, and the notice says so.
     func clearSettledNotifierPluginUpdateOutcome() {
         guard notifierPlugin.settles(activeNotifierPluginUpdate) else { return }
-        dismissNotifierPluginUpdateOutcome()
+        notifierPluginUpdate.settle(as: .updated(version: notifierPlugin.runningVersion))
     }
 
     /// Stops following a running update (Cancel). Hermes finishes whatever
