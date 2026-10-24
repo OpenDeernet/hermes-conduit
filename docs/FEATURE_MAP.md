@@ -853,12 +853,12 @@ row) · iPad and Mac (same view) · searching messages ("In messages")
 - The profiles get their own row when they don't fit beside the controls, and the filter becomes a labeled pill under them (2026-10-22, #1117, Eric).
 - In the stacked bar, search is a magnifier leading the controls. Tapping it turns the whole second row (filter and controls) into the field with Cancel until the search is cancelled, the list has no search row, and the filter pill fills the row up to the controls. The one-row bar keeps the field as the list's first row (2026-10-24, #1199, Eric).
 - Going from the stacked bar to the one-row bar carries a query over to the list's field and closes an empty open field (2026-10-24, #1199).
-- The list's search row follows the bar's layout from the last layout seen (`barStackedKey`), so launch doesn't show it for a frame, and a change of layout (rotation, a profile added) slides it in or out with the bar (2026-10-24, #PRNUM).
+- The list's search row follows the bar's layout from the last layout seen (`barStackedKey`), so launch doesn't show it for a frame, and a change of layout (rotation, a profile added) slides it in or out with the bar (2026-10-24, #1206).
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-24, at #PRNUM.
+**Checked:** 2026-10-24, at #1206.
 
 ## Plan card
 
