@@ -856,7 +856,7 @@ row) · iPad and Mac (same view) · searching messages ("In messages")
 - The list's search row follows the bar's layout, starting from the last layout seen (`barStackedKey`). Before any layout is known (first launch) the row stays out until the one-row bar appears; a change of layout (rotation, a profile added) animates it in or out (2026-10-24, #1206: implementation of #1199's open gap).
 
 **Open gaps**
-- A launch whose layout differs from the last one seen (the iPad was rotated, or profiles were added elsewhere, while Conduit was closed) still starts from the old layout, so the row can show for a frame or arrive a frame late. Closing it needs the bar's choice before the first frame, which `ViewThatFits` doesn't expose.
+- A launch whose layout differs from the last one seen still starts from the old layout, so the row can show for a frame or arrive a frame late: the iPad was rotated or profiles were added while Conduit was closed, or another iPad window in the other layout wrote the shared key last. Closing it needs the bar's choice before the first frame, which `ViewThatFits` doesn't expose.
 
 **Checked:** 2026-10-24, at #1206.
 
