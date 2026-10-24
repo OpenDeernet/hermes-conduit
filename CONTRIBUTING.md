@@ -17,7 +17,8 @@ current.
 2. Follow the entry's rulings. Changing a ruling is the maintainer's call;
    record their decision in the entry, with the date and the PR.
 3. In the PR, fill in Siblings: each one done, not needed (and why), or a gap
-   left open for the maintainer to decide.
+   left open for the maintainer to decide. "No mapped feature" is only for a
+   change with no siblings.
 4. Update the entry in the same PR: its siblings, code paths, rulings, the gaps
    opened or closed, and the Checked line. A feature with siblings and no
    entry gets one in that PR. A fix that brings a sibling in line with an
