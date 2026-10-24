@@ -278,6 +278,31 @@ Hermes · Resume Call · memory at call end (notifier)
 
 **Checked:** 2026-10-24, at #1221, for the Watch's transcript tail; at 78f21da; at #1191: a saved screen turn cut at the plugin's limit keeps its last line unless it can be half a fence (#926 review).
 
+## The Watch call log
+
+Timings and connection events from Watch calls, never what was said, kept
+on the Watch and sent to the iPhone, where the user shares them for a
+support question.
+
+**Siblings:** the Watch's batcher and its unsent file · the Watch's own log
+file and its Clear button · the iPhone's copy, with Share call log and Clear
+Log in Voice settings > Apple Watch · the iPhone's own Watch-call lines
+(WatchVoiceLink)
+
+**Code**
+- Watch: `ConduitWatch/WatchCallLog.swift`, `ConduitWatch/WatchHomeView.swift` (Clear), `Shared/WatchVoice/WatchCallLogBatch.swift`
+- iPhone: `Conduit/Watch/WatchPhoneCallLog.swift`, `Conduit/Watch/WatchVoiceLink.swift` (note), `Conduit/Watch/WatchSettingsSection.swift`
+
+**Rulings**
+- Lines travel in batches of up to 50 lines or 32 KB, about 30 seconds after the oldest, and at once around a call's end.
+- While WatchConnectivity can't deliver, the waiting lines keep to 600 lines and 300 KB in memory, in the unsent file and when the next run restores them; past that the oldest go, and a first `watchLogDropped` line says how many (2026-10-24, #1221).
+- The iPhone appends whatever lines arrive, the dropped line included.
+
+**Open gaps**
+- None known.
+
+**Checked:** 2026-10-24, at #1221.
+
 ## Calls from Hermes
 
 Hermes rings the user (a job is done, it waits on an answer, a scheduled

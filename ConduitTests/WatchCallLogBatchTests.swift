@@ -209,6 +209,8 @@ extension HermesVoiceGatewayTimeoutTests {
         let started: [Outgoing] = [.toolResponse(id: "c1", name: "start_job", result: ["job_id": "j", "title": "t", "status": "started"], scheduling: nil)]
         XCTAssertNil(WatchDirectBroker.jobRefusal(in: started, answering: "c1"))
         XCTAssertNil(WatchDirectBroker.jobRefusal(in: [], answering: "c1"))
+        let moved: [Outgoing] = [.toolResponse(id: "c1", name: "start_job", result: ["error": WatchVoiceStartFailure.connectionChanged], scheduling: nil), .endConversation]
+        XCTAssertNil(WatchDirectBroker.jobRefusal(in: moved, answering: "c1"))
         let text = WatchDirectBroker.lateJobRefusalText("Too many jobs.")
         XCTAssertTrue(text.contains("didn't start after all: Too many jobs."))
     }

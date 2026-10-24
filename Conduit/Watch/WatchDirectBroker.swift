@@ -956,6 +956,9 @@ final class WatchDirectBroker {
     static func jobRefusal(in outgoing: [GeminiLiveToolBridge.Outgoing], answering id: String) -> String? {
         for case .toolResponse(let responseID, _, let result, _) in outgoing where responseID == id {
             guard result["job_id"] == nil else { return nil }
+            // The phone left the call's connection before Hermes got the
+            // job: not Hermes' refusal, and the call is ending anyway.
+            if result["error"] == WatchVoiceStartFailure.connectionChanged { return nil }
             if let error = result["error"], !error.isEmpty { return error }
             guard let status = result["status"], status == "not_started" || status == "not_sent" else { return nil }
             return result["message"] ?? "Hermes didn't take the job."

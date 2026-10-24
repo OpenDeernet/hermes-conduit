@@ -135,6 +135,7 @@ struct WatchCallLogBatch: Equatable {
         var waiting = earlier == nil ? lines[...] : lines.dropFirst()
         var dropped = earlier ?? 0
         var total = Self.bytes(of: waiting)
+        // Room for the dropped line at its longest count.
         let marker = Self.droppedLine(Int.max).utf8.count + 1
         while waiting.count > 1, waiting.count + 1 > Self.maxWaitingLines || total + marker > Self.maxWaitingBytes {
             total -= waiting[waiting.startIndex].utf8.count + 1
