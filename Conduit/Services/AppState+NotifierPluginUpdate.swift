@@ -66,6 +66,18 @@ extension AppState {
                 self.notifierPluginUpdate.update(state, run: runID)
             }
             guard let self, !Task.isCancelled else { return }
+            switch outcome {
+            case .updated, .failed, .runningOnHost:
+                break
+            default:
+                // Nothing restarted, or the dashboard waits on a restart:
+                // how it ended shows right away.
+                self.notifierPluginUpdateTask = nil
+                self.notifierPluginUpdate.finish(outcome, run: runID, activeDashboardID: self.activeDashboardID)
+                guard self.activeDashboardID == dashboardID else { return }
+                await self.refreshNotifierPluginStatus()
+                return
+            }
             guard self.activeDashboardID == dashboardID else {
                 self.notifierPluginUpdateTask = nil
                 self.notifierPluginUpdate.finish(outcome, run: runID, activeDashboardID: self.activeDashboardID)
@@ -130,8 +142,8 @@ extension AppState {
         while Date().timeIntervalSince(started) < Self.notifierPluginGatewayWaitLimit {
             if activeDashboardID == dashboardID, let bridge = dashboardTicketBridge,
                let json = try? await bridge.requestJSON(path: GatewayRestarter.statusPath) {
-                guard let gateway = GatewayRestartGatewayStatus(json: json) else { return true }
-                if gateway.isServing { return true }
+                if json["gateway_running"] == nil { return true }
+                if GatewayRestartGatewayStatus(json: json)?.isServing == true { return true }
             }
             try? await Task.sleep(for: .seconds(2))
             if Task.isCancelled || activeDashboardID != dashboardID { return false }

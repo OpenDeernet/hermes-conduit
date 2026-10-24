@@ -495,8 +495,8 @@ extension GatewayRestartTests {
         XCTAssertEqual(NotifierPluginUpdateStep.installing.number, 1)
         XCTAssertEqual(NotifierPluginUpdateStep.restartingGateway(nil).number, 2)
         XCTAssertEqual(NotifierPluginUpdateStep.waitingForChats(count: 2).number, 3)
-        XCTAssertEqual(NotifierPluginUpdateStep.restartingDashboard.number, NotifierPluginUpdateStep.count)
-        // Reconnecting after the host finished is still the last step.
+        XCTAssertEqual(NotifierPluginUpdateStep.restartingDashboard.number, 3)
+        // Reconnecting after the host finished is the last step.
         XCTAssertEqual(NotifierPluginUpdateStep.reconnecting.number, NotifierPluginUpdateStep.count)
         var slot = NotifierPluginUpdateSlot()
         XCTAssertNil(slot.startedAt)
