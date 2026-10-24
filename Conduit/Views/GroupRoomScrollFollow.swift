@@ -115,6 +115,12 @@ final class GroupRoomScrollLocatorView: UIView {
                 guard change.oldValue != change.newValue else { return }
                 Self.onMain { self?.scrolled() }
             },
+            // Bounds origin is the offset; a size change is the keyboard,
+            // rotation or split view.
+            found.observe(\.bounds, options: [.old, .new]) { [weak self] _, change in
+                guard change.oldValue?.size != change.newValue?.size else { return }
+                Self.onMain { self?.scrolled() }
+            },
         ]
     }
 
