@@ -880,23 +880,24 @@ the lists they sit in.
 **Siblings:** installed skills and toolsets (AppState) · the catalog, tool
 counts, backends, MCP servers and plugins (CapabilitiesStore) · the Skills
 and Tools tabs · the bot editor's skills, tools and MCP lists (see Bots:
-create and edit)
+create and edit) · the Kanban task composer's skill picker
 
 **Code**
-- Installed lists and switches: `Conduit/Services/AppState.swift` (loadCapabilities, toggleSkill, toggleToolset, capabilityLoadGeneration), `Conduit/Services/CapabilityToggleWrites.swift`
+- Installed lists and switches: `Conduit/Services/AppState.swift` (loadCapabilities, toggleSkill, toggleToolset, capabilityLoadGeneration, capabilitiesOwner, retireCapabilitySnapshot, CapabilityLoadPolicy), `Conduit/Services/CapabilityToggleWrites.swift`
 - The rest of the page: `Conduit/Services/CapabilitiesStore.swift`
-- Views: `Conduit/Views/CapabilitiesView.swift`, `Conduit/Views/Capabilities/CapabilitySkillsTab.swift`, `Conduit/Views/Capabilities/CapabilityToolsTab.swift`
-- Tests: `ConduitTests/KanbanTests+Capabilities.swift`
+- Views: `Conduit/Views/CapabilitiesView.swift`, `Conduit/Views/Capabilities/CapabilitySkillsTab.swift`, `Conduit/Views/Capabilities/CapabilityToolsTab.swift`, `Conduit/Views/Kanban/KanbanTaskComposerView.swift` (KanbanSkillsPickerSheet)
+- Tests: `ConduitTests/KanbanTests+Capabilities.swift`, `ConduitTests/KanbanTests.swift` (CapabilityLoadPolicy)
 
 **Rulings**
 - A list read that started before a switch was flipped commits nothing, in AppState and in CapabilitiesStore alike (#867; AppState's lists at #1191).
 - Switches reach Hermes one after another in the order flipped, since each rewrites one config.yaml. A failed write puts back what Hermes last confirmed only when no newer flip of that switch is on its way, and a flip a newer one replaced reports no failure (#868 follow-up, #1191).
+- The installed lists belong to a dashboard, its bridge and a profile, not a profile name: two dashboards can both have "default". Another dashboard's rows never show, act or seed a picker, a dashboard switch clears them, and Turn All On/Off stops once the list it started from isn't the one showing (#1005, #1219).
 
 **Open gaps**
 - AppState's list reads go through a live DashboardTicketBridge with no test seam, so its generation guard has no test.
 - Whether a list read can overwrite a flip in the bot editor's lists hasn't been checked.
 
-**Checked:** 2026-10-24, at #1191.
+**Checked:** 2026-10-24, at #1219.
 
 ## Reply progress signals
 
