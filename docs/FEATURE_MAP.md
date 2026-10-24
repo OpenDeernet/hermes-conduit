@@ -574,7 +574,7 @@ group rooms (no Artifacts list) · the notifier's artifacts route · README.md
 **Open gaps**
 - Group rooms' messages aren't listed: a room has no Artifacts list, and its members' replies stay out of the Artifacts page.
 
-**Checked:** 2026-10-24, at #1203; opens and reloads at #1191.
+**Checked:** 2026-10-24, #1218; the page and Show in Chat at #1203; opens and reloads at #1191.
 
 ## Bots: create and edit
 
