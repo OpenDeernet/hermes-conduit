@@ -1538,6 +1538,92 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(WatchVoiceWire.decode([WatchVoiceWire.messageKey: older]), .callsToken(token: "abcd", key: nil))
     }
 
+    // MARK: A Watch answer kept on the iPhone's headset (#1204)
+
+    func testAWatchAnswerStaysOnThePhoneOnlyWithAHeadsetThereAndAWatchThatControlsIt() {
+        XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.bluetoothHFP]), "AirPods on the phone")
+        XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.bluetoothA2DP]))
+        XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.bluetoothLE]))
+        XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.headphones]), "Wired too")
+        XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.builtInReceiver]), "No headset: the Watch has it")
+        XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.builtInSpeaker]))
+        XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: []))
+        XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.carAudio, .bluetoothHFP]), "Never the car's")
+        XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: false, outputs: [.bluetoothHFP]), "An older Watch couldn't end it")
+    }
+
+    func testTheWatchSaysItControlsACallOnThePhoneAndHearsTheCallStayedThere() {
+        let token = WatchVoiceWire.Message.callsToken(token: "abcd", key: "a2V5", engine: "geminiLive", phoneHeadset: true)
+        XCTAssertEqual(WatchVoiceWire.decode(WatchVoiceWire.encode(token)), token)
+        let older = Data(#"{"callsToken":{"token":"abcd","key":"a2V5","engine":"geminiLive"}}"#.utf8)
+        XCTAssertEqual(WatchVoiceWire.decode([WatchVoiceWire.messageKey: older]), .callsToken(token: "abcd", key: "a2V5", engine: "geminiLive", phoneHeadset: nil))
+        let kept = WatchVoiceWire.Message.callOnPhone(callID: 41)
+        XCTAssertEqual(WatchVoiceWire.decode(WatchVoiceWire.encode(kept)), kept)
+
+        XCTAssertEqual(WatchVoiceWire.Message.directStart(callID: 7, version: 2, ring: Self.ringID).watchCallID, 7)
+        XCTAssertEqual(WatchVoiceWire.Message.bridgeStart(callID: 8, version: 2, engine: "gpt", ring: Self.ringID).watchCallRing, Self.ringID)
+        XCTAssertEqual(WatchVoiceWire.Message.localLiveStart(callID: 9, version: 2).watchCallID, 9)
+        XCTAssertNil(WatchVoiceWire.Message.grokStart(callID: 9, version: 2).watchCallRing, "A call of its own answers no ring")
+        XCTAssertNil(kept.watchCallID, "Only a start names a call")
+    }
+
+    func testTheWatchAndThePhoneShareTheKeptCallsMuteAndEndThroughTheRing() throws {
+        let ring = try answeredRing().ring
+        XCTAssertEqual(HermesRingControl.url(ring).absoluteString, "https://push.example/v1/rings/\(Self.ringID)/control")
+
+        let mute = HermesRingControl.setRequest(ring, by: .watch, muted: true)
+        XCTAssertEqual(mute.httpMethod, "POST")
+        let muteBody = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(mute.httpBody)) as? [String: Any])
+        XCTAssertEqual(muteBody["token"] as? String, Self.ringToken)
+        XCTAssertEqual(muteBody["by"] as? String, "watch")
+        XCTAssertEqual(muteBody["muted"] as? Bool, true)
+        XCTAssertNil(muteBody["ended"])
+        let end = HermesRingControl.setRequest(ring, by: .phone, ended: true)
+        let endBody = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(end.httpBody)) as? [String: Any])
+        XCTAssertEqual(endBody["ended"] as? Bool, true)
+        XCTAssertNil(endBody["muted"], "An end leaves the mute alone")
+
+        let read = HermesRingControl.readRequest(ring, after: 3, wait: 45)
+        XCTAssertEqual(read.url?.absoluteString, "https://push.example/v1/rings/\(Self.ringID)/control?after=3&wait=20", "The relay waits 20 s at most")
+        XCTAssertEqual(read.value(forHTTPHeaderField: "Authorization"), "Bearer \(Self.ringToken)")
+
+        let state = Data(#"{"seq":4,"muted":true,"ended":false,"by":"watch"}"#.utf8)
+        XCTAssertEqual(HermesRingControl.readResult(status: 200, data: state), .state(.init(seq: 4, muted: true, ended: false)))
+        XCTAssertEqual(HermesRingControl.readResult(status: 204, data: Data()), .notYet)
+        XCTAssertEqual(HermesRingControl.readResult(status: 404, data: Data()), .gone, "A relay older than 0.17, or a forgotten ring")
+        XCTAssertEqual(HermesRingControl.readResult(status: 200, data: Data("{}".utf8)), .gone)
+        XCTAssertEqual(HermesRingControl.readResult(status: 503, data: Data()), .retry)
+    }
+
+    func testAKeptCallFollowsTheOtherDevicesChangesUntilItEnds() async throws {
+        let ring = try answeredRing().ring
+        var answers: [(Data, Int)] = [
+            (Data(), 204),
+            (Data(#"{"seq":2,"muted":true,"ended":false}"#.utf8), 200),
+            (Data(#"{"seq":2,"muted":true,"ended":false}"#.utf8), 200),
+            (Data(#"{"seq":3,"muted":true,"ended":true}"#.utf8), 200),
+            (Data(), 204),
+        ]
+        var asked: [String] = []
+        var seen: [HermesRingControl.State] = []
+        await HermesRingControl.follow(ring, after: 1, send: { request in
+            asked.append(request.url?.query ?? "")
+            return answers.removeFirst()
+        }) { seen.append($0) }
+        XCTAssertEqual(seen, [.init(seq: 2, muted: true, ended: false), .init(seq: 3, muted: true, ended: true)], "Each change once, until the end")
+        XCTAssertEqual(asked, ["after=1&wait=20", "after=1&wait=20", "after=2&wait=20", "after=2&wait=20"])
+
+        answers = [(Data(), 404)]
+        seen = []
+        await HermesRingControl.follow(ring, after: 0, send: { _ in answers.removeFirst() }) { seen.append($0) }
+        XCTAssertEqual(seen, [], "A relay with no control stops the reads")
+
+        let posted = await HermesRingControl.set(ring, by: .phone, muted: false) { _ in (Data(#"{"seq":1,"muted":false,"ended":false}"#.utf8), 200) }
+        XCTAssertEqual(posted, .init(seq: 1, muted: false, ended: false))
+        let refused = await HermesRingControl.set(ring, by: .phone, muted: false) { _ in (Data(), 404) }
+        XCTAssertNil(refused, "An older relay: the Watch keeps the call")
+    }
+
     // MARK: Ringing the Watch only while its voice can start
 
     func testTheWatchRingsOnlyWhileTheVoiceItAnswersWithCanStart() {

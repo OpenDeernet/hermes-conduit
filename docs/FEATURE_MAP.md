@@ -293,7 +293,8 @@ Pulse (it may call only once the user opts in)
 - Caller name: `Shared/WatchVoice/HermesRing.swift` (HermesCallerName)
 - Trace: `Conduit/Voice/HermesCallTrace.swift`
 - CarPlay: `Conduit/CarPlay/CarPlayVoiceCoordinator.swift`
-- Watch: `ConduitWatch/HermesWatchCalls.swift`, `Conduit/Watch/WatchVoiceLink.swift` (startAnsweredCall), `Shared/WatchVoice/WatchCallVoices.swift` (rings), `Conduit/Watch/WatchDirectBroker.swift` (prepareLocalLive)
+- Watch: `ConduitWatch/HermesWatchCalls.swift` (followPhone, phoneCallMuted, leavePhone), `Conduit/Watch/WatchVoiceLink.swift` (startAnsweredCall), `Shared/WatchVoice/WatchCallVoices.swift` (rings), `Conduit/Watch/WatchDirectBroker.swift` (prepareLocalLive)
+- Answered on the Watch, kept on the iPhone's headset: `Conduit/Voice/HermesNativeCalls.swift` (keepsWatchAnswer, keepFromWatch, watchControlChanged, muteOnWatch, endOnWatch), `Shared/WatchVoice/HermesRing.swift` (HermesRingControl), `ConduitWatch/WatchVoiceCall.swift` (onPhone), `ConduitWatch/WatchCallView.swift`, `ConduitWatch/WatchDirectCallModel.swift` and `ConduitWatch/WatchBridgeCallModel.swift` (callOnPhone), `notifier/relay/src/rings.mjs` (setControl, readControl)
 - Settings: `Conduit/Views/HermesCallSettingsViews.swift`
 - Notifier: `notifier/call_tool.py`, `notifier/calls.py`, `notifier/calls_store.py`, `notifier/call_watches.py`, `notifier/skills/calling-the-user/SKILL.md`, `notifier/relay/src/rings.mjs`
 
@@ -304,10 +305,12 @@ Pulse (it may call only once the user opts in)
 - The call screen names the calling profile; the main profile goes by its Conduit name (2026-10-11, #541).
 - A call about an approval or question is briefed from the chat's card, not the push's short reason, and answered by voice everywhere it can be (see "Hermes is waiting on you"; 2026-10-24, #1194, notifier #343).
 - A Watch that answers starts the call through the relay, since its link to the iPhone is down under the call screen (2026-10-11, #526, notifier #82).
+- Answered on the Watch while the iPhone has a headset on (AirPods, wired), the call stays on the iPhone and plays there, whatever the Watch's voice: the iPhone answers its own ring with its own voice mode, and the Watch's call screen keeps Mute and End, shared through the relay's ring control. With no headset on the iPhone, or a relay older than 0.17, the Watch takes it as before (Eric 2026-10-24, #1204, notifier #354).
 - In the car, CarPlay rings and the Watch stays quiet (2026-10-14, #602).
 
 **Open gaps**
 - A sealed push carries no profile to the Watch, so its call screen says "Hermes" (#541).
+- A call kept on the iPhone's headset hears a mute from CallKit's Mute (the Watch's or the iPhone's call screen) on both devices; the iPhone's in-app Mute doesn't reach the Watch. A relay restart mid-call drops the shared controls, and each device then ends its own side (#1204).
 - The first push after install, before the first status read, can still switch dashboards, and missed-call outcomes are keyed by the pushed dashboard id (#1096).
 
 **Checked:** 2026-10-24, at #1194.
@@ -319,13 +322,15 @@ Where the voice comes out, who owns the audio session, and what mutes what.
 **Siblings:** Classic · Gemini, Grok and Local Live (default and
 echo-cancelling audio) · GPT-Live (WebRTC) · calls from Hermes (CallKit's
 Speaker button) · CarPlay · AirPods and Bluetooth · Read Aloud · the call
-screen's Mute and Silence · the minimised call bar
+screen's Mute and Silence · the minimised call bar · a Watch-answered call
+kept on the iPhone's headset (the Watch's Mute and End)
 
 **Code**
 - Session owner: `Conduit/Voice/VoiceAudioSessionCoordinator.swift` (ensureConversationSpeaker, isNativeCallAudioActive), `Conduit/Voice/VoiceAudioSessionConfiguration.swift`
 - Playback: `Conduit/Voice/AVSpeechPlaybackService.swift` (resumeOnFreshEngine), `Conduit/Voice/VoiceAudioEngineRecovery.swift`
 - Live audio: `Conduit/Voice/GPTLive/GPTLiveAudioLink.swift`, `Conduit/Voice/GeminiLive/LiveVoiceEchoCancellingAudio.swift`, `Conduit/Voice/EchoCancellingVoiceConversationAudio.swift`
 - Mute and Silence: `Conduit/Views/LiveVoiceCallSheet.swift`, `Conduit/Views/MinimisedLiveVoiceBar.swift`, `Conduit/Voice/HeadsetMicrophoneMute.swift`
+- A Watch answer kept on the iPhone's headset: `Conduit/Voice/HermesNativeCalls.swift` (keepsWatchAnswer, muteOnWatch), `ConduitWatch/HermesWatchCalls.swift` (phoneCallMuted)
 - Read Aloud: `Conduit/Voice/MessageReadAloudController.swift`, `Conduit/Views/ReadAloudPlayerBar.swift`
 
 **Rulings**
@@ -333,6 +338,7 @@ screen's Mute and Silence · the minimised call bar
 - A conversation's replies move from the earpiece to the speaker, never during a CallKit call (2026-10-19, #943).
 - Silence mutes the assistant's voice apart from the microphone; its speech is dropped, not held, and job news waits for unmute (2026-10-09, #488).
 - An alarm or phone call pauses a live call, which comes back when the audio does (2026-10-04, #380).
+- A call from Hermes answered on the Watch plays on the iPhone's headset when one is on there (AirPods, wired, never the car's); the Watch's Mute and End control it like a phone call's (Eric 2026-10-24, #1204).
 
 **Open gaps**
 - Silence isn't on CarPlay or the minimised bar (#488).
