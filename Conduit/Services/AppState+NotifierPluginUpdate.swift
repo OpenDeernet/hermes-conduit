@@ -142,15 +142,22 @@ extension AppState {
     private func waitForGatewayAfterNotifierPluginUpdate(dashboardID: UUID?) async -> Bool {
         let started = Date()
         while Date().timeIntervalSince(started) < Self.notifierPluginGatewayWaitLimit {
-            if activeDashboardID == dashboardID, let bridge = dashboardTicketBridge,
-               let json = try? await bridge.requestJSON(path: GatewayRestarter.statusPath) {
-                if json["gateway_running"] == nil { return true }
-                if GatewayRestartGatewayStatus(json: json)?.isServing == true { return true }
-            }
+            if await gatewayServesNow(dashboardID: dashboardID) { return true }
             try? await Task.sleep(for: .seconds(2))
             if Task.isCancelled || activeDashboardID != dashboardID { return false }
         }
         return false
+    }
+
+    /// One `/api/status` read: whether the gateway serves. A Hermes that
+    /// doesn't report its gateway there counts as serving; a failed read
+    /// doesn't.
+    private func gatewayServesNow(dashboardID: UUID?) async -> Bool {
+        guard activeDashboardID == dashboardID, let bridge = dashboardTicketBridge,
+              let json = try? await bridge.requestJSON(path: GatewayRestarter.statusPath),
+              activeDashboardID == dashboardID else { return false }
+        if json["gateway_running"] == nil { return true }
+        return GatewayRestartGatewayStatus(json: json)?.isServing == true
     }
 
     /// Signs in to the dashboard in use again with its saved password, the
@@ -186,13 +193,23 @@ extension AppState {
     /// nothing left to do: the user restarted Hermes. So is "still updating
     /// on the host" once the offered version is running: the host finished
     /// after Conduit stopped following it. Either way the update is done, and
-    /// the notice says so. A failure stays until it's closed: the run's own
-    /// end already checked the plugin and the gateway (an update that landed
-    /// reads as ready there), so what's left is a failure that still holds.
+    /// the notice says so. So is a failure the report contradicts, once the
+    /// gateway serves too: a report or gateway that came back after the run
+    /// stopped waiting.
     func clearSettledNotifierPluginUpdateOutcome() {
         let outcome = activeNotifierPluginUpdate
-        if case .failed = outcome { return }
         guard notifierPlugin.settles(outcome) else { return }
+        if case .failed = outcome {
+            guard !notifierPlugin.updateAvailable else { return }
+            let dashboardID = activeDashboardID
+            Task { [weak self] in
+                guard let self, await self.gatewayServesNow(dashboardID: dashboardID),
+                      self.activeNotifierPluginUpdate == outcome, self.notifierPlugin.settles(outcome),
+                      !self.notifierPlugin.updateAvailable else { return }
+                self.notifierPluginUpdate.settle(as: .updated(version: self.notifierPlugin.runningVersion))
+            }
+            return
+        }
         if notifierPlugin.updateAvailable {
             dismissNotifierPluginUpdateOutcome()
         } else {
