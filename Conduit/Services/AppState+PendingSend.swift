@@ -287,7 +287,7 @@ extension AppState {
             )
         )
         if !onScreen, pending.dashboardID == activeDashboardID, pending.profile == activeProfile {
-            composerNotice = pendingComposerSendNotice(for: pending, onScreen: false, chatIsGone: chatIsGone)
+            composerNotice = pendingComposerSendNotice(for: pending, onScreen: onScreen, chatIsGone: chatIsGone)
         }
     }
 
