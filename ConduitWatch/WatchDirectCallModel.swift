@@ -357,6 +357,9 @@ final class WatchDirectCallModel: ObservableObject {
         let job: WatchJobAnswer.UnsaidJob
         let text: String
         var resent = false
+        /// The check waiting on this send: two jobs can share a notice's
+        /// text, so each send claims one entry.
+        var check: UUID?
     }
     private var unsaidNews: [UnsaidNews] = []
     /// How long a job's outcome may go unspoken after it was sent before it
@@ -2770,17 +2773,20 @@ final class WatchDirectCallModel: ObservableObject {
     /// A job's outcome counts as said once the model has said something
     /// since it went out; one it let pass goes out once more.
     private func checkNewsSpoken(_ text: String, since sentAt: TimeInterval) {
-        guard unsaidNews.contains(where: { $0.text == text }) else { return }
+        guard let claimed = unsaidNews.firstIndex(where: { $0.text == text && $0.check == nil }) else { return }
+        let check = UUID()
+        unsaidNews[claimed].check = check
         let id = callID
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(Self.newsSpeechGrace))
             guard let self, self.callID == id, self.isActive, self.endRequestedAt == nil,
-                  let index = self.unsaidNews.firstIndex(where: { $0.text == text }) else { return }
+                  let index = self.unsaidNews.firstIndex(where: { $0.check == check }) else { return }
             if self.modelSpoke(since: sentAt) || self.unsaidNews[index].resent {
                 self.unsaidNews.remove(at: index)
                 return
             }
             self.unsaidNews[index].resent = true
+            self.unsaidNews[index].check = nil
             WatchCallLog.shared.note("directNewsResent", ["status": self.unsaidNews[index].job.status])
             self.quietQueue.append(.textWhenIdle(text))
             self.flushQuietQueue()

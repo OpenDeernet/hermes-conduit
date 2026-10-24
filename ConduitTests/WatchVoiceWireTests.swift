@@ -1323,6 +1323,10 @@ extension HermesVoiceGatewayTimeoutTests {
         let failed = WatchJobAnswer.UnsaidJob(jobID: "c", title: "Send the report", status: "failed")
         XCTAssertEqual(WatchJobAnswer.listing(none, unsaid: [failed])["summary"], "Send the report failed.")
 
+        // Numbered after the host's highest job, never over one of its own.
+        let gapped = ["summary": "", "job_1": "id=a; title=Book a table; status=running", "job_3": "id=d; title=Tidy up; status=running"]
+        XCTAssertEqual(WatchJobAnswer.listing(gapped, unsaid: [finished])["job_4"], "id=b; title=Check the server; status=finished")
+
         // Already listed by the host, or an error: left as it is.
         let listed = ["summary": "Check the server has finished.", "job_1": "id=b; title=Check the server; status=finished"]
         XCTAssertEqual(WatchJobAnswer.listing(listed, unsaid: [finished]), listed)

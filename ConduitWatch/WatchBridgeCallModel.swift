@@ -227,6 +227,8 @@ final class WatchBridgeCallModel: ObservableObject {
         var text: String
         var channel: GPTLiveProtocol.Channel
         var delegationID: String?
+        /// The settled job whose outcome this says (#1210).
+        var newsJobID: String? = nil
     }
     /// Answers waiting for a quiet moment.
     private var pendingSends: [Pending] = []
@@ -1491,8 +1493,8 @@ final class WatchBridgeCallModel: ObservableObject {
             }
             // A rejoined session doesn't know the old one's delegations.
             let delegationID = item.delegationID.flatMap { delegationConnection[$0] == connection ? $0 : nil }
-            if item.channel == .speakable, let jobID = unsaidNews.first(where: { $0.value.text == item.text })?.key {
-                checkNewsSpoken(jobID, since: now)
+            if let jobID = item.newsJobID, unsaidNews[jobID]?.text == item.text {
+                checkNewsSpoken(jobID, text: item.text, since: now)
             }
             var text = item.text
             if item.channel == .speakable, let asked = item.delegationID {
@@ -1509,12 +1511,13 @@ final class WatchBridgeCallModel: ObservableObject {
 
     /// A job's outcome counts as said once the model has said something
     /// since it went out; one it let pass goes out once more.
-    private func checkNewsSpoken(_ jobID: String, since sentAt: TimeInterval) {
+    /// Newer news for the job replaces the entry and gets its own check.
+    private func checkNewsSpoken(_ jobID: String, text: String, since sentAt: TimeInterval) {
         let id = callID
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(Self.newsSpeechGrace))
             guard let self, self.callID == id, self.isActive, self.endRequestedAt == nil,
-                  let news = self.unsaidNews[jobID] else { return }
+                  let news = self.unsaidNews[jobID], news.text == text else { return }
             if self.modelSpoke(since: sentAt) || news.resent {
                 self.unsaidNews[jobID] = nil
                 self.sendJobStatus()
@@ -1522,7 +1525,7 @@ final class WatchBridgeCallModel: ObservableObject {
             }
             self.unsaidNews[jobID]?.resent = true
             self.note("bridgeNewsResent", ["status": news.status])
-            self.pendingSends.append(Pending(text: news.text, channel: .speakable, delegationID: nil))
+            self.pendingSends.append(Pending(text: news.text, channel: .speakable, delegationID: nil, newsJobID: jobID))
             self.flushPending()
         }
     }
@@ -1667,7 +1670,7 @@ final class WatchBridgeCallModel: ObservableObject {
                 statusChanged = true
             }
             let delegationID = settled ? jobDelegations.removeValue(forKey: item.jobID) : nil
-            pendingSends.append(Pending(text: text, channel: .speakable, delegationID: delegationID))
+            pendingSends.append(Pending(text: text, channel: .speakable, delegationID: delegationID, newsJobID: settled ? item.jobID : nil))
         }
         pendingApproval = approvals.first
         if statusChanged { sendJobStatus() }

@@ -323,7 +323,8 @@ enum WatchJobAnswer {
             return entry.dropFirst(3).split(separator: ";").first.map(String.init)
         })
         var merged = result
-        var number = entries.count
+        // After the host's highest number, in case its numbers have gaps.
+        var number = entries.keys.compactMap { Int($0.dropFirst(4)) }.max() ?? 0
         var lines: [String] = []
         for job in unsaid where !listed.contains(job.jobID) {
             number += 1
