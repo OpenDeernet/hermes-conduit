@@ -558,7 +558,9 @@ final class GroupChatModelsTests: XCTestCase {
         XCTAssertTrue(GroupRoomFollow.following(current: true, userScrolling: false, distanceFromBottom: 900))
         // The user scrolls up: browsing, and new rows don't bring it back.
         XCTAssertFalse(GroupRoomFollow.following(current: true, userScrolling: true, distanceFromBottom: 300))
-        XCTAssertFalse(GroupRoomFollow.following(current: false, userScrolling: false, distanceFromBottom: 0))
+        XCTAssertFalse(GroupRoomFollow.following(current: false, userScrolling: false, distanceFromBottom: 900))
+        // A shrink that lands the reader at the bottom follows again.
+        XCTAssertTrue(GroupRoomFollow.following(current: false, userScrolling: false, distanceFromBottom: 0))
         // The user scrolls back near the bottom: following again.
         XCTAssertTrue(GroupRoomFollow.following(
             current: false, userScrolling: true, distanceFromBottom: GroupRoomFollow.nearBottomTolerance))

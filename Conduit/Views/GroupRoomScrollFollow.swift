@@ -10,15 +10,18 @@ enum GroupRoomFollow {
     /// The chat screen's tolerance (ChatScrollEngine.nearBottomTolerance).
     static let nearBottomTolerance: CGFloat = 40
 
-    /// The follow state after a scroll-offset change. A change the user
-    /// didn't drive (new rows, a programmatic scroll) keeps `current`.
+    /// The follow state after a scroll or layout change. Being near the
+    /// bottom always follows (a trim or a shorter row can land the reader
+    /// there); otherwise only the user's own scroll leaves following, and a
+    /// change they didn't drive (new rows, a programmatic scroll) keeps
+    /// `current`.
     static func following(
         current: Bool,
         userScrolling: Bool,
         distanceFromBottom: CGFloat
     ) -> Bool {
-        guard userScrolling else { return current }
-        return distanceFromBottom <= nearBottomTolerance
+        if distanceFromBottom <= nearBottomTolerance { return true }
+        return userScrolling ? false : current
     }
 }
 
@@ -51,7 +54,7 @@ final class GroupRoomScrollLocatorView: UIView {
     var onChange: ((Bool) -> Void)?
 
     private weak var scrollView: UIScrollView?
-    private var observation: NSKeyValueObservation?
+    private var observations: [NSKeyValueObservation] = []
 
     init() {
         super.init(frame: .zero)
@@ -79,8 +82,8 @@ final class GroupRoomScrollLocatorView: UIView {
     }
 
     func disconnect() {
-        observation?.invalidate()
-        observation = nil
+        observations.forEach { $0.invalidate() }
+        observations = []
         scrollView = nil
     }
 
@@ -93,13 +96,23 @@ final class GroupRoomScrollLocatorView: UIView {
         guard let found = candidate as? UIScrollView, found !== scrollView else { return }
         disconnect()
         scrollView = found
-        observation = found.observe(\.contentOffset, options: [.old, .new]) { [weak self] _, change in
-            guard change.oldValue != change.newValue else { return }
-            if Thread.isMainThread {
-                MainActor.assumeIsolated { self?.scrolled() }
-            } else {
-                DispatchQueue.main.async { self?.scrolled() }
-            }
+        observations = [
+            found.observe(\.contentOffset, options: [.old, .new]) { [weak self] _, change in
+                guard change.oldValue != change.newValue else { return }
+                Self.onMain { self?.scrolled() }
+            },
+            found.observe(\.contentSize, options: [.old, .new]) { [weak self] _, change in
+                guard change.oldValue != change.newValue else { return }
+                Self.onMain { self?.scrolled() }
+            },
+        ]
+    }
+
+    private nonisolated static func onMain(_ body: @escaping @MainActor () -> Void) {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated(body)
+        } else {
+            DispatchQueue.main.async { body() }
         }
     }
 
