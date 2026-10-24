@@ -98,7 +98,7 @@ the host answers with the user's words (`_local_live_call_answer`).
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-24, after #1194, for the Watch's "approved" when nothing ran (notifier 0.70.1).
+**Checked:** 2026-10-24, at #1207 (notifier 0.70.1), for the Watch's "approved" when nothing ran.
 
 ## Voice follow-ups
 

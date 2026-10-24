@@ -104,9 +104,12 @@ enum WatchCallAnswer {
         case "refused":
             return ["error": message ?? "That can't be answered on the Watch. The user can answer it in Conduit on their iPhone."]
         case "failed", "unconfirmed":
-            // An approval Hermes didn't take, or hasn't yet (plugin 0.70.1):
-            // never "approved" then.
-            return ["status": status, "message": (message ?? "It didn't go through. The user can answer it in Conduit on their iPhone.") + " Tell the user in a few words."]
+            // An approval Hermes didn't take, or hasn't confirmed yet (plugin
+            // 0.70.1): never "approved" then.
+            let fallback = status == "failed"
+                ? "It didn't go through. The user can answer it in Conduit on their iPhone."
+                : "Hermes hasn't confirmed it took the answer. The user can check the chat in Conduit."
+            return ["status": status, "message": (message ?? fallback) + " Tell the user in a few words."]
         default:
             return ["status": "not_pending", "message": message ?? "Hermes isn't waiting on the user any more."]
         }

@@ -113,7 +113,9 @@ extension VoiceConversationControllerTests {
         let failed = WatchCallAnswer.result(body: ["ok": true, "status": "failed", "message": "It didn't go through."])
         XCTAssertEqual(failed["status"], "failed")
         XCTAssertTrue(failed["message"]?.hasPrefix("It didn't go through.") == true)
-        XCTAssertEqual(WatchCallAnswer.result(body: ["ok": true, "status": "unconfirmed"])["status"], "unconfirmed")
+        let unconfirmed = WatchCallAnswer.result(body: ["ok": true, "status": "unconfirmed"])
+        XCTAssertEqual(unconfirmed["status"], "unconfirmed")
+        XCTAssertFalse(unconfirmed["message"]?.contains("didn't go through") ?? true, "not known to have failed")
         XCTAssertNotNil(WatchCallAnswer.result(body: ["ok": false, "detail": "choice must be once or deny"])["error"])
 
         XCTAssertEqual(WatchCallAnswer.asksFirstLead, HermesCallWaiting.asksFirstLead, "One lead on the phone and the Watch")
