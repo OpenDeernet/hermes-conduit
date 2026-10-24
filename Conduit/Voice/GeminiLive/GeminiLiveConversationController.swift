@@ -594,6 +594,7 @@ final class GeminiLiveConversationController: ObservableObject {
         // Best effort, as on GPT-Live: the chat still has the exchange.
         pendingContextNotes = []
         withdrawnCallIDs = []
+        respokenJobIDs = []
         tools.connectionReplaced()
         closeOpenEntries()
         phase = .idle
@@ -1360,12 +1361,21 @@ final class GeminiLiveConversationController: ObservableObject {
         guard !pendingTextTurns.isEmpty, isConversationIdle else { return }
         let text = pendingTextTurns.removeFirst()
         let noticeJobID = tools.textUpdateSending(text)
+        let sentAt = now()
         modelTurnActive = true
         // An update that never reached the socket waits for the next
         // connection instead of being lost; a job notice whose conversation
-        // is gone goes back to the supervisor.
-        session.send(.textTurn(text), onSent: { [weak self] in
-            self?.tools.textUpdateDelivered(jobID: noticeJobID)
+        // is gone goes back to the supervisor. One the socket took counts
+        // as told only once the model has said something since: Grok and
+        // Local Live hear every result this way, and a model that lets one
+        // pass in silence hears it once more (#1210).
+        session.send(.textTurn(text), onSent: { [weak self, tools] in
+            guard let self else {
+                tools.textUpdateDelivered(jobID: noticeJobID)
+                return
+            }
+            guard noticeJobID != nil else { return }
+            self.ensureOutcomeSpoken(jobID: noticeJobID, since: sentAt)
         }, onFailure: { [weak self, weak session] in
             guard let self else { return }
             guard self.isActive, self.endRequestedAt == nil, let session, self.session === session else {
@@ -1462,13 +1472,24 @@ final class GeminiLiveConversationController: ObservableObject {
 
     func respeakOutcomeIfSilent(jobID: UUID?, since sentAt: Date) {
         if modelSpoke(since: sentAt) {
+            if let jobID { respokenJobIDs.remove(jobID) }
             tools.outcomeSent(jobID: jobID)
             return
         }
         // No answer came, so no turn is running for it.
         modelTurnActive = false
+        // Said again once: a model that lets it pass twice won't take it a
+        // third time, and the job stays listed until then (#1210).
+        if let jobID, respokenJobIDs.remove(jobID) != nil {
+            tools.outcomeSent(jobID: jobID)
+            return
+        }
+        if let jobID { respokenJobIDs.insert(jobID) }
         reissueAsTextUpdates([jobID])
     }
+
+    /// Jobs whose news the model let pass once and was sent again.
+    private var respokenJobIDs: Set<UUID> = []
 
     /// The call these results were held for was withdrawn: said as text
     /// updates instead.

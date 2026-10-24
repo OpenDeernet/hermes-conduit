@@ -293,6 +293,8 @@ final class WatchDirectCallModel: ObservableObject {
     private var lastUserSpeechAt: TimeInterval?
     private var lastModelTurnEndedAt: TimeInterval?
     private var lastModelAudioAt: TimeInterval?
+    /// The model's last words as text (a turn can come without audio).
+    private var lastModelTranscriptAt: TimeInterval?
     private var awaitingReplySince: TimeInterval?
     /// A tool's answer or a text turn went to the model and its reply
     /// hasn't started yet.
@@ -347,6 +349,19 @@ final class WatchDirectCallModel: ObservableObject {
     private var startJobsTakenSilently = 0
     private var withdrawnToolIDs: Set<String> = []
     private var quietQueue: [WatchVoiceWire.DirectOutgoing] = []
+    /// A job's outcome from its news, queued for the model and not yet
+    /// said: list_jobs still names it (the host counts it told once the
+    /// Watch has it), and a model that lets it pass hears it once more,
+    /// as on the iPhone (#1210).
+    private struct UnsaidNews {
+        let job: WatchJobAnswer.UnsaidJob
+        let text: String
+        var resent = false
+    }
+    private var unsaidNews: [UnsaidNews] = []
+    /// How long a job's outcome may go unspoken after it was sent before it
+    /// is sent once more (GeminiLiveConversationController.outcomeSpeechGrace).
+    static let newsSpeechGrace: TimeInterval = 6
     private var toolCalls = 0
     private var toolsAnsweredLive = 0
     private var toolsUnreachable = 0
@@ -1433,6 +1448,7 @@ final class WatchDirectCallModel: ObservableObject {
         case .outputTranscription(let text):
             guard !suppressingModelTurn else { return }
             modelActed(now)
+            lastModelTranscriptAt = now
             modelTurnActive = true
             awaitingReplySince = nil
             awaitingAnswerSince = nil
@@ -1958,9 +1974,12 @@ final class WatchDirectCallModel: ObservableObject {
             let result: [String: String]
             switch outcome {
             case .answered(let body):
-                result = isFollowUp
+                let answered = isFollowUp
                     ? WatchJobAnswer.followUpResult(WatchJobAnswer.FollowUp(body: body))
                     : WatchJobAnswer.result(body: body)
+                result = wire.name == WatchJobAnswer.listJobs
+                    ? WatchJobAnswer.listing(answered, unsaid: self.unsaidNews.map(\.job))
+                    : answered
                 fields["outcome"] = "answered"
                 fields["status"] = isFollowUp
                     ? (body["outcome"] as? String ?? "error")
@@ -2176,6 +2195,10 @@ final class WatchDirectCallModel: ObservableObject {
             }
             if let text = WatchJobAnswer.notice(for: item, voiceApprovals: relay.voiceApprovals) {
                 quietQueue.append(.textWhenIdle(text))
+                if WatchJobAnswer.settledStatuses.contains(item.status) {
+                    unsaidNews.removeAll { $0.job.jobID == item.jobID }
+                    unsaidNews.append(UnsaidNews(job: .init(jobID: item.jobID, title: item.title, status: item.status), text: text))
+                }
             }
         }
         pendingApproval = approvals.first
@@ -2734,10 +2757,40 @@ final class WatchDirectCallModel: ObservableObject {
             break
         }
         let id = callID
-        session.send(message, onSent: nil, onFailure: { [weak self] in
+        let sentAt = now
+        session.send(message, onSent: { [weak self] in
+            guard let self, self.callID == id, case .textWhenIdle(let text) = item else { return }
+            self.checkNewsSpoken(text, since: sentAt)
+        }, onFailure: { [weak self] in
             guard let self, self.callID == id else { return }
             self.quietQueue.insert(item, at: 0)
         })
+    }
+
+    /// A job's outcome counts as said once the model has said something
+    /// since it went out; one it let pass goes out once more.
+    private func checkNewsSpoken(_ text: String, since sentAt: TimeInterval) {
+        guard unsaidNews.contains(where: { $0.text == text }) else { return }
+        let id = callID
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.newsSpeechGrace))
+            guard let self, self.callID == id, self.isActive, self.endRequestedAt == nil,
+                  let index = self.unsaidNews.firstIndex(where: { $0.text == text }) else { return }
+            if self.modelSpoke(since: sentAt) || self.unsaidNews[index].resent {
+                self.unsaidNews.remove(at: index)
+                return
+            }
+            self.unsaidNews[index].resent = true
+            WatchCallLog.shared.note("directNewsResent", ["status": self.unsaidNews[index].job.status])
+            self.quietQueue.append(.textWhenIdle(text))
+            self.flushQuietQueue()
+        }
+    }
+
+    private func modelSpoke(since at: TimeInterval) -> Bool {
+        if let audio = lastModelAudioAt, audio >= at { return true }
+        if let words = lastModelTranscriptAt, words >= at { return true }
+        return false
     }
 
     private var isQuiet: Bool {
@@ -3241,6 +3294,7 @@ final class WatchDirectCallModel: ObservableObject {
         lastUserSpeechAt = nil
         lastModelTurnEndedAt = nil
         lastModelAudioAt = nil
+        lastModelTranscriptAt = nil
         awaitingReplySince = nil
         awaitingAnswerSince = nil
         unansweredTurns = 0
@@ -3275,6 +3329,7 @@ final class WatchDirectCallModel: ObservableObject {
         startJobsTakenSilently = 0
         withdrawnToolIDs = []
         quietQueue = []
+        unsaidNews = []
         toolCalls = 0
         toolsAnsweredLive = 0
         toolsUnreachable = 0

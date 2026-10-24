@@ -1698,6 +1698,7 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
     }
 
     func statusSummary() -> String { base.statusSummary() }
+    var listedJobs: [VoiceBackgroundJob] { base.listedJobs }
     func cancelAll() async -> String { await base.cancelAll() }
     func cancel(jobID: UUID) async -> String? { await base.cancel(jobID: jobID) }
     func markOutcomeDelivered(jobID: UUID) { base.markOutcomeDelivered(jobID: jobID) }

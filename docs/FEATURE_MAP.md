@@ -155,11 +155,11 @@ the saved transcript's job cards · `docs/VOICE_BACKGROUND_JOBS.md`
 |---|---|
 | Classic | Hermes summarizes it in the call's own session; failures and questions are short spoken notices |
 | Gemini | on the job's own tool call once the model is quiet; sent again as text after 6 s of silence |
-| Grok | a text turn, sent only while quiet |
+| Grok | a text turn, sent only while quiet; sent once more if the model says nothing for 6 s |
 | GPT-Live | on the delegation, after the user has finished talking |
-| Local Live agent | an update, as in the live modes |
+| Local Live agent | an update, as in Grok, checked the same way |
 | Local Live, Hermes turns | dropped: Hermes' reply is already the call's turn |
-| Watch | the relay's job news, at the next quiet moment |
+| Watch | the relay's job news, at the next quiet moment; sent once more if the model says nothing for 6 s |
 
 **Code**
 - All modes: `Conduit/Voice/VoiceBackgroundJobs.swift` (takeNotice, outcomePrompt, showOnScreen, VoiceJobCallAnchor)
@@ -169,7 +169,8 @@ the saved transcript's job cards · `docs/VOICE_BACKGROUND_JOBS.md`
 - Classic: `Conduit/Voice/VoiceConversationController.swift`
 - Call screen: `Conduit/Views/LiveVoiceCallJobs.swift` (LiveVoiceJobCard, LiveVoiceCallTimeline), `Conduit/Services/AppState+PresentedScreens.swift` (cards Hermes shows)
 - Saved transcript: `Conduit/Services/AppState.swift` (voiceJobStartedNote), `Conduit/Voice/VoiceJobLinkNote.swift`, `Conduit/Views/VoiceJobLinkCard.swift`
-- Watch: `Shared/WatchVoice/WatchJobRelay.swift` (notice), `ConduitWatch/WatchDirectCallModel.swift`, `ConduitWatch/WatchBridgeCallModel.swift`
+- Job lists (list_jobs, Classic's status, GPT-Live's status note): `Conduit/Voice/VoiceBackgroundJobs.swift` (listedJobs), `Conduit/Voice/GeminiLive/GeminiLiveToolBridge.swift` (listResult); the Watch's: `Shared/WatchVoice/WatchJobRelay.swift` (listing), `notifier/dashboard/plugin_api.py` (_WatchJobs.list)
+- Watch: `Shared/WatchVoice/WatchJobRelay.swift` (notice), `ConduitWatch/WatchDirectCallModel.swift` (checkNewsSpoken), `ConduitWatch/WatchBridgeCallModel.swift` (checkNewsSpoken)
 - Notifier (Watch relay jobs): `notifier/dashboard/plugin_api.py`
 
 **Rulings**

@@ -1469,7 +1469,7 @@ final class GPTLiveDelegationBridge {
     /// The jobs' state as quiet context, so the model can answer "how's it
     /// going" itself. Not UI copy.
     func statusContext() -> String {
-        let visible = supervisor.jobs.filter { !$0.isThreadTurn && ($0.status.isActive || !$0.outcomeDelivered) }
+        let visible = supervisor.listedJobs
         guard !visible.isEmpty else { return "[Background jobs: none running.]" }
         let lines = visible.map { "Job \($0.number) (\($0.title)): \(GeminiLiveToolBridge.statusName($0.status))" }
         return "[Background jobs on Hermes: " + lines.joined(separator: "; ") + ".]"

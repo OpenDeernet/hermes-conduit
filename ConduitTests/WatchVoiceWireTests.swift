@@ -1307,4 +1307,27 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(Int(GrokLiveProtocol.inputSampleRate), 24_000)
         XCTAssertEqual(Int(GrokLiveProtocol.outputSampleRate), 24_000)
     }
+
+    /// #1210: the host counts a job's outcome told once the Watch has it,
+    /// but the Watch says it only at a quiet moment: list_jobs names it
+    /// until then, as the iPhone does.
+    func testWatchListJobsNamesJobsWhoseOutcomeTheWatchHasNotSaid() {
+        let finished = WatchJobAnswer.UnsaidJob(jobID: "b", title: "Check the server", status: "finished")
+        let running = ["ok": "true", "summary": "Book a table is still running.", "job_1": "id=a; title=Book a table; status=running"]
+        let merged = WatchJobAnswer.listing(running, unsaid: [finished])
+        XCTAssertEqual(merged["job_1"], running["job_1"])
+        XCTAssertEqual(merged["job_2"], "id=b; title=Check the server; status=finished")
+        XCTAssertEqual(merged["summary"], "Book a table is still running. Check the server has finished.")
+
+        let none = ["summary": WatchJobAnswer.noJobsSummary]
+        let failed = WatchJobAnswer.UnsaidJob(jobID: "c", title: "Send the report", status: "failed")
+        XCTAssertEqual(WatchJobAnswer.listing(none, unsaid: [failed])["summary"], "Send the report failed.")
+
+        // Already listed by the host, or an error: left as it is.
+        let listed = ["summary": "Check the server has finished.", "job_1": "id=b; title=Check the server; status=finished"]
+        XCTAssertEqual(WatchJobAnswer.listing(listed, unsaid: [finished]), listed)
+        let error = ["error": "Hermes couldn't run that on the Watch's behalf."]
+        XCTAssertEqual(WatchJobAnswer.listing(error, unsaid: [finished]), error)
+    }
+
 }

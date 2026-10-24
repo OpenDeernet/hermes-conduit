@@ -230,6 +230,21 @@ final class WatchBridgeCallModel: ObservableObject {
     }
     /// Answers waiting for a quiet moment.
     private var pendingSends: [Pending] = []
+    /// A settled job's outcome from its news, not yet said: the status
+    /// context still names it, and a model that lets it pass hears it once
+    /// more, as on the iPhone (#1210). By job id.
+    private struct UnsaidNews {
+        let title: String
+        let status: String
+        let text: String
+        var resent = false
+    }
+    private var unsaidNews: [String: UnsaidNews] = [:]
+    /// The model's last words as text.
+    private var lastModelWordsAt: TimeInterval?
+    /// How long a job's outcome may go unspoken after it was sent before it
+    /// is sent once more (GeminiLiveConversationController.outcomeSpeechGrace).
+    static let newsSpeechGrace: TimeInterval = 6
     private var seenDelegations: Set<String> = []
     /// Each delegation's connection: a rejoined session can't take an
     /// answer on the old one's delegations, so those go as session context.
@@ -827,6 +842,7 @@ final class WatchBridgeCallModel: ObservableObject {
             userLine += words
             caption = String(userLine.suffix(120))
         case .outputTranscript(let words):
+            lastModelWordsAt = now
             assistantLine += words
             caption = String(assistantLine.suffix(120))
         case .turnDone(let role, let words):
@@ -1475,6 +1491,9 @@ final class WatchBridgeCallModel: ObservableObject {
             }
             // A rejoined session doesn't know the old one's delegations.
             let delegationID = item.delegationID.flatMap { delegationConnection[$0] == connection ? $0 : nil }
+            if item.channel == .speakable, let jobID = unsaidNews.first(where: { $0.value.text == item.text })?.key {
+                checkNewsSpoken(jobID, since: now)
+            }
             var text = item.text
             if item.channel == .speakable, let asked = item.delegationID {
                 if userSpokeAfter(asked) { text = WatchBridgeDelegation.resultAfterUserNote + text }
@@ -1486,6 +1505,32 @@ final class WatchBridgeCallModel: ObservableObject {
             }
         }
         pendingSends = kept
+    }
+
+    /// A job's outcome counts as said once the model has said something
+    /// since it went out; one it let pass goes out once more.
+    private func checkNewsSpoken(_ jobID: String, since sentAt: TimeInterval) {
+        let id = callID
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.newsSpeechGrace))
+            guard let self, self.callID == id, self.isActive, self.endRequestedAt == nil,
+                  let news = self.unsaidNews[jobID] else { return }
+            if self.modelSpoke(since: sentAt) || news.resent {
+                self.unsaidNews[jobID] = nil
+                self.sendJobStatus()
+                return
+            }
+            self.unsaidNews[jobID]?.resent = true
+            self.note("bridgeNewsResent", ["status": news.status])
+            self.pendingSends.append(Pending(text: news.text, channel: .speakable, delegationID: nil))
+            self.flushPending()
+        }
+    }
+
+    private func modelSpoke(since at: TimeInterval) -> Bool {
+        if let loud = lastLoudAt, loud >= at { return true }
+        if let words = lastModelWordsAt, words >= at { return true }
+        return false
     }
 
     /// The user said more after asking for this, as the phone checks:
@@ -1556,8 +1601,11 @@ final class WatchBridgeCallModel: ObservableObject {
     /// The phone's job status context: GPT-Live answers "how's my job
     /// going?" from it instead of delegating or guessing.
     private func sendJobStatus() {
+        // A settled job is named until its outcome is said, as the iPhone
+        // lists it (#1210).
         let jobs = jobNumbers.sorted { $0.key < $1.key }.compactMap { entry in
             runningJobs[entry.value].map { (number: entry.key, title: $0.title, status: $0.status) }
+                ?? unsaidNews[entry.value].map { (number: entry.key, title: $0.title, status: $0.status) }
         }
         answer(nil, WatchBridgeDelegation.statusContext(jobs), channel: .commentary)
     }
@@ -1614,6 +1662,10 @@ final class WatchBridgeCallModel: ObservableObject {
             // GPT-Live can't answer an approval here: the user taps it.
             guard let text = WatchJobAnswer.notice(for: item, voiceApprovals: false) else { continue }
             let settled = ["finished", "failed", "cancelled"].contains(item.status)
+            if settled {
+                unsaidNews[item.jobID] = UnsaidNews(title: Self.jobTitle(item.title), status: item.status, text: text)
+                statusChanged = true
+            }
             let delegationID = settled ? jobDelegations.removeValue(forKey: item.jobID) : nil
             pendingSends.append(Pending(text: text, channel: .speakable, delegationID: delegationID))
         }
@@ -1852,6 +1904,8 @@ final class WatchBridgeCallModel: ObservableObject {
         endPhrases = []
         goodbyeHeardAt = nil
         pendingSends = []
+        unsaidNews = [:]
+        lastModelWordsAt = nil
         seenDelegations = []
         delegationConnection = [:]
         delegationUserLines = [:]
