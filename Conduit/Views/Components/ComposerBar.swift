@@ -54,6 +54,9 @@ struct ComposerBar: View, Equatable {
     /// The latest replacement puts the cursor after the text.
     @State private var composerCursorAtEnd = false
     @State private var loadedDraftKey: ComposerDraftKey?
+    /// The store's clear count when the draft was loaded: a sign-out or a
+    /// server switch since then cleared the store on purpose.
+    @State private var loadedDraftClearCount: UInt64 = 0
     @State private var photoImportContext: AsyncAttachmentContext?
     @State private var photoImportGeneration: UInt64 = 0
     @State private var documentImportContext: AsyncAttachmentContext?
@@ -124,6 +127,17 @@ struct ComposerBar: View, Equatable {
             profile: profile,
             sessionID: sessionID ?? ComposerDraftKey.newConversationSessionID
         )
+    }
+
+    /// The draft a composer that's going away keeps: the one in the field,
+    /// unless the store was cleared since it was loaded.
+    static func draftKeyToKeepOnDisappear(
+        loaded: ComposerDraftKey?,
+        loadedClearCount: UInt64,
+        storeClearCount: UInt64
+    ) -> ComposerDraftKey? {
+        guard loadedClearCount == storeClearCount else { return nil }
+        return loaded
     }
 
     /// A prefill goes in only over the draft it was made for, or the same
@@ -522,11 +536,17 @@ struct ComposerBar: View, Equatable {
             if voiceMessages.isActive, !voiceMessages.isSending { voiceMessages.cancel() }
             collapseTask?.cancel()
             collapseTask = nil
-            // Dependable second hook: whether this view leaves for a room,
-            // a session switch, or teardown, the typed text lands in the
-            // app-lifetime store first.
-            if appState.activeRoomSurface != nil {
-                saveDraft(for: activeDraftKey)
+            // Dependable second hook: whether this view leaves for a room
+            // or the chat is closed (Back, another chat from the list), the
+            // field lands in the app-lifetime store under the draft it
+            // holds. A sign-out or server switch cleared the store on
+            // purpose, so nothing goes back in after one.
+            if let key = Self.draftKeyToKeepOnDisappear(
+                loaded: loadedDraftKey,
+                loadedClearCount: loadedDraftClearCount,
+                storeClearCount: draftStore.clearCount
+            ) {
+                saveDraft(for: key)
             }
         }
         // A session resume can complete before the gateway has refreshed its
@@ -2104,6 +2124,7 @@ struct ComposerBar: View, Equatable {
         attachments = draft.attachments
         replyReference = draft.replyReference
         loadedDraftKey = key
+        loadedDraftClearCount = draftStore.clearCount
         composerTextHeight = ComposerPasteTextView.minimumHeight
         isFocused = false
         isShowingSlashSuggestions = false

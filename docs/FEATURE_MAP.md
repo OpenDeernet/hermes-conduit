@@ -604,6 +604,39 @@ Read Aloud and live voice read-back · chat list previews and quotes
 
 **Checked:** 2026-10-23, at #1175.
 
+## Composer drafts
+
+Unsent words, files and a quoted reply wait in the composer they were typed
+in until they're sent, whichever way the user leaves.
+
+**Siblings:** chat composer (chats, project chats, Bot Chat) · New Chat ·
+a saved copy's composer and its waiting message ("Sends when connected") ·
+group rooms · the full editor · the notices that say where words went
+
+| Leaving by | Chat composer | Group room |
+|---|---|---|
+| Back, or another chat from the list | text, files and quote kept | text and files kept |
+| A room opened over the chat | kept | not applicable |
+| Sign-out or another server | dropped | dropped, files deleted |
+| The room disbanded or left the list | not applicable | dropped, files deleted |
+
+**Code**
+- Chat composer: `Conduit/Views/Components/ComposerBar.swift` (loadDraft, saveDraft, handoffComposer, onDisappear), `Conduit/Views/Components/ComposerDraftStore.swift`
+- Waiting message: `Conduit/Services/AppState+PendingSend.swift` (returnPendingComposerSendToDraft, pendingComposerSendNotice), `Conduit/Models/PendingComposerSend.swift`
+- Group rooms: `Conduit/Views/Components/GroupRoomComposer.swift`, `Conduit/Services/AppState.swift` (activeRoomDraft, activeRoomAttachments, pruneRoomStores)
+- Tests: `ConduitTests/ComposerDraftStoreTests.swift`, `ConduitTests/GroupChatSessionSafetyTests.swift`, `ConduitTests/OfflineChatCacheTests.swift`
+
+**Rulings**
+- Drafts live in memory per (profile, chat), and a sign-out or server switch clears them on purpose; a composer that goes away after the clear doesn't put its draft back (2026-10-24, #996).
+- A waiting message is never sent on its own after it's handed back. When Hermes says its chat is gone, its words go into the composer on screen, unsent, with a notice saying so (2026-10-24, #996).
+
+**Open gaps**
+- Drafts don't outlive Conduit being stopped; only a waiting message does (as a file).
+- A waiting message left from an earlier run whose chat is gone still goes back into that chat's draft: the gone chats are only known for this run.
+- A room's quoted message and its "To" picks aren't kept when the room is left.
+
+**Checked:** 2026-10-24, at #996's fix.
+
 ## Feature map rules
 
 How a change brings its connected features along, and how this map stays
