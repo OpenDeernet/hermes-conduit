@@ -430,6 +430,99 @@ enum BotAvatarImage {
 struct BotProfileDetails: Equatable {
     var description: String
     var soul: String
+    /// The profile's own `model.provider` / `model.default`; empty when it
+    /// has no pin of its own.
+    var provider: String = ""
+    var model: String = ""
+    var capabilities = BotCapabilities()
+}
+
+/// One skill, toolset or MCP server a profile can turn on or off.
+struct BotCapability: Equatable, Identifiable {
+    var name: String
+    var label: String?
+    var description: String = ""
+    var toolCount: Int?
+    var enabled: Bool
+
+    var id: String { name }
+}
+
+/// `profiles.describe`'s skills, toolsets and MCP servers (upstream
+/// `profile-config.tsx` `AdvancedProfileConfig`).
+struct BotCapabilities: Equatable {
+    var skills: [BotCapability] = []
+    var toolsets: [BotCapability] = []
+    var mcpServers: [BotCapability] = []
+
+    var isEmpty: Bool { skills.isEmpty && toolsets.isEmpty && mcpServers.isEmpty }
+
+    init(skills: [BotCapability] = [], toolsets: [BotCapability] = [], mcpServers: [BotCapability] = []) {
+        self.skills = skills
+        self.toolsets = toolsets
+        self.mcpServers = mcpServers
+    }
+
+    init(describe object: [String: AnyCodable]) {
+        func rows(_ key: String) -> [BotCapability] {
+            (object[key]?.arrayValue ?? []).compactMap { row in
+                guard let item = row.objectValue,
+                      let name = item["name"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !name.isEmpty else { return nil }
+                let label = item["label"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return BotCapability(
+                    name: name,
+                    label: label?.isEmpty == false ? label : nil,
+                    description: item["description"]?.stringValue ?? "",
+                    toolCount: item["tool_count"]?.intValue,
+                    // An MCP entry without the flag is on, as the runtime reads it.
+                    enabled: item["enabled"]?.boolValue ?? (key == "mcp_servers")
+                )
+            }
+        }
+        skills = rows("skills").sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        toolsets = rows("toolsets")
+        mcpServers = rows("mcp_servers")
+    }
+
+    /// The `profiles.configure` sections for what `edited` changed from
+    /// `original`; an untouched section is never written. Toolsets all on
+    /// clear the pin so the platform default applies, as Desktop does.
+    /// Hermes reads an empty list the same way, so all off can't be said:
+    /// the editor keeps the last tool on (`canTurnOffToolset`). MCP is a
+    /// plain on/off per server, so an empty list does mean none.
+    static func configureParams(original: BotCapabilities, edited: BotCapabilities) -> [String: Any] {
+        func enabledNames(_ rows: [BotCapability]) -> Set<String> { Set(rows.filter(\.enabled).map(\.name)) }
+        var params: [String: Any] = [:]
+        if enabledNames(edited.skills) != enabledNames(original.skills) {
+            params["disabled_skills"] = edited.skills.filter { !$0.enabled }.map(\.name)
+        }
+        if enabledNames(edited.toolsets) != enabledNames(original.toolsets) {
+            let enabled = edited.toolsets.filter(\.enabled).map(\.name)
+            params["enabled_toolsets"] = enabled.count == edited.toolsets.count ? [String]() : enabled
+        }
+        if enabledNames(edited.mcpServers) != enabledNames(original.mcpServers) {
+            params["enabled_mcp_servers"] = edited.mcpServers.filter(\.enabled).map(\.name)
+        }
+        return params
+    }
+
+    /// Whether the toolset at `index` may be turned off: never the last one
+    /// on, since no tools on would save as Hermes' default tools.
+    func canTurnOffToolset(at index: Int) -> Bool {
+        guard toolsets.indices.contains(index), toolsets[index].enabled else { return true }
+        return toolsets.filter(\.enabled).count > 1
+    }
+
+    /// The `applied` keys `configureParams` sections report under (the
+    /// gateway's `_configure_cfg_sections` names them so, not by field).
+    static func appliedSections(for params: [String: Any]) -> [String] {
+        var sections: [String] = []
+        if params["disabled_skills"] != nil { sections.append("skills") }
+        if params["enabled_toolsets"] != nil { sections.append("toolsets") }
+        if params["enabled_mcp_servers"] != nil { sections.append("mcp_servers") }
+        return sections
+    }
 }
 
 /// The bot editor's form, shared by create and edit.
@@ -444,11 +537,96 @@ struct BotEditorDraft: Equatable {
     var newAvatarPNG: Data?
     /// The user removed the existing picture.
     var removesAvatar = false
+
+    // Advanced (Desktop's New Bot "Advanced" section).
+    /// The profile a new bot copies its settings from: the main profile
+    /// (Desktop's default), another bot, or "" for a fresh profile with the
+    /// bundled skills.
+    var cloneFrom: String = BotCreateRequest.mainProfile
+    /// A provider and model pin. Both empty: a new bot inherits the main
+    /// profile's model, an edited bot keeps its own.
+    var provider: String = ""
+    var model: String = ""
+    /// Share (not copy) the main profile's keys and accounts, so a token
+    /// refresh in one never signs the other out.
+    var shareAuth = true
+    /// Skip the bundled skills.
+    var noSkills = false
+    /// Skills, toolsets and MCP servers as the user left them, and as they
+    /// were loaded (for a new bot: its Start From profile's). Nil until
+    /// loaded; only changed sections are written.
+    var capabilities: BotCapabilities?
+    var capabilitiesBaseline: BotCapabilities?
+}
+
+/// Upstream `create-dialog.tsx` `ensureAgentCreated`: the `profiles.create`
+/// parameters for a new bot.
+enum BotCreateRequest {
+    /// The profile Desktop clones by default.
+    static let mainProfile = "default"
+
+    static func params(slug: String, description: String, soul: String, draft: BotEditorDraft) -> [String: Any] {
+        var params: [String: Any] = [
+            "name": slug,
+            "description": description,
+            "soul": soul,
+            "no_skills": draft.noSkills,
+            "share_auth": draft.shareAuth
+        ]
+        let cloneFrom = draft.cloneFrom.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Omitted = a fresh profile with the bundled skills.
+        if !cloneFrom.isEmpty { params["clone_from"] = cloneFrom }
+        let provider = draft.provider.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = draft.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The gateway pins a model only with both; one alone inherits.
+        if !provider.isEmpty, !model.isEmpty {
+            params["provider"] = provider
+            params["model"] = model
+        }
+        return params
+    }
+
+    /// Whether a model the create asked for was pinned. `profiles.create`
+    /// reports a failed pin only as `model_set: false`; an older gateway
+    /// that omits the key counts as pinned.
+    static func modelPinned(_ params: [String: Any], result: AnyCodable) -> Bool {
+        guard params["model"] != nil else { return true }
+        return result.objectValue?["model_set"]?.boolValue != false
+    }
+}
+
+/// `setup.runtime_check` for a new bot: can its profile reach a model?
+/// Only an explicit `ok: false` counts, so an older gateway goes ahead as
+/// before (upstream `create-dialog.tsx` `submit`).
+enum BotRuntimeCheck {
+    static func needsModel(_ result: AnyCodable?) -> Bool {
+        result?.objectValue?["ok"]?.boolValue == false
+    }
+}
+
+/// A `profiles.configure` model pin the gateway would not write unasked
+/// (an expensive or data-training model): its `confirm_message`.
+enum BotModelConfirmation {
+    static func message(in result: AnyCodable) -> String? {
+        let object = result.objectValue ?? [:]
+        guard object["confirm_required"]?.boolValue == true else { return nil }
+        // `warning` is the older gateways' name for the same text.
+        let message = [object["confirm_message"], object["warning"]]
+            .lazy
+            .compactMap { $0?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? ""
+        return message.isEmpty ? AppLocalization.string("Hermes requires confirmation before using this model.") : message
+    }
 }
 
 /// What a create or edit came to. `saved` with a warning means the bot was
 /// written but a best-effort part (look, picture, personality) was not.
 enum BotSaveResult: Equatable {
-    case saved(warning: String?)
+    /// `needsModel`: a new bot that cannot reach a model yet, so it skips
+    /// its introduction.
+    case saved(warning: String?, needsModel: Bool = false)
+    /// Everything else saved; the model pin waits for the user to confirm
+    /// the gateway's message.
+    case confirmModel(String)
     case failed(String)
 }

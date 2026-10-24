@@ -19,8 +19,9 @@ struct BotEditorSheet: View {
 
     let mode: Mode
     /// Called after a successful save, with the new bot's profile name (for
-    /// a create) and any best-effort part that did not save.
-    let onFinished: (_ createdBotName: String?, _ warning: String?) -> Void
+    /// a create), any best-effort part that did not save, and whether the
+    /// new bot can introduce itself (its profile reaches a model).
+    let onFinished: (_ createdBotName: String?, _ warning: String?, _ introduces: Bool) -> Void
 
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -32,7 +33,16 @@ struct BotEditorSheet: View {
     @State private var error: String?
     @State private var showingImagePicker = false
     @State private var pickedImage: UIImage?
+    /// Whether Hermes can generate pictures; nil until asked.
+    @State private var canGeneratePictures: Bool?
+    @State private var showingGenerator = false
     @State private var seeded = false
+    @State private var showsAdvanced = false
+    /// The gateway's message for a model pick it wants confirmed.
+    @State private var modelConfirmation: String?
+    @State private var capabilitiesLoadFailed = false
+    /// The Start From profile the staged lists were read from.
+    @State private var capabilitiesSource: String?
 
     private enum DetailsState {
         case idle, loading, loaded, failed
@@ -72,6 +82,7 @@ struct BotEditorSheet: View {
                     Text(AppLocalization.string("Description"))
                 }
                 personalitySection
+                advancedSection
             }
             .navigationTitle(isCreating ? AppLocalization.string("New Bot") : AppLocalization.string("Edit Bot"))
             .navigationBarTitleDisplayMode(.inline)
@@ -92,22 +103,49 @@ struct BotEditorSheet: View {
                 }
             }
         }
-        .interactiveDismissDisabled(isSaving)
+        // Also while the model alert is up: a swipe would drop the pick
+        // without saying so.
+        .interactiveDismissDisabled(isSaving || modelConfirmation != nil)
+        .alert(
+            AppLocalization.string("Use This Model?"),
+            isPresented: Binding(
+                get: { modelConfirmation != nil },
+                set: { if !$0 { modelConfirmation = nil } }
+            ),
+            presenting: modelConfirmation
+        ) { _ in
+            Button(AppLocalization.string("Use Anyway")) { confirmModel() }
+            Button(AppLocalization.string("Cancel"), role: .cancel) {
+                // Everything else already saved; only the model stays.
+                dismiss()
+                onFinished(nil, AppLocalization.string("The model was not saved."), false)
+            }
+        } message: { message in
+            Text(verbatim: message)
+        }
         .sheet(isPresented: $showingImagePicker) {
             ImagePicker(image: $pickedImage)
         }
+        .sheet(isPresented: $showingGenerator) {
+            GeneratePictureSheet(
+                defaultPrompt: PictureGeneration.botPrompt(
+                    name: draft.name.isEmpty ? editedBot?.displayLabel ?? "" : draft.name,
+                    description: draft.description
+                ),
+                forGroup: false
+            ) { image in
+                usePicture(image)
+            }
+            .environmentObject(appState)
+        }
         .onChange(of: pickedImage) { _, image in
             guard let image else { return }
-            if let png = BotAvatarImage.normalizedPNG(from: image) {
-                draft.newAvatarPNG = png
-                draft.removesAvatar = false
-                error = nil
-            } else {
-                error = AppLocalization.string("That picture could not be used.")
-            }
+            usePicture(image)
             pickedImage = nil
         }
+        .task { canGeneratePictures = await appState.refreshPictureGeneration() }
         .task { await seed() }
+        .task(id: capabilitySource) { await loadStartFromCapabilities() }
         .task {
             // The stored picture, independent of whether the roster row's
             // fetch succeeded.
@@ -141,6 +179,15 @@ struct BotEditorSheet: View {
                     Label(AppLocalization.string("Choose Photo"), systemImage: "photo")
                 }
                 .buttonStyle(.bordered)
+                if canGeneratePictures == true {
+                    Button {
+                        Haptics.light()
+                        showingGenerator = true
+                    } label: {
+                        Label(AppLocalization.string("Generate"), systemImage: "sparkles")
+                    }
+                    .buttonStyle(.bordered)
+                }
                 if previewImage != nil || (hasStoredAvatar && !draft.removesAvatar) {
                     Button(role: .destructive) {
                         Haptics.light()
@@ -166,9 +213,26 @@ struct BotEditorSheet: View {
                 }
             }
             .font(.subheadline)
+            if canGeneratePictures == false {
+                Text(AppLocalization.string("Set up image generation in Hermes to generate pictures."))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 4)
+    }
+
+    /// A chosen or generated picture, scaled to the stored square.
+    private func usePicture(_ image: UIImage) {
+        if let png = BotAvatarImage.normalizedPNG(from: image) {
+            draft.newAvatarPNG = png
+            draft.removesAvatar = false
+            error = nil
+        } else {
+            error = AppLocalization.string("That picture could not be used.")
+        }
     }
 
     private var pictureStateDescription: String {
@@ -314,6 +378,166 @@ struct BotEditorSheet: View {
         }
     }
 
+    /// Desktop's Advanced disclosure. Creating: where the profile starts
+    /// from, its model, skills, tools and MCP, shared keys and bundled
+    /// skills. Editing: its model, skills, tools and MCP, once the bot's
+    /// details have loaded.
+    @ViewBuilder
+    private var advancedSection: some View {
+        if isCreating || detailsState == .loaded {
+            Section {
+                Button {
+                    Haptics.light()
+                    withAnimation { showsAdvanced.toggle() }
+                } label: {
+                    HStack {
+                        Text(AppLocalization.string("Advanced"))
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(showsAdvanced ? 90 : 0))
+                            .accessibilityHidden(true)
+                    }
+                }
+                .accessibilityValue(Text(showsAdvanced ? AppLocalization.string("Shown") : AppLocalization.string("Hidden")))
+                if showsAdvanced {
+                    if isCreating {
+                        Picker(AppLocalization.string("Start From"), selection: startFromSelection) {
+                            Text(AppLocalization.string("Main Profile")).tag(BotCreateRequest.mainProfile)
+                            ForEach(cloneSources, id: \.name) { bot in
+                                Text(verbatim: bot.displayLabel).tag(bot.name)
+                            }
+                            Text(AppLocalization.string("Fresh Profile")).tag("")
+                        }
+                    }
+                    NavigationLink {
+                        BotModelPicker(provider: $draft.provider, model: $draft.model, allowsInherit: isCreating)
+                    } label: {
+                        LabeledContent(AppLocalization.string("Model")) {
+                            Text(verbatim: BotModelPicker.summary(model: draft.model, allowsInherit: isCreating))
+                        }
+                    }
+                    capabilitiesRow
+                    if isCreating {
+                        Toggle(AppLocalization.string("Share Keys and Accounts"), isOn: $draft.shareAuth)
+                        Toggle(AppLocalization.string("Skip Bundled Skills"), isOn: $draft.noSkills)
+                    }
+                }
+            } footer: {
+                if showsAdvanced, isCreating {
+                    Text(AppLocalization.string("Shared keys and accounts stay one set with the main profile, so a sign-in refresh in one never signs the other out. Turn it off for a separate copy."))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var capabilitiesRow: some View {
+        if isCreating, draft.cloneFrom.isEmpty {
+            // Nothing to diff against before the profile exists: a fresh
+            // one starts with Hermes' own defaults.
+            Text(draft.noSkills
+                ? AppLocalization.string("A fresh profile starts with Hermes' default tools. Edit the bot afterwards to change them.")
+                : AppLocalization.string("A fresh profile starts with Hermes' bundled skills and default tools. Edit the bot afterwards to change them."))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } else if draft.capabilities != nil {
+            NavigationLink {
+                BotCapabilitiesView(
+                    capabilities: Binding(
+                        get: { draft.capabilities ?? BotCapabilities() },
+                        set: { draft.capabilities = $0 }
+                    ),
+                    skillsSkipped: isCreating && draft.noSkills,
+                    sourceLabel: isCreating ? startFromLabel : nil
+                )
+            } label: {
+                Text(AppLocalization.string("Skills, Tools and MCP"))
+            }
+        } else if capabilitiesLoadFailed {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(AppLocalization.string("Could not load skills, tools or MCP servers."))
+                    .foregroundStyle(.secondary)
+                Button(AppLocalization.string("Try Again")) {
+                    Task { await loadStartFromCapabilities() }
+                }
+            }
+        } else {
+            LabeledContent(AppLocalization.string("Skills, Tools and MCP")) {
+                ProgressView()
+            }
+        }
+    }
+
+    /// The profile a new bot's skills, tools and MCP lists are read from
+    /// while Advanced is open: its Start From profile. Nil when nothing
+    /// should load, a fresh start included: its real set is Hermes'
+    /// defaults, which no profile here shows (Desktop reads the main
+    /// profile's and diffs against it).
+    private var capabilitySource: String? {
+        guard isCreating, showsAdvanced, !draft.cloneFrom.isEmpty else { return nil }
+        return draft.cloneFrom
+    }
+
+    private var startFromLabel: String {
+        let source = capabilitySource ?? BotCreateRequest.mainProfile
+        if BotManagement.isDefaultProfile(source) { return AppLocalization.string("Main Profile") }
+        return appState.botRoster.first { $0.name == source }?.displayLabel ?? source
+    }
+
+    /// A new Start From pick replaces the staged lists: picks made against
+    /// another profile's set don't carry over.
+    private func loadStartFromCapabilities() async {
+        guard let source = capabilitySource else {
+            // Picks made against another profile don't carry to a fresh one.
+            if isCreating, draft.cloneFrom.isEmpty {
+                capabilitiesSource = nil
+                draft.capabilities = nil
+                draft.capabilitiesBaseline = nil
+                capabilitiesLoadFailed = false
+            }
+            return
+        }
+        guard source != capabilitiesSource || draft.capabilities == nil else { return }
+        capabilitiesSource = source
+        draft.capabilities = nil
+        draft.capabilitiesBaseline = nil
+        capabilitiesLoadFailed = false
+        let loaded = await appState.loadBotCapabilities(startingFrom: source)
+        // A Try Again isn't cancelled with the task: a newer Start From wins.
+        guard !Task.isCancelled, source == capabilitySource else { return }
+        if let loaded {
+            draft.capabilities = loaded
+            draft.capabilitiesBaseline = loaded
+        } else {
+            capabilitiesSource = nil
+            capabilitiesLoadFailed = true
+        }
+    }
+
+    /// Start From, dropping the staged lists at once: a Create before the
+    /// new profile's lists load must not send the old profile's picks.
+    private var startFromSelection: Binding<String> {
+        Binding(
+            get: { draft.cloneFrom },
+            set: { source in
+                guard source != draft.cloneFrom else { return }
+                draft.cloneFrom = source
+                capabilitiesSource = nil
+                draft.capabilities = nil
+                draft.capabilitiesBaseline = nil
+                capabilitiesLoadFailed = false
+            }
+        )
+    }
+
+    /// Bots a new one can copy its settings from, besides the main profile.
+    private var cloneSources: [BotProfile] {
+        appState.botRoster.filter { !BotManagement.isDefaultProfile($0.name) }
+    }
+
     // MARK: State
 
     private var avatarName: String {
@@ -370,6 +594,9 @@ struct BotEditorSheet: View {
             draft.description = loaded.description
         }
         draft.soul = loaded.soul
+        draft.provider = loaded.provider
+        draft.model = loaded.model
+        draft.capabilities = loaded.capabilities
         detailsState = .loaded
     }
 
@@ -392,10 +619,35 @@ struct BotEditorSheet: View {
             case .failed(let message):
                 Haptics.warning()
                 error = message
-            case .saved(let warning):
-                Haptics.success()
+            case .saved(let warning, let needsModel):
+                if warning == nil { Haptics.success() } else { Haptics.warning() }
                 dismiss()
-                onFinished(createdName, warning)
+                onFinished(createdName, warning, createdName != nil && !needsModel)
+            case .confirmModel(let message):
+                Haptics.warning()
+                // Only Edit Bot asks; a create pins through profiles.create.
+                if editedBot == nil { error = message } else { modelConfirmation = message }
+            }
+        }
+    }
+
+    private func confirmModel() {
+        guard let bot = editedBot else { return }
+        isSaving = true
+        error = nil
+        let draft = self.draft
+        Task {
+            let result = await appState.saveBotModel(bot, provider: draft.provider, model: draft.model, confirmed: true)
+            isSaving = false
+            switch result {
+            case .saved(let warning, _):
+                if warning == nil { Haptics.success() } else { Haptics.warning() }
+                dismiss()
+                onFinished(nil, warning, false)
+            case .confirmModel, .failed:
+                Haptics.warning()
+                dismiss()
+                onFinished(nil, AppLocalization.string("The model was not saved."), false)
             }
         }
     }

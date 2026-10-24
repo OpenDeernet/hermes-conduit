@@ -49,6 +49,7 @@ struct V2ConversationScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.v2Shell) private var shell
     @State private var composerExpanded = false
+    @AppStorage(V2ChatListPreference.key) private var chatListBeside = V2ChatListPreference.defaultValue
     @AppStorage(ChatVoiceButtonAction.key) private var appChatVoiceButton = ChatVoiceButtonAction.defaultValue.rawValue
     /// A voice message recorded while the big button is held keeps the
     /// button under the finger, though the composer opens beside it.
@@ -58,7 +59,7 @@ struct V2ConversationScreen: View {
     @State private var chatTitlePendingRename: SessionSummary?
     @State private var chatTitlePendingDeletion: SessionSummary?
     @State private var confirmsRoomDisband = false
-    @State private var choosesRoomPicture = false
+    @State private var choosesRoomPicture: GroupRoomPictureRequest?
     /// The open chat's ids while its Artifacts sheet shows.
     @State private var artifactSessionIDs: ArtifactSheetIDs?
 
@@ -132,6 +133,29 @@ struct V2ConversationScreen: View {
                     .accessibilityIdentifier("conversation.close")
                 }
             }
+            // A window wide enough for two columns: hide the list for the
+            // whole width, or bring it back beside the chat (#1164).
+            if shell.canSplit {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        Haptics.light()
+                        chatListBeside.toggle()
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color.primary)
+                            .frame(width: 40, height: 40)
+                            .modifier(V2PreGlassToolbarControl())
+                    }
+                    // iPadOS's own sidebar shortcut. A tab kept behind the
+                    // selected one still holds its chat, and a shortcut
+                    // ignores opacity and hit testing: only the shown tab's.
+                    .keyboardShortcut("s", modifiers: [.command, .control])
+                    .disabled(!shell.isTabActive)
+                    .accessibilityLabel(shell.isSplit ? AppLocalization.string("Hide chat list") : AppLocalization.string("Show chat list"))
+                    .accessibilityIdentifier("conversation.chatListToggle")
+                }
+            }
             // Session-only controls: an open room owns the title and actions.
             if appState.activeRoomSurface == nil {
                 ToolbarItem(placement: .principal) {
@@ -181,7 +205,7 @@ struct V2ConversationScreen: View {
                     onRename: { chatTitlePendingRename = $0 },
                     onDelete: { chatTitlePendingDeletion = $0 },
                     onDisbandRoom: { confirmsRoomDisband = true },
-                    onChooseRoomPicture: { choosesRoomPicture = true },
+                    onChooseRoomPicture: { choosesRoomPicture = $0 },
                     onArtifacts: { artifactSessionIDs = ArtifactSheetIDs(ids: appState.activeChatArtifactSessionIDs) }
                 )
             }
@@ -210,7 +234,7 @@ struct V2ConversationScreen: View {
         }
         // On the screen, not the menu: a dialog raised as a menu closes
         // may never show.
-        .modifier(GroupRoomPicturePicker(isPresented: $choosesRoomPicture))
+        .modifier(GroupRoomPicturePicker(request: $choosesRoomPicture))
         .confirmationDialog(
             AppLocalization.string("Disband this group chat?"),
             isPresented: $confirmsRoomDisband,
@@ -282,7 +306,7 @@ private struct V2ConversationMenu: View {
     let onRename: (SessionSummary) -> Void
     let onDelete: (SessionSummary) -> Void
     let onDisbandRoom: () -> Void
-    let onChooseRoomPicture: () -> Void
+    let onChooseRoomPicture: (GroupRoomPictureRequest) -> Void
     let onArtifacts: () -> Void
 
     private var statusColor: Color {
