@@ -6888,6 +6888,7 @@ final class AppState: ObservableObject {
     private func finishVoiceCallRecording() {
         voiceCallCheckpointTask?.cancel()
         voiceCallCheckpointTask = nil
+        voiceCallCheckpointed = nil
         liveVoiceResumeContext = nil
         liveHermesCall = nil
         hermesCallToldCards = []
