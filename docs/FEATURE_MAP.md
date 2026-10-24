@@ -637,6 +637,29 @@ group rooms · the full editor · the notices that say where words went
 
 **Checked:** 2026-10-24, at #1185.
 
+## A chat's last reply
+
+Reading the newest reply in a chat without opening it, from the open chat's
+transcript or else its saved history.
+
+**Siblings:** the Send to Hermes Shortcut ("Wait for Answer") · live voice
+calls reading a job's chat · the Watch's answer to a call from Hermes
+
+**Code**
+- Reader: `Conduit/Services/AppState.swift` (latestLiveVoiceThreadReply, latestLiveVoiceThreadReplyMessage, latestReplyTurn)
+- Shortcut: `Conduit/Intents/SendToHermesIntent.swift` (ShortcutReply.mayBe), `Conduit/Services/AppState+ShortcutSend.swift`
+- Live calls: `Conduit/Voice/VoiceBackgroundJobs.swift` (latestThreadReply)
+- Tests: `ConduitTests/ShortcutSendTests.swift`
+
+**Rulings**
+- Only the Shortcut has to tell a new reply from the one before it. Its row ids decide first, then the user's message each reply answers (this run's against another), and the wording last (2026-10-24, #1185).
+- Voice calls and the Watch use only the reply's text (2026-10-24, #1185).
+
+**Open gaps**
+- The same message sent twice and answered in the same words, read once from saved history and once from the open chat, still can't be told apart.
+
+**Checked:** 2026-10-24, at #1185.
+
 ## Feature map rules
 
 How a change brings its connected features along, and how this map stays

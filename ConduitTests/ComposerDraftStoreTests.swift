@@ -462,7 +462,7 @@ final class ComposerDraftStoreTests: XCTestCase {
 
         // Back from a chat: what's in the field is kept under its draft.
         XCTAssertEqual(
-            ComposerBar.draftKeyToKeepOnDisappear(
+            ComposerBar.draftKeyToKeep(
                 loaded: key,
                 loadedClearCount: loadedClearCount,
                 storeClearCount: store.clearCount
@@ -470,7 +470,7 @@ final class ComposerDraftStoreTests: XCTestCase {
             key
         )
         XCTAssertNil(
-            ComposerBar.draftKeyToKeepOnDisappear(
+            ComposerBar.draftKeyToKeep(
                 loaded: nil,
                 loadedClearCount: loadedClearCount,
                 storeClearCount: store.clearCount
@@ -479,10 +479,11 @@ final class ComposerDraftStoreTests: XCTestCase {
         )
 
         // A sign-out or server switch cleared the store: the composer
-        // going away after it doesn't put the draft back.
+        // going away, or handing off to another chat, after it doesn't put
+        // the draft back.
         store.removeAll()
         XCTAssertNil(
-            ComposerBar.draftKeyToKeepOnDisappear(
+            ComposerBar.draftKeyToKeep(
                 loaded: key,
                 loadedClearCount: loadedClearCount,
                 storeClearCount: store.clearCount

@@ -129,9 +129,10 @@ struct ComposerBar: View, Equatable {
         )
     }
 
-    /// The draft a composer that's going away keeps: the one in the field,
-    /// unless the store was cleared since it was loaded.
-    static func draftKeyToKeepOnDisappear(
+    /// The draft a composer that's leaving it (going away, or handing off
+    /// to another chat) keeps: the one in the field, unless the store was
+    /// cleared since it was loaded.
+    static func draftKeyToKeep(
         loaded: ComposerDraftKey?,
         loadedClearCount: UInt64,
         storeClearCount: UInt64
@@ -541,7 +542,7 @@ struct ComposerBar: View, Equatable {
             // field lands in the app-lifetime store under the draft it
             // holds. A sign-out or server switch cleared the store on
             // purpose, so nothing goes back in after one.
-            if let key = Self.draftKeyToKeepOnDisappear(
+            if let key = Self.draftKeyToKeep(
                 loaded: loadedDraftKey,
                 loadedClearCount: loadedDraftClearCount,
                 storeClearCount: draftStore.clearCount
@@ -2132,10 +2133,17 @@ struct ComposerBar: View, Equatable {
 
     private func handoffComposer(to destinationKey: ComposerDraftKey) {
         guard loadedDraftKey != destinationKey else { return }
+        // A sign-out or server switch cleared the store on the way here:
+        // the field's draft isn't put back, and the destination's loads.
+        let keptKey = Self.draftKeyToKeep(
+            loaded: loadedDraftKey,
+            loadedClearCount: loadedDraftClearCount,
+            storeClearCount: draftStore.clearCount
+        )
         // The same chat under another id (a saved copy's chat opening, the
         // chat a New Chat created): the field stays as it is, focus and
         // dictation with it.
-        if let loadedDraftKey, appState.composerDraftKeysAreSameChat(loadedDraftKey, destinationKey) {
+        if let loadedDraftKey = keptKey, appState.composerDraftKeysAreSameChat(loadedDraftKey, destinationKey) {
             saveDraft(for: destinationKey)
             draftStore.removeDraft(for: loadedDraftKey)
             self.loadedDraftKey = destinationKey
@@ -2146,7 +2154,7 @@ struct ComposerBar: View, Equatable {
         // editor to the chat it was opened in.
         dictation.cancel()
         isShowingFullEditor = false
-        if let loadedDraftKey {
+        if let loadedDraftKey = keptKey {
             saveDraft(for: loadedDraftKey)
             if Self.draftKeysAreEquivalent(
                 loadedDraftKey,
