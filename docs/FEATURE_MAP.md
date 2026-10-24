@@ -847,17 +847,18 @@ row) · iPad and Mac (same view) · searching messages ("In messages")
 
 **Code**
 - Bar layout: `Conduit/Views/V2/V2TopBar.swift` (ViewThatFits: one row, else stacked with lowerLeading under the profiles)
-- Controls and search: `Conduit/Views/V2/V2ChatsView.swift` (trailingControls, stackedLeading, barUnstacked, filterPill, barSearchField, searchField, searchCapsule)
+- Controls and search: `Conduit/Views/V2/V2ChatsView.swift` (trailingControls, stackedLeading, barUnstacked, setBarStacked, filterPill, barSearchField, searchField, searchCapsule)
 
 **Rulings**
 - The profiles get their own row when they don't fit beside the controls, and the filter becomes a labeled pill under them (2026-10-22, #1117, Eric).
 - In the stacked bar, search is a magnifier leading the controls. Tapping it turns the whole second row (filter and controls) into the field with Cancel until the search is cancelled, the list has no search row, and the filter pill fills the row up to the controls. The one-row bar keeps the field as the list's first row (2026-10-24, #1199, Eric).
 - Going from the stacked bar to the one-row bar carries a query over to the list's field and closes an empty open field (2026-10-24, #1199).
+- The list's search row follows the bar's layout from the last layout seen (`barStackedKey`), so launch doesn't show it for a frame, and a change of layout (rotation, a profile added) slides it in or out with the bar (2026-10-24, #PRNUM).
 
 **Open gaps**
-- The bar reports its layout from whichever row appears (onAppear), so on launch or rotation into the stacked bar the list can show its search row for a frame before it moves into the bar.
+- None known.
 
-**Checked:** 2026-10-24, at #1199.
+**Checked:** 2026-10-24, at #PRNUM.
 
 ## Plan card
 

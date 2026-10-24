@@ -284,8 +284,12 @@ struct V2ChatsView: View, Equatable {
     @FocusState private var searchFocused: Bool
     /// The bar is stacked (profiles on their own row): search is a button
     /// in the controls and opens over the filter row, so the list doesn't
-    /// carry a third row of chrome.
-    @State private var barStacked = false
+    /// carry a third row of chrome. It starts from the last layout seen
+    /// (`barStackedKey`): the bar only reports its layout once it appears,
+    /// and a guess the other way showed the list's search row for a frame
+    /// on launch.
+    @State private var barStacked = UserDefaults.standard.bool(forKey: V2ChatsView.barStackedKey)
+    private static let barStackedKey = "v2.chats.barStacked"
     /// The magnifier was tapped: the stacked bar shows the field.
     @State private var barSearchOpen = false
     /// The tap that opened the field also focuses it, once; coming back
@@ -705,7 +709,7 @@ struct V2ChatsView: View, Equatable {
         // Set by the layout that shows, never on disappearing: a chat
         // pushed over the list hides both, and the list keeps its rows.
         .onAppear {
-            barStacked = true
+            setBarStacked(true)
             // A query brought over from the list's field keeps the field
             // up while it's edited down to nothing, until Cancel.
             if !searchText.isEmpty { barSearchOpen = true }
@@ -715,8 +719,16 @@ struct V2ChatsView: View, Equatable {
     /// The one-row bar took over. A query carries over to the list's
     /// field; an empty open one doesn't come back on the next stack.
     private func barUnstacked() {
-        barStacked = false
+        setBarStacked(false)
         barSearchOpen = false
+    }
+
+    /// A change (rotation, a profile added) slides the list's search row in
+    /// or out with the bar instead of jumping it.
+    private func setBarStacked(_ stacked: Bool) {
+        guard stacked != barStacked else { return }
+        UserDefaults.standard.set(stacked, forKey: Self.barStackedKey)
+        withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { barStacked = stacked }
     }
 
     /// A query keeps the field up after the keyboard goes away; Cancel
