@@ -520,13 +520,15 @@ current with nobody tending it.
 
 **Siblings:** CONTRIBUTING.md (the full rules) · this map's intro · the PR
 template · the reviewer prompt · the notifier's CONTRIBUTING.md, PR template
-and reviewer prompt · the map check in CI
+and reviewer prompt · the map check in CI · README.md and docs/CI.md, which
+point at the map and its check
 
 **Code**
 - Rules: `CONTRIBUTING.md`, `docs/FEATURE_MAP.md` (the intro and the sibling sets), `.github/pull_request_template.md` (Siblings)
 - Reviewers: `.github/workflows/opencode-review.yml` (the Connected features focus area)
 - Notifier: `notifier/CONTRIBUTING.md`, `notifier/.github/pull_request_template.md`, `notifier/.github/workflows/opencode-review.yml`
 - Map check: `scripts/check-feature-map.py` (paths and entry shape), `scripts/tests/test_check_feature_map.py`, run by `.github/workflows/ci.yml` (Feature map paths exist)
+- Pointers: `README.md` (Architecture), `docs/CI.md` (the plan job under Jobs)
 
 **Rulings**
 - A checked-in map, a Siblings section in every PR, and rulings in each entry; a sibling left out without a reason is a major review finding (2026-10-23, #1167, Eric).
