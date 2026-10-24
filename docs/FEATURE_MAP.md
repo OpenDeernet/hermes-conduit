@@ -497,7 +497,7 @@ memory), its routes under /pulse and its capabilities · the
 `hermes conduit-push pulse` commands
 
 **Code**
-- App, on the `pulse` branch only, so not in backticks (the map check reads main): Conduit/Views/V2/V2PulsePage.swift (the screen), Conduit/Services/PulseFeed.swift (cards, marks, ratings), Conduit/Services/AppState+Pulse.swift and Conduit/Services/AppState.swift (opensPulseScreen, for pushes), Conduit/Services/PulseSettings.swift and Conduit/Views/PulseSettingsViews.swift (Settings > Pulse)
+- App, on the `pulse` branch only, so not in backticks (the map check reads main): Conduit/Views/V2/V2PulsePage.swift (the screen), Conduit/Views/V2/V2ChatsView.swift (V2PulseButton in the Chats bar, Pulse's chat left out of the list and content search), Conduit/Views/V2/V2Shell.swift (the `.pulse` route, full screen on a phone), Conduit/Services/PulseFeed.swift (cards, marks, ratings), Conduit/Services/AppState+Pulse.swift and Conduit/Services/AppState.swift (opensPulseScreen, for pushes), Conduit/Services/PulseSettings.swift and Conduit/Views/PulseSettingsViews.swift (Settings > Pulse)
 - Loop: `notifier/pulse.py` (the tick, the report's candidate run, cards from turns, push copy), `notifier/pulse_delivery.py`, `notifier/pulse_host.py`, `notifier/pulse_hermes.py`, `notifier/chat_takeover.py`
 - Report: `notifier/pulse_report.py` (what it reads), `notifier/pulse_candidates.py` (the candidate list, the router and the 30-day journal)
 - Memory, follow-ups and the brief: `notifier/pulse_memory.py`, `notifier/pulse_followup.py`, `notifier/pulse_brief.py`
@@ -515,6 +515,7 @@ memory), its routes under /pulse and its capabilities · the
 - Tone stays out of what Pulse learns, and a reason given on a thumbs-down applies at once (2026-10-24, Eric).
 - Pulse pushes follow the Notifications rulings: App Language from title_label, titled with the session title (2026-10-23, notifier #334).
 - Code picks the report's items from a candidate list the model makes, and every candidate is journaled for 30 days (2026-10-24, notifier #337).
+- Main reaches `pulse` by a merge commit, never a squash, so archives don't re-stitch old conflicts (2026-10-24, #1186; build 228's stitch lost the Chats Pulse button).
 
 **Open gaps**
 - Learning from ratings in code is the next slice. Until it lands, the persona criteria (Quiet and Samantha diverge, a changed interest is heard, due items always surface) are strict xfail in `notifier/tests/test_pulse_personas.py`.
@@ -522,7 +523,7 @@ memory), its routes under /pulse and its capabilities · the
 - The app paths above aren't checked by the map check while they live only on `pulse`; they go in backticks if the app side ever reaches main.
 - What a Pulse push does on the Watch, which has no Pulse screen, hasn't been checked.
 
-**Checked:** 2026-10-24, at #1180, with notifier #337 and the `pulse` branch at fae4ec6.
+**Checked:** 2026-10-24, at #1186 on the `pulse` branch (main brought in at 79a5319c), with notifier #337.
 
 ## Bots: create and edit
 
