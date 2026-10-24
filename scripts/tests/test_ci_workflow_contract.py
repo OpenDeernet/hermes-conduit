@@ -799,6 +799,27 @@ class SmokeSelectionTests(unittest.TestCase):
         self.assertEqual(doc["changed_unit"], ["ServerSignOutTests"])
         self.assertNotIn("ConnectionSetupUITests", doc["unit"])
 
+    def test_a_changed_app_file_adds_its_stems_family(self):
+        proc, doc = self._changed_selection(
+            ["Conduit/Services/AppState+PendingSend.swift"])
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        # #1154 changed AppState.swift and broke this class, which then
+        # failed only at night.
+        self.assertIn("AppStateChatResumeTests", doc["changed_unit"])
+        self.assertIn("AppStateMultiDashboardTests", doc["changed_unit"])
+        for name in doc["changed_unit"]:
+            self.assertTrue(name.startswith("AppState"), name)
+
+    def test_a_family_member_does_not_crowd_out_the_changes_own_class(self):
+        def mutate(suite):
+            suite["changed_max_classes"] = 1
+        proc, doc = self._changed_selection(
+            ["Conduit/Services/AppState.swift",
+             "ConduitTests/SessionPresentationCacheTests.swift"], mutate)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(doc["changed_unit"], ["SessionPresentationCacheTests"])
+        self.assertIn("AppStateChatResumeTests", doc["changed_skipped"])
+
     def test_a_changed_timing_family_stays_nightly_only(self):
         proc, doc = self._changed_selection(
             ["ConduitTests/LongContextScalingFixtureTests.swift"])
