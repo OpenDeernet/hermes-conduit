@@ -181,7 +181,7 @@ the saved transcript's job cards · `docs/VOICE_BACKGROUND_JOBS.md`
 **Open gaps**
 - GPT-Live's model can't put a card on the call screen: Gemini, Grok and Local Live agent have `show_on_screen`, GPT-Live has no marker for it. Cards Hermes shows still appear (#366).
 
-**Checked:** 2026-10-24, at 78f21da; at #1191: message.interim counts as a job's progress (#912 review); at #PR: a cut screen card reads fences as "Code fences in messages" says.
+**Checked:** 2026-10-24, at 78f21da; at #1191: message.interim counts as a job's progress (#912 review); at #1220: a cut screen card reads fences as "Code fences in messages" says.
 
 ## Tools and consent in calls
 
@@ -266,7 +266,7 @@ Hermes · Resume Call · memory at call end (notifier)
 
 **Rulings**
 - A call's turns go to the host only when the call ends; saving mid-call stalled Gemini (2026-10-01, #281).
-- While a call runs its unsaved turns are kept in the on-device outbox, within 10 seconds of a turn settling and on a 15-second timer, so a call the app loses mid-way is saved later. A checkpoint with nothing new (no turn, job or chat change) writes nothing, and a call cut short is measured to its last checkpoint (2026-10-24, #PR, from #1002). Gemini, Grok, GPT-Live and Local Live share this path; Classic saves in its own chat, and the Watch saves once at the end.
+- While a call runs its unsaved turns are kept in the on-device outbox, within 10 seconds of a turn settling and on a 15-second timer, so a call the app loses mid-way is saved later. A checkpoint with nothing new (no turn, job or chat change) writes nothing, and a call cut short is measured to its last checkpoint (2026-10-24, #1220, from #1002). Gemini, Grok, GPT-Live and Local Live share this path; Classic saves in its own chat, and the Watch saves once at the end.
 - A saved call keeps the session source "desktop"; its voice tags live in their own meta key, since a session's source picks the agent's toolsets (2026-09-30).
 - A call joined to a chat is kept with the chat, not in a second session, and a reconnect within 120 seconds continues the same call (2026-10-13, #574, notifier #98).
 - A call that stands alone, and a chat a Classic call created, are archived when the call ends; a typed turn brings them back (2026-10-22, #1127, notifier #295).
@@ -275,7 +275,7 @@ Hermes · Resume Call · memory at call end (notifier)
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-24, at #PR: quiet checkpoints, and a saved turn's cut closes a long fence with one as long, within the plugin's limit.
+**Checked:** 2026-10-24, at #1220: quiet checkpoints, and a saved turn's cut closes a long fence with one as long, within the plugin's limit.
 
 ## Calls from Hermes
 
@@ -1219,13 +1219,13 @@ read-back · chat list previews and quotes
 - Tests: `ConduitTests/VoiceBackgroundJobTests.swift`, `ConduitTests/VoiceHistoryTests.swift`, `ConduitTests/GroupChatModelsTests.swift`
 
 **Rulings**
-- A fence is three or more backticks or tildes; only a line of the same mark, at least as long and with nothing after it, closes it, so a ```` block can show ``` lines (#893). Code that tracks blocks uses `MarkdownFence` rather than its own reading (2026-10-24, #PR, from #1002).
-- A cut that leaves a block open closes it with a fence as long as the opener, and the closer's room comes off the cut, so the result stays within its limit however long the fence (2026-10-24, #PR).
+- A fence is three or more backticks or tildes; only a line of the same mark, at least as long and with nothing after it, closes it, so a ```` block can show ``` lines (#893). Code that tracks blocks uses `MarkdownFence` rather than its own reading (2026-10-24, #1220, from #1002).
+- A cut that leaves a block open closes it with a fence as long as the opener, and the closer's room comes off the cut, so the result stays within its limit however long the fence (2026-10-24, #1220).
 
 **Open gaps**
 - None known. Previews and quotes only drop fence lines and track no block, so they need no closing rule.
 
-**Checked:** 2026-10-24, at #PR.
+**Checked:** 2026-10-24, at #1220.
 
 ## Files prepared for preview and Save to Files
 
@@ -1241,12 +1241,12 @@ the gateway media resolver · the workspace browser's Save to Files
 - Tests: `ConduitTests/MarkdownLargeDocumentTests+MediaPreview.swift`
 
 **Rulings**
-- Each download goes in a folder of its own, removed when the preview or share sheet that asked for it closes, or when it is dismissed or switched to another file while still downloading; a previous run's leftovers are swept at launch (2026-10-24, #PR, from #1002).
+- Each download goes in a folder of its own, removed when the preview or share sheet that asked for it closes, or when it is dismissed or switched to another file while still downloading; a previous run's leftovers are swept at launch (2026-10-24, #1220, from #1002).
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-24, at #PR.
+**Checked:** 2026-10-24, at #1220.
 
 ## Review labels
 
