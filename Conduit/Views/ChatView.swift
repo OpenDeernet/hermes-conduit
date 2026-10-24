@@ -648,13 +648,9 @@ struct ChatView: View {
                 // The published request disappeared on the AppState side
                 // (completed/abandoned/cancelled elsewhere).
                 scrollEngine.restorationSystemCancelled()
-<<<<<<< HEAD
-                // A pinned reply waiting on the restore goes now.
-=======
                 // A pinned reply, artifact or Pulse card waiting on the
                 // restore goes now.
                 revealPendingArtifact()
->>>>>>> origin/pulse
                 revealPendingPinnedReply()
             }
     }

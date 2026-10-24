@@ -737,9 +737,6 @@ struct V2Shell: View {
         return HStack(spacing: 0) {
             NavigationStack(path: V2SplitLayout.listPath(path)) {
                 list
-<<<<<<< HEAD
-                    .navigationDestination(for: V2Route.self) { destination($0) }
-=======
                     .navigationDestination(for: V2Route.self) { route in
                         if route == .pulse {
                             tabBarClearance(V2PulsePage())
@@ -747,7 +744,6 @@ struct V2Shell: View {
                             destination(route)
                         }
                     }
->>>>>>> origin/pulse
             }
             .frame(width: V2SplitLayout.listWidth)
             // Each column's backdrop stays in its own column.
@@ -787,15 +783,11 @@ struct V2Shell: View {
         case .project(let project):
             listRoot(tabBarClearance(V2ProjectPage(project: project)), alone: alone)
         case .artifacts:
-<<<<<<< HEAD
             listRoot(tabBarClearance(V2ArtifactsPage()), alone: alone)
-=======
-            tabBarClearance(V2ArtifactsPage())
         case .pulse:
             // Full screen on a phone, as a chat is: its reply box sits where
             // the tabs were. Split, the list column keeps the bar (`splitColumns`).
             V2PulsePage()
->>>>>>> origin/pulse
         }
     }
 

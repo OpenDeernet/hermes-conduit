@@ -61,8 +61,6 @@ final class NotificationCopyTests: XCTestCase {
         ]).title, "Response ready")
     }
 
-<<<<<<< HEAD
-=======
     func testPulsePushesAreTitledByWhatTheyBring() {
         XCTAssertEqual(NotificationCopy.preview([
             "title_label": "pulse.noticed", "count": 3, "title": "Pulse noticed 3 things", "body": "A · B · C",
@@ -74,7 +72,6 @@ final class NotificationCopyTests: XCTestCase {
         XCTAssertEqual(NotificationCopy.preview(["title_label": "pulse.followup"]).title, "Pulse · Follow-up")
     }
 
->>>>>>> origin/pulse
     func testUnlabelledPushKeepsTheHostText() {
         // An older plugin, or a title that is content (a tool's prompt).
         let preview = NotificationCopy.preview(["title": "Head to the airport", "body": "Tap Go."])
