@@ -135,7 +135,8 @@ class CheckFeatureMapTests(unittest.TestCase):
         self.assertIn("::error::Couldn't read docs/FEATURE_MAP.md in", out.getvalue())
 
     def test_what_counts_as_a_path(self):
-        for span in ("Conduit/Voice/VoiceTypes.swift", "docs/", "notifier/events.py", "README.md", "project.yml"):
+        for span in ("Conduit/Voice/VoiceTypes.swift", "docs/", "notifier/events.py", "README.md", "project.yml",
+                     ".github/workflows/ci.yml", "notifier/.github/pull_request_template.md"):
             self.assertTrue(check.is_path(span), span)
         for span in ("session.steer", "answer_approval", "/voice-tools", ".interrupted",
                      "conduit://session/1", "POST /voice/sessions", "Approve:"):

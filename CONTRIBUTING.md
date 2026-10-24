@@ -20,8 +20,9 @@ current.
    left open for the maintainer to decide.
 4. Update the entry in the same PR: its siblings, code paths, rulings, the gaps
    opened or closed, and the Checked line. A feature with siblings and no
-   entry gets one. A fix that brings a sibling in line with an earlier change
-   it missed adds that sibling to the entry, so the next change reaches it.
+   entry gets one in that PR. A fix that brings a sibling in line with an
+   earlier change it missed adds that sibling to the entry, so the next change
+   reaches it.
 5. Text that describes a behavior is one of its siblings: Settings captions,
    the briefings and tool results models read, the notifier's tool
    descriptions, README.md and docs/.
