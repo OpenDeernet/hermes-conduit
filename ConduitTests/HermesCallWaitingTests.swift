@@ -106,7 +106,7 @@ extension VoiceConversationControllerTests {
         XCTAssertNotNil(WatchCallAnswer.result(body: ["ok": true, "status": "refused", "message": "Too long"])["error"])
         XCTAssertEqual(WatchCallAnswer.result(body: ["ok": true, "status": "not_waiting"])["status"], "not_pending")
         // An approval Hermes didn't take (plugin 0.70.1) is never read as approved.
-        let missed = WatchCallAnswer.result(body: ["ok": true, "status": "not_waiting",
+        let missed = WatchCallAnswer.result(body: ["ok": true, "status": "too_late",
                                                    "message": "It didn't go through: nothing was approved."])
         XCTAssertEqual(missed["status"], "not_pending")
         XCTAssertEqual(missed["message"], "It didn't go through: nothing was approved.")

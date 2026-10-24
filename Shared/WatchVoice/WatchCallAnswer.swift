@@ -83,7 +83,7 @@ enum WatchCallAnswer {
         switch status {
         case "answered":
             // An approval's "answered" comes once Hermes took it (plugin
-            // 0.70.1); one it didn't take reads not_waiting, failed or
+            // 0.70.1); one it didn't take reads too_late, failed or
             // unconfirmed.
             if let choice = body["choice"] as? String {
                 let said = choice == "once"
