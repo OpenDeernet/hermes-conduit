@@ -192,9 +192,6 @@ struct GroupChatView: View {
             .onChange(of: latestJumps) { _, _ in
                 withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
             }
-            .onChange(of: appState.activeRoomSurface?.room.roomID) { _, _ in
-                followLatest()
-            }
             .onAppear {
                 followLatest()
                 scrollToBottom(proxy)

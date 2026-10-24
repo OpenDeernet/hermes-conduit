@@ -64,6 +64,7 @@ final class GroupRoomScrollLocatorView: UIView {
 
     private weak var scrollView: UIScrollView?
     private var observations: [NSKeyValueObservation] = []
+    private var lastAdjustedInsets = UIEdgeInsets.zero
 
     init(flag: GroupRoomFollowFlag) {
         self.flag = flag
@@ -89,6 +90,12 @@ final class GroupRoomScrollLocatorView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         connectIfNeeded()
+        // adjustedContentInset (safe area, keyboard) is not KVO-observable;
+        // a change to it re-lays out the content, which lands here.
+        if let scrollView, scrollView.adjustedContentInset != lastAdjustedInsets {
+            lastAdjustedInsets = scrollView.adjustedContentInset
+            scrolled()
+        }
     }
 
     func disconnect() {
@@ -117,6 +124,10 @@ final class GroupRoomScrollLocatorView: UIView {
             },
             // Bounds origin is the offset; a size change is the keyboard,
             // rotation or split view.
+            found.observe(\.contentInset, options: [.old, .new]) { [weak self] _, change in
+                guard change.oldValue != change.newValue else { return }
+                Self.onMain { self?.scrolled() }
+            },
             found.observe(\.bounds, options: [.old, .new]) { [weak self] _, change in
                 guard change.oldValue?.size != change.newValue?.size else { return }
                 Self.onMain { self?.scrolled() }
