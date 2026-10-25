@@ -25221,10 +25221,10 @@ final class AppState: ObservableObject {
                         linkID: liveActivityLinkSessionID(for: sessionId),
                         title: activeSessionTitle,
                         profile: activeProfile,
-                        // A Bot Chat's card names its bot, as the chat does.
+                        // A Bot Chat's card names its bot and wears its color, as the chat does.
                         profileName: conversationAgentIdentity.name,
-                        glowHex: profileGlowColors()[activeProfile]?.hex
-                            ?? profileGlowTint(activeProfile).flatMap { ProfileGlowRGB(UIColor($0).resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark)))?.hex },
+                        glowHex: profileGlowColors()[conversationIdentityProfile]?.hex
+                            ?? profileGlowTint(conversationIdentityProfile).flatMap { ProfileGlowRGB(UIColor($0).resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark)))?.hex },
                         dashboardID: activeDashboardID?.uuidString
                     )
                 case .queued:

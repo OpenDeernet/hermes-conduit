@@ -812,6 +812,8 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(HermesCallCopy.callerName(profile: "default", mainName: "Hermes", profileName: "Nova", title: nil), "Nova", "A main profile never named in Conduit goes by its bot's name")
         XCTAssertEqual(HermesCallCopy.callerName(profile: "default", mainName: nil, profileName: "Nova", title: nil), "Nova")
         XCTAssertEqual(HermesCallCopy.callerName(profile: "research", mainName: nil, profileName: " ", title: nil), "Research")
+        XCTAssertEqual(HermesCallCopy.callerName(profile: "research", mainName: nil, profileName: "research", title: nil), "Research", "A name that is only the id reads as the id does")
+        XCTAssertEqual(HermesCallCopy.callerName(profile: "default", mainName: nil, profileName: "Default", title: nil), "Hermes")
         XCTAssertEqual(HermesCallCopy.callerName(profile: "  ", mainName: nil, profileName: "Nova", title: nil), "Hermes", "No profile: nothing names the caller")
 
         // The Watch reads the caller from a push in the clear.
