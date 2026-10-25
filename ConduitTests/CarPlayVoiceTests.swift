@@ -450,9 +450,7 @@ extension CarPlayVoiceTemplateFactoryTests {
     }
 
     func testShortcutsAreTrimmedCappedAndSaved() throws {
-        let suite = "CarPlayShortcutTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("CarPlayShortcutTests")
         let preferences = CarPlayPreferences(defaults: defaults)
         XCTAssertTrue(preferences.playsSounds, "sounds are on by default")
         XCTAssertFalse(preferences.choosesChatFirst, "CarPlay opens on the voice screen by default")
@@ -1170,9 +1168,7 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
 
     func testCarPlayOpensOnTheChatListWhenNothingIsRunning() async throws {
         let harness = makeHarness()
-        let suite = "CarPlayChooseChat.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("CarPlayChooseChat")
         let preferences = CarPlayPreferences(defaults: defaults)
         preferences.setChoosesChatFirst(true)
         harness.coordinator.preferencesProvider = { preferences }
@@ -1200,9 +1196,7 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
     func testAFailedVoiceScreenInstallStartsVoiceInsteadOfTheChatList() async throws {
         for listFirst in [true, false] {
             let harness = makeHarness()
-            let suite = "CarPlayChooseChat.\(UUID().uuidString)"
-            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-            addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+            let defaults = makeScratchDefaults("CarPlayChooseChat")
             let preferences = CarPlayPreferences(defaults: defaults)
             preferences.setChoosesChatFirst(true)
             harness.coordinator.preferencesProvider = { preferences }
@@ -1231,9 +1225,7 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
 
     func testCarPlayShowsARunningConversationInsteadOfTheChatList() async throws {
         let harness = makeHarness()
-        let suite = "CarPlayChooseChat.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("CarPlayChooseChat")
         let preferences = CarPlayPreferences(defaults: defaults)
         preferences.setChoosesChatFirst(true)
         harness.coordinator.preferencesProvider = { preferences }
@@ -1550,9 +1542,7 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
 
     func testBrowseScreensOpenOneLevelDown() async throws {
         let harness = makeHarness()
-        let suite = "CarPlayBrowse.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("CarPlayBrowse")
         let preferences = CarPlayPreferences(defaults: defaults)
         harness.coordinator.preferencesProvider = { preferences }
         harness.coordinator.handleConnect(harness.spy)
@@ -1866,9 +1856,7 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
 
     func testSentTurnPlaysTheStatusSoundUnlessTurnedOff() async throws {
         let harness = makeHarness()
-        let suite = "CarPlaySounds.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("CarPlaySounds")
         let preferences = CarPlayPreferences(defaults: defaults)
         var played: [CarPlayEarcon] = []
         harness.coordinator.preferencesProvider = { preferences }
@@ -2113,6 +2101,64 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
         XCTAssertFalse(harness.activations.contains(.error), "the superseded start showed Error: \(harness.activations)")
         XCTAssertEqual(harness.controller.state, .listening, "the second start listens")
         XCTAssertEqual(harness.activations.last, .listening)
+    }
+
+    /// The phone switches to a live mode while a classic start waits for
+    /// Hermes (#999): the old start neither stops the new mode's call nor
+    /// carries on into a classic listening turn.
+    func testAClassicStartWaitingForHermesStopsWhenTheModeTurnsLive() async {
+        let harness = CarPlayVoiceCoordinatorTests.makeSharedHarness()
+        addTeardownBlock { [defaults = harness.defaults, suite = harness.defaultsSuiteName] in
+            defaults.removePersistentDomain(forName: suite)
+        }
+        harness.appState.activeSessionId = "existing-session"
+        harness.appState.isConnected = false
+        harness.appState.isConnecting = true
+        harness.coordinator.connectionWaiter = { appState in
+            appState.setGeminiLiveEnabled(true)
+            appState.isConnecting = false
+            appState.isConnected = true
+            return true
+        }
+        harness.coordinator.handleConnect(harness.spy)
+        await harness.coordinator.waitForPresentation()
+
+        await harness.coordinator.performStartListeningTurn(generation: harness.coordinator.connectionGeneration)
+
+        XCTAssertFalse(harness.controller.hasLiveVoiceSession, "classic Voice wasn't prepared for a live mode")
+        XCTAssertNotEqual(harness.controller.state, .listening)
+        XCTAssertEqual(harness.capture.startCount, 0, "the microphone is never acquired")
+        XCTAssertFalse(harness.activations.contains(.error), "\(harness.activations)")
+    }
+
+    /// A switch to a live mode that lands while the prepare is arming
+    /// classic Voice: the prepare closes the conversation it armed instead
+    /// of leaving it open behind the new mode.
+    func testAModeSwitchDuringAClassicPrepareClosesWhatThePrepareArmed() async {
+        let harness = CarPlayVoiceCoordinatorTests.makeSharedHarness()
+        addTeardownBlock { [defaults = harness.defaults, suite = harness.defaultsSuiteName] in
+            defaults.removePersistentDomain(forName: suite)
+        }
+        harness.appState.activeSessionId = "existing-session"
+        let requester = HeldOnceVoiceConfigRequester()
+        harness.appState.voiceCapabilityRequesterForTesting = requester
+        harness.coordinator.handleConnect(harness.spy)
+        await harness.coordinator.waitForPresentation()
+        let generation = harness.coordinator.connectionGeneration
+
+        let start = Task { @MainActor in
+            await harness.coordinator.establishVoice(generation: generation)
+        }
+        for _ in 0..<500 where !requester.isHolding { await Task.yield() }
+        XCTAssertTrue(requester.isHolding, "the classic prepare is in flight")
+        XCTAssertFalse(harness.controller.hasLiveVoiceSession)
+
+        harness.appState.setGeminiLiveEnabled(true)
+        requester.release()
+        await start.value
+
+        XCTAssertFalse(harness.controller.hasLiveVoiceSession, "the classic conversation the prepare armed was closed")
+        XCTAssertNotEqual(harness.controller.state, .listening)
     }
 
     /// End, then Listen, while the first start's prepare is still on its
@@ -3030,9 +3076,7 @@ final class CarPlayVoiceRoutePolicyTests: XCTestCase {
 @MainActor
 extension CarPlayVoiceCoordinatorTests {
     private func choosingChatFirst(_ harness: Harness) throws {
-        let suite = "CarPlayChooseChat.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("CarPlayChooseChat")
         let preferences = CarPlayPreferences(defaults: defaults)
         preferences.setChoosesChatFirst(true)
         harness.coordinator.preferencesProvider = { preferences }

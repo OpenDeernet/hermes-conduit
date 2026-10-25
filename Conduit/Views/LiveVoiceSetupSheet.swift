@@ -3,12 +3,14 @@ import SwiftUI
 struct LiveVoiceSetupSheet: View {
     enum Mode {
         case gemini
+        case qwen
         case gpt
         case grok
 
         var checkTitle: String {
             switch self {
             case .gemini: AppLocalization.string("Check Gemini Live")
+            case .qwen: AppLocalization.string("Check Qwen Live")
             case .gpt: AppLocalization.string("Check GPT-Live")
             case .grok: AppLocalization.string("Check Grok Live")
             }
@@ -81,11 +83,31 @@ struct LiveVoiceSetupSheet: View {
                         .conduitFixedGlyph()
                         .foregroundStyle(.white)
                         .frame(width: 22, height: 22)
-                        .background(Color.conduitAccent, in: Circle())
+                        // The sent-bubble fill: the dark-mode accent is
+                        // too light under white text.
+                        .background(Color.conduitUserBubble, in: Circle())
                     Text(AppLocalization.string("Add a Gemini API key"))
                         .font(.subheadline.weight(.semibold))
                 }
                 Text(AppLocalization.string("Add it in Voice settings under API key, or set GEMINI_API_KEY in the active Hermes profile’s .env file. The key stays on your Hermes server."))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .qwen:
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(verbatim: "2")
+                        .font(.caption.weight(.bold))
+                        .conduitFixedGlyph()
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        // As the Gemini step: white on the sent-bubble fill.
+                        .background(Color.conduitUserBubble, in: Circle())
+                    Text(AppLocalization.string("Add a Qwen API key"))
+                        .font(.subheadline.weight(.semibold))
+                }
+                Text(AppLocalization.string("Set DASHSCOPE_API_KEY and CONDUIT_QWEN_LIVE_WORKSPACE on your Hermes profile. The permanent key stays on your server."))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -126,6 +148,7 @@ struct LiveVoiceSetupLink: View {
     private var accessibilityTitle: String {
         switch mode {
         case .gemini: AppLocalization.string("Set up Gemini Live")
+        case .qwen: AppLocalization.string("Set up Qwen Live")
         case .gpt: AppLocalization.string("Set up GPT-Live")
         case .grok: AppLocalization.string("Set up Grok Live")
         }

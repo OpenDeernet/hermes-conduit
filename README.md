@@ -1,11 +1,31 @@
 # Hermes Conduit
 
+Qwen Live is an independently selectable provider alongside Gemini Live.
+See [setup and validation limits](docs/QWEN_LIVE.md).
+
 A native iPhone, iPad and Apple Watch app for [Hermes Agent](https://github.com/NousResearch/hermes-agent). Free, no ads, no tracking.
 
 [![App Store](https://img.shields.io/badge/App_Store-Hermes_Conduit-blue)](https://apps.apple.com/us/app/hermes-conduit/id6790977764)
 [![TestFlight](https://img.shields.io/badge/TestFlight-Beta-blue)](https://testflight.apple.com/join/gcF9BBJ3)
 [![Website](https://img.shields.io/badge/Website-hermesconduit.app-blue)](https://hermesconduit.app)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/agrias)
+
+## See it in action
+
+<table>
+  <tr>
+    <td align="center" valign="top"><img src="docs/media/voice.webp" width="200" alt="A live voice call: Hermes answers, its waveform moving"></td>
+    <td align="center" valign="top"><img src="docs/media/watch-speaking.webp" width="200" alt="A live voice call on Apple Watch while Hermes speaks"></td>
+    <td align="center" valign="top"><img src="docs/media/watch-approval.webp" width="200" alt="The Watch asking to approve a command, with Approve once"></td>
+  </tr>
+  <tr>
+    <td align="center">Talk to Hermes live, and talk over it</td>
+    <td align="center">Call from your wrist</td>
+    <td align="center">Approve a command on the Watch</td>
+  </tr>
+</table>
+
+More on [hermesconduit.app](https://hermesconduit.app): [live voice](https://hermesconduit.app/voice/), [Apple Watch](https://hermesconduit.app/watch/), [CarPlay](https://hermesconduit.app/carplay/) and [privacy](https://hermesconduit.app/privacy/).
 
 Want new features sooner? The [TestFlight beta](https://testflight.apple.com/join/gcF9BBJ3) gets newer builds before they reach the App Store.
 
@@ -29,7 +49,7 @@ The app works with any Hermes dashboard on its own. The free [Hermes Conduit Not
 
 **Voice**
 
-- Live voice calls with Gemini Live, GPT-Live (ChatGPT subscription or API key), Grok Live, or Local Live on your own speech server, with echo cancellation and talking over Hermes
+- Live voice calls with Gemini Live, Qwen Live, GPT-Live (ChatGPT subscription or API key), Grok Live, or Local Live on your own speech server, with echo cancellation and talking over Hermes
 - Start, check and cancel Hermes jobs by voice; results come back into the call
 - Calls stay with their chat, keep going with the screen locked, shrink to a bar while you read, and are saved as chats you can resume
 - Hermes calls you: a CallKit call when a job is done, Hermes needs you, or a check you scheduled is due, on the phone or the Watch
@@ -160,7 +180,7 @@ Then turn on notifications under Settings > Notifications; Conduit pairs the sig
 
 The app uses a shared relay by default (`push.milim.dev`) so notifications work out of the box with no extra setup.
 
-**End-to-end encryption.** With notifier 0.5 or later, Conduit gives each pairing its own key over your dashboard connection (never through the relay) and turns encryption on by itself. Notification text, session and profile names, approval and clarify cards, and your clarify answers are then encrypted between your Hermes host and this iPhone; a Notification Service Extension decrypts them on the phone. The relay and Apple only see routing data such as the event type and timing. Settings > Notifications shows which pairings are encrypted.
+**End-to-end encryption.** With notifier 0.5 or later, Conduit gives each pairing its own key over your dashboard connection (never through the relay) and turns encryption on by itself. Notification text, session and profile names, approval and clarify cards, and your clarify answers are then encrypted between your Hermes host and this iPhone; a Notification Service Extension decrypts them on the phone. The relay and Apple only see routing data such as the event type and timing. With notifier 0.71 or later the keys rotate, or when you tap Rotate encryption keys in Settings > Notifications; the old key still opens notifications already on their way for 7 days. With notifier 0.72 or later they rotate every 7 days through a key exchange inside the encrypted channel, so a new key normally never crosses your dashboard connection (if a rotation can't finish, Conduit falls back to handing over a new key through that connection, then replaces it through the exchange); on iOS 26 that exchange uses ML-KEM-768 with X25519 and is quantum-safe, shown with a shield instead of the padlock. Settings > Notifications shows which pairings are encrypted, and a padlock marks a saved dashboard whose hosts all confirmed they seal with this iPhone's current key.
 
 **Running your own relay.** Apple only delivers notifications for the App Store build when they are signed with its developer's APNs key, so a relay you run yourself can't reach the App Store app, even if you enter its URL under Settings > Notifications > Push relay. A self-hosted relay works with a Conduit build you sign with your own Apple developer account and bundle id (see [Building from source](#building-from-source) and the relay's [self-hosting guide](https://github.com/kaishi00/hermes-conduit-notifier#self-hosting)). Such a build registers under its own bundle id, and can make your relay its default with the `CONDUIT_DEFAULT_RELAY_URL` build setting (an https URL, e.g. `xcodebuild CONDUIT_DEFAULT_RELAY_URL=https://push.example.com …`), so nobody has to type it into Settings. If your goal is that the relay can't read your notifications, end-to-end encryption already covers that on the shared relay.
 
@@ -194,7 +214,7 @@ Key places:
 - `Conduit/Services/HermesClient.swift` - WebSocket client and RPC layer
 - `Conduit/Services/AppState.swift` (and its `AppState+*.swift` extensions) - state and session lifecycle
 - `Conduit/Views/V2/` - the app shell: Chats, Tasks, Bots, Settings
-- `Conduit/Voice/` - Classic voice, dictation and the live voice engines (Gemini Live, GPT-Live, Grok Live, Local Live)
+- `Conduit/Voice/` - Classic voice, dictation and the live voice engines (Gemini Live, Qwen Live, GPT-Live, Grok Live, Local Live)
 - `Conduit/Health`, `Conduit/Location`, `Conduit/Phone` - opt-in phone data sync
 - `ConduitWatch/` - the Apple Watch app
 - `Shared/` - code shared with the extensions and the Watch
@@ -202,7 +222,7 @@ Key places:
 
 ## Privacy
 
-Conduit has no analytics, telemetry, crash-reporting or ad SDKs, and its developer never receives your conversations, voice or phone data. Chats, attachments and opt-in phone data go to your own Hermes host. Live voice calls go to the voice provider you choose (Google, OpenAI or xAI) or your own speech server. The optional push relay delivers notifications and calls through Apple; with end-to-end encryption on, it sees only routing data, not their content.
+Conduit has no analytics, telemetry, crash-reporting or ad SDKs, and its developer never receives your conversations, voice or phone data. Chats, attachments and opt-in phone data go to your own Hermes host. Live voice calls go to the voice provider you choose (Google, Alibaba Cloud, OpenAI or xAI) or your own speech server. The optional push relay delivers notifications and calls through Apple; with end-to-end encryption on, it sees only routing data, not their content.
 
 The full [privacy policy](https://kaishi00.github.io/hermes-conduit-notifier/privacy/) says what each party receives.
 
