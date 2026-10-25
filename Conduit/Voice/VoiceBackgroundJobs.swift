@@ -1334,8 +1334,13 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         if joinsCall, liveThread == nil {
             // Said while the call's first job is still making its chat: it
             // joins that chat once it's made.
+            let callID = liveCallID
+            let waits = callID != nil && callChatClaim?.callID == callID
             await waitForCallChatClaim()
             if liveThread != nil { return joinCallChat(requested, onJobCreated: onJobCreated) }
+            // The call hung up meanwhile: let go of it, as of the call's
+            // turns still waiting theirs. Read by no one: not localized.
+            if waits, callChatClosedCallID == callID { return "The call ended before Hermes took this request." }
         }
         let activeCount = activeJobCount
         guard activeCount < Self.maximumActiveJobs else {
@@ -2314,7 +2319,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             // A replay of a voice turn's own completion, once it no longer
             // owns the chat, is not a typed turn, nor a Watch call's next
             // request's reply (its jobs share one chat, #1250).
-            if runsInCallChat(before) {
+            if runsInCallChat(before) || before.continuesChat {
                 rememberChatTurn(messageID, reply: content)
             } else if let messageID, !messageID.isEmpty, !notedChatTurns.contains(messageID) {
                 notedChatTurns.append(messageID)
@@ -2386,7 +2391,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         let reply = (reply ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if id != nil, (messageID ?? "").isEmpty, !reply.isEmpty, reply == lastUnidentifiedChatReply { return true }
         guard !reply.isEmpty, let late = jobs.firstIndex(where: { job in
-            job.id != id && runsInCallChat(job) && job.settledByPoll && !job.isDetachedThreadTurn
+            job.id != id && (runsInCallChat(job) || job.continuesChat) && job.settledByPoll && !job.isDetachedThreadTurn
                 && job.result?.trimmingCharacters(in: .whitespacesAndNewlines) == reply
         }) else { return false }
         jobs[late].settledByPoll = false
@@ -2793,7 +2798,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
                 continue
             }
             jobs[index].status = .finished
-            if runsInCallChat(job) { jobs[index].settledByPoll = true }
+            if runsInCallChat(job) || job.continuesChat { jobs[index].settledByPoll = true }
             // A completion held for a follow-up that never carried on.
             if jobs[index].result == nil { jobs[index].result = job.heldCompletion }
             jobs[index].followUp = nil
@@ -2815,7 +2820,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             guard generation == self.generation else { return }
             // Events may have settled it meanwhile; they carry the real reply.
             guard let current = self.job(id), current.status.isActive else { continue }
-            let inCallChat = runsInCallChat(current)
+            let inCallChat = runsInCallChat(current) || current.continuesChat
             update(id) {
                 $0.status = .finished
                 if inCallChat { $0.settledByPoll = true }

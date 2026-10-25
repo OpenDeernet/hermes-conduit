@@ -272,6 +272,22 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(supervisor.liveThread?.runtimeSessionID, "rt-2")
     }
 
+    func testARequestWaitingForTheCallsChatAtHangUpIsLetGo() async {
+        let (supervisor, fake) = makeUnattachedCall()
+        fake.parksCreate = true
+        let first = Task { await supervisor.startJob(instructions: "plan the trip", joinsCall: true) }
+        await fake.createParked.waitUntil(1)
+        let second = Task { await supervisor.startJob(instructions: "and book the hotel", joinsCall: true) }
+        try? await Task.sleep(for: .milliseconds(20))
+        supervisor.detachLiveThread()
+        fake.releaseCreate()
+        _ = await first.value
+        let reply = await second.value
+
+        XCTAssertEqual(reply, "The call ended before Hermes took this request.")
+        XCTAssertEqual(fake.created, 1, "nothing of the ended call starts after it")
+    }
+
     func testTheCallsChatJobTakesFollowUpsWhileItRuns() async {
         let (supervisor, _) = makeUnattachedCall()
         _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)
