@@ -232,7 +232,7 @@ entry)
 
 **Code**
 - Start paths: `Conduit/Voice/VoiceTypes.swift` (PendingVoiceIntent.Source), `Conduit/Services/AppState.swift` (prepareVoiceConversation, voiceWaitsForRunningTurn)
-- Which chat: `Conduit/Services/AppState.swift` (liveVoiceThreadForOpenChat, savedCallToResume, keepVoiceCallWithAdoptedChat); an unattached call's first request's chat: `Conduit/Voice/VoiceBackgroundJobs.swift` (adoptCallChat, callChatJobRuns), `Conduit/Voice/GeminiLive/GeminiLiveToolBridge.swift` (startBackgroundJob), `Conduit/Voice/GPTLive/GPTLiveDelegationBridge.swift` (send)
+- Which chat: `Conduit/Services/AppState.swift` (liveVoiceThreadForOpenChat, savedCallToResume, keepVoiceCallWithAdoptedChat); an unattached call's first request's chat: `Conduit/Voice/VoiceBackgroundJobs.swift` (adoptCallChat, callChatJobRuns), `Conduit/Voice/GeminiLive/GeminiLiveToolBridge.swift` (startBackgroundJob), `Conduit/Voice/GPTLive/GPTLiveDelegationBridge.swift` (send), `Shared/WatchVoice/VoiceJobRouting.swift` (wantsJobOfItsOwn); on the Watch: `Shared/WatchVoice/WatchJobRelay.swift` (joinsCall), `ConduitWatch/WatchBridgeCallModel.swift` (startArguments), `Conduit/Watch/WatchDirectBroker.swift` (WatchCallJobSupervisor.callChat), `Conduit/Voice/VoiceBackgroundJobs.swift` (continueJob), `notifier/dashboard/plugin_api.py` (_WatchJobs._continue_session)
 - Chat voice button: `Conduit/Views/V2/V2VoiceButton.swift`, `Conduit/Views/V2/ChatVoiceButtonAction.swift`, `Conduit/Services/AppState+VoiceMessage.swift`, `Conduit/Voice/VoiceMessageRecorder.swift`
 - Siri and Shortcuts: `Conduit/Intents/StartVoiceConversationIntent.swift`; wake phrase: `Conduit/Voice/Wake/WakeLifecycleCoordinator.swift`
 - CarPlay: `Conduit/CarPlay/CarPlayVoiceCoordinator.swift` (prepareWaitingForConnection, establishLiveVoice), `Conduit/CarPlay/CarPlayBrowseTemplates.swift`
@@ -244,6 +244,7 @@ entry)
 **Rulings**
 - A live call started from a chat joins that chat for the whole call, and its requests become the chat's turns (2026-10-02, #312). An empty chat counts as a chat (2026-10-16, #679).
 - Started anywhere else, a live call stands alone until its first ordinary request: once Hermes takes that job, its chat becomes the call's, as if the call had started there. Background, quick and other-profile work still runs apart, and a first request of that kind leaves the call unattached (Eric, 2026-10-25, #1252, for #1250; replaces #312's "stands alone").
+- A Watch call does the same with its jobs: each later ordinary one is still a job of the call, with its own news, but runs as the next turn of the chat the first made, on the relay (notifier 0.78, `joins_call`) and on the iPhone alike. The call is saved as its own, as Watch calls are (2026-10-25, #1252, notifier #369).
 - In a chat with a saved call, the voice button resumes that call (2026-10-16, #679).
 - A call always takes over a chat that Desktop holds, whatever the setting, and "Take over automatically" is on by default (2026-10-21, #1066).
 - Classic can't start while a reply runs; live calls start beside it (2026-10-18, #767).
@@ -252,10 +253,9 @@ entry)
 
 **Open gaps**
 - Group rooms have no voice button setting, and the Watch and CarPlay don't follow it (#1134).
-- Watch calls don't keep their requests in their first request's chat yet: the relay's jobs (notifier) and the iPhone-run ones (`WatchCallJobSupervisor`) still make a chat each (#1252, being done next).
 - When a Classic call can't take over its chat, it shows a generic error (#1066).
 
-**Checked:** 2026-10-25, at #1252: an unattached phone or CarPlay call takes its first ordinary request's chat; Qwen starts through the shared controller, at #1182, carried in #1235; 2026-10-24, at #1223, for a start's late answers and CarPlay's mode switch; 2026-10-23, seeded from main at 64d53c3.
+**Checked:** 2026-10-25, at #1252: an unattached phone or CarPlay call takes its first ordinary request's chat, and a Watch call runs its later ordinary jobs there (notifier #369); Qwen starts through the shared controller, at #1182, carried in #1235; 2026-10-24, at #1223, for a start's late answers and CarPlay's mode switch; 2026-10-23, seeded from main at 64d53c3.
 
 ## Ending a call and what gets saved
 

@@ -1809,13 +1809,35 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
 
     /// Told of each job this call starts.
     var onJobCreated: (@MainActor (UUID) -> Void)?
+    /// The chat this call's first ordinary job made: its later ordinary
+    /// requests run there too, as the relay's do (#1250). The call has no
+    /// attached chat on the phone, so each is still a job of the call.
+    private(set) var callChat: VoiceThreadTarget?
 
     func startJob(instructions: String, profile: String?, joinsCall: Bool, onJobCreated: (@MainActor (UUID) -> Void)?) async -> String {
         let noted = self.onJobCreated
-        return await base.startJob(instructions: instructions, profile: profile, onJobCreated: { jobID in
+        let created: @MainActor (UUID) -> Void = { jobID in
             noted?(jobID)
             onJobCreated?(jobID)
+        }
+        let joins = joinsCall && (profile ?? "").isEmpty
+        if joins, let callChat {
+            return await base.continueJob(instructions: instructions, in: callChat, onJobCreated: created)
+        }
+        var startedID: UUID?
+        let reply = await base.startJob(instructions: instructions, profile: profile, onJobCreated: { jobID in
+            startedID = jobID
+            created(jobID)
         })
+        if joins, callChat == nil, let startedID, let job = base.jobs.first(where: { $0.id == startedID }), job.profile == nil,
+           job.requestSent, let runtimeID = job.runtimeSessionID, !runtimeID.isEmpty {
+            switch job.status {
+            case .failed, .cancelled: break
+            case .starting, .running, .needsInput, .finished:
+                callChat = VoiceThreadTarget(runtimeSessionID: runtimeID, storedSessionID: job.storedSessionID, title: job.title)
+            }
+        }
+        return reply
     }
 
     func statusSummary() -> String { base.statusSummary() }

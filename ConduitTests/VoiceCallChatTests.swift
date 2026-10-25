@@ -195,4 +195,53 @@ extension VoiceConversationControllerTests {
         _ = await bridge.handleDelegation(id: "del_4", request: "research flights in the background")
         XCTAssertEqual(fake.created, 2, "asked-for background work still runs apart")
     }
+
+    // MARK: Watch calls the iPhone runs jobs for
+
+    func testAWatchCallsLaterOrdinaryJobsRunInTheChatItsFirstMade() async {
+        let fake = FakeVoiceJobBackend()
+        let base = VoiceBackgroundJobSupervisor(backend: fake.backend, pollInterval: .seconds(3_600), threadWaitInterval: .milliseconds(5))
+        let watch = WatchCallJobSupervisor(base)
+
+        _ = await watch.startJob(instructions: "plan the trip", profile: nil, joinsCall: true, onJobCreated: nil)
+        XCTAssertEqual(watch.callChat?.runtimeSessionID, "rt-1")
+        XCTAssertNil(base.liveThread, "the phone has no call to attach")
+
+        // While the first runs, the next waits its turn in the same chat.
+        _ = await watch.startJob(instructions: "and book the hotel", profile: nil, joinsCall: true, onJobCreated: nil)
+        XCTAssertEqual(fake.created, 1)
+        try? await Task.sleep(for: .milliseconds(40))
+        XCTAssertEqual(fake.submissions.count, 1)
+        XCTAssertEqual(base.jobs.last?.status, .starting)
+
+        base.observe(.messageComplete(sessionId: "rt-1", messageId: nil, content: "Plan.", reasoning: nil))
+        guard await waitForCallChat({ fake.submissions.count == 2 }) else { return }
+        XCTAssertEqual(fake.submissions.last?.0, "rt-1")
+        XCTAssertTrue(fake.submissions.last?.1.hasSuffix("and book the hotel") == true)
+        guard await waitForCallChat({ base.jobs.last?.status == .running }) else { return }
+        base.observe(.messageComplete(sessionId: "rt-1", messageId: nil, content: "Booked.", reasoning: nil))
+        XCTAssertEqual(base.jobs.map(\.result), ["Plan.", "Booked."])
+
+        // Work kept apart still gets a chat of its own.
+        _ = await watch.startJob(instructions: "research flights in the background", profile: nil, joinsCall: false, onJobCreated: nil)
+        XCTAssertEqual(fake.created, 2)
+        XCTAssertEqual(watch.callChat?.runtimeSessionID, "rt-1")
+    }
+
+    func testCancellingAJobWaitingForTheCallsChatLeavesTheRunningOneAlone() async {
+        let fake = FakeVoiceJobBackend()
+        let base = VoiceBackgroundJobSupervisor(backend: fake.backend, pollInterval: .seconds(3_600), threadWaitInterval: .milliseconds(5))
+        let watch = WatchCallJobSupervisor(base)
+        _ = await watch.startJob(instructions: "plan the trip", profile: nil, joinsCall: true, onJobCreated: nil)
+        _ = await watch.startJob(instructions: "and book the hotel", profile: nil, joinsCall: true, onJobCreated: nil)
+        guard let waiting = base.jobs.last?.id else { return XCTFail("no job") }
+
+        _ = await base.cancel(jobID: waiting)
+
+        XCTAssertTrue(fake.cancelled.isEmpty, "the first request keeps running")
+        XCTAssertEqual(base.jobs.first?.status, .running)
+        base.observe(.messageComplete(sessionId: "rt-1", messageId: nil, content: "Plan.", reasoning: nil))
+        try? await Task.sleep(for: .milliseconds(40))
+        XCTAssertEqual(fake.submissions.count, 1, "the cancelled request never goes in")
+    }
 }

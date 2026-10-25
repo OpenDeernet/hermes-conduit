@@ -150,6 +150,9 @@ struct VoiceBackgroundJob: Identifiable, Equatable {
     /// A thread turn the liveness poll settled before its completion event
     /// arrived. That late event is its own reply, not a typed turn's.
     var settledByPoll = false
+    /// Runs in a chat an earlier job of the call made (`continueJob`,
+    /// #1250): until its request goes in, that chat's turn isn't its own.
+    var continuesChat = false
     /// The live call that started this job and where in its transcript,
     /// so the call screen can show the job there. Nil outside a live call.
     var callAnchor: VoiceJobCallAnchor?
@@ -1419,6 +1422,76 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         }
     }
 
+    /// Runs `instructions` as a job of its own in `chat`, the chat an
+    /// earlier job of the same call made (#1250): a Watch call's later
+    /// ordinary requests that the iPhone runs, as the relay's run in the
+    /// call's chat. Answered at once; the request goes in once nothing else
+    /// runs there, as an attached call's turns wait.
+    func continueJob(
+        instructions: String,
+        in chat: VoiceThreadTarget,
+        onJobCreated: (@MainActor (UUID) -> Void)? = nil
+    ) async -> String {
+        let activeCount = activeJobCount
+        guard activeCount < Self.maximumActiveJobs else {
+            return AppLocalization.string("You already have \(activeCount) background jobs running. Cancel them before starting another.")
+        }
+        var job = VoiceBackgroundJob(
+            id: UUID(),
+            title: Self.title(for: instructions),
+            instructions: instructions,
+            runtimeSessionID: chat.runtimeSessionID,
+            storedSessionID: chat.storedSessionID,
+            status: .starting,
+            startedAt: Date()
+        )
+        job.continuesChat = true
+        job.callAnchor = currentCallAnchor
+        markNewCallbackJob(&job)
+        lastJobNumber += 1
+        job.number = lastJobNumber
+        jobs.append(job)
+        onJobCreated?(job.id)
+        let generation = generation
+        Task { [weak self] in await self?.sendContinuedJob(job.id, in: chat, generation: generation) }
+        return startedReply(job)
+    }
+
+    private func sendContinuedJob(_ jobID: UUID, in chat: VoiceThreadTarget, generation: UInt64) async {
+        while generation == self.generation, job(jobID)?.status == .starting {
+            // One request at a time in the chat: an earlier job of the call
+            // still running there, or a turn typed in it, goes first.
+            let earlier = jobs.contains { other in
+                other.id != jobID && other.status.isActive && other.requestSent
+                    && [other.runtimeSessionID, other.storedSessionID].compactMap { $0 }.contains { chat.owns(sessionID: $0) }
+            }
+            if !earlier, !(await backend.threadIsBusy(chat)) { break }
+            try? await Task.sleep(for: threadWaitInterval)
+        }
+        guard generation == self.generation, job(jobID)?.status == .starting else { return }
+        do {
+            let runtimeID = try await backend.resolveThreadRuntime(chat)
+            guard generation == self.generation, job(jobID)?.status == .starting else { return }
+            let request = job(jobID)?.instructions ?? ""
+            update(jobID) {
+                if !runtimeID.isEmpty { $0.runtimeSessionID = runtimeID }
+                $0.requestSent = true
+                $0.sentAt = Date()
+            }
+            try await backend.submit(runtimeID.isEmpty ? chat.runtimeSessionID : runtimeID, Self.jobPrompt(for: request))
+            guard generation == self.generation else { return }
+            if job(jobID)?.status == .starting { update(jobID) { $0.status = .running } }
+            armCallback(jobID)
+            startPollingIfNeeded()
+        } catch {
+            guard generation == self.generation, job(jobID)?.status.isActive == true else { return }
+            // Events that already moved it on mean Hermes took it.
+            guard job(jobID)?.status == .starting else { startPollingIfNeeded(); return }
+            update(jobID) { $0.status = .failed(UserFacingError.message(for: error)) }
+            noticeMayBePending()
+        }
+    }
+
     /// Makes `jobID`'s chat the running call's (#1250): a call started
     /// outside a chat keeps its requests in the chat its first one made, as
     /// a call started from a chat keeps them in that one. Only while the
@@ -1893,6 +1966,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         let candidates = jobs.indices.filter { index in
             let job = jobs[index]
             return job.owns(sessionID: sessionID) && job.status.isActive && (!job.isThreadTurn || job.threadTurnSubmitted)
+                && (!job.continuesChat || job.requestSent)
         }
         return candidates.first { !jobs[$0].isDetachedThreadTurn } ?? candidates.first
     }
@@ -2021,6 +2095,9 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             $0.outcomeDelivered = true
         }
         callbackJobMayHaveSettled(job.id)
+        // Still waiting its turn in the call's chat: what runs there is
+        // another request's, so nothing is interrupted.
+        if job.continuesChat, !job.requestSent { return true }
         guard let sessionID = job.runtimeSessionID else { return true }
         do {
             try await backend.cancel(sessionID)
@@ -2810,20 +2887,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
 /// chat the delegation's own words decide where it goes. Gemini and Grok
 /// pick a tool instead.
 enum VoiceThreadRouting {
-    /// Phrases that keep work out of the chat, as a background job. Matched
-    /// as whole words, and only ones that say where the work should run:
-    /// "the new chat feature" is a request for this chat.
-    static let backgroundPhrases = [
-        "in the background",
-        "as a background job",
-        "in a background job",
-        "start a background job",
-        "in a separate chat",
-        "in a new chat",
-        "在后台",
-        "后台运行",
-        "后台任务",
-    ]
+    static let backgroundPhrases = VoiceJobRouting.backgroundPhrases
     /// "Read me the last reply" asks for what Hermes already said.
     static let lastReplyPhrases = [
         "last reply",
@@ -2852,7 +2916,7 @@ enum VoiceThreadRouting {
     /// Said as the request itself ("read me…", "can you repeat…"), not
     /// mentioned along the way ("they hear the last reply was wrong").
     static let readVerbs = ["read", "repeat", "tell me", "let me hear", "hear", "play back", "say"]
-    static let politePrefixes = ["please ", "can you ", "could you ", "would you ", "hey, ", "hey ", "ok, ", "ok ", "okay, ", "okay ", "so "]
+    static let politePrefixes = VoiceJobRouting.politePrefixes
     /// Said before a read request on a call, not part of it (#451): "no,
     /// no, I want you to read back the last reply", "you need to read…".
     static let readLeadIns = [
@@ -2879,12 +2943,10 @@ enum VoiceThreadRouting {
     /// CJK has no word breaks: the request is read only when it is just a
     /// verb and the reply phrase ("朗读上一条回复"), not a sentence about it.
     static let cjkReadVerbs = ["朗读", "读一下", "读给我听", "读给我", "读", "告诉我", "重复"]
-    static let cjkPolitePrefixes = ["请", "麻烦", "帮我"]
+    static let cjkPolitePrefixes = VoiceJobRouting.cjkPolitePrefixes
     static let cjkTrailers = ["。", "！", "吧", "呢", "一下", "给我听", "!", "."]
 
-    /// A request led by "quick" ("quick, what's on my calendar") runs as a
-    /// fast job on the Voice Jobs model instead of in the chat.
-    static let quickWords = ["quick", "quickly"]
+    static let quickWords = VoiceJobRouting.quickWords
 
     /// "Send it to Hermes" (#451): the user already said where it goes, so
     /// asking first doesn't ask again. Never when the words before it in
@@ -3458,8 +3520,7 @@ enum VoiceThreadRouting {
     }
 
     static func wantsBackgroundJob(_ request: String) -> Bool {
-        let folded = fold(request)
-        return backgroundPhrases.contains { contains(folded, phrase: $0) } || startsQuick(folded: folded)
+        VoiceJobRouting.wantsJobOfItsOwn(request)
     }
 
     /// The request without the leading "quick" that routed it (GPT-Live is
@@ -3478,31 +3539,7 @@ enum VoiceThreadRouting {
     }
 
     private static func startsQuick(folded: String) -> Bool {
-        var request = Substring(folded.trimmingCharacters(in: .whitespacesAndNewlines))
-        while let prefix = politePrefixes.first(where: { request.hasPrefix($0) }) {
-            request = request.dropFirst(prefix.count)
-        }
-        for word in quickWords where request.hasPrefix(word) {
-            let rest = request.dropFirst(word.count)
-            // A word of its own, with something asked after it.
-            guard let next = rest.first, !(next.isLetter || next.isNumber) else { continue }
-            // "Quick question, …" is a figure of speech, not a request for a job.
-            let asked = rest.drop { !($0.isLetter || $0.isNumber) }
-            if asked.hasPrefix("question"),
-               asked.dropFirst("question".count).first.map({ !($0.isLetter || $0.isNumber) }) ?? true { continue }
-            if !asked.isEmpty { return true }
-        }
-        var cjk = Substring(folded.filter { !$0.isWhitespace })
-        while let prefix = cjkPolitePrefixes.first(where: { cjk.hasPrefix($0) }) {
-            cjk = cjk.dropFirst(prefix.count)
-        }
-        // "快速" or "快" set off from the request: "快，查一下天气". Without
-        // the separator it is a word of its own ("快速排序").
-        for word in ["快速", "快"] where cjk.hasPrefix(word) {
-            let rest = cjk.dropFirst(word.count)
-            if let next = rest.first, "，,：:".contains(next), rest.count > 1 { return true }
-        }
-        return false
+        VoiceJobRouting.startsQuick(folded: folded)
     }
 
     static func wantsLastReply(_ request: String) -> Bool {
@@ -3640,26 +3677,11 @@ enum VoiceThreadRouting {
         return lastReplyPhrases.contains { $0 == String(request) }
     }
 
-    /// Lowercased, with a curly apostrophe made straight and the Turkish
-    /// "İ" lowercased to a plain "i" ("İptal" is "iptal", not "i̇ptal").
     private static func fold(_ text: String) -> String {
-        text.lowercased()
-            .replacingOccurrences(of: "\u{2019}", with: "'")
-            .replacingOccurrences(of: "i\u{307}", with: "i")
+        VoiceJobRouting.fold(text)
     }
 
-    /// Whole-word match for Latin phrases ("read" isn't in "thread"); CJK
-    /// phrases have no spaces, so a substring is a match.
     static func contains(_ text: String, phrase: String) -> Bool {
-        guard phrase.unicodeScalars.allSatisfy({ $0.isASCII }) else { return text.contains(phrase) }
-        var searchStart = text.startIndex
-        while let range = text.range(of: phrase, range: searchStart..<text.endIndex) {
-            let before = range.lowerBound == text.startIndex ? nil : text[text.index(before: range.lowerBound)]
-            let after = range.upperBound == text.endIndex ? nil : text[range.upperBound]
-            let isWordCharacter: (Character?) -> Bool = { $0.map { $0.isLetter || $0.isNumber } ?? false }
-            if !isWordCharacter(before) && !isWordCharacter(after) { return true }
-            searchStart = text.index(after: range.lowerBound)
-        }
-        return false
+        VoiceJobRouting.contains(text, phrase: phrase)
     }
 }
