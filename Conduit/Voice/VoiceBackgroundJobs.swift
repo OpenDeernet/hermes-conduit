@@ -1284,7 +1284,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     }
 
     /// Background jobs only: thread turns run in the attached chat.
-    var activeJobCount: Int { jobs.filter { $0.status.isActive && !$0.isThreadTurn }.count }
+    var activeJobCount: Int { jobs.filter { $0.status.isActive && !$0.isThreadTurn && !$0.isDetachedThreadTurn }.count }
 
     /// Jobs and thread turns still being worked on, for the liveness poll.
     private var activeWorkCount: Int { jobs.filter { $0.status.isActive }.count }
@@ -2372,11 +2372,12 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
 
     /// A completion the call already heard as a settled voice turn's reply:
     /// one the liveness poll settled first, whose late completion comes
-    /// back, or one whose message id it has noted. Matched once by reply,
+    /// back, or one it has noted, by message id or, without one, by reply. Matched once by reply,
     /// so a later turn with the same words still counts.
     private func isEarlierCallChatReply(_ messageID: String?, reply: String?, excluding id: UUID?) -> Bool {
         if let messageID, !messageID.isEmpty, id != nil, notedChatTurns.contains(messageID) { return true }
         let reply = (reply ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if id != nil, (messageID ?? "").isEmpty, !reply.isEmpty, reply == lastUnidentifiedChatReply { return true }
         guard !reply.isEmpty, let late = jobs.firstIndex(where: { job in
             job.id != id && runsInCallChat(job) && job.settledByPoll && !job.isDetachedThreadTurn
                 && job.result?.trimmingCharacters(in: .whitespacesAndNewlines) == reply

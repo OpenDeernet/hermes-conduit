@@ -171,6 +171,27 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(fake.threadSubmissions.first?.0, "rt-1")
     }
 
+    func testAReplayedReplyWithNoIdOfTheCallsChatRequestIsNotTheNextTurns() async {
+        let (supervisor, fake) = makeUnattachedCall()
+        _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: nil, content: "Plan.", reasoning: nil))
+        let next = supervisor.startThreadTurn(request: "and book the hotel")
+        guard await waitForCallChat({ !fake.threadSubmissions.isEmpty }) else { return }
+
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: nil, content: "Plan.", reasoning: nil))
+        XCTAssertEqual(supervisor.jobs.first(where: { $0.id == next.jobID })?.status.isActive, true)
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: nil, content: "Booked.", reasoning: nil))
+        XCTAssertEqual(supervisor.jobs.first(where: { $0.id == next.jobID })?.result, "Booked.")
+    }
+
+    func testAFirstRequestLeftRunningAtHangUpDoesNotCountAgainstTheNextCall() async {
+        let (supervisor, _) = makeUnattachedCall()
+        _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)
+        XCTAssertEqual(supervisor.activeJobCount, 1)
+        supervisor.detachLiveThread()
+        XCTAssertEqual(supervisor.activeJobCount, 0)
+    }
+
     func testANewRequestWaitsOnTheCallsChatRequestsQuestion() async {
         let (supervisor, fake) = makeUnattachedCall()
         _ = await supervisor.startJob(instructions: "clean the logs", joinsCall: true)
