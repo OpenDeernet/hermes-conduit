@@ -2183,6 +2183,64 @@ final class AppState: ObservableObject {
     var phoneScreenIsAway: @MainActor () -> Bool = {
         !PhoneScenePresence.isInForeground
     }
+    /// The Pulse screen (PulseFeed.swift): its unseen cards for the
+    /// button's badge, the chats' messages that have a card (chat id, then
+    /// Hermes' message id, to card id), a request to show it, and Pulse's
+    /// own chat, which the screen stands in for.
+    @Published var pulseUnseen = 0
+    @Published var pulseSources: [String: [Int: Int]] = [:]
+    @Published var pulseOpenRequest: PulseOpenRequest?
+    @Published var pulseHomeChatID: String?
+    /// Pulse's chat per dashboard as the last feed named it, kept across
+    /// launches: until the feed is read again after a launch or a
+    /// reconnect, the Pulse button and the hidden chat go by it. Views read
+    /// it through `pulseHomeChat`, so every change goes through
+    /// `storePulseHomes`, which tells them.
+    private(set) lazy var pulseRememberedHomes: [String: String] =
+        defaults.dictionary(forKey: Self.pulseHomesKey) as? [String: String] ?? [:]
+    static let pulseHomesKey = "conduit.pulse.homeChats"
+
+    func rememberPulseHome(_ chat: String?) {
+        guard let key = activeDashboardID?.uuidString, pulseRememberedHomes[key] != chat else { return }
+        var homes = pulseRememberedHomes
+        homes[key] = chat
+        storePulseHomes(homes)
+    }
+
+    /// A removed dashboard's Pulse chat goes with it.
+    func forgetPulseHome(of dashboardID: UUID) {
+        var homes = pulseRememberedHomes
+        guard homes.removeValue(forKey: dashboardID.uuidString) != nil else { return }
+        storePulseHomes(homes)
+    }
+
+    /// Do it's New Chat, for a Pulse item from no chat (PulseFeed.swift):
+    /// only when New Chat can start one at once, never one that waits. The
+    /// chat is the one this call's own create opened, as createNewSession
+    /// returns it, while it's still the one open: another create landing
+    /// meanwhile (a call's chat, Ask Hermes About, a widget) opens a chat
+    /// that isn't this one's. The Pulse screen stays up until it opened, so
+    /// a chat that didn't start leaves it there to say why. Nil when none
+    /// started.
+    func startPulseNewChat() async -> String? {
+        guard canStartNewChatNow, !isStartingNewChat, !showsPendingNewChat else { return nil }
+        guard let created = await createNewSessionMarkingStart(), activeSessionId == created else { return nil }
+        dismissSidebarDrawer()
+        return created
+    }
+
+    /// Do it's switch to Pulse's profile, for a new chat there: whether it
+    /// finished with that profile on screen. False when a newer navigation
+    /// took the screen meanwhile, which a new chat mustn't replace.
+    func switchProfileForPulse() async -> Bool {
+        await switchProfile(to: Self.pulseHomeProfile, reusing: nil)
+    }
+
+    private func storePulseHomes(_ homes: [String: String]) {
+        objectWillChange.send()
+        pulseRememberedHomes = homes
+        defaults.set(homes, forKey: Self.pulseHomesKey)
+    }
     @Published private(set) var composerPrefillText = ""
     @Published private(set) var composerPrefillToken = UUID()
     /// The draft the prefill is for, until ComposerBar puts it in. A new
@@ -7373,7 +7431,8 @@ final class AppState: ObservableObject {
             let firstLine = detail.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
             var detail = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
             if detail.count > 200 { detail = String(detail.prefix(200)) + "…" }
-            return detail.isEmpty
+            // A coded refusal is for the screen that asked; here it's just the error.
+            return detail.isEmpty || DashboardTicketBridgeError.isStructuredDetail(detail)
                 ? AppLocalization.string("Hermes answered with error \(String(status)).")
                 : AppLocalization.string("Hermes answered: \(detail)")
         default:
@@ -11999,6 +12058,7 @@ final class AppState: ObservableObject {
         if visibilities.removeValue(forKey: bucket) != nil {
             persistModelVisibilities(visibilities)
         }
+        forgetPulseHome(of: id)
     }
 
     // MARK: Relay gateways each dashboard's host reported
@@ -13251,6 +13311,10 @@ final class AppState: ObservableObject {
         recordOfflineChatCopy()
         recordSavedChatList()
         selectDashboardTarget(id)
+        // Pulse's badge, marks and chat are the outgoing dashboard's.
+        pulseUnseen = 0
+        pulseSources = [:]
+        pulseHomeChatID = nil
         rememberDashboardURL(dashboard.normalizedURL)
         let crossedServer = prepareChatResumeForConnection(to: dashboard.normalizedURL, dashboardID: id)
         retireConnectionRuntimeForDashboardSwitch()
@@ -17029,7 +17093,7 @@ final class AppState: ObservableObject {
         return nil
     }
 
-    private func canonicalSessionID(for sessionID: String?) -> String? {
+    func canonicalSessionID(for sessionID: String?) -> String? {
         ChatSessionPersistenceIdentity.canonicalID(
             for: sessionID,
             identity: activeChatScrollSessionIdentity,
@@ -22667,6 +22731,10 @@ final class AppState: ObservableObject {
             }
             return .failed
         }
+        if await opensPulseScreen(for: target) {
+            traceStage = "pulse"
+            return .opened
+        }
         traceStage = "open start"
         let notificationAttemptID = UUID()
         activeNotificationOpenAttemptID = notificationAttemptID
@@ -23148,7 +23216,9 @@ final class AppState: ObservableObject {
         !isStartingNewChat && (canStartNewChatNow || canQueueNewChat || showsPendingNewChat)
     }
 
-    private var canStartNewChatNow: Bool {
+    /// New Chat can start a chat right now, with nothing to wait for. Do
+    /// it's refusal on the Pulse screen goes by it too (PulseFeed.swift).
+    var canStartNewChatNow: Bool {
         isConnected && !isConnecting && !isProfileSwitching && client != nil
             && turnState != .synchronizing && offlineChatPresentation == nil
     }
@@ -24407,8 +24477,14 @@ final class AppState: ObservableObject {
     /// What the host's notifier plugin serves; Settings nudges an update.
     @Published private(set) var notifierPlugin = NotifierPluginStatus() {
         // A plugin that just said it takes on-screen reports gets the turn
-        // already running.
-        didSet { if oldValue.state != notifierPlugin.state { updateChatOnScreen() } }
+        // already running; one that answered without Pulse ends the Pulse
+        // this dashboard remembered.
+        didSet {
+            if oldValue.state != notifierPlugin.state {
+                updateChatOnScreen()
+                forgetPulseHomeIfGone()
+            }
+        }
     }
     /// The plugin on its repository's main branch, once read. A reset for
     /// another host keeps it (`freshNotifierPluginStatus`).
