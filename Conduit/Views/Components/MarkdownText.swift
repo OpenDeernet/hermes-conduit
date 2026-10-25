@@ -2135,6 +2135,11 @@ private struct RemoteMarkdownImage: View {
     /// Scopes where a `MEDIA:` picture is kept on the phone; without one
     /// (a surface that sets no resolver) it is fetched each time.
     @Environment(\.gatewayMediaFiles) private var gatewayMediaFiles
+    /// The chat's scroll engine, which says when a picture that will grow
+    /// its row shows (#1238).
+    @Environment(\.chatRowDisclosure) private var disclosure
+    /// The row's frame, and the picture waiting to show in it.
+    @StateObject private var arrival = ChatPictureArrival()
     @State private var gatewayImage: UIImage?
     /// The cache key `gatewayImage` was loaded for, so a row kept across a
     /// dashboard or profile switch never shows the picture it held before.
@@ -2154,6 +2159,7 @@ private struct RemoteMarkdownImage: View {
     /// Shown at most 360 pt tall and a phone's width: twice that, at 3x,
     /// stays sharp.
     private static let remoteMaxPixelSize: CGFloat = 2048
+    private static let maxHeight: CGFloat = 360
 
     private var isGatewayMedia: Bool { url.hasPrefix("MEDIA:") }
     private var gatewayCacheKey: String? {
@@ -2208,7 +2214,7 @@ private struct RemoteMarkdownImage: View {
             } else {
             switch shownRemoteOutcome {
             case .image(let image):
-                Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 360).clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: Self.maxHeight).clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .overlay { if openingRemote { ProgressView() } }
                     .opensMediaPreview(openRemoteImage)
                     .accessibilityLabel(alt.isEmpty ? Text("Image") : Text(verbatim: alt))
@@ -2222,6 +2228,7 @@ private struct RemoteMarkdownImage: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .chatRowFrame(arrival)
         .onDisappear {
             openTask?.cancel()
             openTask = nil
@@ -2244,10 +2251,27 @@ private struct RemoteMarkdownImage: View {
                 let started = TranscriptImageCache.generation
                 let outcome = await BoundedRemoteImage.load(remoteURL, maxPixelSize: Self.remoteMaxPixelSize)
                 guard !Task.isCancelled else { return }
-                if case .image(let image) = outcome, started == TranscriptImageCache.generation {
-                    TranscriptPictureMemory.rememberSize(image.size, for: remoteSizeKey)
+                guard case .image(let image) = outcome else {
+                    withAnimation(.easeInOut(duration: 0.2)) { remoteOutcome = outcome }
+                    return
                 }
-                withAnimation(.easeInOut(duration: 0.2)) { remoteOutcome = outcome }
+                // Shows once the reader's scrolling allows, its size
+                // remembered then: remembered first, it would resize the
+                // loading line on its own. In a chat the engine makes the
+                // row's growth good in one pass, so the picture lands
+                // unanimated there.
+                let engine = disclosure?.engine
+                let height = ChatPictureArrival.fittedHeight(of: image.size, inWidth: arrival.frame.width, maxHeight: Self.maxHeight)
+                arrival.arrive(rowHeight: height, engine: engine) {
+                    if started == TranscriptImageCache.generation {
+                        TranscriptPictureMemory.rememberSize(image.size, for: remoteSizeKey)
+                    }
+                    if engine == nil {
+                        withAnimation(.easeInOut(duration: 0.2)) { remoteOutcome = outcome }
+                    } else {
+                        remoteOutcome = outcome
+                    }
+                }
                 return
             }
             guard gatewayFileKind == nil else { return }
@@ -2267,11 +2291,7 @@ private struct RemoteMarkdownImage: View {
             let keptGeneration = TranscriptImageCache.generation
             if let cacheKey, let kept = await Self.keptGatewayImage(cacheKey, maxPixelSize: maxPixelSize) {
                 guard !Task.isCancelled else { return }
-                if keptGeneration == TranscriptImageCache.generation {
-                    TranscriptPictureMemory.remember(kept, for: cacheKey)
-                }
-                gatewayImage = kept
-                gatewayImageKey = cacheKey
+                placeGatewayImage(kept, for: cacheKey, generation: keptGeneration)
                 return
             }
             guard !Task.isCancelled else { return }
@@ -2304,6 +2324,17 @@ private struct RemoteMarkdownImage: View {
                 gatewayFailedURL = url
                 return
             }
+            placeGatewayImage(image, for: cacheKey, generation: generation)
+        }
+    }
+
+    /// Puts a picture from Hermes in the row once the reader's scrolling
+    /// allows (ChatPictureArrival), remembering it then: remembered first,
+    /// its size would resize the loading line on its own. After a sign-out
+    /// it shows, but isn't remembered.
+    private func placeGatewayImage(_ image: UIImage, for cacheKey: String?, generation: Int) {
+        let height = ChatPictureArrival.fittedHeight(of: image.size, inWidth: arrival.frame.width, maxHeight: Self.maxHeight)
+        arrival.arrive(rowHeight: height, engine: disclosure?.engine) {
             if let cacheKey, generation == TranscriptImageCache.generation {
                 TranscriptPictureMemory.remember(image, for: cacheKey)
             }
@@ -2318,7 +2349,7 @@ private struct RemoteMarkdownImage: View {
             Image(uiImage: gatewayImage)
                 .resizable()
                 .scaledToFit()
-                .frame(maxHeight: 360)
+                .frame(maxHeight: Self.maxHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay { if openingRemote { ProgressView() } }
                 .opensMediaPreview(openGatewayImage)
@@ -2347,7 +2378,7 @@ private struct RemoteMarkdownImage: View {
         if let size = reservedSize {
             Color.primary.opacity(0.05)
                 .aspectRatio(size, contentMode: .fit)
-                .frame(maxHeight: 360)
+                .frame(maxHeight: Self.maxHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay { label.padding(12) }
         } else {

@@ -1415,6 +1415,56 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertEqual(surface.contentOffsetY, 2000, "the background leaves the offset alone")
     }
 
+    // MARK: - Pictures arriving in their rows (#1238)
+
+    func testAPictureArrivingAboveTheReaderWaitsForTheFlingAndMovesThemWithIt() {
+        let (engine, surface) = browsingReader()
+        surface.isDecelerating = true
+        surface.contentOffsetY = 1900
+        engine.surfaceScrolled()
+        let arrival = ChatPictureArrival()
+        arrival.frame = CGRect(x: 0, y: 1000, width: 300, height: 44)
+        var shown = 0
+        arrival.arrive(rowHeight: 244, engine: engine) { shown += 1 }
+        XCTAssertEqual(shown, 0, "the loading line stays under the fling")
+
+        surface.isDecelerating = false
+        runScheduled()
+        XCTAssertEqual(shown, 1)
+        surface.layOut(contentHeight: 4200)
+        XCTAssertEqual(surface.contentOffsetY, 2100, "moved by the row's growth")
+    }
+
+    func testAPictureWhoseRowAlreadyHoldsItsSizeShowsAtOnce() {
+        let (engine, surface) = browsingReader()
+        surface.isDecelerating = true
+        surface.contentOffsetY = 1900
+        engine.surfaceScrolled()
+        let arrival = ChatPictureArrival()
+        arrival.frame = CGRect(x: 0, y: 1000, width: 300, height: 244)
+        var shown = 0
+        arrival.arrive(rowHeight: 244, engine: engine) { shown += 1 }
+        XCTAssertEqual(shown, 1, "nothing will move")
+        XCTAssertNil(engine.cardShift)
+    }
+
+    func testAPictureOutsideAChatShowsAtOnce() {
+        let arrival = ChatPictureArrival()
+        arrival.frame = CGRect(x: 0, y: 1000, width: 300, height: 44)
+        var shown = 0
+        arrival.arrive(rowHeight: 244, engine: nil) { shown += 1 }
+        XCTAssertEqual(shown, 1)
+    }
+
+    func testAReplyPictureFitsTheRowsWidthUpToItsCeiling() {
+        XCTAssertEqual(ChatPictureArrival.fittedHeight(of: CGSize(width: 1200, height: 800), inWidth: 300, maxHeight: 360), 200)
+        XCTAssertEqual(ChatPictureArrival.fittedHeight(of: CGSize(width: 100, height: 1000), inWidth: 300, maxHeight: 360), 360)
+        XCTAssertEqual(
+            ChatPictureArrival.fittedHeight(of: CGSize(width: 1200, height: 800), inWidth: 0, maxHeight: 360), 0,
+            "a row without a width yet has no growth to announce"
+        )
+    }
+
     // MARK: - Background
 
     func testPausedEngineLeavesTheOffsetAloneAndCatchesUpOnReturn() {

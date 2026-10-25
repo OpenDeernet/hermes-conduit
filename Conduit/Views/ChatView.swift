@@ -1759,6 +1759,11 @@ private struct UserImageAttachmentPreview: View {
     @State private var localPreview: UIImage?
     @State private var localPreviewPath: String?
     @State private var localPreviewFailedPath: String?
+    /// The chat's scroll engine, which says when a picture that will grow
+    /// its row shows (#1238).
+    @Environment(\.chatRowDisclosure) private var disclosure
+    /// The row's frame, and the picture waiting to show in it.
+    @StateObject private var arrival = ChatPictureArrival()
 
     /// Cache-only lookup (no decode) so a hit renders on the first frame.
     /// Misses are filled asynchronously — see the `.task` in `body`.
@@ -1851,6 +1856,7 @@ private struct UserImageAttachmentPreview: View {
                 .modifier(OptionalAccessibilityHint(hint: attachment.imageDescription))
             }
         }
+        .chatRowFrame(arrival)
         .task(id: "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.imageCacheKey(for: attachment) ?? "")") {
             // Local file: cache hits are already shown by `body` on the first
             // frame via `cachedLocalImage`, so only misses reach here. Decode
@@ -1866,12 +1872,17 @@ private struct UserImageAttachmentPreview: View {
                     localPreviewFailedPath = url.path
                     return
                 }
-                if generation == TranscriptImageCache.generation {
-                    TranscriptPictureMemory.previews.setObject(image, forKey: url.path as NSString, cost: TranscriptPictureMemory.bitmapCost(of: image))
-                    TranscriptPictureMemory.rememberSize(image.size, for: url.path)
+                // Shows once the reader's scrolling allows, kept and its
+                // size remembered then: either would resize the loading
+                // line on its own first.
+                arrival.arrive(rowHeight: previewHeight(for: image.size), engine: disclosure?.engine) {
+                    if generation == TranscriptImageCache.generation {
+                        TranscriptPictureMemory.previews.setObject(image, forKey: url.path as NSString, cost: TranscriptPictureMemory.bitmapCost(of: image))
+                        TranscriptPictureMemory.rememberSize(image.size, for: url.path)
+                    }
+                    localPreview = image
+                    localPreviewPath = url.path
                 }
-                localPreview = image
-                localPreviewPath = url.path
                 // A picture from Hermes. The local-file branch returns above,
                 // so a local URI never reaches here — which also removes the
                 // old `localImage == nil` check that decoded local files on
@@ -1891,12 +1902,7 @@ private struct UserImageAttachmentPreview: View {
                 let keptGeneration = TranscriptImageCache.generation
                 if let image = await Self.keptPreview(for: cacheKey) {
                     guard !Task.isCancelled else { return }
-                    if keptGeneration == TranscriptImageCache.generation {
-                        remember(image, as: cacheKey)
-                    } else {
-                        gatewayImage = image
-                        gatewayImageKey = cacheKey
-                    }
+                    place(image, as: cacheKey, generation: keptGeneration)
                     return
                 }
                 guard !Task.isCancelled else { return }
@@ -1918,12 +1924,22 @@ private struct UserImageAttachmentPreview: View {
                     return
                 }
                 guard !Task.isCancelled else { return }
-                if generation == TranscriptImageCache.generation {
-                    remember(image, as: cacheKey)
-                } else {
-                    gatewayImage = image
-                    gatewayImageKey = cacheKey
-                }
+                place(image, as: cacheKey, generation: generation)
+            }
+        }
+    }
+
+    /// Puts a picture from Hermes in the row once the reader's scrolling
+    /// allows (ChatPictureArrival), remembering it then: remembered first,
+    /// its size would resize the loading line on its own. After a sign-out
+    /// it shows, but isn't remembered.
+    private func place(_ image: UIImage, as key: String, generation: Int) {
+        arrival.arrive(rowHeight: previewHeight(for: image.size), engine: disclosure?.engine) {
+            if generation == TranscriptImageCache.generation {
+                remember(image, as: key)
+            } else {
+                gatewayImage = image
+                gatewayImageKey = key
             }
         }
     }

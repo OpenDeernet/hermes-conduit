@@ -1789,22 +1789,25 @@ does.
 
 **Siblings:** chats, project chats and Bot Chat · the saved-chat copy · reply
 pictures in tool results, large documents and HTML previews · call job
-result sheets · group rooms · the cards drawn in web pages, whose heights
-share the memo (see Cards drawn in web pages) · text that describes it (none
-today: no Settings caption, briefing or doc says how pictures load)
+result sheets · group rooms · the cards drawn in web pages, which share the
+memo and the scroll engine's gate (see Cards drawn in web pages) · text that
+describes it (none today: no Settings caption, briefing or doc says how
+pictures load)
 
 **Code**
 - Attachments: `Conduit/Views/ChatView.swift` (UserImageAttachmentPreview)
 - Reply pictures (`MEDIA:` and web): `Conduit/Views/Components/MarkdownText.swift` (RemoteMarkdownImage), `Conduit/Views/Components/BoundedRemoteImage.swift`, `Conduit/Views/Components/GatewayMediaDataURLResolver.swift` (imageCacheKey, imageCacheKey(forMediaPath:)), set for job sheets in `Conduit/Views/LiveVoiceCallJobs.swift`
 - Kept and remembered: `Conduit/Services/TranscriptImageCache.swift` (files on the phone), `Conduit/Services/TranscriptPictureMemory.swift` (decoded reply pictures, attachment previews, every picture's size and the card heights, loaded from ChatView), both forgotten in `Conduit/Services/AppState.swift` (wipeOfflineChatCache, deleteSavedChats)
+- A picture's first arrival: `Conduit/Views/Components/ChatCardHeight.swift` (ChatPictureArrival, chatRowFrame), `Conduit/Services/ChatScrollEngine.swift` (cardMeasured, takeCardShift), reached through `Conduit/Views/ChatRowDisclosure.swift` (engine)
 - Tests: `ConduitTests/TranscriptInlineImageTests.swift`
 
 **Rulings**
 - A row never changes height when its picture arrives, if the picture has loaded on this phone before: its size is remembered (kept next to the pictures, read once off the main thread) and its placeholder takes it (2026-10-25, #1239, #1238).
 - Reading, decoding and keeping a picture, and its size, stay off the main thread: a body looks pictures and sizes up in memory only (a local photo's existence is still checked there: a stat, never a picture read). A picture kept on the phone is never fetched again (2026-10-25, #1239).
+- A picture with no remembered size arrives the way a card takes its height: its row keeps the loading line while the reader scrolls, and once at rest, a row above the viewport grows in the same layout pass that moves the offset by the growth (ChatScrollEngine.cardMeasured). The picture and its size are remembered only as it shows, never before: a remembered size would resize the loading line on its own. In a chat a web picture lands without its fade, since the move needs the growth in one pass (2026-10-25, #1270, #1238).
 
 **Open gaps**
-- A picture never loaded on this phone, or kept by a build before #1239 and not shown since, still mounts as a loading line and grows once, where it is: pictures don't go through the scroll engine the way the cards drawn in web pages do (#1270), because their height follows the row's width, which the memo doesn't know.
+- A picture never loaded on this phone, or kept by a build before #1239 and not shown since, still grows its row once, at rest: above the reader the offset moves with it, on screen it grows below what they look at, unanimated. Its height follows the row's width, so the memo can't reserve it before it loads.
 - Group rooms show no `MEDIA:` pictures: their Markdown has no gateway resolver.
 - Past 4,000 remembered sizes the memo starts again (no LRU), so pictures grow once more until each loads again.
 
@@ -1818,14 +1821,14 @@ reports its height.
 
 **Siblings:** chats, project chats and Bot Chat (the scroll engine's rows) ·
 the saved-chat copy · call job result sheets · group rooms · the full-screen
-sheets (the same page, interactive) · pictures in messages (the same memo,
-see Pictures in messages) · text that describes it (none today: no Settings
-caption, briefing or doc says how these cards draw)
+sheets (the same page, interactive) · pictures in messages (the same memo
+and the same gate, see Pictures in messages) · text that describes it (none
+today: no Settings caption, briefing or doc says how these cards draw)
 
 **Code**
 - HTML previews: `Conduit/Views/Components/HTMLPreviewBlock.swift` (HTMLPreviewBlock, heightKey, HTMLPreviewPage.placeholderHeight)
 - Diagrams and formulas: `Conduit/Views/Components/MarkupBlock.swift` (MarkupBlock, heightKey(for:), placeholderHeight(for:))
-- The room a card holds, and when it takes its height: `Conduit/Views/Components/ChatCardHeight.swift`, `Conduit/Services/ChatScrollEngine.swift` (cardMeasured, takeCardShift, scrollRestDelay, cardGrowthDeadline), reached through `Conduit/Views/ChatRowDisclosure.swift` (engine)
+- The room a card holds, and when it takes its height: `Conduit/Views/Components/ChatCardHeight.swift` (ChatCardHeight; ChatPictureArrival for pictures), `Conduit/Services/ChatScrollEngine.swift` (cardMeasured, takeCardShift, scrollRestDelay, cardGrowthDeadline), reached through `Conduit/Views/ChatRowDisclosure.swift` (engine)
 - Heights kept across launches: `Conduit/Services/TranscriptPictureMemory.swift` (height, rememberHeight, with the picture sizes), forgotten in `Conduit/Services/AppState.swift` (wipeOfflineChatCache, deleteSavedChats)
 - Built from Markdown: `Conduit/Views/Components/MarkdownText.swift` (htmlPreview, math and mermaid blocks)
 - Tests: `ConduitTests/ChatScrollEngineTests.swift` (Cards taking their measured height), `ConduitTests/TranscriptInlineImageTests.swift`, `ConduitTests/MarkupBlockTests.swift`, `ConduitTests/MarkdownLargeDocumentTests+HTMLPreview.swift`
@@ -1840,7 +1843,6 @@ caption, briefing or doc says how these cards draw)
 - A kept height is for the width and text size it was measured at: an iPad whose chat column changed width, or a formula after a text size change, takes the kept height and then its new one, announced like any growth.
 - A page that fails (the file card, Couldn't draw) replaces the card at the fallback's height without telling the engine.
 - The saved-chat copy and job sheets have no engine, so their cards grow where they are; group rooms draw diagrams and formulas the same way, and show no HTML previews (no gateway resolver).
-- Pictures still grow once where they are when never loaded on this phone (see Pictures in messages).
 
 **Checked:** 2026-10-25, at #1270.
 

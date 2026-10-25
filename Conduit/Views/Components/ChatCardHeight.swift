@@ -16,6 +16,10 @@
 //  Outside a chat (a job sheet, the saved copy) there is no engine and the
 //  card takes its height at once.
 //
+//  A picture arriving in its row (ChatPictureArrival) goes the same way:
+//  the loading line stays until the reader's scrolling rests, and the row's
+//  growth above the viewport is made good in the pass that lands it.
+//
 
 import SwiftUI
 
@@ -93,6 +97,66 @@ extension View {
             // Layout callbacks arrive on the main thread; said so, whatever
             // isolation the SDK gives this closure.
             MainActor.assumeIsolated { card.stackMinY = minY }
+        }
+    }
+}
+
+/// A picture row's growth when its picture arrives (#1238). The row shows a
+/// loading line until then, and a reply picture's height follows the row's
+/// width, so the growth is known only once both are: the view keeps the
+/// row's frame here (`chatRowFrame`), and when the picture is decoded hands
+/// over the height the row will take and what shows it. The engine lets it
+/// show like a card taking its height (ChatScrollEngine.cardMeasured); a
+/// row already at that height, or one outside a chat, shows it at once.
+@MainActor
+final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
+    /// The row's frame in the transcript stack's space.
+    var frame: CGRect = .zero
+    private var pending: (delta: CGFloat, show: () -> Void)?
+
+    /// A reply picture's height in its row: scaled to the row's width, up
+    /// to `maxHeight` (`Image.resizable().scaledToFit().frame(maxHeight:)`).
+    /// Zero before the row has a width.
+    static func fittedHeight(of size: CGSize, inWidth width: CGFloat, maxHeight: CGFloat) -> CGFloat {
+        guard size.width > 0, size.height > 0, width > 0 else { return 0 }
+        return min(maxHeight, width * size.height / size.width)
+    }
+
+    /// The picture is decoded: `show` puts it in the row, which then takes
+    /// `rowHeight`. A row not laid out yet (no height to grow from) shows
+    /// it at once.
+    func arrive(rowHeight: CGFloat, engine: ChatScrollEngine?, show: @escaping () -> Void) {
+        let delta = rowHeight > 0 && frame.height > 0 ? rowHeight - frame.height : 0
+        pending = (delta, show)
+        if let engine, abs(delta) > 0.5 {
+            engine.cardMeasured(self)
+        } else {
+            takeMeasuredHeight()
+        }
+    }
+
+    // MARK: - ChatScrollMeasuredCard
+
+    var pendingGrowth: ChatScrollCardGrowth {
+        ChatScrollCardGrowth(delta: pending?.delta ?? 0, minY: frame.minY)
+    }
+
+    func takeMeasuredHeight() {
+        guard let pending else { return }
+        self.pending = nil
+        pending.show()
+    }
+}
+
+extension View {
+    /// Keeps `arrival` told where this row is in the transcript stack's
+    /// space and how tall it is, which change with layout, never with a
+    /// scroll tick.
+    func chatRowFrame(_ arrival: ChatPictureArrival) -> some View {
+        onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: CoordinateSpace.named(ChatScrollEngine.coordinateSpaceName))
+        } action: { frame in
+            MainActor.assumeIsolated { arrival.frame = frame }
         }
     }
 }
