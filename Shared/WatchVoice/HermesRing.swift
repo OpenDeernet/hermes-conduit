@@ -548,6 +548,21 @@ enum HermesRingControl {
         return nil
     }
 
+    /// The control as it stands, without waiting: seq 0 and unmuted when
+    /// no one has written it yet, nil when the relay has no such ring or no
+    /// control route, or couldn't be reached.
+    static func current(
+        _ ring: HermesRing,
+        send: (URLRequest) async throws -> (Data, Int) = HermesRingHandoff.send
+    ) async -> State? {
+        guard let answer = try? await send(readRequest(ring, after: 0, wait: 0)) else { return nil }
+        switch readResult(status: answer.1, data: answer.0) {
+        case .state(let state): return state
+        case .notYet: return State(seq: 0, muted: false, ended: false)
+        case .gone, .retry: return nil
+        }
+    }
+
     /// Reads the control past `seq` until it ends, the ring goes, or the
     /// task is cancelled, handing each change to `changed`. A ring the relay
     /// lost (a restart) is written again with `rewrite`, this device's state,

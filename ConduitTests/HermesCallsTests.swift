@@ -1659,6 +1659,16 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(retried, .init(seq: 2, muted: false, ended: true), "A restarting relay is tried again")
         XCTAssertEqual(tries, 3)
 
+        let stands = await HermesRingControl.current(ring) { request in
+            XCTAssertEqual(request.url?.query, "after=0&wait=0")
+            return (Data(#"{"seq":1,"muted":true,"ended":false}"#.utf8), 200)
+        }
+        XCTAssertEqual(stands, .init(seq: 1, muted: true, ended: false), "A mute the Watch sent first stands")
+        let unwritten = await HermesRingControl.current(ring) { _ in (Data(), 204) }
+        XCTAssertEqual(unwritten, .init(seq: 0, muted: false, ended: false))
+        let lost = await HermesRingControl.current(ring) { _ in (Data(), 404) }
+        XCTAssertNil(lost, "A ring the relay lost, or an older relay: written instead")
+
         var bodies = [Data("garbled".utf8), Data(#"{"seq":3,"muted":true,"ended":false}"#.utf8)]
         let reread = await HermesRingControl.set(ring, by: .phone, muted: true, attempts: 2, retryDelay: 0) { _ in (bodies.removeFirst(), 200) }
         XCTAssertEqual(reread, .init(seq: 3, muted: true, ended: false), "A 200 it can't read is tried again")
