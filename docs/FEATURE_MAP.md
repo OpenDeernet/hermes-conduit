@@ -1765,7 +1765,8 @@ Hermes, else the gold accent.
 use) · the open chat (chats, project chats, Bot Chat: the chat's own agent)
 and its working line · sheets over the open chat (Model, Context) · group
 rooms (the profile in use) · Settings and its pages · the Profiles and All
-profiles sheets · the Live Activity's color
+profiles sheets · the Live Activity's color · Settings captions and
+model-facing text (none describe the glow)
 
 **Code**
 - Colors: `Conduit/Services/ProfileGlowColors.swift`, `Conduit/Services/AppState+V2Shell.swift` (profileGlowTint), `Conduit/Services/AppState.swift` (profileGlowColors, setProfileGlowColor, conversationIdentityProfile), `Conduit/Services/ProfileAppearanceStore.swift` (picks)
