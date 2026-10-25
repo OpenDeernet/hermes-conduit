@@ -1167,7 +1167,8 @@ final class GeminiLiveConversationController: ObservableObject {
         return false
     }
 
-    /// The model is told to acknowledge every start_job out loud. If it
+    /// The model is told to acknowledge every start_job out loud (Grok and
+    /// Local Live once it returns). If it
     /// stayed silent (it sometimes does while a NON_BLOCKING call runs),
     /// prompt a one-line acknowledgement once the conversation is quiet.
     private func ensureAcknowledgement(since calledAt: Date, epoch: Int) {
