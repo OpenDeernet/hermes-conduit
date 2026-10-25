@@ -1261,7 +1261,7 @@ and the README's "See it in action" strip show.
 **Siblings:** the iPhone and iPad capture · the Watch capture · the call
 fixtures they launch (phone and Watch) · the showcase clips · the App Preview
 cut · scripts/app-store/README.md · README.md's "See it in action" strip
-(`docs/media/`) · the hermesconduit.app pages that show the
+(`docs/media/voice.webp` and the clips beside it) · the hermesconduit.app pages that show the
 clips (kaishi00/hermes-conduit-website)
 
 **Code**
