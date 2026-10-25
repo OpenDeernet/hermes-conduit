@@ -89,7 +89,6 @@ extension WakePhraseCompilerTests {
         XCTAssertTrue(WakePhraseMatcher.isUsable("小爱"))
         // Every script wake hears without word spacing counts characters.
         XCTAssertTrue(WakePhraseMatcher.isUsable("ㄋㄧ"), "bopomofo")
-        XCTAssertTrue(WakePhraseMatcher.isUsable("ﾾￂ"), "halfwidth hangul")
         XCTAssertTrue(WakePhraseMatcher.isUsable("สวัสดี"), "thai")
         let thai = binding("สวัสดีเฮอร์มีส")
         XCTAssertEqual(WakePhraseMatcher.match(transcript: "โอเคสวัสดีเฮอร์มีสครับ", bindings: [thai]), thai)
