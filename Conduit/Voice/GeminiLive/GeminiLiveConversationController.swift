@@ -1466,10 +1466,15 @@ final class GeminiLiveConversationController: ObservableObject {
             guard self.session.map(ObjectIdentifier.init) == sentOn,
                   self.session?.connectionGeneration == generation else {
                 // Same call, new connection: said if the model spoke since,
-                // otherwise reported again there as a tracked update.
+                // otherwise reported again there as a tracked update. That
+                // is its one resend, on whichever connection (#1210).
                 if self.modelSpoke(since: sentAt) {
+                    if let jobID { self.respokenJobIDs.remove(jobID) }
+                    self.tools.outcomeSent(jobID: jobID)
+                } else if let jobID, self.respokenJobIDs.remove(jobID) != nil {
                     self.tools.outcomeSent(jobID: jobID)
                 } else {
+                    if let jobID { self.respokenJobIDs.insert(jobID) }
                     self.reissueAsTextUpdates([jobID])
                 }
                 return
