@@ -1765,15 +1765,17 @@ Chat (Hermes' messaging gateway) · the notifier's live read of the setting
 for chats already open
 
 **Code**
-- Setting: `Conduit/Views/AuxiliaryViews.swift` (ChatSettingsDetail fields, `display.memory_notifications`)
-- Row: `Conduit/Services/StreamEventParser.swift` (`review.summary`), `Conduit/Services/HermesClient.swift` (reviewActivity), `Conduit/Services/AppState.swift` (the review cache, mergeCachedReviews), `Conduit/Views/ChatView.swift` (SELF-IMPROVEMENT REVIEW)
+- Setting: `Conduit/Views/AuxiliaryViews.swift` (ChatSettingsDetail fields, `display.memory_notifications`), `Conduit/Models/Models.swift` (ProfileDisplayPreferences.showReviews), `Conduit/Services/AppState.swift` (loadProfileDisplayPreferences, setProfileSetting)
+- Row: `Conduit/Services/StreamEventParser.swift` (`review.summary`), `Conduit/Services/HermesClient.swift` (reviewActivity), `Conduit/Services/AppState.swift` (the review cache, mergeCachedReviews), `Conduit/Views/ChatView.swift` (SELF-IMPROVEMENT REVIEW, drawnMessageScrollTargets), `Conduit/Views/ChatActivityRows.swift` (ChatMessageScrollTarget.drawsRow), `Conduit/Views/OfflineChatTranscriptView.swift` (the offline copy)
+- Tests: `ConduitTests/AppStateChatResumeTests.swift` (testReviewRowsFollowTheSelfImprovementSetting)
 - Notifier: `notifier/review_notices.py`, `notifier/tests/test_review_notices.py`
 
 **Rulings**
 - A changed setting reaches chats already open at their next review, with no restart: the dashboard reads it only when it builds a chat's agent, so the plugin reads it again from the chat's profile before each review. Bot Chat needs nothing, Hermes' gateway reads it every turn (2026-10-25, notifier #373, #1260).
+- Never show hides the rows a chat already has too, live and in the offline copy, without deleting them: they come back when the setting does. Anything but "off" (or a YAML false) shows them, as Hermes reads it (2026-10-25, #1260; Eric's rule to close gaps in the same change).
 
 **Open gaps**
-- Review rows a chat already showed stay in its history (and in the app's review cache) after the setting turns off; only new reviews are hidden.
+- None known.
 
 **Checked:** 2026-10-25, #1260.
 
