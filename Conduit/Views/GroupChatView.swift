@@ -258,6 +258,8 @@ struct GroupChatView: View {
         // move the offset at all).
         Task { @MainActor [followFlag] in
             try? await Task.sleep(for: .milliseconds(300))
+            // Over even if the locator has gone (the room closed).
+            followFlag.isLanding = false
             followFlag.reevaluate?()
         }
     }
