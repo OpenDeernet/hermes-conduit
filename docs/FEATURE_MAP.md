@@ -1753,6 +1753,30 @@ Settings caption, briefing or doc says how pictures load)
 
 **Checked:** 2026-10-25, at #1239.
 
+## Self-improvement updates
+
+The "💾 Self-improvement review" rows Hermes adds to a chat after it saves a
+memory or a skill, and the Chat setting that shows or hides them
+(`display.memory_notifications`: Use Hermes default, Always show, Never show).
+
+**Siblings:** the Chat settings row and its caption · the review row in the
+chat · chats, project chats and group rooms (the dashboard's chats) · Bot
+Chat (Hermes' messaging gateway) · the notifier's live read of the setting
+for chats already open
+
+**Code**
+- Setting: `Conduit/Views/AuxiliaryViews.swift` (ChatSettingsDetail fields, `display.memory_notifications`)
+- Row: `Conduit/Services/StreamEventParser.swift` (`review.summary`), `Conduit/Services/HermesClient.swift` (reviewActivity), `Conduit/Services/AppState.swift` (the review cache, mergeCachedReviews), `Conduit/Views/ChatView.swift` (SELF-IMPROVEMENT REVIEW)
+- Notifier: `notifier/review_notices.py`, `notifier/tests/test_review_notices.py`
+
+**Rulings**
+- A changed setting reaches chats already open at their next review, with no restart: the dashboard reads it only when it builds a chat's agent, so the plugin reads it again from the chat's profile before each review. Bot Chat needs nothing, Hermes' gateway reads it every turn (2026-10-25, notifier #373, #TBD).
+
+**Open gaps**
+- Review rows a chat already showed stay in its history (and in the app's review cache) after the setting turns off; only new reviews are hidden.
+
+**Checked:** 2026-10-25, #TBD.
+
 ## Feature map rules
 
 How a change brings its connected features along, and how this map stays
