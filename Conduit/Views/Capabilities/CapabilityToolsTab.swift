@@ -500,8 +500,11 @@ struct CapabilityToolsetDetailPage: View {
 
     private func load() async {
         async let configLoad = try? store.toolsetConfig(name: name)
+        // A read a switch cancelled leaves the next one's page alone.
         if name == "terminal" {
-            if let fresh = try? await store.terminalBackends() {
+            let fresh = try? await store.terminalBackends()
+            guard !Task.isCancelled else { return }
+            if let fresh {
                 backends = fresh
                 backendsError = nil
             } else if backends == nil {
@@ -509,6 +512,7 @@ struct CapabilityToolsetDetailPage: View {
             }
         }
         let loaded = await configLoad
+        guard !Task.isCancelled else { return }
         if let loaded {
             config = loaded
             configError = nil
