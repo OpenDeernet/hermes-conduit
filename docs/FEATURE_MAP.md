@@ -1775,13 +1775,13 @@ profiles sheets · the Live Activity's color
 - Tests: `ConduitTests/ProfileGlowColorTests.swift`, `ConduitTests/BotModeTests.swift` (conversationIdentityProfile, the bot's glow)
 
 **Rulings**
-- A Bot Chat glows in its bot's color, the backdrop and the sheets over it as well as its working line and Live Activity; the Bots list and every other root keep the profile in use (2026-10-25, Eric's report, #PRNUM).
+- A Bot Chat glows in its bot's color, the backdrop and the sheets over it as well as its working line and Live Activity; the Bots list and every other root keep the profile in use (2026-10-25, Eric's report, #1263).
 - Sheets reached from Settings or a page take the glow as an environment value (`settingsGlowTint`), not from AppState, so a sheet built on them needs nothing injected (#638).
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-25, #PRNUM.
+**Checked:** 2026-10-25, #1263.
 
 ## Feature map rules
 
