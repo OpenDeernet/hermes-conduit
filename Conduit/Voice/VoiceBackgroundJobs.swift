@@ -418,6 +418,12 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     /// The job whose chat an unattached call took as its own (#1250): the
     /// call's first ordinary request. Its chat is `liveThread`.
     private(set) var callChatJobID: UUID?
+    /// The ordinary job whose chat is still being made, for the call it
+    /// was asked in: a request said meanwhile waits to join that chat.
+    private var callChatClaim: (jobID: UUID, callID: UUID)?
+    /// The call that let go of its chat: a first job that finishes starting
+    /// after the hang-up no longer makes its chat the call's.
+    private var callChatClosedCallID: UUID?
 
     /// A note waiting for the call. A screenshot note carries its
     /// screenshot's attachment URI, so removing that screenshot finds it.
@@ -1325,6 +1331,12 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         joinsCall: Bool = false,
         onJobCreated: (@MainActor (UUID) -> Void)? = nil
     ) async -> String {
+        if joinsCall, liveThread == nil {
+            // Said while the call's first job is still making its chat: it
+            // joins that chat once it's made.
+            await waitForCallChatClaim()
+            if liveThread != nil { return joinCallChat(requested, onJobCreated: onJobCreated) }
+        }
         let activeCount = activeJobCount
         guard activeCount < Self.maximumActiveJobs else {
             return AppLocalization.string("You already have \(activeCount) background jobs running. Cancel them before starting another.")
@@ -1356,6 +1368,10 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         anchored.number = lastJobNumber
         jobs.append(anchored)
         onJobCreated?(job.id)
+        if joinsCall, profile == nil, liveThread == nil, callChatClaim == nil, let callID = liveCallID {
+            callChatClaim = (job.id, callID)
+        }
+        defer { if callChatClaim?.jobID == job.id { callChatClaim = nil } }
         let generation = generation
         var createdSessionID: String?
         do {
@@ -1502,7 +1518,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     /// job's own call runs and nothing is attached yet, and only for a job
     /// on the profile in use that Hermes took.
     private func adoptCallChat(_ jobID: UUID) {
-        guard liveThread == nil, let job = job(jobID), job.profile == nil,
+        guard liveThread == nil, liveCallID != callChatClosedCallID, let job = job(jobID), job.profile == nil,
               let callID = job.callAnchor?.callID, callID == liveCallID, liveCallTranscript?() != nil,
               let runtimeID = job.runtimeSessionID, !runtimeID.isEmpty else { return }
         switch job.status {
@@ -1514,6 +1530,23 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         update(jobID) { $0.isCallChat = true }
         liveThread = thread
         onCallChatAdopted?(thread)
+    }
+
+    /// Waits while the running call's first ordinary job is making its chat.
+    private func waitForCallChatClaim() async {
+        let generation = generation
+        while let claim = callChatClaim, claim.callID == liveCallID, liveThread == nil, generation == self.generation {
+            try? await Task.sleep(for: threadWaitInterval)
+        }
+    }
+
+    /// A request that waited for the call's chat, sent there as its next
+    /// turn. Read by the live model, not shown: not localized.
+    private func joinCallChat(_ request: String, onJobCreated: (@MainActor (UUID) -> Void)?) -> String {
+        let sent = startThreadTurn(request: request)
+        guard let id = sent.jobID else { return sent.refusal ?? "Hermes couldn't take the request." }
+        onJobCreated?(id)
+        return "Sent to the call's chat as its next message, after the request before it. Hermes' reply arrives later on this call; don't guess it."
     }
 
     /// Whether `job` holds the call's chat: a voice turn sent there, or the
@@ -1541,7 +1574,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     /// The background job with `number` in spoken job lists.
     func backgroundJob(numbered number: Int) -> VoiceBackgroundJob? {
         guard number > 0 else { return nil }
-        return jobs.first { !$0.isThreadTurn && $0.number == number }
+        return jobs.first { !$0.isThreadTurn && !$0.isDetachedThreadTurn && $0.number == number }
     }
 
     /// Puts the user's follow-up into the request `jobID` (a background job,
@@ -1755,6 +1788,8 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         liveThread = nil
         let callChatJob = callChatJobID
         callChatJobID = nil
+        callChatClaim = nil
+        callChatClosedCallID = liveCallID
         chatNotes.removeAll()
         callChatPrompts.removeAll()
         screenshotNotesHeard.removeAll()
@@ -2085,7 +2120,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     /// Cancels one active job. Returns what to say, or nil when no active
     /// job has that id.
     func cancel(jobID: UUID) async -> String? {
-        guard let job = job(jobID), job.status.isActive, !job.isThreadTurn else { return nil }
+        guard let job = job(jobID), job.status.isActive, !job.isThreadTurn, !job.isDetachedThreadTurn else { return nil }
         let cancelled = await cancelOnHermes(job)
         stopPollingIfIdle()
         pruneSettledJobs()
@@ -2168,6 +2203,8 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         noticesInFlight.removeAll()
         liveThread = nil
         callChatJobID = nil
+        callChatClaim = nil
+        callChatClosedCallID = nil
         liveCallID = nil
         liveCallStartedAt = nil
         callOpening = nil

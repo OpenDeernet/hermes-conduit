@@ -114,6 +114,7 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(supervisor.jobs.first?.isDetachedThreadTurn, true)
         XCTAssertEqual(supervisor.jobs.first?.status, .running, "a request Hermes took isn't cancelled")
         XCTAssertTrue(supervisor.listedJobs.isEmpty, "a later call doesn't list it")
+        XCTAssertNil(supervisor.backgroundJob(numbered: 1), "nor reach it by number")
 
         supervisor.beginLiveCall()
         supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: "m1", content: "Plan.", reasoning: nil))
@@ -172,6 +173,45 @@ extension VoiceConversationControllerTests {
         supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: "m1", content: "Here's the plan.", reasoning: nil))
         guard case .submit(let prompt, _)? = supervisor.takePendingNotice() else { return XCTFail("the result is handed back") }
         XCTAssertTrue(prompt.hasPrefix("[Hermes replied in the chat."))
+    }
+
+    func testARequestSaidWhileTheCallsChatIsMadeJoinsThatChat() async {
+        let (supervisor, fake) = makeUnattachedCall()
+        fake.parksCreate = true
+        var firstID: UUID?
+        let first = Task { await supervisor.startJob(instructions: "plan the trip", joinsCall: true) { firstID = $0 } }
+        await fake.createParked.waitUntil(1)
+        XCTAssertNotNil(firstID)
+        var secondID: UUID?
+        let second = Task { await supervisor.startJob(instructions: "and book the hotel", joinsCall: true) { secondID = $0 } }
+        try? await Task.sleep(for: .milliseconds(30))
+        XCTAssertNil(secondID, "it waits for the chat being made")
+        fake.releaseCreate()
+        _ = await first.value
+        _ = await second.value
+
+        XCTAssertEqual(fake.created, 1, "one chat for both")
+        XCTAssertEqual(supervisor.liveThread?.runtimeSessionID, "rt-1")
+        XCTAssertEqual(supervisor.jobs.first { $0.id == secondID }?.isThreadTurn, true, "the second is the chat's next turn")
+    }
+
+    func testAFirstJobThatFinishesStartingAfterTheHangUpAttachesNothing() async {
+        let (supervisor, fake) = makeUnattachedCall()
+        fake.parksCreate = true
+        var firstID: UUID?
+        let first = Task { await supervisor.startJob(instructions: "plan the trip", joinsCall: true) { firstID = $0 } }
+        await fake.createParked.waitUntil(1)
+        XCTAssertNotNil(firstID)
+        supervisor.detachLiveThread()
+        fake.releaseCreate()
+        _ = await first.value
+        XCTAssertNil(supervisor.liveThread)
+        XCTAssertNil(supervisor.callChatJobID)
+
+        // The next call makes its own chat.
+        supervisor.beginLiveCall()
+        _ = await supervisor.startJob(instructions: "check the server", joinsCall: true)
+        XCTAssertEqual(supervisor.liveThread?.runtimeSessionID, "rt-2")
     }
 
     func testTheCallsChatJobTakesFollowUpsWhileItRuns() async {
