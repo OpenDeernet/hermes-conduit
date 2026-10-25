@@ -250,7 +250,16 @@ struct CapabilityToolsetDetailPage: View {
                 .padding(.horizontal, 16)
         }
         .navigationTitle(Text(verbatim: toolset.map(CapabilityToolsetOrdering.label) ?? name))
-        .task(id: name) { await load() }
+        // Read again for another dashboard or profile: what the last one
+        // answered never stays on screen to be acted on.
+        .task(id: appState.currentCapabilitiesOwner) {
+            config = nil
+            configError = nil
+            backends = nil
+            backendsError = nil
+            notice = nil
+            await load()
+        }
         .alert(
             Text(verbatim: keyPrompt?.key ?? ""),
             isPresented: Binding(get: { keyPrompt != nil }, set: { if !$0 { keyPrompt = nil } }),

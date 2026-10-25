@@ -893,11 +893,12 @@ to new sessions."; no other behavior text describes these lists)
 **Rulings**
 - A list read that started before a switch was flipped commits nothing, in AppState and in CapabilitiesStore alike (#867; AppState's lists at #1191).
 - Switches reach Hermes one after another in the order flipped, since each rewrites one config.yaml. A failed write puts back what Hermes last confirmed only when no newer flip of that switch is on its way, and a flip a newer one replaced reports no failure (#868 follow-up, #1191).
-- The installed lists belong to a dashboard, its bridge and a profile, not a profile name: two dashboards can both have "default". Another dashboard's rows never show, act or seed a picker, a dashboard switch clears them, and Turn All On/Off stops once the list it started from isn't the one showing (2026-10-24, #1005, #1219).
+- The installed lists belong to a dashboard, its bridge and a profile, not a profile name: two dashboards can both have "default". Another dashboard's rows never show, act or seed a picker, a dashboard switch clears them, and Turn All On/Off stops once the list it started from isn't the one showing, and a pushed detail page reads its skill or toolset again (2026-10-24, #1005, #1219).
 
 **Open gaps**
 - AppState's list reads go through a live DashboardTicketBridge with no test seam, so its generation guard has no test.
 - Whether a list read can overwrite a flip in the bot editor's lists hasn't been checked.
+- The Kanban skill picker says "No skills match." when it withholds another dashboard's skills, the same as a search miss.
 
 **Checked:** 2026-10-24, at #1219.
 
@@ -1231,7 +1232,8 @@ saved as another.
 
 **Siblings:** Settings' Edit Connection · Repair's password reconnect
 (Reconnect Now) · Repair's sign-in (browser and native OAuth) · Settings'
-Sign In Again
+Sign In Again · the two alerts' text (no Settings caption, README or doc
+describes this case)
 
 **Code**
 - Edit Connection: `Conduit/Services/ConnectionSetupApplication.swift` (perform, addressBelongsToDashboard), `Conduit/Views/AuxiliaryViews.swift` (the Settings not applied alert)

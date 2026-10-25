@@ -308,7 +308,10 @@ struct CapabilitySkillDetailPage: View {
                 .padding(.horizontal, 16)
         }
         .navigationTitle(Text(verbatim: name))
-        .task(id: name) {
+        // Read again for another dashboard or profile.
+        .task(id: appState.currentCapabilitiesOwner) {
+            document = nil
+            loadError = nil
             do {
                 document = SkillFrontmatter.parse(try await store.skillContent(name: name))
                 loadError = nil
