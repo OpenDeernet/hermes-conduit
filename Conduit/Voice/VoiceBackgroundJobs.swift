@@ -147,6 +147,9 @@ struct VoiceBackgroundJob: Identifiable, Equatable {
     /// A thread turn whose call ended. It keeps running in its chat, but no
     /// later call hears about it, reads its reply, or loses events to it.
     var isDetachedThreadTurn = false
+    /// The request whose chat an unattached call took (#1250): its reply is
+    /// the chat's, told as a chat turn's is.
+    var isCallChat = false
     /// A thread turn the liveness poll settled before its completion event
     /// arrived. That late event is its own reply, not a typed turn's.
     var settledByPoll = false
@@ -1508,6 +1511,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         }
         let thread = VoiceThreadTarget(runtimeSessionID: runtimeID, storedSessionID: job.storedSessionID, title: job.title)
         callChatJobID = jobID
+        update(jobID) { $0.isCallChat = true }
         liveThread = thread
         onCallChatAdopted?(thread)
     }
@@ -2850,7 +2854,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
 
     /// A settled job's or thread turn's result, for the live model.
     static func outcomePrompt(for job: VoiceBackgroundJob, result: String) -> String {
-        job.isThreadTurn ? threadReplyPrompt(result: result) : completionPrompt(title: job.title, result: result)
+        job.isThreadTurn || job.isCallChat ? threadReplyPrompt(result: result) : completionPrompt(title: job.title, result: result)
     }
 
     /// Hermes' reply in the attached chat, for the live model. Written for

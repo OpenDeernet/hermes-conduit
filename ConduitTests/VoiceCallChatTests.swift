@@ -166,6 +166,14 @@ extension VoiceConversationControllerTests {
         XCTAssertNotNil(fourth.refusal)
     }
 
+    func testTheCallsChatRequestsResultIsToldAsTheChatsReply() async {
+        let (supervisor, _) = makeUnattachedCall()
+        _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: "m1", content: "Here's the plan.", reasoning: nil))
+        guard case .submit(let prompt, _)? = supervisor.takePendingNotice() else { return XCTFail("the result is handed back") }
+        XCTAssertTrue(prompt.hasPrefix("[Hermes replied in the chat."))
+    }
+
     func testTheCallsChatJobTakesFollowUpsWhileItRuns() async {
         let (supervisor, _) = makeUnattachedCall()
         _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)
