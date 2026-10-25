@@ -1316,7 +1316,7 @@ struct TeammateMessageNote: View {
     /// Loads the face; held, not observed, like the rows' AppState.
     let appState: AppState
     /// The row's key in `disclosure`, so a rebuilt row stays open.
-    let disclosureID: String?
+    let disclosureID: String
     @Environment(\.chatRowDisclosure) private var disclosure
     /// Nil until tapped here: a rebuilt row takes what the reader chose
     /// from `disclosure`.
@@ -1325,7 +1325,7 @@ struct TeammateMessageNote: View {
     @ScaledMetric(relativeTo: .footnote) private var faceSize: CGFloat = 18
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(inbound: BotTeammateMessages.Inbound, roster: [BotProfile], appState: AppState, disclosureID: String?) {
+    init(inbound: BotTeammateMessages.Inbound, roster: [BotProfile], appState: AppState, disclosureID: String) {
         self.inbound = inbound
         self.disclosureID = disclosureID
         let bot = Self.resolve(inbound, in: roster)
@@ -1336,7 +1336,7 @@ struct TeammateMessageNote: View {
     }
 
     private var expanded: Bool {
-        tapped ?? disclosureID.flatMap { disclosure?.isExpanded($0, default: false) } ?? false
+        tapped ?? disclosure?.isExpanded(disclosureID, default: false) ?? false
     }
 
     var body: some View {

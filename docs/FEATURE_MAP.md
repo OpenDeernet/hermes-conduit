@@ -814,14 +814,15 @@ other read in it.
 chats, project chats and Bot Chats (the chat's own bot is left out) · group
 rooms (their own @ list and recipient picks) · the note that tells the bot
 who each tag is · a teammate's delivery in the chat ("Message from Atlas") ·
-the sender's step ("Messaged Atlas") · the Live Activity's tool line ·
+the bot's folded reply to it ("Replied to Atlas") · the same notes in a saved
+chat's copy · the sender's step ("Messaged Atlas") · the Live Activity's tool line ·
 Hermes Desktop's bot chat · chat list previews and quotes · Read Aloud and live voice ·
 the bot's SOUL messaging section · README.md's bots line
 
 **Code**
 - Tags and the note to the bot: `Conduit/Services/BotMentions.swift`, `Conduit/Services/GroupChatModels.swift` (MentionAutocomplete)
 - Composer: `Conduit/Views/Components/ComposerBar.swift` (mentionCandidates, attachmentButton), `Conduit/Views/Components/GroupRoomComposer.swift`
-- Teammate messages: `Conduit/Services/BotTeammateMessages.swift`, `Conduit/Views/ChatView.swift` (TeammateMessageNote, TeammateReplyNote, SettledToolCardContent.stepTitle, runningToolTitle), `Conduit/Views/ChatRowState.swift` (teammateReplies, botLabels), `Conduit/Views/ChatActivityRows.swift` (ChatStepSubject, ChatWorkingLine.currentToolTitle)
+- Teammate messages: `Conduit/Services/BotTeammateMessages.swift`, `Conduit/Views/ChatView.swift` (TeammateMessageNote, TeammateReplyNote, SettledToolCardContent.stepTitle, runningToolTitle), `Conduit/Views/ChatRowState.swift` (teammateReplies, botLabels), `Conduit/Views/ChatActivityRows.swift` (ChatStepSubject, ChatWorkingLine.currentToolTitle), `Conduit/Views/ChatRowDisclosure.swift` (how the notes open), `Conduit/Views/OfflineChatTranscriptView.swift` (a saved copy's rows and their disclosure)
 - Previews, quotes and speech: `Conduit/Services/PreviewText.swift` (strip), read by the chat list and spoken previews
 - Tool categories: `Shared/Widgets/HermesTurnActivity.swift`, and its twin, `notifier/live_activity.py` (`tool_category`, notifier #338)
 - The messaging protocol a bot is born with: `Conduit/Services/BotManagement.swift` (BotSoul)
