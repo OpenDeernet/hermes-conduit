@@ -2482,8 +2482,8 @@ extension HermesVoiceGatewayTimeoutTests {
         let modes: [(String, String)] = [
             ("Gemini and Qwen", GeminiLiveConversationController.instructions(search: .hermes)),
             ("Watch", GeminiLiveConversationController.instructions(search: .hermes, onWatch: true)),
-            ("Grok", GeminiLiveConversationController.instructions(search: .grok) + GrokLiveProtocol.grokInstructions(now: Date(), timeZone: .current)),
-            ("Local Live agent", GeminiLiveConversationController.instructions(search: .none) + LocalLiveProtocol.agentInstructions),
+            ("Grok", GeminiLiveConversationController.instructions(search: .grok, acknowledgesOnceStarted: true) + GrokLiveProtocol.grokInstructions(now: Date(), timeZone: .current)),
+            ("Local Live agent", GeminiLiveConversationController.instructions(search: .none, acknowledgesOnceStarted: true) + LocalLiveProtocol.agentInstructions),
             ("GPT-Live", GPTLiveConversationController.briefing()),
             ("GPT-Live on the Watch", GPTLiveConversationController.briefing(onWatch: true)),
         ]
