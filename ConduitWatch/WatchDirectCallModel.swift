@@ -2765,23 +2765,24 @@ final class WatchDirectCallModel: ObservableObject {
         guard !quietQueue.isEmpty, let session, session.isReady, isQuiet else { return }
         let item = quietQueue.removeFirst()
         guard let message = item.clientMessage else { return }
-        textUpdatesSent += 1
         // A text turn is answered; the next update waits for that.
-        switch item {
-        case .textWhenIdle(let text):
-            awaitingAnswerSince = now
-            noteTextSent("update", text)
-        case .contextWhenIdle(let text):
-            noteTextSent("context", text)
-        case .toolResponse, .endConversation:
-            break
-        }
+        if case .textWhenIdle = item { awaitingAnswerSince = now }
         let id = callID
         session.send(message, onSent: { [weak self] in
+            guard let self, self.callID == id else { return }
+            // Counted once it went: a failed send comes back to the queue.
+            self.textUpdatesSent += 1
+            switch item {
+            case .textWhenIdle(let text):
+                self.noteTextSent("update", text)
+            case .contextWhenIdle(let text):
+                self.noteTextSent("context", text)
+            case .toolResponse, .endConversation:
+                break
+            }
             // A tool's answer said as text owes a reply as it would on
             // its call, once it went.
-            guard let self, self.callID == id, case .textWhenIdle(let text) = item,
-                  let waiting = self.lostAnswers[text] else { return }
+            guard case .textWhenIdle(let text) = item, let waiting = self.lostAnswers[text] else { return }
             self.lostAnswers[text] = waiting > 1 ? waiting - 1 : nil
             if self.replyOwedSince == nil { self.replyOwedSince = self.now }
         }, onFailure: { [weak self] in
