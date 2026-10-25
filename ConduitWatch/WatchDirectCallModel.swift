@@ -3326,7 +3326,7 @@ final class WatchDirectCallModel: ObservableObject {
         startJobsTakenSilently = 0
         withdrawnToolIDs = []
         quietQueue = []
-        lostAnswers = []
+        lostAnswers = [:]
         toolCalls = 0
         toolsAnsweredLive = 0
         toolsUnreachable = 0
