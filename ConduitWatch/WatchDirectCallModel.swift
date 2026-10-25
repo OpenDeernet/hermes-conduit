@@ -2516,7 +2516,7 @@ final class WatchDirectCallModel: ObservableObject {
                     guard case .toolResponse(let responseID, let name, let response, _, let fallback) = item, responseID == call.id else { return item }
                     return withdrawn ? nil : .textWhenIdle(fallback ?? Self.wristResultText(name: name, result: response))
                 }
-                self.apply(WatchVoiceWire.DirectToolResult(outgoing: outgoing, runningJobs: result.runningJobs), answering: nil, generation: nil, withdrawn: false)
+                self.apply(WatchVoiceWire.DirectToolResult(outgoing: outgoing, runningJobs: result.runningJobs, newsJobs: result.newsJobs), answering: nil, generation: nil, withdrawn: false)
             }, failure: { [weak self] error in
                 guard let self else { return Self.wristToolAbandoned(call, callEnded: true) }
                 guard self.callID == id, self.isActive else { return Self.wristToolAbandoned(call, callEnded: !self.isActive) }
@@ -2646,6 +2646,7 @@ final class WatchDirectCallModel: ObservableObject {
 
     private func apply(_ result: WatchVoiceWire.DirectToolResult, answering toolCallID: String?, generation: Int?, withdrawn: Bool) {
         runningJobs = result.runningJobs
+        var newsJobs = result.newsJobs ?? []
         for item in result.outgoing {
             switch item {
             case .endConversation:
@@ -2661,7 +2662,18 @@ final class WatchDirectCallModel: ObservableObject {
                 }
                 let listed = WatchJobAnswer.listing(result, unsaid: unsaidNews.map(\.job))
                 answer(.toolResponse(id: id, name: name, result: listed, scheduling: scheduling, fallback: fallback), generation: generation)
-            case .textWhenIdle, .contextWhenIdle:
+            case .textWhenIdle(let text):
+                // A settled job's outcome from the iPhone is kept and
+                // checked as the relay's news is (#1210).
+                guard let index = newsJobs.firstIndex(where: { $0.text == text }) else {
+                    quietQueue.append(QuietItem(outgoing: item))
+                    continue
+                }
+                let job = newsJobs.remove(at: index)
+                quietQueue.append(QuietItem(outgoing: item, newsJobID: job.jobID))
+                unsaidNews.removeAll { $0.job.jobID == job.jobID }
+                unsaidNews.append(UnsaidNews(job: .init(jobID: job.jobID, title: job.title, status: job.status), text: text))
+            case .contextWhenIdle:
                 quietQueue.append(QuietItem(outgoing: item))
             }
         }

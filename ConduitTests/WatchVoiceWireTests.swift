@@ -1335,4 +1335,19 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(WatchJobAnswer.listing(error, unsaid: [finished]), error)
     }
 
+    /// #1210: a job the iPhone runs for a direct Watch call tells the Watch
+    /// which text update carries its outcome, so the Watch keeps it listed
+    /// until said; an older iPhone's answer still decodes.
+    func testDirectToolResultCarriesTheJobsItsTextUpdatesSettle() throws {
+        let news = WatchVoiceWire.DirectNewsJob(text: "[Check the server finished.]", jobID: "b", title: "Check the server", status: "finished")
+        let result = WatchVoiceWire.DirectToolResult(outgoing: [.textWhenIdle(news.text)], runningJobs: 0, newsJobs: [news])
+        let decoded = try JSONDecoder().decode(WatchVoiceWire.DirectToolResult.self, from: JSONEncoder().encode(result))
+        XCTAssertEqual(decoded, result)
+
+        let older = Data(#"{"outgoing":[],"runningJobs":1}"#.utf8)
+        let old = try JSONDecoder().decode(WatchVoiceWire.DirectToolResult.self, from: older)
+        XCTAssertNil(old.newsJobs)
+        XCTAssertEqual(old.runningJobs, 1)
+    }
+
 }
