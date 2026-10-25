@@ -1217,7 +1217,7 @@ final class GPTLiveConversationController: ObservableObject {
                 if !isStatus {
                     delegationUserEntries[delegationID] = nil
                     if item.channel == .speakable, bridge.carriesJobResult(delegationID: delegationID) {
-                        awaitSaid(item.text, since: sentAt) { [bridge] in bridge.replyDelivered(delegationID: delegationID) }
+                        awaitSaid(text, since: sentAt) { [bridge] in bridge.replyDelivered(delegationID: delegationID) }
                     } else {
                         bridge.replyDelivered(delegationID: delegationID)
                     }
