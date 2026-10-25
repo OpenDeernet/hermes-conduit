@@ -252,6 +252,10 @@ struct PinnedRepliesSheet: View {
     /// Whether it was opened from the open chat, which then leads.
     private let fromOpenChat: Bool
     @State private var scope: Scope
+    /// Set once the filter has shown, so it stays while the sheet is up:
+    /// unpinning this chat's last pin leaves This chat empty rather than
+    /// switching to every chat's pins.
+    @State private var keepsScope = false
 
     init(fromOpenChat: Bool = false) {
         self.fromOpenChat = fromOpenChat
@@ -261,9 +265,10 @@ struct PinnedRepliesSheet: View {
     var body: some View {
         let all = appState.activePinnedReplies
         let openChat: Set<String> = fromOpenChat ? Set(appState.openChatPinnedReplies.map(\.id)) : []
-        // Only while both sides have pins: with none left in this chat, or
-        // none anywhere else, the two would show the same list or nothing.
-        let showsScope = !openChat.isEmpty && openChat.count < all.count
+        // Shown when both sides have pins (with none in this chat, or none
+        // anywhere else, the two would show the same list or nothing), then
+        // kept until the sheet closes.
+        let showsScope = keepsScope || (!openChat.isEmpty && openChat.count < all.count)
         let pins = showsScope && scope == .thisChat ? all.filter { openChat.contains($0.id) } : all
         let sections = PinnedReplies.overview(pins, firstPins: openChat)
         NavigationStack {
@@ -312,6 +317,7 @@ struct PinnedRepliesSheet: View {
                 }
             }
         }
+        .onAppear { if showsScope { keepsScope = true } }
         .pinnedReplyLabelEditor($labelingPin) { pin, label in
             appState.setPinnedReplyLabel(pin, to: label)
         }
