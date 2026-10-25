@@ -880,7 +880,7 @@ the lists they sit in.
 **Siblings:** installed skills and toolsets (AppState) · the catalog, tool
 counts, backends, MCP servers and plugins (CapabilitiesStore) · the Skills
 and Tools tabs · the bot editor's skills, tools and MCP lists (see Bots:
-create and edit) · the skill and toolset detail pages · the Kanban
+create and edit) · the skill, toolset and catalog skill detail pages · the Kanban
 task composer's skill picker · the Capabilities captions ("Changes apply
 to new sessions."; no other behavior text describes these lists)
 
@@ -1242,7 +1242,7 @@ describes this case)
 
 **Rulings**
 - The two never merge: nothing of the other dashboard's (password, Face ID choice, Cloudflare token, sign-in cookies) is written. Edit Connection says so; Repair stops before connecting and offers to switch to it (2026-10-24, #995, #1219, Eric).
-- Repair's sign-in is checked before its sheet registers the address, and a new address a repair's sign-in registered stays that repair's own, for another sign-in or a password reconnect, until that repair connects or another repair begins (#1219).
+- Repair's sign-in is checked before its sheet registers the address, and a new address a repair's sign-in registered stays that repair's own, for another sign-in or a password reconnect, until that repair connects or another repair begins (2026-10-24, #1219).
 
 **Open gaps**
 - Settings' Sign In Again only offers the active dashboard's own address, so it never meets this case; it shares Repair's activation and would refuse the same way.

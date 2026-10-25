@@ -338,11 +338,20 @@ struct CapabilitySkillDetailPage: View {
 /// A catalog skill's page before it's installed: its SKILL.md and Install.
 struct OfficialSkillDetailPage: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
+    @EnvironmentObject private var appState: AppState
     let skill: OfficialSkill
     @ObservedObject var store: CapabilitiesStore
     let reload: () async -> Void
     @State private var document: SkillFrontmatter?
     @State private var loadError: String?
+    /// The dashboard and profile the page was opened for: its installed
+    /// state and Install belong to them, never to one switched to since.
+    @State private var openedFor: CapabilitySnapshotOwner?
+
+    private var isCurrent: Bool {
+        guard let openedFor else { return false }
+        return appState.currentCapabilitiesOwner == openedFor && store.serves(openedFor)
+    }
 
     private var state: CapabilityInstallState? { store.skillInstalls[skill.identifier] }
     private var installed: Bool {
@@ -360,7 +369,9 @@ struct OfficialSkillDetailPage: View {
                 ],
                 usage: nil
             ) {
-                if installed {
+                if !isCurrent {
+                    EmptyView()
+                } else if installed {
                     Label(AppLocalization.string("Installed"), systemImage: "checkmark.circle.fill")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.green)
@@ -368,6 +379,7 @@ struct OfficialSkillDetailPage: View {
                     Button {
                         Haptics.selection()
                         Task {
+                            guard isCurrent else { return }
                             if await store.installSkill(skill) {
                                 Haptics.success()
                                 await reload()
@@ -394,6 +406,9 @@ struct OfficialSkillDetailPage: View {
             CapabilitySkillDocument(document: document, error: loadError)
         }
         .navigationTitle(Text(verbatim: skill.name))
+        .onAppear {
+            if openedFor == nil { openedFor = appState.currentCapabilitiesOwner }
+        }
         .task(id: skill.identifier) {
             do {
                 document = SkillFrontmatter.parse(try await store.skillPreview(identifier: skill.identifier))
