@@ -1124,7 +1124,7 @@ not the config.
 **Open gaps**
 - A config edit from Hermes Desktop or the terminal can still land between Conduit's GET and PUT; Hermes has no revision check to refuse the stale PUT.
 
-**Checked:** 2026-10-24, at #1222.
+**Checked:** 2026-10-25, at #1230 (host-run plugin update recorded); at #1222.
 
 ## Wake phrase
 
@@ -1150,7 +1150,7 @@ wired into the app, so not needed)
 **Open gaps**
 - Han-only phrases on a phone with no Chinese or Japanese language set are heard in Simplified Chinese; a Japanese kanji-only name may be missed.
 
-**Checked:** 2026-10-24, at #1222.
+**Checked:** 2026-10-25, at #1230 (halfwidth Hangul, Jamo extensions, Bopomofo); at #1222.
 
 ## Dictation and voice message length
 
