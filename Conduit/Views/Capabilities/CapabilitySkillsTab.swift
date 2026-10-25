@@ -409,9 +409,11 @@ struct OfficialSkillDetailPage: View {
             }
         }
         .navigationTitle(Text(verbatim: skill.name))
-        .task(id: skill.identifier) {
+        // Again on a return to the dashboard and profile it was opened for,
+        // in case a switch cut the first read short.
+        .task(id: isCurrent) {
             if openedFor == nil { openedFor = appState.currentCapabilitiesOwner }
-            guard isCurrent else { return }
+            guard isCurrent, document == nil else { return }
             do {
                 let content = try await store.skillPreview(identifier: skill.identifier)
                 guard isCurrent else { return }
