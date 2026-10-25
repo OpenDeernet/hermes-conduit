@@ -1872,6 +1872,7 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
             case .failed, .cancelled: break
             case .starting, .running, .needsInput, .finished:
                 callChat = VoiceThreadTarget(runtimeSessionID: runtimeID, storedSessionID: job.storedSessionID, title: job.title)
+                base.markOpensCallChat(startedID)
             }
         }
         return reply

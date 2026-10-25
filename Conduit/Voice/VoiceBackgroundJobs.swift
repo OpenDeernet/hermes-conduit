@@ -156,6 +156,10 @@ struct VoiceBackgroundJob: Identifiable, Equatable {
     /// Runs in a chat an earlier job of the call made (`continueJob`,
     /// #1250): until its request goes in, that chat's turn isn't its own.
     var continuesChat = false
+    /// Made the chat a Watch call's later jobs continue (#1250).
+    var opensCallChat = false
+    /// In a Watch call's shared chat: its replies are matched against replays.
+    var sharesCallChat: Bool { continuesChat || opensCallChat }
     /// The live call that started this job and where in its transcript,
     /// so the call screen can show the job there. Nil outside a live call.
     var callAnchor: VoiceJobCallAnchor?
@@ -2323,7 +2327,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             let sharesChat = jobs.contains {
                 $0.id != before.id && $0.continuesChat && $0.status.isActive && $0.owns(sessionID: sessionID)
             }
-            if runsInCallChat(before) || before.continuesChat || sharesChat {
+            if runsInCallChat(before) || before.sharesCallChat || sharesChat {
                 rememberChatTurn(messageID, reply: content)
             } else if let messageID, !messageID.isEmpty, !notedChatTurns.contains(messageID) {
                 notedChatTurns.append(messageID)
@@ -2395,7 +2399,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         let reply = (reply ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if id != nil, (messageID ?? "").isEmpty, !reply.isEmpty, reply == lastUnidentifiedChatReply { return true }
         guard !reply.isEmpty, let late = jobs.firstIndex(where: { job in
-            job.id != id && (runsInCallChat(job) || job.continuesChat) && job.settledByPoll && !job.isDetachedThreadTurn
+            job.id != id && (runsInCallChat(job) || job.sharesCallChat) && job.settledByPoll && !job.isDetachedThreadTurn
                 && job.result?.trimmingCharacters(in: .whitespacesAndNewlines) == reply
         }) else { return false }
         jobs[late].settledByPoll = false
@@ -2802,7 +2806,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
                 continue
             }
             jobs[index].status = .finished
-            if runsInCallChat(job) || job.continuesChat { jobs[index].settledByPoll = true }
+            if runsInCallChat(job) || job.sharesCallChat { jobs[index].settledByPoll = true }
             // A completion held for a follow-up that never carried on.
             if jobs[index].result == nil { jobs[index].result = job.heldCompletion }
             jobs[index].followUp = nil
@@ -2824,7 +2828,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             guard generation == self.generation else { return }
             // Events may have settled it meanwhile; they carry the real reply.
             guard let current = self.job(id), current.status.isActive else { continue }
-            let inCallChat = runsInCallChat(current) || current.continuesChat
+            let inCallChat = runsInCallChat(current) || current.sharesCallChat
             update(id) {
                 $0.status = .finished
                 if inCallChat { $0.settledByPoll = true }
@@ -2891,6 +2895,12 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
 
     private func job(_ id: UUID) -> VoiceBackgroundJob? {
         jobs.first { $0.id == id }
+    }
+
+    /// A Watch call's first ordinary job made the chat its later ones
+    /// continue: its replies are matched against replays as theirs are.
+    func markOpensCallChat(_ id: UUID) {
+        update(id) { $0.opensCallChat = true }
     }
 
     private func update(_ id: UUID, _ change: (inout VoiceBackgroundJob) -> Void) {
