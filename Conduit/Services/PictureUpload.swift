@@ -27,7 +27,6 @@ enum PictureUpload {
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               max(width, height) > maxPixelSize else { return nil }
-        let hasAlpha = properties[kCGImagePropertyHasAlpha] as? Bool ?? false
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             // Upright, so the EXIF orientation the JPEG drops is applied.
@@ -36,20 +35,42 @@ enum PictureUpload {
             kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        // An alpha channel alone (common in screenshots) still goes as a
+        // JPEG; only pixels that are really see-through keep it a PNG.
+        let seeThrough = (properties[kCGImagePropertyHasAlpha] as? Bool ?? false) && !isOpaque(image)
         let output = NSMutableData()
-        let type: UTType = hasAlpha ? .png : .jpeg
+        let type: UTType = seeThrough ? .png : .jpeg
         guard let destination = CGImageDestinationCreateWithData(
             output, type.identifier as CFString, 1, nil
         ) else { return nil }
-        CGImageDestinationAddImage(destination, image, hasAlpha ? nil : [
+        CGImageDestinationAddImage(destination, image, seeThrough ? nil : [
             kCGImageDestinationLossyCompressionQuality: jpegQuality
         ] as CFDictionary)
         guard CGImageDestinationFinalize(destination), output.length < data.count else { return nil }
         let stem = (filename as NSString).deletingPathExtension
         return Prepared(
             data: output as Data,
-            filename: (stem.isEmpty ? "image" : stem) + (hasAlpha ? ".png" : ".jpg"),
-            mimeType: hasAlpha ? "image/png" : "image/jpeg"
+            filename: (stem.isEmpty ? "image" : stem) + (seeThrough ? ".png" : ".jpg"),
+            mimeType: seeThrough ? "image/png" : "image/jpeg"
         )
+    }
+
+    /// Whether every pixel is fully opaque.
+    static func isOpaque(_ image: CGImage) -> Bool {
+        switch image.alphaInfo {
+        case .none, .noneSkipFirst, .noneSkipLast: return true
+        default: break
+        }
+        let width = image.width, height = image.height
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let pixels = context.data else { return false }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let bytes = pixels.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        for index in stride(from: 3, to: width * height * 4, by: 4) where bytes[index] != 255 {
+            return false
+        }
+        return true
     }
 }

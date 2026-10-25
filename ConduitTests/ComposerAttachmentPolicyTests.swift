@@ -111,7 +111,7 @@ final class ComposerAttachmentPolicyTests: XCTestCase {
 
     // MARK: - Pictures sent to Hermes (#1265)
 
-    private func pngData(width: Int, height: Int, alpha: Bool = false) throws -> Data {
+    private func pngData(width: Int, height: Int, alpha: Bool = false, opaque: Bool = false) throws -> Data {
         let context = try XCTUnwrap(CGContext(
             data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(),
@@ -123,6 +123,8 @@ final class ComposerAttachmentPolicyTests: XCTestCase {
         for i in 0..<(context.bytesPerRow * height) {
             seed = seed &* 1_103_515_245 &+ 12_345
             pixels[i] = UInt8(truncatingIfNeeded: seed >> 16)
+            // Premultiplied, a full alpha takes any color.
+            if alpha, opaque, i % 4 == 3 { pixels[i] = 255 }
         }
         let image = try XCTUnwrap(context.makeImage())
         let output = NSMutableData()
@@ -149,6 +151,12 @@ final class ComposerAttachmentPolicyTests: XCTestCase {
         let prepared = try XCTUnwrap(PictureUpload.resized(data, filename: "sticker.png"))
         XCTAssertEqual(prepared.filename, "sticker.png", "A JPEG would fill in the transparency")
         XCTAssertEqual(prepared.mimeType, "image/png")
+    }
+
+    func testAnOpaquePictureWithAnAlphaChannelStillGoesAsAJPEG() throws {
+        let data = try pngData(width: 2600, height: 1950, alpha: true, opaque: true)
+        let prepared = try XCTUnwrap(PictureUpload.resized(data, filename: "screenshot.png"))
+        XCTAssertEqual(prepared.mimeType, "image/jpeg", "Only real transparency keeps it a PNG")
     }
 
     func testAPictureAModelTakesGoesUnchanged() throws {
