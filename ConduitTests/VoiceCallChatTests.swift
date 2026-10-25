@@ -154,6 +154,17 @@ extension VoiceConversationControllerTests {
         XCTAssertTrue(fake.threadSubmissions.isEmpty)
     }
 
+    func testTheCallsChatRequestCountsAsOneOfTheChatsThree() async {
+        let (supervisor, fake) = makeUnattachedCall()
+        fake.threadBusy = true
+        _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)
+        XCTAssertNotNil(supervisor.startThreadTurn(request: "and book the hotel").jobID)
+        XCTAssertNotNil(supervisor.startThreadTurn(request: "and the car").jobID)
+        let fourth = supervisor.startThreadTurn(request: "and the dinner")
+        XCTAssertNil(fourth.jobID, "three in flight with the first request")
+        XCTAssertNotNil(fourth.refusal)
+    }
+
     func testTheCallsChatJobTakesFollowUpsWhileItRuns() async {
         let (supervisor, _) = makeUnattachedCall()
         _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)

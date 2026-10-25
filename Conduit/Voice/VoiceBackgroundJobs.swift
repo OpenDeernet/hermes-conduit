@@ -1697,7 +1697,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         let inFlight = jobs.filter { job in
             job.isThreadTurn && job.status.isActive
                 && threadTargets[job.id].map { Self.sameChat($0, thread) } == true
-        }.count
+        }.count + (callChatJobRuns(in: thread) ? 1 : 0) // the request whose chat the call took
         guard inFlight < Self.maximumThreadTurns else {
             return (nil, AppLocalization.string("Hermes is still working on your earlier requests in this chat. Ask again once they finish."))
         }
