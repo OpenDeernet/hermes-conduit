@@ -438,8 +438,9 @@ final class GPTLiveDelegationBridge {
         }
         if supervisor.liveThread != nil, !VoiceThreadRouting.wantsBackgroundJob(routingWords) {
             // Attached to a chat: the call's request still running there
-            // takes this as a follow-up.
-            if let target = supervisor.threadFollowUpTarget() {
+            // takes this as a follow-up. "New job:" is new work, the chat's
+            // next turn, in a call that took its first job's chat (#1250).
+            if !startsNewJob, let target = supervisor.threadFollowUpTarget() {
                 let outcome = await supervisor.followUp(jobID: target, words: Self.followUpWords(userWords: spoken, delegated: ownWords), kind: nil)
                 guard callGeneration == call, !isEnding else { return [] }
                 noteTaker(outcome, jobID: target, delegationID: id)
@@ -508,7 +509,10 @@ final class GPTLiveDelegationBridge {
         // A call that ends while Hermes creates the job must not leave this
         // delegation in the next call's table.
         // The delegation is free text: "for Fam, …" names another profile.
-        let reply = await supervisor.startJob(instructions: task, profile: nil) { [weak self] jobID in
+        // Work the user didn't ask to keep apart: an unattached call's first
+        // such job makes the chat its later requests go to (#1250).
+        let joinsCall = !VoiceThreadRouting.wantsBackgroundJob(routingWords) && !supervisor.namesOtherProfile(task)
+        let reply = await supervisor.startJob(instructions: task, profile: nil, joinsCall: joinsCall) { [weak self] jobID in
             createdJobID = jobID
             guard let self, !self.isEnding, self.callGeneration == call else { return }
             self.openDelegations[jobID] = id

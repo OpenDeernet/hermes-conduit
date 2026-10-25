@@ -409,6 +409,9 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     /// The chat the running live call is attached to, if any. Published so
     /// the minimised call's bar can name it.
     @Published var liveThread: VoiceThreadTarget?
+    /// The job whose chat an unattached call took as its own (#1250): the
+    /// call's first ordinary request. Its chat is `liveThread`.
+    private(set) var callChatJobID: UUID?
 
     /// A note waiting for the call. A screenshot note carries its
     /// screenshot's attachment URI, so removing that screenshot finds it.
@@ -453,6 +456,10 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     /// Called with every id of a newly created job session so the host can
     /// badge it in the session list.
     var onJobSessionCreated: (@MainActor (_ sessionIDs: [String]) -> Void)?
+    /// Called when an unattached call takes its first job's chat as its own
+    /// (#1250), and again when that chat's stored id turns up, so the saved
+    /// call is kept with the chat.
+    var onCallChatAdopted: (@MainActor (VoiceThreadTarget) -> Void)?
     /// Called when the call sends a request to its attached chat, so the
     /// saved call can link to where the work happened.
     var onThreadTurnStarted: (@MainActor (_ job: VoiceBackgroundJob, _ thread: VoiceThreadTarget) -> Void)?
@@ -1300,9 +1307,15 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     ///
     /// `profile` is the profile or bot the user named for the job. Without
     /// one, a leading "for <profile>, …" in the instructions names it.
+    ///
+    /// `joinsCall`: an ordinary request (not background, quick or another
+    /// profile's) from a live call. In a call not attached to a chat, the
+    /// first such job's chat becomes the call's, so later requests are its
+    /// next turns (#1250).
     func startJob(
         instructions requested: String,
         profile spokenProfile: String? = nil,
+        joinsCall: Bool = false,
         onJobCreated: (@MainActor (UUID) -> Void)? = nil
     ) async -> String {
         let activeCount = activeJobCount
@@ -1377,6 +1390,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             if self.job(job.id)?.status == .starting {
                 update(job.id) { $0.status = .running }
             }
+            if joinsCall { adoptCallChat(job.id) }
             armCallback(job.id)
             startPollingIfNeeded()
             return startedReply(job)
@@ -1388,6 +1402,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             // turn (its events moved the job on) is not a failed start.
             switch self.job(job.id)?.status {
             case .running?, .needsInput?, .finished?:
+                if joinsCall { adoptCallChat(job.id) }
                 startPollingIfNeeded()
                 return startedReply(job)
             case .failed?:
@@ -1404,6 +1419,31 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         }
     }
 
+    /// Makes `jobID`'s chat the running call's (#1250): a call started
+    /// outside a chat keeps its requests in the chat its first one made, as
+    /// a call started from a chat keeps them in that one. Only while the
+    /// job's own call runs and nothing is attached yet, and only for a job
+    /// on the profile in use that Hermes took.
+    private func adoptCallChat(_ jobID: UUID) {
+        guard liveThread == nil, let job = job(jobID), job.profile == nil,
+              let callID = job.callAnchor?.callID, callID == liveCallID, liveCallTranscript?() != nil,
+              let runtimeID = job.runtimeSessionID, !runtimeID.isEmpty else { return }
+        switch job.status {
+        case .failed, .cancelled: return
+        case .starting, .running, .needsInput, .finished: break
+        }
+        let thread = VoiceThreadTarget(runtimeSessionID: runtimeID, storedSessionID: job.storedSessionID, title: job.title)
+        callChatJobID = jobID
+        liveThread = thread
+        onCallChatAdopted?(thread)
+    }
+
+    /// Whether `job` holds the call's chat: a voice turn sent there, or the
+    /// job whose chat the call took (#1250).
+    private func runsInCallChat(_ job: VoiceBackgroundJob) -> Bool {
+        job.isThreadTurn || (job.id == callChatJobID && liveThread != nil)
+    }
+
     // MARK: Follow-ups (#451)
 
     /// The call's own request in its attached chat that a follow-up goes
@@ -1411,10 +1451,13 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     /// Nil when there is none; the follow-up is then the chat's next turn.
     func threadFollowUpTarget() -> UUID? {
         guard let thread = liveThread else { return nil }
-        return jobs.last { job in
+        let turn = jobs.last { job in
             job.isThreadTurn && !job.isDetachedThreadTurn && job.status.isActive
                 && threadTargets[job.id].map { Self.sameChat($0, thread) } == true
-        }?.id
+        }
+        // The job whose chat the call took, while it still runs, takes
+        // follow-ups as the only running job did before (#472).
+        return turn?.id ?? callChatJobID.flatMap { id in job(id)?.status.isActive == true ? id : nil }
     }
 
     /// The background job with `number` in spoken job lists.
@@ -1629,6 +1672,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
 
     func detachLiveThread() {
         liveThread = nil
+        callChatJobID = nil
         chatNotes.removeAll()
         callChatPrompts.removeAll()
         screenshotNotesHeard.removeAll()
@@ -1747,7 +1791,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             let chatHasSentTurn = jobs.contains { job in
                 job.isThreadTurn && job.threadTurnSubmitted && job.status.isActive
                     && threadTargets[job.id].map { Self.sameChat($0, thread) } == true
-            }
+            } || callChatJobRuns(in: thread)
             if chatHasSentTurn { return }
             if await backend.threadIsBusy(thread) {
                 guard generation == self.generation else { return }
@@ -1834,12 +1878,21 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         }
     }
 
+    /// Whether the job whose chat the call took (#1250) still runs there:
+    /// the call's turns wait for it, as for a turn of their own.
+    private func callChatJobRuns(in thread: VoiceThreadTarget) -> Bool {
+        guard let id = callChatJobID, let job = job(id), job.status.isActive else { return false }
+        return [job.runtimeSessionID, job.storedSessionID].compactMap { $0 }.contains { thread.owns(sessionID: $0) }
+    }
+
     /// The job an event for `sessionID` belongs to. A turn left running by an
-    /// ended call yields to the current call's turn in the same chat.
+    /// ended call yields to the current call's turn in the same chat. A
+    /// settled job owns nothing: the chat a call took from its first job
+    /// (#1250) carries the call's later turns, and the turns typed there.
     private static func observingIndex(in jobs: [VoiceBackgroundJob], sessionID: String) -> Int? {
         let candidates = jobs.indices.filter { index in
             let job = jobs[index]
-            return job.owns(sessionID: sessionID) && (!job.isThreadTurn || (job.threadTurnSubmitted && job.status.isActive))
+            return job.owns(sessionID: sessionID) && job.status.isActive && (!job.isThreadTurn || job.threadTurnSubmitted)
         }
         return candidates.first { !jobs[$0].isDetachedThreadTurn } ?? candidates.first
     }
@@ -2027,6 +2080,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         followUpsInFlight.removeAll()
         noticesInFlight.removeAll()
         liveThread = nil
+        callChatJobID = nil
         liveCallID = nil
         liveCallStartedAt = nil
         callOpening = nil
@@ -2155,7 +2209,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             // Read before notifying: the host delivers the notice right away,
             // and marking it delivered can prune settled jobs, which shifts
             // `index` (or leaves it past the end: #332).
-            let settledThreadTurn = before.isThreadTurn && !jobs[index].status.isActive
+            let settledThreadTurn = runsInCallChat(before) && !jobs[index].status.isActive
             noticeMayBePending()
             if settledThreadTurn { pumpThreadTurns() }
         }
@@ -2175,7 +2229,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         // already came back to the call as that turn's reply. Matched once,
         // so a later typed turn with the same words still counts.
         if let late = jobs.firstIndex(where: { job in
-            job.isThreadTurn && job.settledByPoll && !job.isDetachedThreadTurn
+            runsInCallChat(job) && job.settledByPoll && !job.isDetachedThreadTurn
                 && job.result?.trimmingCharacters(in: .whitespacesAndNewlines) == reply
         }) {
             jobs[late].settledByPoll = false
@@ -2546,7 +2600,11 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         var settledThreadTurns: [UUID] = []
         var settledJobs: [UUID] = []
         var learned: [(String, String)] = []
-        defer { for (runtimeID, storedID) in learned { onJobStoredSessionLearned?(runtimeID, storedID) } }
+        var callChatLearned = false
+        defer {
+            for (runtimeID, storedID) in learned { onJobStoredSessionLearned?(runtimeID, storedID) }
+            if callChatLearned, let liveThread { onCallChatAdopted?(liveThread) }
+        }
         for index in jobs.indices where jobs[index].status == .running || jobs[index].status == .needsInput {
             let job = jobs[index]
             // A job that went active while the reads awaited is judged next time.
@@ -2557,6 +2615,12 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
                    let runtimeID = job.runtimeSessionID, !runtimeID.isEmpty, row.storedSessionId != runtimeID {
                     jobs[index].storedSessionID = row.storedSessionId
                     learned.append((runtimeID, row.storedSessionId))
+                    // The chat the call took learns its durable id with it.
+                    if job.id == callChatJobID, liveThread?.runtimeSessionID == runtimeID,
+                       (liveThread?.storedSessionID ?? "").isEmpty {
+                        liveThread?.storedSessionID = row.storedSessionId
+                        callChatLearned = true
+                    }
                 }
                 jobs[index].consecutiveMissedPolls = 0
                 jobs[index].listedByLivenessPoll = true
@@ -2583,7 +2647,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
                 continue
             }
             jobs[index].status = .finished
-            if job.isThreadTurn { jobs[index].settledByPoll = true }
+            if runsInCallChat(job) { jobs[index].settledByPoll = true }
             // A completion held for a follow-up that never carried on.
             if jobs[index].result == nil { jobs[index].result = job.heldCompletion }
             jobs[index].followUp = nil
@@ -2605,8 +2669,10 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             guard generation == self.generation else { return }
             // Events may have settled it meanwhile; they carry the real reply.
             guard let current = self.job(id), current.status.isActive else { continue }
+            let inCallChat = runsInCallChat(current)
             update(id) {
                 $0.status = .finished
+                if inCallChat { $0.settledByPoll = true }
                 if let reply, !reply.isEmpty { $0.result = reply }
                 // A completion held for a follow-up that never carried on.
                 if $0.result == nil { $0.result = $0.heldCompletion }

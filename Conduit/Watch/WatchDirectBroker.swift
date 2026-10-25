@@ -1810,7 +1810,7 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
     /// Told of each job this call starts.
     var onJobCreated: (@MainActor (UUID) -> Void)?
 
-    func startJob(instructions: String, profile: String?, onJobCreated: (@MainActor (UUID) -> Void)?) async -> String {
+    func startJob(instructions: String, profile: String?, joinsCall: Bool, onJobCreated: (@MainActor (UUID) -> Void)?) async -> String {
         let noted = self.onJobCreated
         return await base.startJob(instructions: instructions, profile: profile, onJobCreated: { jobID in
             noted?(jobID)
