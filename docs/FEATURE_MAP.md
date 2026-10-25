@@ -1273,7 +1273,10 @@ how long a large one may take on a slow link.
 **Siblings:** the chat composer (picker, drop, camera, paste) · the share
 extension · Ask Hermes About Screen · a recorded voice message · Bot Chat and
 project chats (the same send) · the group room composer (its own upload) ·
-the socket's keepalive and the foreground connection check
+the socket's keepalive, the network path change's probe and the foreground
+connection check · Settings captions, briefings, the notifier's tool text and
+README (none describes upload size or timing) · the notifier (the upload is
+Hermes' own RPC)
 
 **Code**
 - The send: `Conduit/Services/AppState.swift` (sendMessage: image.attach_bytes, file.attach when Hermes refuses the image, file.attach for every other file)
@@ -1285,7 +1288,7 @@ the socket's keepalive and the foreground connection check
 **Rulings**
 - A picture sent as an image whose long edge is over 2048 px goes as a 2048 px JPEG (quality 0.85), upright, with a .jpg name; one that size or smaller, an animated one, or one the JPEG wouldn't make smaller goes as it is. The chat shows the picture as picked. Files sent as files are never changed (Eric, 2026-10-25, #1268, for #1265: a full-size photo on a slow link outlasted Hermes' own socket ping and dropped the connection).
 - An upload's budget is two minutes, or about 1 s for every 64 KB it carries (about 0.5 Mbit/s) if that is longer, for a picture and a file alike; a group room's upload allows the same rate, with its own three-minute floor (2026-10-25, #1265 report: 3 to 4 MB photos failed now and then under the 30 s every request had).
-- While a frame of 256 KB or more is still being written (a cancelled request's too), the keepalive, the network path change's probe and the foreground check don't ping: a ping queued behind it can't be answered in time and would drop a working socket. The request's own budget answers for the socket, and once it ends the pings come back (2026-10-25, #1265 report).
+- While a frame of 256 KB or more is still being written (a cancelled request's too), the keepalive, the network path change's probe and the foreground check don't ping: a ping queued behind it can't be answered in time and would drop a working socket. The request's own budget answers for the socket, and once it ends the pings come back; a cancelled request has no budget left, so its frame counts until the socket finishes or fails the write (2026-10-25, #1265 report).
 
 **Open gaps**
 - Files go up one after another as base64 over the chat socket; nothing shows how far an upload has got.
