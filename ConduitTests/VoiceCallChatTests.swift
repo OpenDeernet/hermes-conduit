@@ -105,6 +105,55 @@ extension VoiceConversationControllerTests {
         XCTAssertNil(ended.callChatJobID)
     }
 
+    func testHangingUpLetsGoOfTheCallsChatRequest() async {
+        // Still running at hang-up: its reply is the chat's, never a later
+        // call's notice, and the chat's events aren't its any more.
+        let (supervisor, _) = makeUnattachedCall()
+        _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)
+        supervisor.detachLiveThread()
+        XCTAssertEqual(supervisor.jobs.first?.isDetachedThreadTurn, true)
+        XCTAssertEqual(supervisor.jobs.first?.status, .running, "a request Hermes took isn't cancelled")
+
+        supervisor.beginLiveCall()
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: "m1", content: "Plan.", reasoning: nil))
+        XCTAssertNil(supervisor.takePendingNotice(), "a later call doesn't hear it")
+    }
+
+    func testAReplayedReplyOfTheCallsChatRequestIsNotTypedContext() async {
+        let (supervisor, fake) = makeUnattachedCall()
+        _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: "m1", content: "Plan.", reasoning: nil))
+        _ = supervisor.takePendingNotice()
+        fake.threadPrompt = "plan the trip"
+
+        // A reconnect replays it.
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: "m1", content: "Plan.", reasoning: nil))
+
+        XCTAssertNil(supervisor.takePendingChatContext())
+    }
+
+    func testANewRequestWaitsOnTheCallsChatRequestsQuestion() async {
+        let (supervisor, fake) = makeUnattachedCall()
+        _ = await supervisor.startJob(instructions: "clean the logs", joinsCall: true)
+        let approval = ApprovalActivity(
+            sessionId: "rt-1",
+            command: "rm -rf /var/log/old",
+            description: "Delete old logs",
+            choices: nil,
+            allowPermanent: false,
+            smartDenied: false,
+            status: .pending,
+            choice: nil,
+            error: nil
+        )
+        supervisor.observe(.approval(sessionId: "rt-1", activity: approval))
+        XCTAssertEqual(supervisor.jobs.first?.status, .needsInput)
+
+        let next = supervisor.startThreadTurn(request: "and the caches")
+        XCTAssertNil(next.jobID, "Hermes is paused in the chat until the user answers")
+        XCTAssertTrue(fake.threadSubmissions.isEmpty)
+    }
+
     func testTheCallsChatJobTakesFollowUpsWhileItRuns() async {
         let (supervisor, _) = makeUnattachedCall()
         _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)

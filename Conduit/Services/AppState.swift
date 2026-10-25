@@ -6000,9 +6000,15 @@ final class AppState: ObservableObject {
         captureVoiceCall()
         // Its line in the saved call says where the request went now.
         if let job = voiceBackgroundJobSupervisor.jobs.first(where: { $0.id == voiceBackgroundJobSupervisor.callChatJobID }) {
+            let line = Self.voiceThreadTurnNote(job, thread: thread)
             for sessionID in [job.storedSessionID, job.runtimeSessionID, nil] {
-                recorder.replaceNote(Self.voiceJobStartedNote(title: job.title, sessionID: sessionID), with: Self.voiceThreadTurnNote(job, thread: thread))
+                recorder.replaceNote(Self.voiceJobStartedNote(title: job.title, sessionID: sessionID), with: line)
             }
+            // Once the chat's stored id is learned, the line links to it.
+            var earlier = thread
+            earlier.storedSessionID = nil
+            let runtimeLine = Self.voiceThreadTurnNote(job, thread: earlier)
+            if runtimeLine != line { recorder.replaceNote(runtimeLine, with: line) }
         }
         recorder.jobSessionIDs.removeAll { ids.contains($0) }
         let key = voiceHistoryKey(profile: recorder.profile)

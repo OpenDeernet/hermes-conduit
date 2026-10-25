@@ -1683,8 +1683,11 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         // turn would only queue behind it, and nothing comes back until the
         // user answers.
         let jobWaits = jobs.contains { job in
-            job.isThreadTurn && job.status == .needsInput
-                && threadTargets[job.id].map { Self.sameChat($0, thread) } == true
+            guard job.status == .needsInput else { return false }
+            if job.isThreadTurn { return threadTargets[job.id].map { Self.sameChat($0, thread) } == true }
+            // The request whose chat the call took (#1250).
+            return job.id == callChatJobID
+                && [job.runtimeSessionID, job.storedSessionID].compactMap { $0 }.contains { thread.owns(sessionID: $0) }
         }
         if jobWaits || callWaitsOn != nil {
             return (nil, AppLocalization.string("Hermes is paused in this chat until you answer what it asked, so it can't take another request yet. Answer it first, or ask Hermes to explain more as your answer."))
@@ -1745,16 +1748,18 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
 
     func detachLiveThread() {
         liveThread = nil
+        let callChatJob = callChatJobID
         callChatJobID = nil
         chatNotes.removeAll()
         callChatPrompts.removeAll()
         screenshotNotesHeard.removeAll()
         notedChatTurns.removeAll()
         lastUnidentifiedChatReply = nil
-        // Every turn of the ending call, settled ones too: none is read back
-        // or announced to a later call.
-        for index in jobs.indices where jobs[index].isThreadTurn && !jobs[index].isDetachedThreadTurn {
-            if jobs[index].status.isActive, !jobs[index].threadTurnSubmitted {
+        // Every turn of the ending call, settled ones too, and the request
+        // whose chat it took (#1250): none is read back or announced to a
+        // later call.
+        for index in jobs.indices where (jobs[index].isThreadTurn || jobs[index].id == callChatJob) && !jobs[index].isDetachedThreadTurn {
+            if jobs[index].isThreadTurn, jobs[index].status.isActive, !jobs[index].threadTurnSubmitted {
                 jobs[index].status = .cancelled
             }
             jobs[index].outcomeDelivered = true
@@ -2259,7 +2264,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         case .messageComplete(_, let messageID, let content, _, _):
             // A replay of a voice turn's own completion, once it no longer
             // owns the chat, is not a typed turn.
-            if before.isThreadTurn { rememberChatTurn(messageID, reply: content) }
+            if runsInCallChat(before) { rememberChatTurn(messageID, reply: content) }
             // Contract: Hermes emits message.complete once per turn, after
             // the tool loop ends (intermediate assistant text arrives as
             // deltas around tool.start/tool.complete). Voice turns rely on
@@ -2532,8 +2537,10 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     private func takeNotice(withReason: Bool) -> (notice: VoiceBackgroundJobNotice, jobID: UUID)? {
         for index in jobs.indices {
             let job = jobs[index]
-            // A thread turn its call let go of is never announced.
-            if job.isThreadTurn, job.outcomeDelivered || job.isDetachedThreadTurn || liveThread == nil { continue }
+            // A thread turn its call let go of is never announced, nor the
+            // request whose chat an ended call took (#1250).
+            if job.isDetachedThreadTurn { continue }
+            if job.isThreadTurn, job.outcomeDelivered || liveThread == nil { continue }
             if job.status == .needsInput, !job.inputRequestDelivered {
                 jobs[index].inputRequestDelivered = true
                 return (.speak(Self.waitingNotice(for: job)), job.id)
