@@ -1409,7 +1409,7 @@ extension VoiceConversationControllerTests {
 
         // The model lets it pass: it goes out once more.
         current += GPTLiveConversationController.outcomeSpeechGrace
-        controller.confirmResultSaid(result)
+        controller.confirmResultsSaidForTesting()
         controller.flushPendingContextIfIdle()
         XCTAssertEqual(session.speakable.count, 2)
         XCTAssertEqual(session.speakable.last?.text, result)
@@ -1417,7 +1417,7 @@ extension VoiceConversationControllerTests {
 
         // Silent again: no third try, and it counts as told.
         current += GPTLiveConversationController.outcomeSpeechGrace
-        controller.confirmResultSaid(result)
+        controller.confirmResultsSaidForTesting()
         controller.flushPendingContextIfIdle()
         XCTAssertEqual(session.speakable.count, 2)
         XCTAssertTrue(supervisor.listedJobs.isEmpty)
@@ -1438,13 +1438,12 @@ extension VoiceConversationControllerTests {
         supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: nil, content: "All green.", reasoning: nil))
         controller.deliverPendingJobUpdates()
         controller.flushPendingContextIfIdle()
-        let result = session.speakable.first?.text ?? ""
         current += 1
         session.onEvent?(.outputTranscript("The server's all green."))
         session.onEvent?(.turnDone(role: "assistant", transcript: "The server's all green."))
 
         current += GPTLiveConversationController.outcomeSpeechGrace
-        controller.confirmResultSaid(result)
+        controller.confirmResultsSaidForTesting()
         controller.flushPendingContextIfIdle()
         XCTAssertEqual(session.speakable.count, 1, "Said, so not sent again")
         XCTAssertTrue(supervisor.listedJobs.isEmpty)

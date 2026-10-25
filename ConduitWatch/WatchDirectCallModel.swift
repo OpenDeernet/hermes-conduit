@@ -2617,10 +2617,17 @@ final class WatchDirectCallModel: ObservableObject {
             switch item {
             case .endConversation:
                 requestEnd()
-            case .toolResponse(let id, _, _, _, _):
+            case .toolResponse(let id, let name, let result, let scheduling, let fallback):
                 // The model withdrew the call while it ran: no answer.
                 if withdrawn, id == toolCallID { continue }
-                answer(item, generation: generation)
+                // The iPhone's list, when the relay couldn't answer, still
+                // names the relay's jobs whose outcome the Watch hasn't said.
+                guard name == WatchJobAnswer.listJobs, !unsaidNews.isEmpty else {
+                    answer(item, generation: generation)
+                    continue
+                }
+                let listed = WatchJobAnswer.listing(result, unsaid: unsaidNews.map(\.job))
+                answer(.toolResponse(id: id, name: name, result: listed, scheduling: scheduling, fallback: fallback), generation: generation)
             case .textWhenIdle, .contextWhenIdle:
                 quietQueue.append(item)
             }

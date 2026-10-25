@@ -478,6 +478,8 @@ final class GeminiLiveConversationController: ObservableObject {
         clearAudioPause()
         tools.returnUnsent(pendingTextTurns)
         pendingTextTurns = []
+        // A returned resend is a first send next time.
+        respokenJobIDs = []
         returnHeldOutcomes()
         // Best effort, as on GPT-Live: the chat still has the exchange.
         pendingContextNotes = []
@@ -590,11 +592,12 @@ final class GeminiLiveConversationController: ObservableObject {
         // Unspoken job notices go back to the supervisor, not the bin.
         tools.returnUnsent(pendingTextTurns)
         pendingTextTurns = []
+        // A returned resend is a first send next time.
+        respokenJobIDs = []
         returnHeldOutcomes()
         // Best effort, as on GPT-Live: the chat still has the exchange.
         pendingContextNotes = []
         withdrawnCallIDs = []
-        respokenJobIDs = []
         tools.connectionReplaced()
         closeOpenEntries()
         phase = .idle
@@ -686,6 +689,8 @@ final class GeminiLiveConversationController: ObservableObject {
         idleFlushTask = nil
         tools.returnUnsent(pendingTextTurns)
         pendingTextTurns = []
+        // A returned resend is a first send next time.
+        respokenJobIDs = []
         returnHeldOutcomes()
         // Best effort, as on GPT-Live: the chat still has the exchange.
         pendingContextNotes = []
@@ -1012,6 +1017,8 @@ final class GeminiLiveConversationController: ObservableObject {
             idleFlushTask = nil
             tools.returnUnsent(pendingTextTurns)
             pendingTextTurns = []
+            // A returned resend is a first send next time.
+            respokenJobIDs = []
             returnHeldOutcomes()
             // Ending: the goodbye finishes closing instead of offering a
             // retry (the end task closes the conversation).

@@ -316,6 +316,9 @@ final class GPTLiveConversationController: ObservableObject {
     private var modelTurnActive = false
     private var lastUserSpeechAt: Date?
     private var lastModelOutputAt: Date?
+    /// The model's last words: unlike `lastModelOutputAt`, never set by a
+    /// send of Conduit's.
+    private var lastModelWordsAt: Date?
     private var lastModelTurnEndedAt: Date?
     /// Something to send only while nobody speaks.
     private struct PendingSend {
@@ -325,21 +328,23 @@ final class GPTLiveConversationController: ObservableObject {
         let jobID: UUID?
         /// The delegation it answers (a job's result), if any.
         let delegationID: String?
+        /// A result the model let pass, sent once more: how to settle it.
+        var resendSettle: (@MainActor () -> Void)? = nil
     }
     /// Idle-only sends (job notices, delegation results, typed exchanges)
     /// waiting to go out.
     private var pendingContext: [PendingSend] = []
-    /// Job results that went out and aren't yet known to be said, by text:
-    /// `settle` marks the job told once the model has said something
-    /// since, or after one more try (#1210).
+    /// Job results that went out and aren't yet known to be said, one per
+    /// send (two jobs can share a result's text): `settle` marks the job
+    /// told once the model has said something since, or after one more
+    /// try (#1210).
     private struct UnconfirmedResult {
+        let text: String
         let sentAt: Date
         let resent: Bool
         let settle: @MainActor () -> Void
     }
-    private var unconfirmedResults: [String: UnconfirmedResult] = [:]
-    /// Results the model let pass, queued once more with how to settle them.
-    private var resendSettles: [String: @MainActor () -> Void] = [:]
+    private var unconfirmedResults: [UUID: UnconfirmedResult] = [:]
     /// The user's transcript entries when each open delegation was made:
     /// an entry not among them is something they said after asking. The
     /// request's own late words land in its entries, not new ones.
@@ -445,6 +450,7 @@ final class GPTLiveConversationController: ObservableObject {
         modelTurnActive = false
         lastUserSpeechAt = nil
         lastModelOutputAt = nil
+        lastModelWordsAt = nil
         lastModelTurnEndedAt = nil
         delegatedEntries = []
         sendClaimTask?.cancel()
@@ -770,16 +776,15 @@ final class GPTLiveConversationController: ObservableObject {
         pendingContext = []
         delegationUserEntries = [:]
         // Sent once already: it counts as said, as on the other live modes.
-        let settles = Array(resendSettles.values) + unconfirmedResults.values.map(\.settle)
-        resendSettles = [:]
+        let settles = unsent.compactMap(\.resendSettle) + unconfirmedResults.values.map(\.settle)
         unconfirmedResults = [:]
         settles.forEach { $0() }
-        for item in unsent {
+        for item in unsent where item.resendSettle == nil {
             if let delegationID = item.delegationID {
                 bridge.replyUndelivered(delegationID: delegationID)
             }
         }
-        bridge.returnUnsent(jobIDs: unsent.filter { $0.delegationID == nil }.map(\.jobID))
+        bridge.returnUnsent(jobIDs: unsent.filter { $0.delegationID == nil && $0.resendSettle == nil }.map(\.jobID))
     }
 
     private func handle(_ event: GPTLiveProtocol.ServerEvent) {
@@ -794,6 +799,7 @@ final class GPTLiveConversationController: ObservableObject {
             // what it said into the pause stays readable.
             modelTurnActive = true
             lastModelOutputAt = now()
+            lastModelWordsAt = lastModelOutputAt
             // The model's turn already holds Conduit's sends back.
             clearOpeningHold()
             // Only the change: an unchanged phase would still publish.
@@ -1216,7 +1222,7 @@ final class GPTLiveConversationController: ObservableObject {
                         bridge.replyDelivered(delegationID: delegationID)
                     }
                 }
-            } else if let settle = resendSettles.removeValue(forKey: item.text) {
+            } else if let settle = item.resendSettle {
                 awaitSaid(item.text, since: sentAt, resent: true, settle: settle)
             } else if item.channel == .speakable, let jobID = item.jobID {
                 awaitSaid(item.text, since: sentAt) { [bridge] in bridge.contextDelivered(jobID: jobID) }
@@ -1235,30 +1241,35 @@ final class GPTLiveConversationController: ObservableObject {
     }
 
     private func awaitSaid(_ text: String, since sentAt: Date, resent: Bool = false, settle: @escaping @MainActor () -> Void) {
-        unconfirmedResults[text] = UnconfirmedResult(sentAt: sentAt, resent: resent, settle: settle)
+        let send = UUID()
+        unconfirmedResults[send] = UnconfirmedResult(text: text, sentAt: sentAt, resent: resent, settle: settle)
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(Self.outcomeSpeechGrace))
             guard let self else {
                 settle()
                 return
             }
-            self.confirmResultSaid(text)
+            self.confirmResultSaid(send)
         }
+    }
+
+    /// Checks every result still waiting, as their timers would.
+    func confirmResultsSaidForTesting() {
+        Array(unconfirmedResults.keys).forEach { confirmResultSaid($0) }
     }
 
     /// Settles a result that went out `outcomeSpeechGrace` ago: said if the
     /// model spoke since (or the call is over), else queued once more.
-    func confirmResultSaid(_ text: String) {
-        guard let result = unconfirmedResults.removeValue(forKey: text) else { return }
-        let spoke = lastModelOutputAt.map { $0 >= result.sentAt } ?? false
+    private func confirmResultSaid(_ send: UUID) {
+        guard let result = unconfirmedResults.removeValue(forKey: send) else { return }
+        let spoke = lastModelWordsAt.map { $0 >= result.sentAt } ?? false
         guard isActive, endRequestedAt == nil, !spoke, !result.resent else {
             result.settle()
             return
         }
         // No answer came, so no turn is running for it.
         modelTurnActive = false
-        resendSettles[text] = result.settle
-        pendingContext.append(PendingSend(text: text, channel: .speakable, jobID: nil, delegationID: nil))
+        pendingContext.append(PendingSend(text: result.text, channel: .speakable, jobID: nil, delegationID: nil, resendSettle: result.settle))
         scheduleIdleFlush()
     }
 
