@@ -845,7 +845,7 @@ the bot's SOUL messaging section · README.md's bots line
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-24, at #1192.
+**Checked:** 2026-10-25, at #1259.
 
 ## Markdown lists in messages
 
