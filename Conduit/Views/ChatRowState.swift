@@ -38,6 +38,19 @@ struct ChatRowState: Equatable {
     /// Replies can be pinned here (#918), and the rows that are.
     var canPinReplies = false
     var pinnedMessageIDs: Set<String> = []
+    /// Replies to a teammate's delivery, folded under "Replied to <name>".
+    var teammateReplies: [String: String] = [:]
+    /// The bots' names as the chat shows them: a "Messaged" step reads its
+    /// teammate's name from the roster, and this redraws it when that loads.
+    var botLabels: [String] = []
+    /// Names the steps Conduit has no words of its own for.
+    var toolCatalog = ToolCatalog()
+    /// Finished runs' summaries, by their first tool call.
+    var stepSummaries: [String: String] = [:]
+    /// Runs Hermes is looking back on now, by their first tool call.
+    var stepSummariesAsked: Set<String> = []
+    /// A run's menu can ask Hermes to explain it.
+    var canExplainStepRuns = false
 
     init() {}
 
@@ -60,6 +73,16 @@ struct ChatRowState: Equatable {
         pulseCards = appState.pulseCards(forChat: appState.activeSessionId)
         canPinReplies = appState.canPinReplies
         pinnedMessageIDs = appState.openChatPinnedMessageIDs
+        teammateReplies = BotTeammateMessages.teammateReplies(
+            in: appState.messages,
+            streamingMessageID: appState.isBusy ? BotTeammateMessages.runningReplyID(in: appState.messages) : nil
+        )
+        botLabels = appState.botRoster.map { "\($0.name)=\($0.displayLabel)" }
+        toolCatalog = appState.toolCatalog
+        let scope = appState.toolCatalogKey
+        stepSummaries = appState.stepSummaries[scope] ?? [:]
+        stepSummariesAsked = Set(appState.stepSummaryRequested.keys.lazy.filter { $0.scope == scope }.map(\.toolID))
+        canExplainStepRuns = appState.client != nil && !(appState.activeSessionId ?? "").isEmpty && !isOffline
     }
 
     /// `AppState.canReact(to:)`, from these values alone.

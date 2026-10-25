@@ -1387,6 +1387,69 @@ extension VoiceConversationControllerTests {
         controller.stop()
     }
 
+    func testGPTLiveJobResultTheModelLetsPassIsSentOnceMoreAndStaysListedUntilSaid() async {
+        var current = Date(timeIntervalSince1970: 1_000)
+        let (controller, session, supervisor, _) = makeGPTController(clock: { current })
+        await controller.start()
+        session.becomeReady()
+        session.onEvent?(.turnDone(role: "user", transcript: "Check the server."))
+        session.onEvent?(.outputTranscript("On it."))
+        session.onEvent?(.delegation(id: "del_1", text: ""))
+        await settle(40)
+        session.onEvent?(.turnDone(role: "assistant", transcript: "On it."))
+        current += GPTLiveConversationController.userQuietInterval + 0.5
+
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: nil, content: "All green.", reasoning: nil))
+        controller.deliverPendingJobUpdates()
+        controller.flushPendingContextIfIdle()
+        XCTAssertEqual(session.speakable.count, 1)
+        XCTAssertEqual(session.speakable.first?.delegationID, "del_1")
+        let result = session.speakable.first?.text ?? ""
+        XCTAssertEqual(supervisor.listedJobs.count, 1, "Sent isn't said: list_jobs still names it (#1210)")
+
+        // The model lets it pass: it goes out once more.
+        current += GPTLiveConversationController.outcomeSpeechGrace
+        controller.confirmResultsSaidForTesting()
+        controller.flushPendingContextIfIdle()
+        XCTAssertEqual(session.speakable.count, 2)
+        XCTAssertEqual(session.speakable.last?.text, result)
+        XCTAssertEqual(supervisor.listedJobs.count, 1)
+
+        // Silent again: no third try, and it counts as told.
+        current += GPTLiveConversationController.outcomeSpeechGrace
+        controller.confirmResultsSaidForTesting()
+        controller.flushPendingContextIfIdle()
+        XCTAssertEqual(session.speakable.count, 2)
+        XCTAssertTrue(supervisor.listedJobs.isEmpty)
+        XCTAssertNil(supervisor.takePendingNotice())
+        controller.stop()
+    }
+
+    func testGPTLiveJobResultTheModelSaysIsToldWithoutAResend() async {
+        var current = Date(timeIntervalSince1970: 1_000)
+        let (controller, session, supervisor, _) = makeGPTController(clock: { current })
+        await controller.start()
+        session.becomeReady()
+        session.onEvent?(.turnDone(role: "user", transcript: "Check the server."))
+        session.onEvent?(.delegation(id: "del_1", text: ""))
+        await settle(40)
+        current += GPTLiveConversationController.userQuietInterval + 0.5
+
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: nil, content: "All green.", reasoning: nil))
+        controller.deliverPendingJobUpdates()
+        controller.flushPendingContextIfIdle()
+        current += 1
+        session.onEvent?(.outputTranscript("The server's all green."))
+        session.onEvent?(.turnDone(role: "assistant", transcript: "The server's all green."))
+
+        current += GPTLiveConversationController.outcomeSpeechGrace
+        controller.confirmResultsSaidForTesting()
+        controller.flushPendingContextIfIdle()
+        XCTAssertEqual(session.speakable.count, 1, "Said, so not sent again")
+        XCTAssertTrue(supervisor.listedJobs.isEmpty)
+        controller.stop()
+    }
+
     func testGPTLiveHeldDelegationResultGoesBackWhenTheCallEnds() async {
         let current = Date(timeIntervalSince1970: 1_000)
         let (controller, session, supervisor, _) = makeGPTController(clock: { current })
@@ -1921,9 +1984,7 @@ extension ContinuousConversationPreferenceTests {
 @MainActor
 extension AppStateVoiceCapabilityTests {
     private func makeGPTLiveAppState() -> AppState {
-        let suite = "GPTLiveAppState.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("GPTLiveAppState")
         let appState = AppState(defaults: defaults, loadSavedConnection: false)
         appState.connection = HermesConnection(baseUrl: "https://example.com", ticket: "test-ticket")
         appState.isConnected = true
@@ -2430,9 +2491,7 @@ extension AppStateVoiceCapabilityTests {
     /// Conduit reconnecting with GPT-Live chosen over a fake call, and
     /// Siri's request for a call pending in the shared store.
     private func makeSiriWaitingAppState() -> (AppState, FakeGPTLiveSessionControl) {
-        let suite = "GPTLiveSiriWaiting.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("GPTLiveSiriWaiting")
         let appState = AppState(defaults: defaults, loadSavedConnection: false)
         _ = appState.handleScenePhase(.active)
         appState.showLogin = false
@@ -2556,9 +2615,7 @@ extension AppStateVoiceCapabilityTests {
         let appState = makeGPTLiveAppState()
         appState.setGPTLiveEnabled(true)
         let (_, session) = installFakeGPTLive(in: appState)
-        let suite = "CarPlayChooseChat.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("CarPlayChooseChat")
         let preferences = CarPlayPreferences(defaults: defaults)
         preferences.setChoosesChatFirst(true)
         let coordinator = CarPlayVoiceCoordinator()
@@ -4374,4 +4431,46 @@ final class FakeGPTLiveSpokenWords: GPTLiveSpokenWords {
     func wordsMark() -> Int { mark }
     func lastUserLine() -> String { lastLine }
     func settleWords(_ words: GPTLiveDelegationBridge.SettledWords) { settled.append(words) }
+}
+
+// MARK: - A start's late answers (#999)
+
+@MainActor
+extension VoiceConversationControllerTests {
+    func testGPTLiveStoppedStartsLateAnswerLeavesTheNewerStartAlone() async {
+        let held = HeldLiveAvailability<GPTLiveAvailability>()
+        let session = FakeGPTLiveSessionControl()
+        var sessionsMade = 0
+        let supervisor = VoiceBackgroundJobSupervisor(backend: FakeVoiceJobBackend().backend, pollInterval: .seconds(3_600))
+        let controller = GPTLiveConversationController(
+            makeSession: { sessionsMade += 1; return session },
+            availability: { try await held.next() },
+            briefing: { "[rules]" },
+            openingPrompt: { nil },
+            supervisor: supervisor,
+            requestPermission: { true },
+            now: Date.init,
+            endConversationPhrases: { [] },
+            headsetMute: HeadsetMicrophoneMute(system: FakeSystemInputMute())
+        )
+
+        let first = Task { await controller.start() }
+        await settle(until: { held.waiting.count == 1 })
+        // Stop, then Start again: both leave the controller `.connecting`.
+        controller.stop()
+        let second = Task { await controller.start() }
+        await settle(until: { held.waiting.count == 2 })
+
+        // The stopped start hears back late, that GPT-Live isn't there.
+        held.answer(0, with: .unavailable(reason: "old answer"))
+        await first.value
+        XCTAssertEqual(controller.phase, .connecting, "the old answer doesn't fail the newer start")
+        XCTAssertEqual(sessionsMade, 0)
+
+        held.answer(1, with: .available(model: "gpt-live-1-codex", voice: "cove"))
+        await second.value
+        XCTAssertEqual(sessionsMade, 1, "only the newer start connects")
+        XCTAssertEqual(session.started, 1)
+        controller.stop()
+    }
 }

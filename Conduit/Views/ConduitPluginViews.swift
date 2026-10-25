@@ -34,7 +34,7 @@ enum NotifierPluginSummary {
 /// The features Conduit uses from the plugin, by capability id, and what
 /// the user calls them.
 enum NotifierPluginFeature: CaseIterable {
-    case chatTakeover, savedCalls, liveVoiceContext, geminiLive, gptLive, grokLive
+    case chatTakeover, savedCalls, liveVoiceContext, geminiLive, qwenLive, gptLive, grokLive
     case encryptedNotifications, pairing, hermesCalls, agentSettings, healthSync, updates
 
     /// Every capability id the feature needs.
@@ -44,6 +44,7 @@ enum NotifierPluginFeature: CaseIterable {
         case .savedCalls: return ["voice-sessions", "voice-tags", "voice-summary"]
         case .liveVoiceContext: return ["memory", "personality", "web-search"]
         case .geminiLive: return ["gemini-live"]
+        case .qwenLive: return ["qwen-live"]
         case .gptLive: return ["gpt-live"]
         case .grokLive: return ["grok-live"]
         case .encryptedNotifications: return ["e2e-notifications"]
@@ -62,6 +63,7 @@ enum NotifierPluginFeature: CaseIterable {
         case .savedCalls: return AppLocalization.string("Saved voice calls")
         case .liveVoiceContext: return AppLocalization.string("Memory, personality and web search in live voice")
         case .geminiLive: return AppLocalization.string("Gemini Live")
+        case .qwenLive: return AppLocalization.string("Qwen Live")
         case .gptLive: return AppLocalization.string("GPT-Live")
         case .grokLive: return AppLocalization.string("Grok Live")
         case .encryptedNotifications: return AppLocalization.string("Encrypted notifications")
@@ -479,6 +481,7 @@ struct NotifierPluginUpdateStatusView: View {
         case .waitingForChats(let count):
             return AppLocalization.string("Waiting for \(count) running chats to finish…")
         case .restartingDashboard: return AppLocalization.string("Restarting the dashboard…")
+        case .reconnecting: return AppLocalization.string("Reconnecting…")
         }
     }
 }
@@ -490,10 +493,17 @@ struct NotifierPluginUpdateBanner: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     @EnvironmentObject private var appState: AppState
     @State private var confirming = false
-    @State private var showsNotes = false
     /// The notes as they were when What's New was tapped: an hourly
-    /// changelog read can't empty the open sheet.
+    /// changelog read can't empty the open sheet. The sheet is presented
+    /// by this item, not a separate flag: a flag's sheet built its content
+    /// before it saw the notes and opened blank.
     @State private var shownNotes: NotifierPluginReleaseNotes?
+
+    /// The finished update's timer starts over when Conduit reconnects.
+    private struct AutoDismissKey: Equatable {
+        let update: NotifierPluginUpdateState
+        let connected: Bool
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -507,10 +517,8 @@ struct NotifierPluginUpdateBanner: View {
         }
         .animation(.snappy, value: appState.showsNotifierPluginUpdateNotice)
         .notifierPluginUpdateConfirmation(isPresented: $confirming, install: isInstall)
-        .sheet(isPresented: $showsNotes) {
-            if let shownNotes {
-                NotifierPluginChangesSheet(notes: shownNotes)
-            }
+        .sheet(item: $shownNotes) { notes in
+            NotifierPluginChangesSheet(notes: notes)
         }
     }
 
@@ -559,7 +567,6 @@ struct NotifierPluginUpdateBanner: View {
                     } else if !line.isEmpty {
                         Button {
                             shownNotes = notes
-                            showsNotes = true
                         } label: {
                             Text(verbatim: line)
                                 .font(.footnote)
@@ -627,10 +634,10 @@ struct NotifierPluginUpdateBanner: View {
             guard !update.isInProgress else { return }
             UIAccessibility.post(notification: .announcement, argument: text)
         }
-        // A finished update leaves on its own; with VoiceOver on it stays
-        // until closed.
-        .task(id: update) {
-            guard case .updated = update, !UIAccessibility.isVoiceOverRunning else { return }
+        // A finished update leaves on its own once Conduit is connected
+        // again; with VoiceOver on it stays until closed.
+        .task(id: AutoDismissKey(update: update, connected: appState.isConnected)) {
+            guard case .updated = update, appState.isConnected, !UIAccessibility.isVoiceOverRunning else { return }
             try? await Task.sleep(for: .seconds(8))
             if !Task.isCancelled, appState.activeNotifierPluginUpdate == update { appState.dismissNotifierPluginUpdateOutcome() }
         }
@@ -702,8 +709,9 @@ struct NotifierPluginChangesList: View {
 
 /// What the update to the offered version brings, and when that version
 /// came out, for the notice and Settings > Conduit plugin.
-struct NotifierPluginReleaseNotes: Equatable {
+struct NotifierPluginReleaseNotes: Equatable, Identifiable {
     var version: String
+    var id: String { version }
     var released: Date?
     var changes: [NotifierPluginChangelog.Change]
 

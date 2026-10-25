@@ -22,16 +22,20 @@ enum WatchCallEnd {
     /// The call's grant has no audio streams left (the host refused one, or
     /// the Watch used them all): only a new call gets more.
     static let streamsSpent = String(localized: "This call can't reconnect to Hermes again. Start the call again.")
+    /// A call from Hermes the iPhone kept on its headset (#1204): the
+    /// model's part is over, and the call goes on as `onPhone`.
+    static let onPhone = "kept on the iPhone's headset"
 
     static func isNormal(_ reason: String?) -> Bool {
         guard let reason else { return true }
-        return reason == byUser || reason == goodbye
+        return reason == byUser || reason == goodbye || reason == onPhone
     }
 }
 
 /// The voice a Watch call talks to, picked on the Watch.
 enum WatchVoiceEngine: String, CaseIterable, Identifiable {
     case geminiLive
+    case qwenLive
     case gptLive
     case grokLive
     case localLive
@@ -43,6 +47,7 @@ enum WatchVoiceEngine: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .geminiLive: return String(localized: "Gemini Live")
+        case .qwenLive: return String(localized: "Qwen Live")
         case .gptLive: return String(localized: "GPT-Live")
         case .grokLive: return String(localized: "Grok")
         case .localLive: return String(localized: "Local Live")
@@ -51,7 +56,8 @@ enum WatchVoiceEngine: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .geminiLive: return String(localized: "Runs on your Watch")
+        case .geminiLive: return String(localized: "Connects directly from your Watch")
+        case .qwenLive: return String(localized: "Connects directly from your Watch")
         case .gptLive, .grokLive: return String(localized: "Runs on your Hermes host")
         case .localLive: return String(localized: "Your own speech server")
         }
@@ -61,6 +67,7 @@ enum WatchVoiceEngine: String, CaseIterable, Identifiable {
     var callVoice: WatchCallVoices.Voice {
         switch self {
         case .geminiLive: return .geminiLive
+        case .qwenLive: return .qwenLive
         case .gptLive: return .gptLive
         case .grokLive: return .grokLive
         case .localLive: return .localLive
@@ -70,6 +77,7 @@ enum WatchVoiceEngine: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .geminiLive: return "sparkles"
+        case .qwenLive: return "sparkles"
         case .gptLive: return "waveform.path.ecg"
         case .grokLive: return "bolt.fill"
         case .localLive: return "house.fill"
@@ -96,6 +104,10 @@ final class WatchVoiceCall: ObservableObject {
         case lost
         /// Siri or an alarm took the microphone: a tap brings it back.
         case needsTap
+        /// A call from Hermes answered here that the iPhone kept, since a
+        /// headset (AirPods) was on there (#1204): its voice plays there,
+        /// and Mute and End here control it (HermesWatchCalls).
+        case onPhone
         case ending
         case ended(String?)
     }
@@ -141,6 +153,8 @@ final class WatchVoiceCall: ObservableObject {
     /// The ended call's summary was dismissed: its model's end is old news
     /// until the next call starts.
     private var summaryDismissed = false
+    /// The call went on as `onPhone`: what the model shows is old news.
+    private var onPhone = false
     /// The model's previous call when a new one was started, until the
     /// model begins the new one: until then, what it shows is old news.
     private var previousModelCall: UInt32?
@@ -187,13 +201,15 @@ final class WatchVoiceCall: ObservableObject {
         endedAt = nil
         caption = nil
         transcript = []
+        isMuted = false
+        onPhone = false
         phase = .preparing
         previousModelCall = modelCallID
         switch callEngine {
         case .geminiLive: Task { await direct.start(engine: .gemini, ring: ring, answer: answer) }
+        case .qwenLive: Task { await direct.start(engine: .qwen, ring: ring, answer: answer) }
         case .grokLive: Task { await direct.start(engine: .grok, ring: ring, answer: answer) }
-        // Calls from Hermes don't ring a Watch on Local Live (WatchCallVoices).
-        case .localLive: Task { await direct.start(engine: .localLive) }
+        case .localLive: Task { await direct.start(engine: .localLive, ring: ring, answer: answer) }
         case .gptLive: Task { await bridge.start(ring: ring, answer: answer) }
         }
     }
@@ -203,6 +219,7 @@ final class WatchVoiceCall: ObservableObject {
     static func startRequest(engine: WatchVoiceEngine, callID: UInt32, ring: String?) -> WatchVoiceWire.Message {
         switch engine {
         case .geminiLive: return WatchDirectCallModel.startRequest(engine: .gemini, callID: callID, ring: ring)
+        case .qwenLive: return WatchDirectCallModel.startRequest(engine: .qwen, callID: callID, ring: ring)
         case .grokLive: return WatchDirectCallModel.startRequest(engine: .grok, callID: callID, ring: ring)
         case .localLive: return WatchDirectCallModel.startRequest(engine: .localLive, callID: callID, ring: ring)
         case .gptLive: return WatchBridgeCallModel.startRequest(callID: callID, ring: ring)
@@ -210,8 +227,12 @@ final class WatchVoiceCall: ObservableObject {
     }
 
     func end() {
+        guard phase != .onPhone else {
+            endOnPhone()
+            return
+        }
         switch callEngine {
-        case .geminiLive, .grokLive, .localLive: direct.end()
+        case .geminiLive, .qwenLive, .grokLive, .localLive: direct.end()
         case .gptLive: bridge.end()
         }
     }
@@ -219,23 +240,43 @@ final class WatchVoiceCall: ObservableObject {
     /// Stops the voice while it speaks; brings the microphone back after
     /// Siri or an alarm.
     func tap() {
+        guard phase != .onPhone else { return }
         switch callEngine {
-        case .geminiLive, .grokLive, .localLive: direct.tapOrb()
+        case .geminiLive, .qwenLive, .grokLive, .localLive: direct.tapOrb()
         case .gptLive: bridge.tapOrb()
         }
     }
 
     func toggleMute() {
+        guard phase != .onPhone else {
+            isMuted.toggle()
+            HermesWatchCalls.shared.phoneCallMuted(isMuted)
+            return
+        }
         switch callEngine {
-        case .geminiLive, .grokLive, .localLive: direct.toggleMute()
+        case .geminiLive, .qwenLive, .grokLive, .localLive: direct.toggleMute()
         case .gptLive: bridge.toggleMute()
         }
+    }
+
+    /// The iPhone muted or unmuted the call it kept.
+    func phoneMuted(_ muted: Bool) {
+        guard phase == .onPhone else { return }
+        isMuted = muted
+    }
+
+    /// The call the iPhone kept is over, ended here or there.
+    func endOnPhone() {
+        guard phase == .onPhone else { return }
+        endedAt = Date()
+        WKInterfaceDevice.current().play(.stop)
+        phase = .ended(nil)
     }
 
     /// Answers the approval the card showed, never one queued behind it.
     func answerApproval(_ approval: WatchJobAnswer.Approval, approve: Bool) {
         switch callEngine {
-        case .geminiLive, .grokLive, .localLive: direct.answerApproval(approval, approve: approve)
+        case .geminiLive, .qwenLive, .grokLive, .localLive: direct.answerApproval(approval, approve: approve)
         case .gptLive: bridge.answerApproval(approval, approve: approve)
         }
     }
@@ -390,10 +431,11 @@ final class WatchVoiceCall: ObservableObject {
     }
 
     private func refresh() {
-        guard !summaryDismissed, !isScreenshotFixture else { return }
+        // The model's part of a call the iPhone kept is over.
+        guard !summaryDismissed, !isScreenshotFixture, !onPhone else { return }
         let next: Phase
         switch callEngine {
-        case .geminiLive, .grokLive, .localLive: next = Self.phase(direct.phase)
+        case .geminiLive, .qwenLive, .grokLive, .localLive: next = Self.phase(direct.phase)
         case .gptLive: next = Self.phase(bridge.phase)
         }
         // Only a dismissed summary goes back to the home screen: a model
@@ -405,7 +447,7 @@ final class WatchVoiceCall: ObservableObject {
             previousModelCall = nil
         }
         switch callEngine {
-        case .geminiLive, .grokLive, .localLive:
+        case .geminiLive, .qwenLive, .grokLive, .localLive:
             caption = direct.caption
             transcript = direct.transcript
             isMuted = direct.isMuted
@@ -417,6 +459,17 @@ final class WatchVoiceCall: ObservableObject {
             isMuted = bridge.isMuted
             jobsRunning = bridge.relayJobsRunning
             pendingApproval = bridge.pendingApproval
+        }
+        if case .ended(.some(WatchCallEnd.onPhone)) = next {
+            onPhone = true
+            caption = nil
+            transcript = []
+            isMuted = false
+            jobsRunning = 0
+            liveSince = Date()
+            WKInterfaceDevice.current().play(.start)
+            phase = .onPhone
+            return
         }
         if liveSince == nil, next == .listening || next == .speaking {
             liveSince = Date()
@@ -431,7 +484,7 @@ final class WatchVoiceCall: ObservableObject {
 
     private var modelCallID: UInt32 {
         switch callEngine {
-        case .geminiLive, .grokLive, .localLive: return direct.callID
+        case .geminiLive, .qwenLive, .grokLive, .localLive: return direct.callID
         case .gptLive: return bridge.callID
         }
     }
