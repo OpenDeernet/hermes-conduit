@@ -1069,6 +1069,14 @@ final class HermesClient: ObservableObject {
     // nonisolated(unsafe): deinit cancels it; cancel() is thread-safe.
     nonisolated(unsafe) private var keepaliveTask: Task<Void, Never>?
     private var lastInboundAt = Date()
+    /// Requests with a large frame (a picture going up) the socket is still
+    /// writing, until the write finishes or the request's own budget ends.
+    /// One can take a minute on a slow link, and a ping queued behind it
+    /// can't be answered before it's through (#1265).
+    private var requestsBeingWritten: Set<Int> = []
+    /// A frame this size or larger counts as being written until the socket
+    /// says it's through; a smaller one goes out at once.
+    static let largeFrameBytes = 256 * 1024
     private var isProbing = false
     private let keepaliveInterval: TimeInterval?
     private let backgroundKeepaliveInterval: TimeInterval?
@@ -1094,6 +1102,13 @@ final class HermesClient: ObservableObject {
     var onDisconnected: (() -> Void)?
 
     static let requestTimeout: TimeInterval = 30
+    /// An upload's budget: at least two minutes, plus about 1 s for every
+    /// 64 KB of request (about 0.5 Mbit/s), the rate a group room's upload
+    /// allows, so a large picture on a slow link isn't cut off (#1265).
+    static let minimumUploadTimeout: TimeInterval = 120
+    static func uploadTimeout(forPayloadCharacters count: Int) -> TimeInterval {
+        max(minimumUploadTimeout, TimeInterval(count) / 64_000)
+    }
     static let promptSubmitTimeout: TimeInterval = 180 // 3 minutes
     static let titleGenerationTimeout: TimeInterval = 90
     /// The legacy full-transcript resume is the RPC most likely to carry the
@@ -1339,6 +1354,9 @@ final class HermesClient: ObservableObject {
     /// it is no longer this client's socket.
     private func keepaliveQuietTimeLeft(on socket: any HermesWebSocket, interval: TimeInterval) -> TimeInterval? {
         guard self.socket === socket else { return nil }
+        // A frame still being written: a ping would wait behind it and look
+        // lost, closing the socket under the upload. Look again later.
+        if !requestsBeingWritten.isEmpty { return interval }
         return interval - Date().timeIntervalSince(lastInboundAt)
     }
 
@@ -1871,6 +1889,7 @@ final class HermesClient: ObservableObject {
                 // Timeout
                 let timer = Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { [weak self] _ in
                     Task { @MainActor in
+                        self?.requestsBeingWritten.remove(id)
                         if let pending = self?.pending.removeValue(forKey: id) {
                             pending.continuation.resume(throwing: HermesError.timeout(method))
                         }
@@ -1883,7 +1902,10 @@ final class HermesClient: ObservableObject {
                 // frames (`socket.send(JSON.stringify(...))`). The gateway accepts
                 // the connection but does not dispatch binary JSON-RPC frames.
                 let text = String(decoding: body, as: UTF8.self)
+                let isLarge = body.count >= Self.largeFrameBytes
+                if isLarge { requestsBeingWritten.insert(id) }
                 socket.send(.string(text)) { [weak self] error in
+                    if isLarge { Task { @MainActor in self?.requestsBeingWritten.remove(id) } }
                     if let error {
                         self?.logger.error("RPC send failed for \(method, privacy: .public): \(LogRedaction.message(error), privacy: .public)")
                         Task { @MainActor in
@@ -1903,6 +1925,7 @@ final class HermesClient: ObservableObject {
     }
 
     private func cancelPendingRequest(id: Int) {
+        requestsBeingWritten.remove(id)
         guard let pending = pending.removeValue(forKey: id) else { return }
         pending.timer?.invalidate()
         pending.continuation.resume(throwing: CancellationError())
@@ -2216,7 +2239,13 @@ final class HermesClient: ObservableObject {
     /// A gateway that predates `ping` answers "method not found". That reply
     /// travelled over this socket, so it proves the socket alive exactly as a
     /// pong would; Hermes Desktop reads it the same way.
+    ///
+    /// While a request's frame is still being written (a picture going up),
+    /// the ping would wait behind it past its budget and drop a working
+    /// socket: that request's own budget answers for the socket instead
+    /// (#1265).
     func healthCheck() async throws {
+        guard requestsBeingWritten.isEmpty else { return }
         try await ping(timeout: Self.pingTimeout)
     }
 
@@ -3173,7 +3202,7 @@ final class HermesClient: ObservableObject {
             "session_id": sessionId,
             "content_base64": base64,
             "filename": filename
-        ])
+        ], timeout: Self.uploadTimeout(forPayloadCharacters: base64.utf8.count))
         return result.objectValue?["path"]?.stringValue
     }
 
@@ -3196,7 +3225,7 @@ final class HermesClient: ObservableObject {
             "data_url": dataUrl,
             "name": name,
             "path": path
-        ], timeout: 120)
+        ], timeout: Self.uploadTimeout(forPayloadCharacters: dataUrl.utf8.count))
         return Self.fileAttachmentReference(from: result)
     }
 

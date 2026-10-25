@@ -1264,6 +1264,31 @@ message · the group room composer · the Settings caption for the limit
 
 **Checked:** 2026-10-24, at #1190; the paste's pixel bound at #1191 (#892 review).
 
+## Sending files in a chat
+
+How a message's pictures and files go up to Hermes before the prompt, and
+how long a large one may take on a slow link.
+
+**Siblings:** the chat composer (picker, drop, camera, paste) · the share
+extension · Ask Hermes About Screen · a recorded voice message · Bot Chat and
+project chats (the same send) · the group room composer (its own upload) ·
+the socket's keepalive and the foreground connection check
+
+**Code**
+- The send: `Conduit/Services/AppState.swift` (sendMessage: image.attach_bytes, file.attach when Hermes refuses the image, file.attach for every other file)
+- Budgets and the socket: `Conduit/Services/HermesClient.swift` (uploadTimeout, attachImage, attachFile, requestsBeingWritten, keepaliveQuietTimeLeft, healthCheck)
+- Group rooms: `Conduit/Services/GroupRoomFiles.swift` (timeoutMilliseconds)
+- Tests: `ConduitTests/HermesClientTests.swift`
+
+**Rulings**
+- An upload's budget is at least two minutes, plus about 1 s for every 64 KB it carries (about 0.5 Mbit/s), for a picture and a file alike; a group room's upload allows the same rate, with its own three-minute floor (2026-10-25, #1265 report: 3 to 4 MB photos failed now and then under the 30 s every request had).
+- While a frame of 256 KB or more is still being written, the keepalive doesn't ping and the foreground check doesn't either: a ping queued behind it can't be answered in time and would drop a working socket. The request's own budget answers for the socket, and once it ends the pings come back (2026-10-25, #1265 report).
+
+**Open gaps**
+- Files go up one after another as base64 over the chat socket; nothing shows how far an upload has got.
+
+**Checked:** 2026-10-25, at #PRNUM.
+
 ## Phone change errors
 
 What Hermes and the user are told when a calendar, reminder or alarm change
