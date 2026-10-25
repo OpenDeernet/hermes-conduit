@@ -1242,7 +1242,7 @@ describes this case)
 
 **Rulings**
 - The two never merge: nothing of the other dashboard's (password, Face ID choice, Cloudflare token, sign-in cookies) is written. Edit Connection says so; Repair stops before connecting and offers to switch to it (2026-10-24, #995, #1219, Eric).
-- Repair's sign-in is checked before its sheet registers the address, and a new address a repair's sign-in registered stays that repair's own, for another sign-in or a password reconnect, until that repair tries to activate or another repair begins (#1219).
+- Repair's sign-in is checked before its sheet registers the address, and a new address a repair's sign-in registered stays that repair's own, for another sign-in or a password reconnect, until that repair connects or another repair begins (#1219).
 
 **Open gaps**
 - Settings' Sign In Again only offers the active dashboard's own address, so it never meets this case; it shares Repair's activation and would refuse the same way.

@@ -12214,9 +12214,9 @@ final class AppState: ObservableObject {
     /// opens, so it can never install a connection underneath the repair.
     @discardableResult
     func beginSavedConnectionRepair() -> ConnectionRepairContext? {
+        repairRegisteredDashboardIDs = []
         guard let context = makeSavedConnectionRepairContext() else { return nil }
         cancelChatResumeTransportRecovery()
-        repairRegisteredDashboardIDs = []
         return context
     }
 
@@ -12240,9 +12240,9 @@ final class AppState: ObservableObject {
     /// restart the loop; the user is left in the stable disconnected state.
     @discardableResult
     func beginConnectionRepair() -> ConnectionRepairContext? {
+        repairRegisteredDashboardIDs = []
         guard let context = makeConnectionRepairContext() else { return nil }
         cancelChatResumeTransportRecovery()
-        repairRegisteredDashboardIDs = []
         return context
     }
 
@@ -12268,8 +12268,6 @@ final class AppState: ObservableObject {
         // the tested URL counts as changed (remember it) and whether the
         // Cloudflare token needs a same-origin re-bind.
         let failedTarget = connection?.baseUrl
-        // Whatever this try's outcome, a later repair starts without them.
-        defer { repairRegisteredDashboardIDs = [] }
         // A sign-in's address was checked before its sheet registered it
         // (ConnectionSetupView.beginRepairSignIn); a tested password
         // reconnect is checked here, before its cookies are committed.
@@ -12327,14 +12325,17 @@ final class AppState: ObservableObject {
             }
         }
         guard outcome == .activated else { return outcome }
+        // Connected: what this repair registered is a dashboard of its own
+        // now, and a later repair starts without it.
+        repairRegisteredDashboardIDs = []
         persistActivatedRepair(handoff, failedTarget: failedTarget)
         return outcome
     }
 
     /// Dashboards a repair's sign-in registered for a new address this
     /// repair (`registerRepairDashboard`); cleared when a repair begins
-    /// (either entry) and once an activation is tried, so a later repair
-    /// never inherits them.
+    /// (either entry) and once one connects, so a later repair never
+    /// inherits them.
     private var repairRegisteredDashboardIDs: Set<UUID> = []
 
     /// The saved dashboard other than the one being repaired that already
