@@ -114647,7 +114647,6 @@
         }
       }
     },
-    "Experimental. Keeps the microphone open while Gemini talks on the phone's speaker or in the car, with iOS echo cancellation, so you can cut in by speaking. Headphones and AirPods always allow this. Turn it off if Gemini keeps cutting itself off. Shared by Gemini Live, Grok Live and Classic voice. Applies to the next conversation.": null,
     "Experimental. Keeps the microphone open while Gemini talks on the phone's speaker or in the car, with iOS echo cancellation, so you can cut in by speaking. Headphones and AirPods always allow this. Turn it off if Gemini keeps cutting itself off. Shared by Qwen Live, Gemini Live, Grok Live and Classic voice. Applies to the next conversation.": {
       "localizations": {
         "de": {
@@ -114730,7 +114729,6 @@
         }
       }
     },
-    "Experimental. Keeps the microphone open while Grok talks on the phone's speaker or in the car, with iOS echo cancellation, so you can cut in by speaking. Headphones and AirPods always allow this. Turn it off if Grok keeps cutting itself off. Shared by Gemini Live, Grok Live and Classic voice. Applies to the next conversation.": null,
     "Experimental. Keeps the microphone open while Grok talks on the phone's speaker or in the car, with iOS echo cancellation, so you can cut in by speaking. Headphones and AirPods always allow this. Turn it off if Grok keeps cutting itself off. Shared by Qwen Live, Gemini Live, Grok Live and Classic voice. Applies to the next conversation.": {
       "localizations": {
         "de": {
@@ -218399,7 +218397,6 @@
         }
       }
     },
-    "Press Return to send. Use Shift-Return for a new line.": null,
     "Press the Action Button in any app and Conduit opens with a screenshot of it, ready for your question.": {
       "localizations": {
         "de": {
@@ -283821,7 +283818,6 @@
         }
       }
     },
-    "Talk with Gemini Live instead of the Hermes speech pipeline. Hermes still does the work: Gemini starts background jobs on this profile and tells you their results. The API key stays on your Hermes server. Approvals are never given by voice.": null,
     "Talk with Gemini Live instead of the Hermes speech pipeline. Hermes still does the work: Gemini starts background jobs on this profile and tells you their results. The API key stays on your Hermes server. Gemini answers what Hermes asks you only with what you say, and approves a command only on your yes.": {
       "localizations": {
         "de": {
