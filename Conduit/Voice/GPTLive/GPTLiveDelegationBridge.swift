@@ -536,7 +536,15 @@ final class GPTLiveDelegationBridge {
         lastTaker = (id, jobID)
         guard openDelegations[jobID] == id else { return [] }
         var outgoing: [Outgoing] = []
-        if let job = supervisor.jobs.first(where: { $0.id == jobID }), job.status.isActive {
+        if let job = supervisor.jobs.first(where: { $0.id == jobID }), job.status.isActive, job.isThreadTurn {
+            // Said while the call's chat was being made: it joined that chat
+            // as its next turn (#1250).
+            outgoing.append(.delegationReply(
+                delegationID: id,
+                text: confirmed ? Self.sentToChat : "Hermes is working on this in the chat. Its reply will follow on this delegation; don't guess it.",
+                channel: confirmed ? .speakable : .commentary
+            ))
+        } else if let job = supervisor.jobs.first(where: { $0.id == jobID }), job.status.isActive {
             // The first request of a call on its own made the call's chat (#1250).
             let place = job.isCallChat ? " in the call's chat" : ""
             let corrections = "If the user corrects or changes it while it runs, delegate their words starting with \"Job \(job.number):\"."

@@ -682,12 +682,16 @@ final class GeminiLiveToolBridge {
         guard !holdsJobCalls, openCalls[jobID] == call.id else { return settled }
         openCalls[jobID] = nil
         callNames[call.id] = nil
-        let title = supervisor.jobs.first(where: { $0.id == jobID })?.title ?? ""
+        let job = supervisor.jobs.first(where: { $0.id == jobID })
+        // Said while the call's chat was being made, it joined that chat (#1250).
+        let message = job?.isThreadTurn == true
+            ? "Sent to the call's chat as its next message. Hermes' reply will arrive later as a message; don't wait for it."
+            : "The job is running on Hermes. Its result will arrive later as a message; don't wait for it."
         return settled + [.toolResponse(id: call.id, name: call.name, result: [
             "job_id": jobID.uuidString,
-            "title": title,
+            "title": job?.title ?? "",
             "status": "started",
-            "message": "The job is running on Hermes. Its result will arrive later as a message; don't wait for it.",
+            "message": message,
         ], scheduling: nil)]
     }
 
