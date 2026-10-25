@@ -959,12 +959,12 @@ devices)
 
 **Rulings**
 - Only the user's own scroll leaves following, except a long reply's stop below. Being near the bottom (40 pt), the jump button or sending returns to it (chats: ChatScrollEngine; group rooms 2026-10-24, #1184).
-- A reply longer than the screen stops at its start: following never pins past the bottom of the user's message it answers, and once the reply runs on, the reader is left browsing there. On by default, switchable in Settings > Chat (Eric, 2026-10-25, #PRNUM, notifier issue 365).
-- The stop never moves the offset up: a reader already below the reply's start (back at its end, or a reply that outgrew the screen before its message was laid out) follows on to the end. It holds at the turn's start, not the answer text, because a turn's steps fold and their summaries arrive below that point (2026-10-25, #PRNUM).
-- What arms it: a send, a new user message from another device, and opening a chat that was unread, which lands at the start of its latest reply once its transcript is in. The jump button, the title tap, a jump to a question and a session switch disarm it (2026-10-25, #PRNUM).
-- Group rooms land a following transcript at the top of the first new member message, and stop following when it doesn't fit (2026-10-25, #PRNUM).
+- A reply longer than the screen stops at its start: following never pins past the bottom of the user's message it answers, and once the reply runs on, the reader is left browsing there. On by default, switchable in Settings > Chat (Eric, 2026-10-25, #1256, notifier issue 365).
+- The stop never moves the offset up: a reader already below the reply's start (back at its end, or a reply that outgrew the screen before its message was laid out) follows on to the end. It holds at the turn's start, not the answer text, because a turn's steps fold and their summaries arrive below that point (2026-10-25, #1256).
+- What arms it: a send, a new user message from another device, and opening a chat that was unread, which lands at the start of its latest reply once its transcript is in. The jump button, the title tap, a jump to a question and a session switch disarm it (2026-10-25, #1256).
+- Group rooms land a following transcript at the top of the first new member message, and stop following when it doesn't fit (2026-10-25, #1256).
 - An open group room keeps a bounded tail: it opens on the last 200 events, and polling trims back to 200 once it holds 400 (2026-10-24, #1184).
-- The delegate tail sheet always follows its end: it is a live log, not a reply to read (2026-10-25, #PRNUM).
+- The delegate tail sheet always follows its end: it is a live log, not a reply to read (2026-10-25, #1256).
 
 **Open gaps**
 - Group rooms have no "Load earlier messages", so history above the 200-event tail isn't reachable in the app.
@@ -974,7 +974,7 @@ devices)
 - Opening an unread chat lands at the reply after its last user message; a chat Hermes wrote to without one (a cron or background result after an already read reply) lands there too, not at the newest row.
 - A chat restored on launch (Continue where you left off) keeps its saved place, unread or not.
 
-**Checked:** 2026-10-25, at #PRNUM.
+**Checked:** 2026-10-25, at #1256.
 
 ## Reconnecting to Hermes
 
