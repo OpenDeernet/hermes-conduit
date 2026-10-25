@@ -1276,12 +1276,17 @@ final class WatchDirectCallModel: ObservableObject {
         // talk over that.
         pendingSamples = []
         let text = WatchRejoin.prompt(transcript, after: rejoinCause)
+        let waitedSince = awaitingAnswerSince
         awaitingAnswerSince = now
-        textUpdatesSent += 1
-        noteTextSent("rejoin", text)
         let id = callID
-        session.send(.textTurn(text), onSent: nil, onFailure: { [weak self] in
+        session.send(.textTurn(text), onSent: { [weak self] in
             guard let self, self.callID == id else { return }
+            self.textUpdatesSent += 1
+            self.noteTextSent("rejoin", text)
+        }, onFailure: { [weak self] in
+            guard let self, self.callID == id else { return }
+            // Nothing went, so nothing is owed; the queue counts it once it does.
+            self.awaitingAnswerSince = waitedSince
             self.quietQueue.insert(.textWhenIdle(text), at: 0)
         })
     }
@@ -2766,6 +2771,7 @@ final class WatchDirectCallModel: ObservableObject {
         let item = quietQueue.removeFirst()
         guard let message = item.clientMessage else { return }
         // A text turn is answered; the next update waits for that.
+        let waitedSince = awaitingAnswerSince
         if case .textWhenIdle = item { awaitingAnswerSince = now }
         let id = callID
         session.send(message, onSent: { [weak self] in
@@ -2787,6 +2793,8 @@ final class WatchDirectCallModel: ObservableObject {
             if self.replyOwedSince == nil { self.replyOwedSince = self.now }
         }, onFailure: { [weak self] in
             guard let self, self.callID == id else { return }
+            // Nothing went, so no answer is owed for it.
+            self.awaitingAnswerSince = waitedSince
             self.quietQueue.insert(item, at: 0)
         })
     }
