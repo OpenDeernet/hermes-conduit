@@ -812,7 +812,7 @@ final class HermesNativeCalls: NSObject {
     /// Watch, as before.
     private func keepWatchAnswer(_ id: UUID, settled: HermesRingSettled) -> Bool {
         guard settled.outcome == .answered, let sealedStart = settled.start,
-              let ring = calls[id]?.ring, calls[id]?.answered == false,
+              let ring = calls[id]?.ring, calls[id]?.answered == false, !watchStartedRings.contains(ring.id),
               let key = HermesRingHandoffKey.load(),
               let start = HermesRingHandoff.openStart(sealedStart, key: key, ringID: ring.id),
               let callID = start.watchCallID else { return false }
@@ -821,7 +821,7 @@ final class HermesNativeCalls: NSObject {
         let route = AVAudioSession.sharedInstance().currentRoute.outputs.map(\.portType)
         let watchControls = UserDefaults.standard.bool(forKey: Self.watchControlsKey)
         guard Self.keepsWatchAnswer(watchControls: watchControls, outputs: route) else {
-            if !route.isEmpty { HermesCallTrace.shared.note("Answered on the Watch, audio here on \(HermesCallAudioRoute.describe(.sharedInstance()))") }
+            HermesCallTrace.shared.note(route.isEmpty ? "Answered on the Watch, no audio route here yet" : "Answered on the Watch, audio here on \(HermesCallAudioRoute.describe(.sharedInstance()))")
             return false
         }
         HermesCallTrace.shared.note("Answered on the Watch with a headset on here: keeping it here")
@@ -897,6 +897,15 @@ final class HermesNativeCalls: NSObject {
     /// answer: a Watch start for it gets `callOnPhone`, never a session.
     func keepsWatchAnswer(ringID: String) -> Bool {
         calls.values.contains { $0.keptFromWatch && $0.ring?.id == ringID }
+    }
+
+    /// Rings whose Watch call already started over the link: never kept
+    /// here after that, or both would answer.
+    private var watchStartedRings: [String] = []
+
+    func startedOnWatch(ringID: String) {
+        guard !watchStartedRings.contains(ringID) else { return }
+        watchStartedRings = Array((watchStartedRings + [ringID]).suffix(16))
     }
 
     /// Kept from the Watch, then couldn't be: the Watch takes the call, as

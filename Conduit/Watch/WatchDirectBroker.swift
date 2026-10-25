@@ -159,6 +159,9 @@ final class WatchDirectBroker {
             answer(.callOnPhone(callID: id))
             return
         }
+        // Started on the Watch before this phone could keep it: it's the
+        // Watch's now.
+        if let ring = message.watchCallRing { HermesNativeCalls.shared.startedOnWatch(ringID: ring) }
         switch message {
         case .directStart(let id, let version, let ring):
             guard version == WatchVoiceWire.version else {
