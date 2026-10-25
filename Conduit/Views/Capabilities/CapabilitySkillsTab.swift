@@ -274,6 +274,13 @@ struct CapabilitySkillDetailPage: View {
     @State private var document: SkillFrontmatter?
     @State private var loadError: String?
 
+    /// Reads again for another dashboard or profile, and once the store
+    /// has been pointed at it.
+    private var detailScope: CapabilityDetailScope {
+        let owner = appState.currentCapabilitiesOwner
+        return CapabilityDetailScope(owner: owner, ready: store.serves(owner))
+    }
+
     /// Only while the list is this dashboard's and profile's.
     private var skill: CapabilitySkill? {
         appState.capabilitiesAreCurrent ? appState.skills.first { $0.name == name } : nil
@@ -311,16 +318,17 @@ struct CapabilitySkillDetailPage: View {
         }
         .navigationTitle(Text(verbatim: name))
         // Read again for another dashboard or profile.
-        .task(id: appState.currentCapabilitiesOwner) {
+        .task(id: detailScope) {
             let owner = appState.currentCapabilitiesOwner
             document = nil
             loadError = nil
+            guard store.serves(owner) else { return }
             do {
                 let content = try await store.skillContent(name: name)
-                guard appState.currentCapabilitiesOwner == owner else { return }
+                guard appState.currentCapabilitiesOwner == owner, store.serves(owner) else { return }
                 document = SkillFrontmatter.parse(content)
             } catch {
-                guard appState.currentCapabilitiesOwner == owner, !Task.isCancelled else { return }
+                guard appState.currentCapabilitiesOwner == owner, store.serves(owner), !Task.isCancelled else { return }
                 loadError = UserFacingError.message(for: error)
             }
         }

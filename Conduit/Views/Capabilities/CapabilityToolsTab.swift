@@ -203,6 +203,13 @@ struct CapabilityToolsetDetailPage: View {
     @State private var keyValue = ""
     @State private var backendToConfirm: TerminalBackendOption?
 
+    /// Reads again for another dashboard or profile, and once the store
+    /// has been pointed at it.
+    private var detailScope: CapabilityDetailScope {
+        let owner = appState.currentCapabilitiesOwner
+        return CapabilityDetailScope(owner: owner, ready: store.serves(owner))
+    }
+
     /// Only while the list is this dashboard's and profile's.
     private var toolset: CapabilityToolset? {
         appState.capabilitiesAreCurrent ? appState.toolsets.first { $0.name == name } : nil
@@ -252,12 +259,13 @@ struct CapabilityToolsetDetailPage: View {
         .navigationTitle(Text(verbatim: toolset.map(CapabilityToolsetOrdering.label) ?? name))
         // Read again for another dashboard or profile: what the last one
         // answered never stays on screen to be acted on.
-        .task(id: appState.currentCapabilitiesOwner) {
+        .task(id: detailScope) {
             config = nil
             configError = nil
             backends = nil
             backendsError = nil
             notice = nil
+            guard store.serves(appState.currentCapabilitiesOwner) else { return }
             await load()
         }
         .alert(

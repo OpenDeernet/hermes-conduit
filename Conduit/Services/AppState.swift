@@ -35776,6 +35776,13 @@ struct CapabilitySnapshotOwner: Equatable {
     let profile: String
 }
 
+/// What a capability detail page reads for: the owner, and whether the
+/// store already serves it.
+struct CapabilityDetailScope: Equatable {
+    let owner: CapabilitySnapshotOwner
+    let ready: Bool
+}
+
 /// Pure ownership rules for capability loads, extracted for deterministic
 /// testing of the rapid-profile-switch races.
 enum CapabilityLoadPolicy {
