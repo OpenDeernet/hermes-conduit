@@ -570,14 +570,15 @@ extension VoiceConversationControllerTests {
         var failed = 0
         session.send(.textTurn("on the socket"), onSent: nil, onFailure: { failed += 1 })
         await settle(until: { first.isHoldingSend })
-        for index in 0..<LiveVoiceSocketWriter.defaultMaxQueuedOther {
+        // The bound counts the frame on the socket too.
+        for index in 0..<(LiveVoiceSocketWriter.defaultMaxQueuedOther - 1) {
             session.send(.textTurn("waiting \(index)"), onSent: nil, onFailure: { failed += 1 })
         }
         XCTAssertEqual(failed, 0, "within the bound, text waits")
         XCTAssertEqual(session.state, .ready)
 
         session.send(.textTurn("one too many"), onSent: nil, onFailure: { failed += 1 })
-        XCTAssertEqual(failed, LiveVoiceSocketWriter.defaultMaxQueuedOther + 1, "every waiting frame and the new one failed")
+        XCTAssertEqual(failed, LiveVoiceSocketWriter.defaultMaxQueuedOther, "every waiting frame and the new one failed")
         XCTAssertNotEqual(session.state, .ready, "the stalled connection is given up")
         await settle(until: { sockets().count == 2 })
         XCTAssertEqual(sockets().count, 2, "the session reconnects")

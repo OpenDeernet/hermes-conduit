@@ -21,7 +21,8 @@ final class LiveVoiceSocketWriter {
     /// count their own capture chunks the same way.
     static let defaultMaxQueuedAudio = 96
     /// Text turns, context notes and tool answers come a few a turn; this
-    /// many waiting means the socket stopped taking frames.
+    /// many outstanding (the frame on the socket included) means the socket
+    /// stopped taking frames.
     static let defaultMaxQueuedOther = 32
 
     /// The socket stopped taking frames: everything queued failed with this.

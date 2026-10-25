@@ -1078,7 +1078,7 @@ Classic's transcription streams · Watch calls (Gemini, Grok, Local Live; GPT-Li
 
 **Rulings**
 - Each connection's frames go out one at a time, in order. Up to 96 capture chunks of audio may wait: for Gemini about two seconds of the tap's 1,024-frame buffers at 48 kHz (longer on a route that captures at a lower rate), and the same count of Grok's and Local Live's own chunks; audio past that is dropped as it arrives. Frames for a socket the session replaced fail instead of going out, and dropped audio is logged (2026-10-24, #1223).
-- Text turns, context notes and tool answers are never dropped on their own. Up to 32 may wait; one more means the socket stopped taking frames, so everything it holds fails and the session reconnects, each frame's failure handler handing its result back as for any failed send (2026-10-25, #1231).
+- Text turns, context notes and tool answers are never dropped on their own. Up to 32 may be outstanding, the one on the socket included; one more means the socket stopped taking frames, so everything it holds fails and the session reconnects, each frame's failure handler handing its result back as for any failed send (2026-10-25, #1231).
 - GPT-Live's audio on the phone is WebRTC's to pace; on the Watch it goes over the host's audio bridge, already capped at 20 sends in flight. Classic's transcription streams keep a whole utterance, since dropping audio there loses words (2026-10-24, #1223).
 
 **Open gaps**
