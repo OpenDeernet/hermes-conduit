@@ -10,7 +10,7 @@ import Foundation
 ///
 /// Latin-script phrases match as whole words in order ("hey fam" matches
 /// "ok hey fam what's up" but never "hey family"). Phrases written without
-/// word spacing (Chinese, Japanese) match as a contiguous run of characters,
+/// word spacing (Han, kana, Hangul, Thai) match as a contiguous run of characters,
 /// because the recognizer does not separate those words with spaces.
 enum WakePhraseMatcher {
     /// A phrase needs at least two words (or two characters for scripts

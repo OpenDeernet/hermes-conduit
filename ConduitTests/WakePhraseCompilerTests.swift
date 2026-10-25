@@ -91,6 +91,8 @@ extension WakePhraseCompilerTests {
         XCTAssertTrue(WakePhraseMatcher.isUsable("ㄋㄧ"), "bopomofo")
         XCTAssertTrue(WakePhraseMatcher.isUsable("ﾾￂ"), "halfwidth hangul")
         XCTAssertTrue(WakePhraseMatcher.isUsable("สวัสดี"), "thai")
+        let thai = binding("สวัสดีเฮอร์มีส")
+        XCTAssertEqual(WakePhraseMatcher.match(transcript: "โอเคสวัสดีเฮอร์มีสครับ", bindings: [thai]), thai)
         XCTAssertNil(WakePhraseMatcher.match(transcript: "conduit", bindings: [binding("conduit")]))
     }
 }
