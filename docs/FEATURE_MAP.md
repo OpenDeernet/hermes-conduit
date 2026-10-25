@@ -1772,7 +1772,7 @@ notifier's live read of the setting for chats already open
 
 **Rulings**
 - A changed setting reaches chats already open at their next review, with no restart: the dashboard reads it only when it builds a chat's agent, so the plugin reads it again from the chat's profile before each review. Hermes' messaging platforms need nothing, its gateway reads it every turn (2026-10-25, notifier #373, #1260).
-- Never show hides the rows a chat already has too, live and in the offline copy, without deleting them: they come back when the setting does. Anything but "off" (or a YAML false) shows them, as Hermes reads it (2026-10-25, #1260; Eric's rule to close gaps in the same change).
+- Never show hides the rows a chat already has too, live and in the offline copy (once the profile's display settings have been read), without deleting them: they come back when the setting does. Anything but "off" (or a YAML false) shows them, as Hermes reads it (2026-10-25, #1260; Eric's rule to close gaps in the same change).
 
 **Open gaps**
 - None known.
