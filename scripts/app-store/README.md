@@ -20,6 +20,10 @@ Results:
   install it. A failed phone clip is listed with the other missing screens at
   the end of the run; the Watch job has no such list, so it fails its own step
   after trying both clips.
+  The README's strip uses animated WebP copies in `docs/media/`, made from
+  the clips with
+  `ffmpeg -i <clip>.mp4 -vf "fps=12,scale=270:-1:flags=lanczos" -c:v libwebp_anim -loop 0 -q:v 60 docs/media/<name>.webp`
+  (`scale=200` and `-q:v 70` for the Watch).
 - Artifact `app-store-logs`: the demo Hermes, seeding, preview recorder and
   xcodebuild logs. `app-store-watch-logs` holds the Watch build log. The clip
   recorder logs travel with the clips in the screenshots artifacts.
