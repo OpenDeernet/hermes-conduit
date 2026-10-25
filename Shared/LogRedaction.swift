@@ -35,7 +35,8 @@ enum LogRedaction {
     /// ending in letters, each with the path and query after it. Type names
     /// (`HermesClientError.timeout`), versions of up to three parts and
     /// prose are kept, and so is a file name with one of the extensions
-    /// below (`config.yaml`); any other file name reads as a host.
+    /// below (`config.yaml`); any other file name reads as a host. An
+    /// unbracketed IPv6 address (`fe80::1`) is not matched.
     static func redactingHosts(_ text: String) -> String {
         let nsText = text as NSString
         var result = text
