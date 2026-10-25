@@ -156,7 +156,7 @@ struct VoiceBackgroundJob: Identifiable, Equatable {
     /// Runs in a chat an earlier job of the call made (`continueJob`,
     /// #1250): until its request goes in, that chat's turn isn't its own.
     var continuesChat = false
-    /// Made the chat a Watch call's later jobs continue (#1250).
+    /// Made the chat a call's later requests go to (#1250).
     var opensCallChat = false
     /// In a Watch call's shared chat: its replies are matched against replays.
     var sharesCallChat: Bool { continuesChat || opensCallChat }
@@ -1379,6 +1379,9 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         onJobCreated?(job.id)
         if joinsCall, profile == nil, liveThread == nil, callChatClaim == nil, let callID = liveCallID {
             callChatClaim = (job.id, callID)
+            // Marked before Hermes can answer, so a reply that beats the
+            // adoption is still matched against replays.
+            markOpensCallChat(job.id)
         }
         defer { if callChatClaim?.jobID == job.id { callChatClaim = nil } }
         let generation = generation
@@ -2900,8 +2903,8 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         jobs.first { $0.id == id }
     }
 
-    /// A Watch call's first ordinary job made the chat its later ones
-    /// continue: its replies are matched against replays as theirs are.
+    /// A call's first ordinary job makes the chat its later requests go
+    /// to: its replies are matched against replays as theirs are.
     func markOpensCallChat(_ id: UUID) {
         update(id) { $0.opensCallChat = true }
     }
