@@ -676,6 +676,8 @@ final class ConnectionRepairTests: XCTestCase {
         XCTAssertEqual(harness.defaults.string(forKey: "conduit.dashboardURL"), remembered,
                        "A failed activation must not move the remembered dashboard")
         XCTAssertFalse(harness.appState.isConnected)
+        XCTAssertNil(harness.appState.repairAddressOwner("https://replacement.example", repairing: remembered),
+                     "The address this repair registered stays its own, so a fresh test there isn't refused")
     }
 
     func testBrowserSignInRepairActivatesAndRemembersWithoutInventingCredentials() async {

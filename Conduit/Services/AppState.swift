@@ -12286,10 +12286,7 @@ final class AppState: ObservableObject {
             // (login and ticket mint both succeeded first) — they are
             // naturally superseded by the next explicit test or sign-in and
             // are deliberately not rolled back.
-            if let dashboardID = resolveDashboardID(
-                forURL: candidate.configuration.serverURL,
-                registerIfMissing: true
-            ) {
+            if let dashboardID = registerRepairDashboard(forURL: candidate.configuration.serverURL) {
                 candidate.nativeConnection.commitCookies(dashboardID: dashboardID)
             }
             outcome = await activateRepairedConnection(with: HermesConnection(
@@ -12302,7 +12299,7 @@ final class AppState: ObservableObject {
                 ticket: ticket
             ))
         case .nativeOAuth(let result, let baseURL, _):
-            guard let dashboardID = resolveDashboardID(forURL: baseURL, registerIfMissing: true) else {
+            guard let dashboardID = registerRepairDashboard(forURL: baseURL) else {
                 return .failed(.unexpectedServerResponse)
             }
             let storedTokens = KeychainHelper.loadNativeOAuthTokens(dashboardID: dashboardID)
@@ -12332,10 +12329,10 @@ final class AppState: ObservableObject {
         return outcome
     }
 
-    /// Dashboards a repair's sign-in registered for a new address this
-    /// repair (`registerRepairDashboard`); cleared when a repair begins
-    /// (either entry) and once one connects, so a later repair never
-    /// inherits them.
+    /// Dashboards a repair registered for a new address, by sign-in or
+    /// password reconnect (`registerRepairDashboard`); cleared when a
+    /// repair begins (either entry) and once one connects, so a later
+    /// repair never inherits them.
     private var repairRegisteredDashboardIDs: Set<UUID> = []
 
     /// The saved dashboard other than the one being repaired that already
@@ -12352,10 +12349,11 @@ final class AppState: ObservableObject {
         return owner.id == repairing ? nil : owner
     }
 
-    /// Registers a repair sign-in's address before its sheet opens. One it
-    /// newly registers stays the repair's own, so a later try at that
-    /// address (a sign-in again, or a password reconnect) isn't refused as
-    /// another dashboard's.
+    /// Registers a repair's address: a sign-in's before its sheet opens, a
+    /// password reconnect's before its cookies are committed. One it newly
+    /// registers stays the repair's own, so a later try at that address
+    /// (after a failed activation, say) isn't refused as another
+    /// dashboard's.
     func registerRepairDashboard(forURL baseURL: String) -> UUID? {
         let existing = resolveDashboardID(forURL: baseURL, registerIfMissing: false)
         guard let id = existing ?? resolveDashboardID(forURL: baseURL, registerIfMissing: true) else { return nil }
