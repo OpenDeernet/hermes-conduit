@@ -1775,7 +1775,7 @@ notifier's live read of the setting for chats already open
 - Never show hides the rows a chat already has too, live and in the offline copy (once the profile's display settings have been read), without deleting them: they come back when the setting does. Anything but "off" (or a YAML false) shows them, as Hermes reads it (2026-10-25, #1260; Eric's rule to close gaps in the same change).
 
 **Open gaps**
-- None known.
+- Opened offline before any dashboard answered since launch, the offline copy shows review rows whatever the setting, as it does thinking and tool steps: no display setting is kept on the phone.
 
 **Checked:** 2026-10-25, #1260.
 
