@@ -11,8 +11,9 @@ In the PR, say for each sibling whether it's done, not needed (and why), or
 left as a gap, and update the entry in the same PR. Nobody tends the map
 separately: a feature with siblings and no entry gets one in the PR that
 changes it, and a fix that brings a sibling in line with a change it missed
-adds that sibling to the entry. A refactor that changes no behavior has no
-siblings and needs no entry. [CONTRIBUTING.md](../CONTRIBUTING.md) has the
+adds that sibling to the entry. A refactor that changes no behavior and no
+text a person or model reads has no siblings, and needs no new or updated
+entry. [CONTRIBUTING.md](../CONTRIBUTING.md) has the
 rules.
 
 An entry holds the current state only; history stays in the PRs it cites.
@@ -1924,7 +1925,7 @@ point at the map and its check
 - The notifier's reviewers can't read this map, so a notifier PR names its entry, or the hermes-conduit PR that adds or updates it (2026-10-24, #1178).
 - An entry a PR adds or edits names that PR on its Checked line, and CI fails one that doesn't; a commit is only for an entry seeded from main. A carry PR names both, like "#1188, carried in #1200". The PR template asks for a Siblings line for every sibling the entry lists, Settings and model-facing text included (2026-10-24, #1209, Eric).
 - On a PR into `pulse` that merges main, an entry main changed between where `pulse` last met main and where the PR meets it, and that matches main's copy there, came in with main and keeps main's Checked line, so bringing main into `pulse` doesn't name the merge on every entry main changed. A `pulse` PR that doesn't merge main gets no such pass, and neither does an entry main didn't change (2026-10-25, #1248; the first such merge after #1209 failed the check on 48 entries).
-- A refactor that changes no behavior (moving code, or changing how state is stored or observed) has no siblings: its PR says "No mapped feature" and adds no entry, and reviewers don't ask for one (2026-10-25, #1271, Eric; reviewer prompts and notifier copies in #1273 and notifier #377).
+- A refactor that changes no behavior and no text a person or model reads (moving code, or changing how state is stored or observed) has no siblings: its PR says "No mapped feature" and adds no entry, and reviewers don't ask for one (2026-10-25, #1271, Eric; reviewer prompts and notifier copies in #1273 and notifier #377).
 
 **Open gaps**
 - A connection nobody has noticed yet isn't caught by any check; it goes in the first time a fix turns it up.
