@@ -811,6 +811,8 @@ final class HermesNativeCalls: NSObject {
     /// (HermesRingControl). Whether it does; false leaves the answer to the
     /// Watch, as before.
     private func keepWatchAnswer(_ id: UUID, settled: HermesRingSettled) -> Bool {
+        // The same stop again (a repeated push): already being kept.
+        if calls[id]?.keptFromWatch == true { return true }
         guard settled.outcome == .answered, let sealedStart = settled.start,
               let ring = calls[id]?.ring, calls[id]?.answered == false, !watchStartedRings.contains(ring.id),
               let key = HermesRingHandoffKey.load(),
@@ -871,8 +873,10 @@ final class HermesNativeCalls: NSObject {
             handBackToWatch(id, ring: ring, sealedStart: sealedStart)
             return
         }
-        // Muted or ended on the Watch already: so is this call.
+        // Muted or ended on the Watch already: so is this call, and an
+        // ended one needs no call screen there.
         if control.seq > 0 { await watchControlChanged(id, state: control) }
+        guard !control.ended, calls[id] != nil else { return }
         // The Watch's start waits on this, for its call screen to control
         // this call.
         guard let data = try? JSONEncoder().encode(WatchVoiceWire.Message.callOnPhone(callID: callID)),
