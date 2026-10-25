@@ -29924,9 +29924,9 @@ final class AppState: ObservableObject {
         case success(profile: String)
         case failed(profile: String, message: String)
         case unavailable(profile: String)
-        /// The active profile changed mid-request; the result belongs to an
-        /// abandoned profile and callers should discard it.
-        case superseded(requestedProfile: String, activeProfile: String)
+        /// The active dashboard or profile changed mid-request; the result
+        /// belongs to an abandoned one and callers should discard it.
+        case superseded(requested: CapabilitySnapshotOwner, active: CapabilitySnapshotOwner)
 
         var isSuperseded: Bool {
             if case .superseded = self { return true }
@@ -29956,7 +29956,7 @@ final class AppState: ObservableObject {
         }
         do {
             let (skillsResponse, toolsetsResponse) = try await (skillsResult, toolsetsResult)
-            guard ownsRequest() else { return .superseded(requestedProfile: profile, activeProfile: activeProfile) }
+            guard ownsRequest() else { return .superseded(requested: owner, active: currentCapabilitiesOwner) }
             let skillsValues = skillsResponse["_array"] as? [Any] ?? []
             self.skills = skillsValues.compactMap(decodeCapabilitySkill)
                 .sorted { lhs, rhs in
@@ -29972,7 +29972,7 @@ final class AppState: ObservableObject {
             capabilitiesOwner = owner
             return .success(profile: profile)
         } catch {
-            guard ownsRequest() else { return .superseded(requestedProfile: profile, activeProfile: activeProfile) }
+            guard ownsRequest() else { return .superseded(requested: owner, active: currentCapabilitiesOwner) }
             errorMessage = AppLocalization.string("Could not load capabilities: \(UserFacingError.message(for: error))")
             return .failed(profile: profile, message: AppLocalization.string("Could not load capabilities: \(UserFacingError.message(for: error))"))
         }

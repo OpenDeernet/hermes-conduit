@@ -623,7 +623,7 @@ final class ConnectionRepairTests: XCTestCase {
         XCTAssertNotNil(harness.appState.repairAddressOwner("https://other.example", repairing: ConnectionRepairTests.failedURL),
                         "An address that was already saved is still another dashboard's")
         // A later repair doesn't inherit it.
-        harness.appState.beginSavedConnectionRepair()
+        _ = harness.appState.beginSavedConnectionRepair()
         XCTAssertNotNil(harness.appState.repairAddressOwner("https://fresh.example", repairing: ConnectionRepairTests.failedURL))
     }
 
