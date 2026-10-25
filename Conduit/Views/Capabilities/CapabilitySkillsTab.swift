@@ -301,7 +301,9 @@ struct CapabilitySkillDetailPage: View {
                     .tint(.conduitAccent)
                 }
             }
-            CapabilitySkillDocument(document: document, error: loadError)
+            if appState.capabilitiesAreCurrent {
+                CapabilitySkillDocument(document: document, error: loadError)
+            }
             Text("Changes apply to new sessions.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -310,12 +312,15 @@ struct CapabilitySkillDetailPage: View {
         .navigationTitle(Text(verbatim: name))
         // Read again for another dashboard or profile.
         .task(id: appState.currentCapabilitiesOwner) {
+            let owner = appState.currentCapabilitiesOwner
             document = nil
             loadError = nil
             do {
-                document = SkillFrontmatter.parse(try await store.skillContent(name: name))
-                loadError = nil
+                let content = try await store.skillContent(name: name)
+                guard appState.currentCapabilitiesOwner == owner else { return }
+                document = SkillFrontmatter.parse(content)
             } catch {
+                guard appState.currentCapabilitiesOwner == owner, !Task.isCancelled else { return }
                 loadError = UserFacingError.message(for: error)
             }
         }

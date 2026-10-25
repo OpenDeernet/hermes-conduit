@@ -222,23 +222,23 @@ struct CapabilityToolsetDetailPage: View {
                     }
                 }
             }
-            if let notice {
+            if appState.capabilitiesAreCurrent, let notice {
                 Text(verbatim: notice)
                     .font(.footnote)
                     .foregroundStyle(.orange)
                     .padding(.horizontal, 16)
             }
-            if name == "terminal" {
+            if appState.capabilitiesAreCurrent, name == "terminal" {
                 terminalSection
             }
-            if let config, config.hasCategory, !config.providers.isEmpty {
+            if appState.capabilitiesAreCurrent, let config, config.hasCategory, !config.providers.isEmpty {
                 ConduitSettingsSection(title: AppLocalization.string("Backends"), symbol: "server.rack", tint: .conduitAccent) {
                     ForEach(Array(config.providers.enumerated()), id: \.element.id) { index, provider in
                         if index > 0 { Divider().opacity(0.6) }
                         providerRow(provider, config: config)
                     }
                 }
-            } else if let configError {
+            } else if appState.capabilitiesAreCurrent, let configError {
                 Text(verbatim: configError)
                     .font(.footnote)
                     .foregroundStyle(.secondary)

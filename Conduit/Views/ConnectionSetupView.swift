@@ -76,7 +76,7 @@ struct ConnectionSetupView: View {
     @State private var repairDashboardID = UUID()
     /// Another saved dashboard that already has the repaired address: the
     /// repair stops and offers to switch to it instead.
-    @State private var repairAddressOwner: SavedDashboard?
+    @State private var repairAddressConflict: SavedDashboard?
     private let onComplete: (ConnectionSetupResult) -> Void
     /// Round 6 (Repair): the explicit activation boundary. Nil outside
     /// Repair mode, in which case the Review shows its normal context action.
@@ -174,9 +174,9 @@ struct ConnectionSetupView: View {
                 repairSignInSheet
             }
             .alert("Already a Saved Dashboard", isPresented: Binding(
-                get: { repairAddressOwner != nil },
-                set: { if !$0 { repairAddressOwner = nil } }
-            ), presenting: repairAddressOwner) { owner in
+                get: { repairAddressConflict != nil },
+                set: { if !$0 { repairAddressConflict = nil } }
+            ), presenting: repairAddressConflict) { owner in
                 Button("Switch") {
                     dismiss()
                     Task { await appState.switchDashboard(to: owner.id) }
@@ -321,7 +321,7 @@ struct ConnectionSetupView: View {
         // registered on an earlier try is the repair's own.
         if let owner = appState.repairAddressOwner(result.serverURL, repairing: appState.connection?.baseUrl),
            owner.id != repairDashboardID {
-            repairAddressOwner = owner
+            repairAddressConflict = owner
             return
         }
         // The staged test already decided the sign-in through the shared
@@ -409,7 +409,7 @@ struct ConnectionSetupView: View {
             activationFailure = failure
         case .addressBelongsToDashboard(let id, _):
             // Nothing was connected or written; the candidate is spent.
-            repairAddressOwner = appState.savedDashboardRegistry.dashboard(with: id)
+            repairAddressConflict = appState.savedDashboardRegistry.dashboard(with: id)
         }
     }
 
