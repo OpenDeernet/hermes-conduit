@@ -274,7 +274,7 @@ entry)
 - CarPlay: `Conduit/CarPlay/CarPlayVoiceCoordinator.swift` (prepareWaitingForConnection, establishLiveVoice), `Conduit/CarPlay/CarPlayBrowseTemplates.swift`
 - A start's late answers: `Conduit/Voice/GeminiLive/GeminiLiveConversationController.swift` (callEpoch, isStarting; Gemini, Qwen, Grok, Local Live), `Conduit/Voice/GPTLive/GPTLiveConversationController.swift` (startAttempt), `Conduit/Voice/VoiceConversationController.swift` (operationGeneration), `ConduitWatch/WatchDirectCallModel.swift` (callID)
 - Watch: `ConduitWatch/WatchHomeView.swift`, `ConduitWatch/TalkToHermesIntent.swift`
-- A chat open elsewhere: `Conduit/Services/ChatTakeover.swift` (ChatTakeoverPreference), `Conduit/Services/AppState.swift` (submitComposerForCall, sendCallPromptTakingOver)
+- A chat open elsewhere: its own entry (Chat open elsewhere)
 - How an attached call behaves: `docs/VOICE_BACKGROUND_JOBS.md`
 
 **Rulings**
@@ -289,7 +289,7 @@ entry)
 - Group rooms have no voice button setting, and the Watch and CarPlay don't follow it (#1134).
 - When a Classic call can't take over its chat, it shows a generic error (#1066).
 
-**Checked:** 2026-10-25, Qwen starts through the shared controller, at #1182, carried in #1235; 2026-10-24, at #1223, for a start's late answers and CarPlay's mode switch; 2026-10-23, seeded from main at 64d53c3.
+**Checked:** 2026-10-25, #1261, the chat-open-elsewhere code moved to its own entry; 2026-10-25, Qwen starts through the shared controller, at #1182, carried in #1235; 2026-10-24, at #1223, for a start's late answers and CarPlay's mode switch; 2026-10-23, seeded from main at 64d53c3.
 
 ## Chat open elsewhere
 
@@ -318,6 +318,7 @@ update notice
 - While the gateway's ledger holds the chat, nothing is dropped: the route answers busy, surface `bot` for another bot's message, and Conduit says the bot is answering another bot and sends once it finishes. Other queued work answers surface `gateway`, which reads as another Hermes window (it's a platform message or a job Hermes runs there), and is waited for the same way (2026-10-25, #1261; notifier #374).
 
 **Open gaps**
+- The offer can't name a bot until the route answers: Hermes' ledger refusal names no owner, so with Take over automatically off the offer reads "another Hermes window" until the tap (#1261).
 - A ledger row Hermes marks `unknown` only clears when it's discarded in Hermes; Conduit waits on it like a busy chat, then says to try again (#1261).
 - Classic shows a generic error when it can't take over (#1066).
 - Desktop isn't told it lost the chat and shows stale history until reopened (needs Hermes, #304).

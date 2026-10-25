@@ -79,7 +79,7 @@ struct ChatTakeoverState: Equatable {
         switch owner {
         case .desktop: return AppLocalization.string("This chat is open in Hermes Desktop. Take it over to send from here.")
         case .terminal: return AppLocalization.string("This chat is open in a Hermes terminal. Take it over to send from here.")
-        case .otherBot: return AppLocalization.string("This bot is answering a message from another bot. Conduit can send yours when it finishes.")
+        case .otherBot: return AppLocalization.string("This bot is answering a message from another bot. Take the chat over, and Conduit sends yours when it finishes.")
         case .otherWindow: return AppLocalization.string("This chat is open in another Hermes window. Take it over to send from here.")
         }
     }

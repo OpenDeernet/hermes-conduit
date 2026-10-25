@@ -194102,84 +194102,84 @@
         }
       }
     },
-    "This bot is answering a message from another bot. Conduit can send yours when it finishes." : {
+    "This bot is answering a message from another bot. Take the chat over, and Conduit sends yours when it finishes." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dieser Bot beantwortet gerade eine Nachricht von einem anderen Bot. Conduit kann deine senden, wenn er fertig ist."
+            "value" : "Dieser Bot beantwortet gerade eine Nachricht von einem anderen Bot. Übernimm den Chat, dann sendet Conduit deine, wenn er fertig ist."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este bot está respondiendo un mensaje de otro bot. Conduit puede enviar el tuyo cuando termine."
+            "value" : "Este bot está respondiendo un mensaje de otro bot. Toma el control del chat y Conduit enviará el tuyo cuando termine."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ce bot répond à un message d'un autre bot. Conduit peut envoyer le vôtre quand il aura terminé."
+            "value" : "Ce bot répond à un message d'un autre bot. Reprenez la discussion, et Conduit enverra le vôtre quand il aura terminé."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bot ini sedang menjawab pesan dari bot lain. Conduit bisa mengirim pesanmu setelah selesai."
+            "value" : "Bot ini sedang menjawab pesan dari bot lain. Ambil alih obrolan, dan Conduit mengirim pesanmu setelah selesai."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Questo bot sta rispondendo a un messaggio di un altro bot. Conduit può inviare il tuo quando ha finito."
+            "value" : "Questo bot sta rispondendo a un messaggio di un altro bot. Prendi il controllo della chat e Conduit invierà il tuo quando ha finito."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このボットは別のボットからのメッセージに応答中です。完了したらConduitがあなたのメッセージを送信できます。"
+            "value" : "このボットは別のボットからのメッセージに応答中です。チャットを引き継ぐと、完了後にConduitがあなたのメッセージを送信します。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이 봇은 다른 봇의 메시지에 답하는 중이에요. 끝나면 Conduit이 메시지를 보낼 수 있어요."
+            "value" : "이 봇은 다른 봇의 메시지에 답하는 중이에요. 채팅을 가져오면 끝난 뒤 Conduit이 메시지를 보내요."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ten bot odpowiada na wiadomość od innego bota. Conduit może wysłać Twoją, gdy skończy."
+            "value" : "Ten bot odpowiada na wiadomość od innego bota. Przejmij czat, a Conduit wyśle Twoją, gdy skończy."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este bot está respondendo a uma mensagem de outro bot. O Conduit pode enviar a sua quando ele terminar."
+            "value" : "Este bot está respondendo a uma mensagem de outro bot. Assuma o chat, e o Conduit envia a sua quando ele terminar."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Этот бот отвечает на сообщение от другого бота. Conduit может отправить ваше, когда он закончит."
+            "value" : "Этот бот отвечает на сообщение от другого бота. Перехватите чат, и Conduit отправит ваше, когда он закончит."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bu bot başka bir botun mesajını yanıtlıyor. Bittiğinde Conduit seninkini gönderebilir."
+            "value" : "Bu bot başka bir botun mesajını yanıtlıyor. Sohbeti devral, bittiğinde Conduit seninkini göndersin."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此机器人正在回复另一个机器人的消息。回复结束后，Conduit 可以发送你的消息。"
+            "value" : "此机器人正在回复另一个机器人的消息。接管此对话后，Conduit 会在回复结束时发送你的消息。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個機器人正在回覆另一個機器人的訊息。回覆結束後，Conduit 可以傳送你的訊息。"
+            "value" : "這個機器人正在回覆另一個機器人的訊息。接管這個聊天後，Conduit 會在回覆結束時傳送你的訊息。"
           }
         }
       }
