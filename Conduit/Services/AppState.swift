@@ -24923,6 +24923,8 @@ final class AppState: ObservableObject {
         if chatTakeoverTask == handle { chatTakeoverTask = nil }
         // Dismissed, or replaced by another refusal, while it waited.
         guard chatTakeover?.sessionID == state.sessionID, chatTakeover?.phase == .waiting else { return false }
+        // Keeps the owner the plugin named while it waited.
+        state.surface = chatTakeover?.surface ?? state.surface
         guard let phase else {
             // The call moved on: the composer offers the button again.
             state.phase = .offered
@@ -24963,14 +24965,15 @@ final class AppState: ObservableObject {
                 ids.append(id)
             }
             var state = ChatTakeoverState(sessionID: runtimeID, sessionIDs: ids, surface: details.surface, phase: .offered)
-            // What a refusal of the resend says: the other app holds it again.
-            let refusedAgainMessage = state.openElsewhereMessage
             // Nil: the call ended while it waited, so there's no refusal to report.
             guard let phase = await Self.runChatTakeover(
                 client: chatTakeoverClient, state: state, profile: profile ?? activeProfile,
                 waitLimit: Self.callChatTakeoverWaitLimit, keepWaiting: stillWanted,
                 onOwner: { state.surface = $0 }
             ) else { throw CancellationError() }
+            // What a refusal of the resend says: the other app holds it
+            // again, named as the plugin named it during the wait.
+            let refusedAgainMessage = state.openElsewhereMessage
             state.phase = phase
             guard state.phase == .ready else { throw VoiceAudioError.unavailable(state.callRefusalMessage) }
             // Another host now, or a turn the call moved past: nothing to send.

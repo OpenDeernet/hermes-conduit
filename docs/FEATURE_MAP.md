@@ -307,7 +307,7 @@ update notice
 
 **Code**
 - Offer, owner and sentences: `Conduit/Services/ChatTakeover.swift` (ChatTakeoverState.owner, ChatTakeoverClient, ChatTakeoverOutcome)
-- Flow: `Conduit/Services/AppState.swift` (noteChatOwnedElsewhere, takeOverChat, chatTakeoverProfile, runChatTakeover, submitComposerForCall, sendCallPromptTakingOver), shown by `Conduit/Views/Components/ComposerBar.swift`
+- Flow: `Conduit/Services/AppState.swift` (noteChatOwnedElsewhere, takeOverChat, chatTakeoverProfile, runChatTakeover, noteChatTakeoverOwner, submitComposerForCall, takeOverChatForCall, sendCallPromptTakingOver), shown by `Conduit/Views/Components/ComposerBar.swift`
 - Setting: `Conduit/Views/AuxiliaryViews.swift` (Take over automatically)
 - Plugin: `notifier/chat_takeover.py` (take_over_session, gateway_queue_owner), `notifier/dashboard/plugin_api.py` (/sessions/takeover), `notifier/pulse_host.py` (take_over), `notifier/conduit_claims.py` (idle claim release)
 
@@ -315,7 +315,7 @@ update notice
 - Only another process's claim is dropped, never while it runs a turn; this dashboard's own claims answer same_host (2026-10-02, #304; notifier #33, #101).
 - A call always takes over, whatever the setting, and Take over automatically is on by default (2026-10-21, #1066).
 - A Bot Chat's takeover asks the bot's profile, where its claims and ledger live (2026-10-25, #1261).
-- While the gateway's ledger holds the chat, nothing is dropped: the route answers busy, surface `bot` for another bot's message, and Conduit says the bot is answering another bot and sends once it finishes (2026-10-25, #1261; notifier #374).
+- While the gateway's ledger holds the chat, nothing is dropped: the route answers busy, surface `bot` for another bot's message, and Conduit says the bot is answering another bot and sends once it finishes. Other queued work answers surface `gateway`, which reads as another Hermes window (it's a platform message or a job Hermes runs there), and is waited for the same way (2026-10-25, #1261; notifier #374).
 
 **Open gaps**
 - A ledger row Hermes marks `unknown` only clears when it's discarded in Hermes; Conduit waits on it like a busy chat, then says to try again (#1261).

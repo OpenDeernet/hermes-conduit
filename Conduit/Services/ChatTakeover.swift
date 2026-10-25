@@ -48,8 +48,16 @@ struct ChatTakeoverState: Equatable {
 
     /// The app that holds the chat, as the sentences below name it.
     enum Owner: Equatable {
+        /// `desktop`: Hermes Desktop.
+        case desktop
+        /// `cli` or `tui`: a Hermes terminal.
+        case terminal
         /// `bot`: Hermes is answering another bot's message in this Bot Chat.
-        case desktop, terminal, otherBot, otherWindow
+        case otherBot
+        /// Anything else, or no name: another Hermes surface, like a
+        /// gateway platform (`gateway` is other work Hermes' gateway queued
+        /// in the chat, such as a Discord message it's answering).
+        case otherWindow
     }
 
     var owner: Owner { Self.owner(surface) }
@@ -152,7 +160,8 @@ enum ChatTakeoverOutcome: Equatable {
     case ready
     /// The other app is running a turn on the chat: ask again shortly.
     /// `surface` names who, when the plugin said (`bot`: another bot's
-    /// message running in a Bot Chat, which Hermes' refusal doesn't name).
+    /// message running in a Bot Chat, which Hermes' refusal doesn't name;
+    /// `gateway`: other work Hermes' gateway queued in the chat).
     case busy(surface: String?)
     /// This dashboard process itself holds the chat (Conduit on another
     /// device, or the web chat). The route never touches that claim.
