@@ -182,7 +182,7 @@ the saved transcript's job cards · `docs/VOICE_BACKGROUND_JOBS.md`
 **Open gaps**
 - GPT-Live's model can't put a card on the call screen: Gemini, Grok and Local Live agent have `show_on_screen`, GPT-Live has no marker for it. Cards Hermes shows still appear (#366).
 
-**Checked:** 2026-10-24, at #1224: a result counts as told only once the model says something after it (one resend, GPT-Live and Watch included), and a job stays on the job lists until its result is said (#1210). Earlier at #1191.
+**Checked:** 2026-10-24, at #1224: a result counts as told once the model says something after it or once it has gone out twice (one resend, GPT-Live and Watch included), and a job stays on the job lists until then (#1210). Earlier at #1191.
 
 ## Tools and consent in calls
 

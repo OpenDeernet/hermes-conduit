@@ -240,6 +240,9 @@ final class WatchBridgeCallModel: ObservableObject {
         let status: String
         let text: String
         var resent = false
+        /// The check waiting on the send that carries it: newer news for
+        /// the job replaces the entry, and its own send checks it.
+        var check: UUID?
     }
     private var unsaidNews: [String: UnsaidNews] = [:]
     /// The model's last words as text.
@@ -1515,17 +1518,20 @@ final class WatchBridgeCallModel: ObservableObject {
     /// since it went out; one it let pass goes out once more.
     /// Newer news for the job replaces the entry and gets its own check.
     private func checkNewsSpoken(_ jobID: String, text: String, since sentAt: TimeInterval) {
+        let check = UUID()
+        unsaidNews[jobID]?.check = check
         let id = callID
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(Self.newsSpeechGrace))
             guard let self, self.callID == id, self.isActive, self.endRequestedAt == nil,
-                  let news = self.unsaidNews[jobID], news.text == text else { return }
+                  let news = self.unsaidNews[jobID], news.check == check else { return }
             if self.modelSpoke(since: sentAt) || news.resent {
                 self.unsaidNews[jobID] = nil
                 self.sendJobStatus()
                 return
             }
             self.unsaidNews[jobID]?.resent = true
+            self.unsaidNews[jobID]?.check = nil
             self.note("bridgeNewsResent", ["status": news.status])
             self.pendingSends.append(Pending(text: news.text, channel: .speakable, delegationID: nil, newsJobID: jobID))
             self.flushPending()
