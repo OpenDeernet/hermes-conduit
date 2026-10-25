@@ -1260,8 +1260,7 @@ and the README's "See it in action" strip show.
 
 **Siblings:** the iPhone and iPad capture · the Watch capture · the call
 fixtures they launch (phone and Watch) · the showcase clips · the App Preview
-cut · scripts/app-store/README.md · README.md's "See it in action" strip
-(`docs/media/voice.webp` and the clips beside it) · the hermesconduit.app pages that show the
+cut · scripts/app-store/README.md · README.md's "See it in action" strip · the hermesconduit.app pages that show the
 clips (kaishi00/hermes-conduit-website)
 
 **Code**
@@ -1271,6 +1270,7 @@ clips (kaishi00/hermes-conduit-website)
 - Fixtures: `Conduit/Services/ScreenshotCallFixture.swift`, `ConduitWatch/WatchVoiceCall.swift` (applyScreenshotFixture)
 - Demo Hermes: `scripts/app-store/start-demo-hermes.sh`, `scripts/app-store/llm_stub.py`, `scripts/app-store/demo-script.json`
 - Text: `scripts/app-store/README.md`
+- README strip: `README.md` ("See it in action"), `docs/media/voice.webp`, `docs/media/watch-speaking.webp`, `docs/media/watch-approval.webp`
 
 **Rulings**
 - A real Hermes with a scripted model, not a mock gateway; only audio-driven states (calls) use DEBUG-only launch fixtures (2026-10-17, #753).
