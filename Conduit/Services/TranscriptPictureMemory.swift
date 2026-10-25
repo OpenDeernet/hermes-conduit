@@ -113,12 +113,13 @@ enum TranscriptPictureMemory {
             }
             // `forgetAll` moved the generation on, and reset the flag itself.
             guard generation == started else { return }
-            let room = max(0, sizeLimit - sizes.count)
-            for (key, size) in kept.sizes.prefix(room) where sizes[key] == nil {
+            // Up to the limits, the ones this launch has first.
+            for (key, size) in kept.sizes where sizes[key] == nil {
+                guard sizes.count < sizeLimit else { break }
                 sizes[key] = size
             }
-            let heightRoom = max(0, heightLimit - heights.count)
-            for (key, height) in kept.heights.prefix(heightRoom) where heights[key] == nil {
+            for (key, height) in kept.heights where heights[key] == nil {
+                guard heights.count < heightLimit else { break }
                 heights[key] = height
             }
         }
