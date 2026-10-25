@@ -517,7 +517,8 @@ enum HermesRingControl {
 
     static func readResult(status: Int, data: Data) -> Read {
         switch status {
-        case 200: return state(data).map(Read.state) ?? .gone
+        // One it can't read is asked again, never taken for a lost ring.
+        case 200: return state(data).map(Read.state) ?? .retry
         case 204: return .notYet
         case 400, 401, 404, 405, 409: return .gone
         default: return .retry
@@ -548,27 +549,28 @@ enum HermesRingControl {
         return nil
     }
 
-    /// The control as it stands, without waiting: seq 0 and unmuted when
-    /// no one has written it yet, nil when the relay has no such ring or no
-    /// control route, or couldn't be reached in `attempts` tries.
+    /// The control as it stands, without waiting: `.state` (seq 0 and
+    /// unmuted when no one has written it yet), `.gone` when the relay has
+    /// no such ring or no control route, `.retry` when it couldn't be read
+    /// in `attempts` tries.
     static func current(
         _ ring: HermesRing,
         attempts: Int = 3,
         retryDelay: UInt64 = 1_000_000_000,
         send: (URLRequest) async throws -> (Data, Int) = HermesRingHandoff.send
-    ) async -> State? {
+    ) async -> Read {
         for attempt in 1...max(1, attempts) {
             let answer = try? await send(readRequest(ring, after: 0, wait: 0))
             switch answer.map({ readResult(status: $0.1, data: $0.0) }) ?? .retry {
-            case .state(let state): return state
-            case .notYet: return State(seq: 0, muted: false, ended: false)
-            case .gone: return nil
+            case .state(let state): return .state(state)
+            case .notYet: return .state(State(seq: 0, muted: false, ended: false))
+            case .gone: return .gone
             case .retry:
-                guard attempt < attempts, !Task.isCancelled else { return nil }
+                guard attempt < attempts, !Task.isCancelled else { return .retry }
                 try? await Task.sleep(nanoseconds: retryDelay)
             }
         }
-        return nil
+        return .retry
     }
 
     /// Reads the control past `seq` until it ends, the ring goes, or the

@@ -1593,7 +1593,7 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(HermesRingControl.readResult(status: 200, data: state), .state(.init(seq: 4, muted: true, ended: false)))
         XCTAssertEqual(HermesRingControl.readResult(status: 204, data: Data()), .notYet)
         XCTAssertEqual(HermesRingControl.readResult(status: 404, data: Data()), .gone, "A relay older than 0.17, or a forgotten ring")
-        XCTAssertEqual(HermesRingControl.readResult(status: 200, data: Data("{}".utf8)), .gone)
+        XCTAssertEqual(HermesRingControl.readResult(status: 200, data: Data("{}".utf8)), .retry, "Unreadable, not lost")
         XCTAssertEqual(HermesRingControl.readResult(status: 503, data: Data()), .retry)
     }
 
@@ -1663,18 +1663,20 @@ extension VoiceConversationControllerTests {
             XCTAssertEqual(request.url?.query, "after=0&wait=0")
             return (Data(#"{"seq":1,"muted":true,"ended":false}"#.utf8), 200)
         }
-        XCTAssertEqual(stands, .init(seq: 1, muted: true, ended: false), "A mute the Watch sent first stands")
+        XCTAssertEqual(stands, .state(.init(seq: 1, muted: true, ended: false)), "A mute the Watch sent first stands")
         let unwritten = await HermesRingControl.current(ring) { _ in (Data(), 204) }
-        XCTAssertEqual(unwritten, .init(seq: 0, muted: false, ended: false))
+        XCTAssertEqual(unwritten, .state(.init(seq: 0, muted: false, ended: false)))
         let lost = await HermesRingControl.current(ring) { _ in (Data(), 404) }
-        XCTAssertNil(lost, "A ring the relay lost, or an older relay: written instead")
+        XCTAssertEqual(lost, .gone, "A ring the relay lost, or an older relay: written instead")
         var reads = 0
         let unreachable = await HermesRingControl.current(ring, retryDelay: 0) { _ in
             reads += 1
             if reads < 3 { throw URLError(.timedOut) }
             return (Data(#"{"seq":4,"muted":true,"ended":false}"#.utf8), 200)
         }
-        XCTAssertEqual(unreachable, .init(seq: 4, muted: true, ended: false), "A read that didn't get through is tried again before anything is written")
+        XCTAssertEqual(unreachable, .state(.init(seq: 4, muted: true, ended: false)), "A read that didn't get through is tried again before anything is written")
+        let down = await HermesRingControl.current(ring, retryDelay: 0) { _ in throw URLError(.timedOut) }
+        XCTAssertEqual(down, .retry, "Never read: nothing is written over it")
 
         var bodies = [Data("garbled".utf8), Data(#"{"seq":3,"muted":true,"ended":false}"#.utf8)]
         let reread = await HermesRingControl.set(ring, by: .phone, muted: true, attempts: 2, retryDelay: 0) { _ in (bodies.removeFirst(), 200) }

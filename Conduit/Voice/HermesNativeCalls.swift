@@ -846,9 +846,14 @@ final class HermesNativeCalls: NSObject {
         // A relay that can't carry the Watch's Mute and End (older than
         // 0.17) leaves the call to the Watch: its End must end this one.
         // Read first, so a mute the Watch already sent stands; written
-        // only for a ring the relay lost.
-        var control = await HermesRingControl.current(ring)
-        if control == nil { control = await HermesRingControl.set(ring, by: .phone, muted: false, attempts: 2) }
+        // only for a ring the relay lost. A relay it can't read leaves the
+        // call to the Watch rather than write over what it may hold.
+        var control: HermesRingControl.State?
+        switch await HermesRingControl.current(ring) {
+        case .state(let state): control = state
+        case .gone: control = await HermesRingControl.set(ring, by: .phone, muted: false, attempts: 2)
+        case .notYet, .retry: control = nil
+        }
         guard let control else {
             log.note("watchAnswerKept", ["ok": false, "why": "noControl"])
             handBackToWatch(id, ring: ring, sealedStart: sealedStart)
@@ -856,7 +861,7 @@ final class HermesNativeCalls: NSObject {
         }
         guard calls[id] != nil else {
             // Ended here meanwhile: so is the Watch's.
-            _ = await HermesRingControl.set(ring, by: .phone, ended: true)
+            _ = await HermesRingControl.set(ring, by: .phone, ended: true, attempts: 5)
             return
         }
         do {
@@ -946,8 +951,15 @@ final class HermesNativeCalls: NSObject {
         taskID = UIApplication.shared.beginBackgroundTask(withName: "conduit.hermesCall.muteOnWatch", expirationHandler: end)
         Task {
             defer { end() }
-            guard await HermesRingControl.set(ring, by: .phone, muted: muted, attempts: 5) == nil else { return }
-            HermesCallTrace.shared.note("The Watch didn't hear the \(muted ? "mute" : "unmute")")
+            // Until it lands, or a newer mute or the call's end takes over.
+            var rounds = 0
+            while self.calls[id]?.controlMuted == muted {
+                if await HermesRingControl.set(ring, by: .phone, muted: muted, attempts: 5) != nil { return }
+                rounds += 1
+                if rounds == 1 { HermesCallTrace.shared.note("The Watch didn't hear the \(muted ? "mute" : "unmute") yet") }
+                guard rounds < 12 else { return }
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
         }
     }
 
@@ -958,7 +970,9 @@ final class HermesNativeCalls: NSObject {
         guard let muted, let call = calls[id], call.keptFromWatch else { return }
         let before = call.inAppMuted
         calls[id]?.inAppMuted = muted
-        guard let before, before != muted, call.controlMuted != muted else { return }
+        // Its first reading counts only as a mute (made before the voice
+        // was in use): the voice may not show a mute from the Watch yet.
+        guard before.map({ $0 != muted }) ?? muted, call.controlMuted != muted else { return }
         HermesCallTrace.shared.note(muted ? "Muted in Conduit" : "Unmuted in Conduit")
         muteOnWatch(id, muted: muted)
         callController.request(CXTransaction(action: CXSetMutedCallAction(call: id, muted: muted))) { _ in }

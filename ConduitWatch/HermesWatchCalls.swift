@@ -371,7 +371,16 @@ final class HermesWatchCalls: NSObject {
         guard let call = calls[id], call.following != nil, call.controlMuted != muted else { return }
         calls[id]?.controlMuted = muted
         WatchCallLog.shared.note("hermesCallMuteToPhone", ["muted": muted])
-        Task { _ = await HermesRingControl.set(call.ring, by: .watch, muted: muted, attempts: 5) }
+        let ring = call.ring
+        Task {
+            // Until it lands, or a newer mute or the call's end takes over.
+            for round in 1...12 {
+                guard self.calls[id]?.controlMuted == muted else { return }
+                if await HermesRingControl.set(ring, by: .watch, muted: muted, attempts: 5) != nil { return }
+                guard round < 12 else { return }
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
+        }
     }
 
     /// The call the iPhone kept ended here: so does the iPhone's.
