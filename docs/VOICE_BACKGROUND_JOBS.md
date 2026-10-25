@@ -117,7 +117,8 @@ reply pending or playing):
   time. The same goes for Gemini's
   text updates, GPT-Live's delegation results and job notices, and job news
   on Apple Watch calls, whether the job runs on the push relay or on the
-  iPhone.
+  iPhone. A result already sent when the call ends counts as told, as
+  before: it isn't carried into the next call.
 - `list_jobs` (and Classic's job status, GPT-Live's status note and the
   Watch's job list) names a finished job until its result counts as told: a
   result waiting for a quiet moment, or sent and not yet said or sent again,
