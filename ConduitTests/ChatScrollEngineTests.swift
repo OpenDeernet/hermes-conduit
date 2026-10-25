@@ -1586,6 +1586,29 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertEqual(engine.mode, .browsing)
     }
 
+    func testABackgroundedLandingLandsOnResume() {
+        let (engine, surface) = makeEngine()
+        engine.holdsRepliesAtStart = { true }
+        engine.setPaused(true)
+        engine.replyStartLandingRequested()
+        events = []
+        scheduled.forEach { $0() }
+        XCTAssertFalse(events.contains { if case .revealRow = $0 { return true }; return false })
+        engine.setPaused(false)
+        XCTAssertEqual(events.last, .revealRow(id: "m9"))
+        XCTAssertEqual(engine.mode, .browsing)
+        withExtendedLifetime(surface) {}
+    }
+
+    func testANotificationOpenGoesPastAnArmedHold() {
+        let (engine, surface) = sendIntoHold()
+        engine.notificationHandoffBegan()
+        XCTAssertFalse(engine.replyHoldArmed)
+        surface.layOut(contentHeight: 5200)
+        XCTAssertEqual(surface.contentOffsetY, 4400)
+        XCTAssertTrue(engine.isFollowingLatest)
+    }
+
     func testTheLandingWaitsForTheSetting() {
         let (engine, surface) = makeEngine()
         engine.replyStartLandingRequested()

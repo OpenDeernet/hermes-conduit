@@ -405,6 +405,7 @@ final class ChatScrollEngine: ObservableObject {
         // Catch up on whatever changed while backgrounded.
         surfaceLayoutChanged()
         surfaceScrolled()
+        landAtReplyStartIfPending()
     }
 
     // MARK: - User drag
@@ -566,9 +567,9 @@ final class ChatScrollEngine: ObservableObject {
         if restoration != nil {
             restoration = nil
         }
-        // A new open: an earlier landing no longer keeps its end away.
-        replyStartLandingPending = false
-        landedAtReplyStart = false
+        // A new open goes to the end: an earlier landing or hold no longer
+        // keeps it away.
+        disarmReplyHold()
         emit(.cancelAutomaticRestoration)
         guard !isDragging else { return }
         setMode(.following)
@@ -603,6 +604,11 @@ final class ChatScrollEngine: ObservableObject {
         defer { renderInputsMayHaveChanged() }
         guard update != .unchanged else { return }
         noteLatestUserRow(arming: !isInitialSync)
+        if replyStartLandingPending {
+            schedule(0) { [weak self] in
+                self?.landAtReplyStartIfPending()
+            }
+        }
 
         if let anchor = prependAnchor, anchor.landedAt == nil {
             landPrependIfNeeded(anchor, frontRowBefore: frontRowBefore)
@@ -765,16 +771,17 @@ final class ChatScrollEngine: ObservableObject {
     private func landAtReplyStartIfPending() {
         // A chat view just up may not have found its scroll view yet:
         // attaching it lands then.
-        guard replyStartLandingPending, surface != nil else { return }
+        // A backgrounded engine, or a transcript without the user's
+        // message yet, lands once it resumes or the message arrives.
+        let targets = targetCache.targets
+        guard replyStartLandingPending, let surface, !isPaused,
+              let userIndex = targets.lastIndex(where: { $0.message.role == .user }) else { return }
         replyStartLandingPending = false
         // Switched off since the request.
         guard holdsRepliesAtStart() else { return }
-        let targets = targetCache.targets
         // A reader who already scrolled, or a restoration placing them,
         // keeps their place.
-        guard mode == .following, !isPaused, !isUserScrolling, restoration == nil,
-              let userIndex = targets.lastIndex(where: { $0.message.role == .user }),
-              let surface else { return }
+        guard mode == .following, !isUserScrolling, restoration == nil else { return }
         latestUserRowID = targets[userIndex].id
         replyHoldArmed = true
         landedAtReplyStart = true
