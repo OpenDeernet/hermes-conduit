@@ -265,6 +265,11 @@ struct CapabilityToolsetDetailPage: View {
             backends = nil
             backendsError = nil
             notice = nil
+            // A key prompt or backend confirmation still open belongs to
+            // the last one.
+            keyPrompt = nil
+            keyValue = ""
+            backendToConfirm = nil
             guard store.serves(appState.currentCapabilitiesOwner) else { return }
             await load()
         }
