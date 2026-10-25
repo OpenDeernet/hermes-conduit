@@ -537,16 +537,18 @@ final class GPTLiveDelegationBridge {
         guard openDelegations[jobID] == id else { return [] }
         var outgoing: [Outgoing] = []
         if let job = supervisor.jobs.first(where: { $0.id == jobID }), job.status.isActive {
+            // The first request of a call on its own made the call's chat (#1250).
+            let place = job.isCallChat ? " in the call's chat" : ""
             let corrections = "If the user corrects or changes it while it runs, delegate their words starting with \"Job \(job.number):\"."
             outgoing.append(confirmed
                 ? .delegationReply(
                     delegationID: id,
-                    text: "\(Self.sentPrefix) as background job \(job.number) (\"\(job.title)\"): tell the user in a few words that it's on its way. Its result follows on this delegation; don't guess it. \(corrections)]",
+                    text: "\(Self.sentPrefix)\(place) as background job \(job.number) (\"\(job.title)\"): tell the user in a few words that it's on its way. Its result follows on this delegation; don't guess it. \(corrections)]",
                     channel: .speakable
                 )
                 : .delegationReply(
                     delegationID: id,
-                    text: "Hermes is working on this as background job \(job.number) (\"\(job.title)\"). Its result will follow on this delegation; don't guess it. \(corrections)",
+                    text: "Hermes is working on this\(place) as background job \(job.number) (\"\(job.title)\"). Its result will follow on this delegation; don't guess it. \(corrections)",
                     channel: .commentary
                 ))
         }

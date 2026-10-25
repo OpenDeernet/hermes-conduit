@@ -2304,6 +2304,9 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             jobs[index].waitingApproval = nil
             jobs[index].waitingQuestion = nil
         case .messageComplete(_, let messageID, let content, _, _):
+            // An earlier voice turn's late or replayed completion, once the
+            // next turn owns the chat, is not this turn's reply.
+            if before.isThreadTurn, isEarlierCallChatReply(messageID, reply: content, excluding: before.id) { return }
             // A replay of a voice turn's own completion, once it no longer
             // owns the chat, is not a typed turn.
             if runsInCallChat(before) { rememberChatTurn(messageID, reply: content) }
@@ -2349,17 +2352,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
               let thread = liveThread, backend.threadOwnsSession(thread, sessionID) else { return }
         let reply = (content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !reply.isEmpty else { return }
-        // A voice turn the liveness poll settled first: its late completion
-        // already came back to the call as that turn's reply. Matched once,
-        // so a later typed turn with the same words still counts.
-        if let late = jobs.firstIndex(where: { job in
-            runsInCallChat(job) && job.settledByPoll && !job.isDetachedThreadTurn
-                && job.result?.trimmingCharacters(in: .whitespacesAndNewlines) == reply
-        }) {
-            jobs[late].settledByPoll = false
-            rememberChatTurn(messageID, reply: reply)
-            return
-        }
+        if isEarlierCallChatReply(messageID, reply: reply, excluding: nil) { return }
         if let messageID, !messageID.isEmpty {
             guard !notedChatTurns.contains(messageID) else { return }
         } else {
@@ -2372,6 +2365,22 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         // The chat replied after any job result: a read-back reads the chat.
         lastCallResult = nil
         queueChatNote(ChatNote(text: Self.chatContextPrompt(typed: prompt, reply: reply)))
+    }
+
+    /// A completion the call already heard as a settled voice turn's reply:
+    /// one the liveness poll settled first, whose late completion comes
+    /// back, or one whose message id it has noted. Matched once by reply,
+    /// so a later turn with the same words still counts.
+    private func isEarlierCallChatReply(_ messageID: String?, reply: String?, excluding id: UUID?) -> Bool {
+        if let messageID, !messageID.isEmpty, id != nil, notedChatTurns.contains(messageID) { return true }
+        let reply = (reply ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !reply.isEmpty, let late = jobs.firstIndex(where: { job in
+            job.id != id && runsInCallChat(job) && job.settledByPoll && !job.isDetachedThreadTurn
+                && job.result?.trimmingCharacters(in: .whitespacesAndNewlines) == reply
+        }) else { return false }
+        jobs[late].settledByPoll = false
+        rememberChatTurn(messageID, reply: reply)
+        return true
     }
 
     /// Records a turn the call has heard (as a note, or as a voice turn's

@@ -134,6 +134,29 @@ extension VoiceConversationControllerTests {
         XCTAssertNil(supervisor.takePendingChatContext())
     }
 
+    func testALateReplyOfThePollSettledCallsChatRequestIsNotTheNextTurns() async {
+        let (supervisor, fake) = makeUnattachedCall()
+        supervisor.liveCallReadsReplies = true
+        _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)
+        fake.threadBusy = true
+        let next = supervisor.startThreadTurn(request: "and book the hotel")
+        XCTAssertNotNil(next.jobID)
+        // The first request's completion is missed: the poll settles it.
+        fake.threadReply = "Plan."
+        await supervisor.pollOnce()
+        fake.threadBusy = false
+        await supervisor.pollOnce()
+        XCTAssertEqual(supervisor.jobs.first?.status, .finished)
+        guard await waitForCallChat({ !fake.threadSubmissions.isEmpty }) else { return }
+
+        // A reconnect replays that completion after the next turn is sent.
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: "m1", content: "Plan.", reasoning: nil))
+        XCTAssertEqual(supervisor.jobs.first(where: { $0.id == next.jobID })?.status.isActive, true, "the old reply isn't the new turn's")
+
+        supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: "m2", content: "Booked.", reasoning: nil))
+        XCTAssertEqual(supervisor.jobs.first(where: { $0.id == next.jobID })?.result, "Booked.")
+    }
+
     func testANewRequestWaitsOnTheCallsChatRequestsQuestion() async {
         let (supervisor, fake) = makeUnattachedCall()
         _ = await supervisor.startJob(instructions: "clean the logs", joinsCall: true)
