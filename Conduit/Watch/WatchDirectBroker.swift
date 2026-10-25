@@ -1450,12 +1450,19 @@ final class WatchDirectBroker {
         // Jobs on another profile are filed there, so the call lists only
         // its own profile's.
         let started = callJobs.removeValue(forKey: id) ?? []
-        let phoneJobs = appState.voiceBackgroundJobSupervisor.jobs.compactMap { job -> WatchVoiceWire.DirectJob? in
-            guard started.contains(job.id), job.profile == nil else { return nil }
+        // A request still waiting its turn in the call's chat goes no
+        // further, as on the relay and in a phone call (#1250).
+        let supervisor = appState.voiceBackgroundJobSupervisor
+        let waiting = supervisor.jobs.filter {
+            started.contains($0.id) && $0.continuesChat && !$0.requestSent && $0.status.isActive
+        }.map(\.id)
+        let phoneJobs = supervisor.jobs.compactMap { job -> WatchVoiceWire.DirectJob? in
+            guard started.contains(job.id), !waiting.contains(job.id), job.profile == nil else { return nil }
             let sessionID = [job.storedSessionID, job.runtimeSessionID].compactMap { $0 }.first { !$0.isEmpty }
             return .init(jobID: job.id.uuidString, title: job.title, sessionID: sessionID, startedAt: job.startedAt)
         }
         Task {
+            for jobID in waiting { _ = await supervisor.cancel(jobID: jobID) }
             if let known {
                 await appState.saveWatchVoiceCall(transcript, connection: known.connection, saveCalls: known.saveCalls, phoneJobs: phoneJobs)
             }
