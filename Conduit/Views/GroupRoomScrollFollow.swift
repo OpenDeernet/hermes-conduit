@@ -23,6 +23,17 @@ enum GroupRoomFollow {
         if distanceFromBottom <= nearBottomTolerance { return true }
         return userScrolling ? false : current
     }
+
+    /// The member message a following transcript lands at the top of when
+    /// new events arrive, as a long chat reply stops at its start (#365):
+    /// the first one after the row that was last before them. Nil scrolls
+    /// to the bottom as before: nothing new from a member, or that row is
+    /// gone (another room).
+    static func replyStart(in events: [GroupEvent], after previousLastID: String?) -> String? {
+        guard let previousLastID,
+              let index = events.lastIndex(where: { $0.id == previousLastID }) else { return nil }
+        return events[(index + 1)...].first(where: \.isMemberMessage)?.id
+    }
 }
 
 /// The follow decision, shared by reference: the transcript's scroll gates
@@ -30,6 +41,9 @@ enum GroupRoomFollow {
 /// for the published copy.
 final class GroupRoomFollowFlag {
     var isFollowing = true
+    /// Decides again from where the transcript is now, for a programmatic
+    /// scroll that may not move the offset at all (set by the locator).
+    var reevaluate: (@MainActor () -> Void)?
 }
 
 /// Placed behind the room's transcript stack inside its ScrollView. Finds
@@ -46,6 +60,7 @@ struct GroupRoomScrollLocator: UIViewRepresentable {
 
     func updateUIView(_ view: GroupRoomScrollLocatorView, context: Context) {
         view.flag = flag
+        flag.reevaluate = { [weak view] in view?.reevaluate() }
         let binding = $isFollowing
         view.onChange = { following in
             // KVO can land mid-update; write the binding after it.
@@ -141,6 +156,10 @@ final class GroupRoomScrollLocatorView: UIView {
         } else {
             DispatchQueue.main.async { body() }
         }
+    }
+
+    func reevaluate() {
+        scrolled()
     }
 
     private func scrolled() {
