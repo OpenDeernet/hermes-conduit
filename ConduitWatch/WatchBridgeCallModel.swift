@@ -98,6 +98,9 @@ final class WatchBridgeCallModel: ObservableObject {
     static let historyTurns = 40
     static let endTimeout: TimeInterval = 4
     static let sendsInFlightLimit = 20
+    /// Text events on one connection not yet sent; past this the socket
+    /// stopped taking them (#1231).
+    static let eventsInFlightLimit = 32
     static let timelineInterval: TimeInterval = 30
 
     @Published private(set) var phase: Phase = .idle
@@ -179,6 +182,8 @@ final class WatchBridgeCallModel: ObservableObject {
     // Uplink
     private var pendingSamples: [Int16] = []
     private var sendsInFlight = 0
+    /// The current connection's text events not yet sent.
+    private var eventsInFlight = 0
     private var chunksUp = 0
     private var chunksDropped = 0
     private var sendFailures = 0
@@ -673,6 +678,7 @@ final class WatchBridgeCallModel: ObservableObject {
         bytesDownBefore += socket.bytesDown
         socket.close()
         self.socket = nil
+        eventsInFlight = 0
         startSentAt = nil
         pingMisses = 0
         pingOutstanding = false
@@ -1002,7 +1008,12 @@ final class WatchBridgeCallModel: ObservableObject {
 
     private func sendEvent(_ message: [String: Any]) {
         guard let text = try? GPTLiveProtocol.encode(message) else { return }
-        send(Data(text.utf8), kind: .event)
+        eventsInFlight += 1
+        let number = connection
+        send(Data(text.utf8), kind: .event) { [weak self] _ in
+            guard let self, self.connection == number else { return }
+            self.eventsInFlight = max(0, self.eventsInFlight - 1)
+        }
     }
 
     private func audioInterrupted(began: Bool) {
@@ -1471,6 +1482,14 @@ final class WatchBridgeCallModel: ObservableObject {
 
     private func flushPending() {
         guard live, endRequestedAt == nil, !pendingSends.isEmpty else { return }
+        // A socket that stopped taking text is given up, as the phone's
+        // writer does: the replies stay pending for the rejoined session
+        // rather than piling up behind it.
+        guard eventsInFlight < Self.eventsInFlightLimit else {
+            note("bridgeEventsBacklogged", ["eventsInFlight": eventsInFlight])
+            connectionLost(code: nil, opened: true)
+            return
+        }
         let quiet = isQuiet
         var kept: [Pending] = []
         for item in pendingSends {
@@ -1841,6 +1860,7 @@ final class WatchBridgeCallModel: ObservableObject {
         microphoneStopped = false
         pendingSamples = []
         sendsInFlight = 0
+        eventsInFlight = 0
         chunksUp = 0
         chunksDropped = 0
         sendFailures = 0
