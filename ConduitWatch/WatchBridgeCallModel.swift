@@ -1691,6 +1691,9 @@ final class WatchBridgeCallModel: ObservableObject {
             // GPT-Live can't answer an approval here: the user taps it.
             guard let text = WatchJobAnswer.notice(for: item, voiceApprovals: false) else { continue }
             let settled = ["finished", "failed", "cancelled"].contains(item.status)
+            // The same outcome reported again is already on its way, and
+            // may have had its one resend (#1210).
+            if settled, unsaidNews[item.jobID]?.text == text { continue }
             if settled {
                 unsaidNews[item.jobID] = UnsaidNews(title: Self.jobTitle(item.title), status: item.status, text: text)
                 statusChanged = true

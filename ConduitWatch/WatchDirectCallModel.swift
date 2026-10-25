@@ -2230,6 +2230,9 @@ final class WatchDirectCallModel: ObservableObject {
             }
             if let text = WatchJobAnswer.notice(for: item, voiceApprovals: relay.voiceApprovals) {
                 let settled = WatchJobAnswer.settledStatuses.contains(item.status)
+                // The same outcome reported again is already on its way, and
+                // may have had its one resend (#1210).
+                if settled, unsaidNews.contains(where: { $0.job.jobID == item.jobID && $0.text == text }) { continue }
                 quietQueue.append(QuietItem(outgoing: .textWhenIdle(text), newsJobID: settled ? item.jobID : nil))
                 if settled {
                     unsaidNews.removeAll { $0.job.jobID == item.jobID }
