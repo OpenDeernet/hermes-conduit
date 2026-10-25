@@ -98,7 +98,7 @@ final class WatchBridgeCallModel: ObservableObject {
     static let historyTurns = 40
     static let endTimeout: TimeInterval = 4
     static let sendsInFlightLimit = 20
-    /// Text events on one connection not yet sent; past this the socket
+    /// Text events outstanding on one connection; at this many the socket
     /// stopped taking them (#1231).
     static let eventsInFlightLimit = 32
     static let timelineInterval: TimeInterval = 30
@@ -182,7 +182,8 @@ final class WatchBridgeCallModel: ObservableObject {
     // Uplink
     private var pendingSamples: [Int16] = []
     private var sendsInFlight = 0
-    /// The current connection's text events not yet sent.
+    /// The current connection's text events outstanding: handed to the
+    /// socket and not yet completed.
     private var eventsInFlight = 0
     /// Times this call gave a connection up for its text backlog.
     private var eventsBackloggedTrips = 0
