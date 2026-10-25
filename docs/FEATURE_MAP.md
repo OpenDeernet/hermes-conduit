@@ -1280,7 +1280,7 @@ clips (kaishi00/hermes-conduit-website)
 **Open gaps**
 - No clips yet of an incoming Hermes call, of CarPlay or of a lock-screen approval. A simulator can't show any of them (calls ring through CallKit, and the CarPlay window opens only by hand), so they come from recordings on Eric's devices, then go into the README strip and the site (#1193).
 
-**Checked:** 2026-10-25, at #1226.
+**Checked:** 2026-10-25, at #1228.
 
 ## Feature map rules
 
