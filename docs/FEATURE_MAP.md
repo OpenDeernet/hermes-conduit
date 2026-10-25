@@ -1770,12 +1770,12 @@ for chats already open
 - Notifier: `notifier/review_notices.py`, `notifier/tests/test_review_notices.py`
 
 **Rulings**
-- A changed setting reaches chats already open at their next review, with no restart: the dashboard reads it only when it builds a chat's agent, so the plugin reads it again from the chat's profile before each review. Bot Chat needs nothing, Hermes' gateway reads it every turn (2026-10-25, notifier #373, #TBD).
+- A changed setting reaches chats already open at their next review, with no restart: the dashboard reads it only when it builds a chat's agent, so the plugin reads it again from the chat's profile before each review. Bot Chat needs nothing, Hermes' gateway reads it every turn (2026-10-25, notifier #373, #1260).
 
 **Open gaps**
 - Review rows a chat already showed stay in its history (and in the app's review cache) after the setting turns off; only new reviews are hidden.
 
-**Checked:** 2026-10-25, #TBD.
+**Checked:** 2026-10-25, #1260.
 
 ## Feature map rules
 
