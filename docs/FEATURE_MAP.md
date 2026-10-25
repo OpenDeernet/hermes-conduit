@@ -20,7 +20,9 @@ has Siblings, Code, Rulings, Open gaps and a Checked line (the date of the
 last check against the code, and the PR that checked it; an entry seeded from
 main may name a commit). `scripts/check-feature-map.py` runs in CI: it checks
 that shape, that every path in backticks exists, and that an entry a PR adds
-or edits names that PR on its Checked line. A path that starts with notifier/ is in
+or edits names that PR on its Checked line (on a PR into `pulse` that merges
+main, one main changed since `pulse` last took it that matches main's copy came
+in with main). A path that starts with notifier/ is in
 [hermes-conduit-notifier](https://github.com/kaishi00/hermes-conduit-notifier),
 checked against its main.
 
@@ -221,6 +223,40 @@ consent screens · the tool text each model reads, in Conduit and the notifier
 
 **Checked:** 2026-10-25, Qwen in the siblings, and a Watch token minted after consent was withdrawn, at #1182, carried in #1235; 2026-10-24, at #1223, for send_request's yes; 2026-10-23, seeded from main at 64d53c3; at #1191, Location's rule delete says when no dashboard is open (#972 review), which changes nothing about consent.
 
+## Acknowledging work handed to Hermes
+
+What a live model says when it hands a request to Hermes, so the user knows
+it heard without hearing the same line every time.
+
+**Siblings:** Gemini Live · Qwen Live · Grok Live · GPT-Live · Local Live agent ·
+Watch calls · CarPlay · calls from Hermes · the web lookup heads-up · the
+instructions preview in Voice settings · Classic (not needed: Hermes speaks
+for itself) · Local Live, Hermes turns (not needed: Hermes' reply is the
+turn) · the notifier (no acknowledgement text there) · Settings captions,
+README and docs (none today: nothing describes the wording)
+
+**Code**
+- The shared rule: `Shared/GeminiLive/LiveVoiceAcknowledgement.swift`; Grok and Local Live's job-claim rule (no acknowledgement text): `Shared/GrokLive/GrokLiveProtocol.swift` (jobClaimInstructions)
+- Gemini, Qwen and the Watch: `Conduit/Voice/GeminiLive/GeminiLiveConversationController.swift` (instructions, acknowledgementPrompt for a quiet start_job); Grok and Local Live build the same instructions with acknowledgesOnceStarted
+- The Voice settings preview shows the instructions as sent: `Conduit/Services/AppState.swift` (liveVoiceInstructionsPreview)
+- Where each call builds them, phone, CarPlay and Watch: `Conduit/Services/AppState.swift` (localLiveAgentSetup, prepareWatchDirectCall, prepareWatchGrokCall)
+- GPT-Live, phone and Watch: `Conduit/Voice/GPTLive/GPTLiveConversationController.swift` (briefingRules; claimsToSendToHermes, which takes an acknowledgement-only turn with no delegation as a send)
+- Local Live agent: `Shared/LocalLive/LocalLiveProtocol.swift` (agentInstructions)
+- Conduit's own tools need none: `Conduit/Voice/VoiceHostTools.swift`
+- Web lookups: `Conduit/Voice/GeminiLive/GeminiLiveToolBridge.swift` (lookupAnswerNote)
+
+**Rulings**
+- Each handoff gets a word or a few, in the model's own words and different each time; Hermes is named at most once on a call, or when the user asks who's doing it; telling the user what it's about to do counts as the acknowledgement (2026-10-25, #1251).
+- Gemini and Qwen (phone and Watch) say it before start_job; Grok and Local Live (phone and Watch) only once start_job returns started; GPT-Live before the delegation (2026-10-25, #1251).
+- GPT-Live's send-claim fallback counts a turn that is only an acknowledgement ("On it.", "One moment, checking.") as well as one naming Hermes, so fewer mentions don't let an undelegated request drop; "Sure." or "Okay." alone never counts. A bare "On it." with no delegation is taken as a send on purpose: the model only says it for work (2026-10-25, #1251).
+- A web lookup's heads-up is said once, varied, and the answer opens without it (2026-10-05, #404).
+- Conduit's own tools answer fast and need no acknowledgement (on main by 2026-10-22, b41f56c).
+
+**Open gaps**
+- GPT-Live's send-claim fallback reads English phrases only: an acknowledgement in other words or another language, with no delegation, can still go unsent until the user asks again; and a short reply made only of acknowledgement words ("Let me look.") counts as a send even when the model meant to answer itself (#1251).
+
+**Checked:** 2026-10-25, at #1251.
+
 ## Starting a call
 
 Every way a call starts, and which chat it joins.
@@ -239,7 +275,7 @@ entry)
 - CarPlay: `Conduit/CarPlay/CarPlayVoiceCoordinator.swift` (prepareWaitingForConnection, establishLiveVoice), `Conduit/CarPlay/CarPlayBrowseTemplates.swift`
 - A start's late answers: `Conduit/Voice/GeminiLive/GeminiLiveConversationController.swift` (callEpoch, isStarting; Gemini, Qwen, Grok, Local Live), `Conduit/Voice/GPTLive/GPTLiveConversationController.swift` (startAttempt), `Conduit/Voice/VoiceConversationController.swift` (operationGeneration), `ConduitWatch/WatchDirectCallModel.swift` (callID)
 - Watch: `ConduitWatch/WatchHomeView.swift`, `ConduitWatch/TalkToHermesIntent.swift`
-- A chat open elsewhere: `Conduit/Services/ChatTakeover.swift` (ChatTakeoverPreference), `Conduit/Services/AppState.swift` (submitComposerForCall, sendCallPromptTakingOver)
+- A chat open elsewhere: its own entry (Chat open elsewhere)
 - How an attached call behaves: `docs/VOICE_BACKGROUND_JOBS.md`
 
 **Rulings**
@@ -256,7 +292,41 @@ entry)
 - Group rooms have no voice button setting, and the Watch and CarPlay don't follow it (#1134).
 - When a Classic call can't take over its chat, it shows a generic error (#1066).
 
-**Checked:** 2026-10-25, at #1252: an unattached phone or CarPlay call takes its first ordinary request's chat, and a Watch call runs its later ordinary jobs there (notifier #369); Qwen starts through the shared controller, at #1182, carried in #1235; 2026-10-24, at #1223, for a start's late answers and CarPlay's mode switch; 2026-10-23, seeded from main at 64d53c3.
+**Checked:** 2026-10-25, at #1252: an unattached phone or CarPlay call takes its first ordinary request's chat, and a Watch call runs its later ordinary jobs there (notifier #369); 2026-10-25, #1261, the chat-open-elsewhere code moved to its own entry; Qwen starts through the shared controller, at #1182, carried in #1235; 2026-10-24, at #1223, for a start's late answers and CarPlay's mode switch; 2026-10-23, seeded from main at 64d53c3.
+
+## Chat open elsewhere
+
+What Conduit does when Hermes refuses a send because something else holds the
+chat (SESSION_NOT_OWNED): Hermes Desktop or a terminal with a claim, or the
+gateway's ledger running other work in it, like another bot's message in a
+Bot Chat.
+
+**Siblings:** the composer's offer and automatic takeover · a call's request
+in the open chat (Classic, Local Live, the live modes) · a call's request off
+screen (CarPlay and Watch calls too) · chats, project chats and Bot Chat ·
+Pulse's own takeover · the plugin's takeover route · the idle claim release ·
+Settings > Chat > Take over automatically and its caption · the plugin's
+update notice
+
+**Code**
+- Offer, owner and sentences: `Conduit/Services/ChatTakeover.swift` (ChatTakeoverState.owner, ChatTakeoverClient, ChatTakeoverOutcome)
+- Flow: `Conduit/Services/AppState.swift` (noteChatOwnedElsewhere, takeOverChat, chatTakeoverProfile, runChatTakeover, noteChatTakeoverOwner, submitComposerForCall, takeOverChatForCall, sendCallPromptTakingOver), shown by `Conduit/Views/Components/ComposerBar.swift`
+- Setting: `Conduit/Views/AuxiliaryViews.swift` (Take over automatically)
+- Plugin: `notifier/chat_takeover.py` (take_over_session, gateway_queue_owner), `notifier/dashboard/plugin_api.py` (/sessions/takeover), `notifier/pulse_host.py` (take_over), `notifier/conduit_claims.py` (idle claim release)
+
+**Rulings**
+- Only another process's claim is dropped, never while it runs a turn; this dashboard's own claims answer same_host (2026-10-02, #304; notifier #33, #101).
+- A call always takes over, whatever the setting, and Take over automatically is on by default (2026-10-21, #1066).
+- A Bot Chat's takeover asks the bot's profile, where its claims and ledger live (2026-10-25, #1261).
+- While the gateway's ledger holds the chat, nothing is dropped: the route answers busy, surface `bot` for another bot's message, and Conduit says the bot is answering another bot and sends once it finishes. Other queued work answers surface `gateway`, which reads as another Hermes window (it's a platform message or a job Hermes runs there), and is waited for the same way (2026-10-25, #1261; notifier #374).
+
+**Open gaps**
+- The offer can't name a bot until the route answers: Hermes' ledger refusal names no owner, so with Take over automatically off the offer reads "another Hermes window" until the tap (#1261).
+- A ledger row Hermes marks `unknown` only clears when it's discarded in Hermes; Conduit waits on it like a busy chat, then says to try again (#1261).
+- Classic shows a generic error when it can't take over (#1066).
+- Desktop isn't told it lost the chat and shows stale history until reopened (needs Hermes, #304).
+
+**Checked:** 2026-10-25, #1261.
 
 ## Ending a call and what gets saved
 
@@ -313,6 +383,32 @@ Log in Voice settings > Apple Watch · the iPhone's own Watch-call lines
 
 **Checked:** 2026-10-24, at #1221.
 
+## GPT-Live's runtime for the Watch
+
+Watch calls to GPT-Live run WebRTC on the Hermes host, in a helper under a
+small Python environment the plugin makes once with aiortc.
+
+**Siblings:** the plugin's prepare and status routes · the Set up row and its
+caption in Voice settings > Apple Watch · `engines` in a Watch grant, which
+lists GPT-Live only once the runtime is ready · the reason a Watch hears when
+it starts GPT-Live without one · the notifier README's Watch audio section
+
+**Code**
+- Host: `notifier/dashboard/plugin_api.py` (_WatchAudioRuntime), `notifier/dashboard/watch_audio_helper.py`, `notifier/tests/test_watch_audio.py`
+- iPhone: `Conduit/Watch/WatchSettingsSection.swift` (Set up, the runtime's state), `Conduit/Watch/WatchToolGrantClient.swift` (prepareAudio, audioStatus)
+- Watch calls: `Conduit/Watch/WatchDirectBroker.swift` (prepareRuntime, the "takes a few minutes" refusal), `Shared/WatchVoice/WatchVoiceWire.swift` (AudioBridge.engines)
+- Text: `notifier/README.md` (Watch audio)
+
+**Rulings**
+- The plugin never installs into Hermes' own Python: it makes its own environment, with venv and pip from the Python Hermes runs, else uv. A Hermes Python that already has both aiortc and av is used as it is, with Hermes' import path.
+- The environment is made without Hermes' PYTHONPATH and pip runs isolated, so it gets its own copy of every package aiortc needs, even ones Hermes already has. The helper runs isolated in that environment and can't see Hermes' packages (2026-10-25, #1254, notifier #370).
+- The environment counts as ready only once its marker names the plugin's aiortc pin; a failed prepare writes none, so the next Set up makes it again.
+
+**Open gaps**
+- None known.
+
+**Checked:** 2026-10-25, at #1254.
+
 ## Calls from Hermes
 
 Hermes rings the user (a job is done, it waits on an answer, a scheduled
@@ -339,7 +435,7 @@ Pulse (it may call only once the user opts in)
 - Answering is the only tap: the call opens its chat and starts talking by itself (2026-10-10, #508).
 - A declined or missed call is told to Hermes in that chat's next turn, with no second ring (2026-10-10, #518, notifier #78).
 - Hermes speaks first on a call it made (2026-10-11, #546, notifier #89).
-- The call screen names the calling profile; the main profile goes by its Conduit name (2026-10-11, #541).
+- The call screen names the calling profile; the main profile goes by its Conduit name (2026-10-11, #541). A bot goes by its name as the Bots list shows it (the push's `profile_name`), else its capitalized id; a main profile never named in Conduit (or named "Hermes", which reads the same) goes by its bot's name rather than "Hermes" (Eric 2026-10-25, #1257, notifier #372).
 - A call about an approval or question is briefed from the chat's card, not the push's short reason, and answered by voice everywhere it can be (see "Hermes is waiting on you"; 2026-10-24, #1194, notifier #343).
 - A Watch that answers starts the call through the relay, since its link to the iPhone is down under the call screen (2026-10-11, #526, notifier #82).
 - Answered on the Watch while the iPhone has a headset on (AirPods, wired), the call stays on the iPhone and plays there, whatever the Watch's voice: the iPhone answers its own ring with its own voice mode, and the Watch's call screen keeps Mute and End, shared through the relay's ring control. Every mute reaches the other device: CallKit's on either call screen, and Conduit's own (the call screen's Mute, the minimised bar, Classic's paused microphone). A relay restart mid-call loses nothing: each device writes its state again and reads on, and a change made while the relay was down is retried. With no headset on the iPhone, or a relay older than 0.17, the Watch takes it as before (Eric 2026-10-24, #1225, notifier #354).
@@ -349,7 +445,7 @@ Pulse (it may call only once the user opts in)
 - A sealed push carries no profile to the Watch, so its call screen says "Hermes" (#541).
 - The first push after install, before the first status read, can still switch dashboards, and missed-call outcomes are keyed by the pushed dashboard id (#1096).
 
-**Checked:** 2026-10-25, Qwen among the modes that answer, and its mute on a call kept on the iPhone's headset (nativeCallVoiceMuted), at #1182, carried in #1235; 2026-10-24, #1225: a call answered on the Watch stays on the iPhone's headset (#1204); at #1194.
+**Checked:** 2026-10-25, #1257 (the caller's name from `profile_name` on the phone, the Watch and the missed call); Qwen among the modes that answer, and its mute on a call kept on the iPhone's headset (nativeCallVoiceMuted), at #1182, carried in #1235; 2026-10-24, #1225: a call answered on the Watch stays on the iPhone's headset (#1204); at #1194.
 
 ## Audio route, Speaker and mute
 
@@ -575,6 +671,7 @@ stays quiet.
 **Siblings:** reply · approval · question · failed turn · tasks and cron ·
 phone changes · missed call · Pulse (pulse.noticed, pulse.brief, pulse.followup; app
 side on the `pulse` branch only, see Pulse) · the Watch (mirrors the iPhone) · Bot Chat ·
+the Live Activity's who-line (names a Bot Chat's bot, `Conduit/Services/AppState.swift` turnStarted call) ·
 the notification service extension · the relay's plain copy ·
 Settings > Notifications · end-to-end encryption (keys, rotation, the
 padlock or shield in Settings > Notifications, on the dashboard rows of
@@ -588,7 +685,7 @@ Saved Dashboards and the Profiles sheet, and in the Watch's Settings)
 - Missed calls: `Conduit/Voice/HermesCalls.swift`
 - Settings: `Conduit/Views/AuxiliaryViews.swift`, `Conduit/Views/SavedDashboardsView.swift` (padlock on dashboard rows, also shown by `Conduit/Views/ProfilePickerSheet.swift`, which reuses `SavedDashboardRowLabel`; worked out by `AppState.notificationsEncryption(of:)` in `Conduit/Services/AppState.swift`)
 - Watch padlock: `Conduit/Services/AppState+HermesCalls.swift` (shareWatchCallVoices), `Conduit/ConduitApp.swift` (the `.task`s that re-share the Watch context when the notifications state settles and when the active dashboard changes), `Shared/WatchVoice/WatchCallVoices.swift` (WatchPhoneContext.notificationsEncryption), `ConduitWatch/WatchHomeView.swift` (WatchSettingsView: the label and its footer say quantum-safe when the shield shows)
-- Notifier: `notifier/events.py` (push_event, plain_text, media_free, sanitize_decision, sanitize_call), `notifier/session_titles.py`, `notifier/chat_on_screen.py`, `notifier/e2e.py`, `notifier/relay/src/apns.mjs`
+- Notifier: `notifier/events.py` (push_event, plain_text, media_free, sanitize_decision, sanitize_call), `notifier/session_titles.py` (title, bot_name: a Bot Chat's bot name), `notifier/chat_on_screen.py`, `notifier/e2e.py`, `notifier/relay/src/apns.mjs`
 
 **Rulings**
 - Notifications follow the App Language: the extension builds the words from the event's title_label and session_title (2026-10-23, #1158, notifier #326).
@@ -597,6 +694,7 @@ Saved Dashboards and the Profiles sheet, and in the Watch's Settings)
 - A reply's push stays quiet while its chat is on screen and in use (2026-10-22, #1132, notifier #301).
 - A Pulse morning brief's push says only the brief's first line, cut to 200 characters; the lines under it are for its card (2026-10-25, notifier #357).
 - A push from a Bot Chat opens the Bot Chat (2026-10-16, #654), and a call from one opens the bot (2026-10-16, #630).
+- A push from a Bot Chat names its bot as the Bots list does: its Bot Mode title, else its display name, else its profile id, never "default" for a named bot. Every push carries that name as `profile_name` (sealed with the content), which calls and the relay's plain copy use (2026-10-25, Eric's report, #1257, notifier #372).
 - Notification status in Settings is for the active dashboard only (2026-10-05, #395).
 - Encryption keys rotate: every 7 days (30 before inline rotation), on Settings > Notifications > Rotate, or when the host asks (`hermes conduit-push e2e rotate`). The phone saves the new key before sending it, and both sides keep the replaced key 7 days for pushes and answers in flight. Rotation is per pairing and below every event kind, so reply, approval, question, failed turn, tasks and cron, phone changes, missed call, Pulse and Bot Chat pushes need no change. On the condition that nothing already working is disrupted: a pairing that never rotates (an older app or notifier) keeps sealing and opening pushes and answers with its one key, tested on both sides (2026-10-24, #1197 and notifier #344, Eric).
 - The relay's plain copy is for pairings with no key. Rotation leaves it untouched: it neither reads nor changes the copy, and a pairing with no key never rotates (2026-10-24, #1197 and notifier #344, Eric).
@@ -610,7 +708,7 @@ Saved Dashboards and the Profiles sheet, and in the Watch's Settings)
 - "Notify me when" choices are one set per iPhone, not per dashboard: the relay keeps one set per installation (#395).
 - A registration update landing after a relay move is dropped rather than written onto the new registration (#865 follow-up, #1191); the move itself has no test seam (it registers through URLSession.shared).
 
-**Checked:** 2026-10-25, the morning brief's push at notifier #357, carried in #1237; 2026-10-24, at #1213 (inline rotation, the shield and the Watch's row and footer; a pairing rotates at most once per run, a Rotate tap during a rotation joins it, and a verified key the Keychain refused stays pending and is shown as such; fork CI #85); #1212 (MEDIA tags in pushes, answer cards and the call screen); keys and padlock at #1197, carried in #1217 (fork CI #82); the registration update race at #1191; its relay registration error log redacted (bare hosts) at #1219.
+**Checked:** 2026-10-25, #1257 (a Bot Chat's push names its bot; `profile_name` for calls, the relay's plain copy and the Live Activity; notifier #372); the morning brief's push at notifier #357, carried in #1237; 2026-10-24, at #1213 (inline rotation, the shield and the Watch's row and footer; a pairing rotates at most once per run, a Rotate tap during a rotation joins it, and a verified key the Keychain refused stays pending and is shown as such; fork CI #85); #1212 (MEDIA tags in pushes, answer cards and the call screen); keys and padlock at #1197, carried in #1217 (fork CI #82); the registration update race at #1191; its relay registration error log redacted (bare hosts) at #1219.
 
 ## Pulse
 
@@ -634,7 +732,7 @@ no chat · the `hermes conduit-push pulse` commands
 
 **Code**
 - App, on the `pulse` branch only, so not in backticks (the map check reads main): Conduit/Views/V2/V2PulsePage.swift (the screen, the morning brief's block), Conduit/Views/V2/V2ChatsView.swift (V2PulseButton in the Chats bar, Pulse's chat left out of the list and content search), Conduit/Views/V2/V2VoiceButton.swift (Pulse's chat left out of voice recents), Conduit/Views/V2/V2Shell.swift (the `.pulse` route, full screen on a phone), Conduit/Services/PulseFeed.swift (cards, marks, ratings, which cards take Done and Do it, the brief's layout, which chat is Pulse's), Conduit/Services/AppState+Pulse.swift and Conduit/Services/AppState.swift (opensPulseScreen, for pushes; pulseRememberedHomes, Pulse's chat per dashboard across launches; startPulseNewChat, the new chat Do it fills), Conduit/Services/PulseSettings.swift and Conduit/Views/PulseSettingsViews.swift (Settings > Pulse)
-- Loop: `notifier/pulse.py` (the tick, the report's candidate run, cards from turns, push copy), `notifier/pulse_delivery.py`, `notifier/pulse_host.py`, `notifier/pulse_hermes.py`, `notifier/chat_takeover.py`
+- Loop: `notifier/pulse.py` (the tick, the report's candidate run, cards from turns, push copy, the model Pulse's calls outside its chat run on), `notifier/pulse_delivery.py`, `notifier/pulse_host.py`, `notifier/pulse_hermes.py`, `notifier/chat_takeover.py`
 - Report: `notifier/pulse_report.py` (what it reads), `notifier/pulse_candidates.py` (the candidate list, the router and the 30-day journal)
 - Memory, follow-ups and the brief: `notifier/pulse_memory.py`, `notifier/pulse_followup.py`, `notifier/pulse_brief.py` (what the brief reads: held cards, open items, the phone, the inbox)
 - What happened since an item came up: `notifier/pulse_evidence.py` (later chats and cron runs, background processes); follow-up, held-reminder, brief-card and Do it checks read it with the item's chat in `notifier/pulse_followup.py`, its continuation through `notifier/pulse_hermes.py` (`chain_messages`), the phone's calendar and reminders and the report in `notifier/pulse_report.py`
@@ -657,14 +755,16 @@ no chat · the `hermes conduit-push pulse` commands
 - Main reaches `pulse` by a merge commit, never a squash, so archives don't re-stitch old conflicts (2026-10-24, #1186; build 228's stitch lost the Chats Pulse button).
 - Done and Do it work on every report item, one Pulse found on its own included. Do it opens the chat it was found in, or, for one from the calendar, reminders, Hermes's notes or scheduled jobs, or the Shortcuts inbox, a new chat in the dashboard's default profile, with the reminder in the composer, and only in the chat Do it's New Chat made. It starts that chat only when New Chat can start one at once: connecting, during a profile switch or with another new chat on its way, the Pulse screen says why instead. The Do it check then reads that chat with the others on the subject. Done on a found item marks only the card, and the next report reads it as done. On a found item the app shows them only to a plugin that reports `pulse_found_actions`; with an older plugin they stay on items about something Pulse remembers (2026-10-25, Eric; notifier #362, #1240; Eric asked why date and worth-knowing cards couldn't be acted on).
 - What's finished stays finished. A reminder sent on with Do it, and Hermes's answer to it, can close a remembered item but never add one, and a commitment Pulse learns of more than half a day after its time (reading older chats) is kept as expired, never reminded (2026-10-25, Eric; notifier #364, Eric's report: a card blamed a reminder job for bringing back finished items).
+- Settings > Pulse's model runs all of Pulse: its turns (the reports and the morning brief), memory, the report's candidate list, and follow-up, held-card and Do it checks. On "Same as the Pulse chat" the calls outside the chat use the Pulse chat's own model, as Hermes reads it back when it reopens the chat, unless Hermes's "Pulse memory" slot names one; a chat without a model of its own, or whose provider is gone, leaves them on Hermes's main model (2026-10-25, notifier #375, Eric's report: with the Pulse chat on Volcengine, report lists and a follow-up check ran on the main model and failed while it was out of capacity).
 
 **Open gaps**
 - Learning from ratings in code is the next slice. Until it lands, the persona criteria (Quiet and Samantha diverge, a changed interest is heard, due items always surface) are strict xfail in `notifier/tests/test_pulse_personas.py`.
 - Create Pulse chat in Settings > Pulse hasn't been tried on a real host: it must make a chat Pulse finds before anything is sent in it.
 - The app paths above aren't checked by the map check while they live only on `pulse`; they go in backticks if the app side ever reaches main.
 - What a Pulse push does on the Watch, which has no Pulse screen, hasn't been checked.
+- Conduit/Services/AppState+Pulse.swift on `pulse` still says Hermes's "Pulse memory" slot left on "auto" follows the main model; since notifier #375 it follows the Pulse chat's model. The next PR into `pulse` corrects the comment.
 
-**Checked:** 2026-10-25, at #1240 on the `pulse` branch, with notifier #362 and #364; carried to main in #1241.
+**Checked:** 2026-10-25, at #1262 with notifier #375 (Pulse's model); the app side at #1240 on the `pulse` branch, with notifier #362 and #364, carried to main in #1241.
 
 ## Artifacts
 
@@ -755,14 +855,15 @@ other read in it.
 chats, project chats and Bot Chats (the chat's own bot is left out) · group
 rooms (their own @ list and recipient picks) · the note that tells the bot
 who each tag is · a teammate's delivery in the chat ("Message from Atlas") ·
-the sender's step ("Messaged Atlas") · the Live Activity's tool line ·
+the bot's folded reply to it ("Replied to Atlas") · the same notes in a saved
+chat's copy · the sender's step ("Messaged Atlas") · the Live Activity's tool line ·
 Hermes Desktop's bot chat · chat list previews and quotes · Read Aloud and live voice ·
 the bot's SOUL messaging section · README.md's bots line
 
 **Code**
 - Tags and the note to the bot: `Conduit/Services/BotMentions.swift`, `Conduit/Services/GroupChatModels.swift` (MentionAutocomplete)
 - Composer: `Conduit/Views/Components/ComposerBar.swift` (mentionCandidates, attachmentButton), `Conduit/Views/Components/GroupRoomComposer.swift`
-- Teammate messages: `Conduit/Services/BotTeammateMessages.swift`, `Conduit/Views/ChatView.swift` (TeammateMessageNote, TeammateReplyNote, SettledToolCardContent.stepTitle, runningToolTitle), `Conduit/Views/ChatRowState.swift` (teammateReplies, botLabels), `Conduit/Views/ChatActivityRows.swift` (ChatStepSubject, ChatWorkingLine.currentToolTitle)
+- Teammate messages: `Conduit/Services/BotTeammateMessages.swift`, `Conduit/Views/ChatView.swift` (TeammateMessageNote, TeammateReplyNote, SettledToolCardContent.stepTitle, runningToolTitle), `Conduit/Views/ChatRowState.swift` (teammateReplies, botLabels), `Conduit/Views/ChatActivityRows.swift` (ChatStepSubject, ChatWorkingLine.currentToolTitle), `Conduit/Views/ChatRowDisclosure.swift` (how the notes open), `Conduit/Views/OfflineChatTranscriptView.swift` (a saved copy's rows and their disclosure)
 - Previews, quotes and speech: `Conduit/Services/PreviewText.swift` (strip), read by the chat list and spoken previews
 - Tool categories: `Shared/Widgets/HermesTurnActivity.swift`, and its twin, `notifier/live_activity.py` (`tool_category`, notifier #338)
 - The messaging protocol a bot is born with: `Conduit/Services/BotManagement.swift` (BotSoul)
@@ -781,11 +882,12 @@ the bot's SOUL messaging section · README.md's bots line
 - A signature is read from the first 320 characters, so a message of any length is still a delivery; tool calls past 64 KB aren't scanned. A signed name may contain "(" ("Atlas (v2)") (2026-10-24).
 - A "Messaged" step names the bot from the roster, and redraws when the roster loads (2026-10-24).
 - Group rooms have no Mention a Bot item: their recipient picks do the same job (2026-10-24).
+- A delivery's note and a folded reply open and close like every other row: the scroll engine hears first, so the tapped row stays put, and the choice outlives the row being rebuilt (2026-10-25, Eric's report: opening either one froze the app until iOS ended it).
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-24, at #1192.
+**Checked:** 2026-10-25, at #1259.
 
 ## Markdown lists in messages
 
@@ -942,29 +1044,43 @@ calls reading a job's chat · the Watch's answer to a call from Hermes
 ## Following the latest message
 
 Whether a transcript keeps itself at the newest message as replies and
-events arrive, or stays where the user scrolled to read.
+events arrive, or stays where the user scrolled to read, and where a long
+reply stops.
 
 **Siblings:** chats, project chats and Bot Chat (one scroll engine) · group
 rooms · a delegate agent's live tail sheet · the jump-to-latest button · how
-much history an open transcript keeps
+much history an open transcript keeps · opening a chat with an unread reply ·
+Settings > Chat's Long replies switch and captions (shared by Sync across
+devices)
 
 **Code**
-- Chats: `Conduit/Services/ChatScrollEngine.swift`, `Conduit/Views/ChatScrollSurfaceLocator.swift`, `Conduit/Views/ChatView.swift` (jumpToLatest)
-- Group rooms: `Conduit/Views/GroupRoomScrollFollow.swift` (GroupRoomFollow, GroupRoomScrollLocator), `Conduit/Views/GroupChatView.swift` (isFollowingLatest, jumpToLatestButton)
+- Chats: `Conduit/Services/ChatScrollEngine.swift` (pin, replyHoldOffset, replyStartLandingRequested, landAtReplyStartIfPending, ChatReplyStartPreference), `Conduit/Views/ChatScrollSurfaceLocator.swift`, `Conduit/Views/ChatView.swift` (jumpToLatest, the send pulse arming the hold, the unread landing observer)
+- Unread open: `Conduit/Services/AppState.swift` (performSessionOpenNotingRefusal, chatReplyStartLandingRequest, takeChatReplyStartLanding)
+- Group rooms: `Conduit/Views/GroupRoomScrollFollow.swift` (GroupRoomFollow, replyStart, GroupRoomScrollLocator), `Conduit/Views/GroupChatView.swift` (isFollowingLatest, landAtTop, jumpToLatestButton)
 - Delegate tail sheet (its own follow state and Latest button): `Conduit/Views/ChatSupportSheets.swift` (DelegateAgentTailSheet)
 - Room history kept: `Conduit/Services/GroupChatModels.swift` (GroupRoomReplay tailWindow, retainedLimit), `Conduit/Services/AppState.swift` (the open and resync tail windows)
+- Setting: `Conduit/Views/AuxiliaryViews.swift` (ReplyStartSettings), `Conduit/Services/AppState+SyncedPreferences.swift` (`app.stop_at_reply_start`)
+- Tests: `ConduitTests/ChatScrollEngineTests.swift` (Long replies stop at their start, An unread chat opens at its latest reply), `ConduitTests/GroupChatModelsTests.swift`
 
 **Rulings**
-- Only the user's own scroll leaves following; new content never does. Being near the bottom (40 pt), the jump button or sending returns to it (chats: ChatScrollEngine; group rooms 2026-10-24, #1184).
+- Only the user's own scroll leaves following, except a long reply's stop below. Being near the bottom (40 pt), the jump button or sending returns to it (chats: ChatScrollEngine; group rooms 2026-10-24, #1184).
+- A reply longer than the screen stops at its start: following never pins past the bottom of the user's message it answers, and once the reply runs on, the reader is left browsing there. On by default, switchable in Settings > Chat (Eric, 2026-10-25, #1256, notifier issue 365).
+- The stop never moves the offset up: a reader already below the reply's start (back at its end, or a reply that outgrew the screen before its message was laid out) follows on to the end. It holds at the turn's start, not the answer text, because a turn's steps fold and their summaries arrive below that point (2026-10-25, #1256).
+- What arms it: a send, a new user message from another device, and opening a chat that was unread, which lands at the start of its latest reply once its transcript is in. The jump button, the title tap, a jump to a question and a session switch disarm it (2026-10-25, #1256).
+- Group rooms land a following transcript at the top of the first new member message, and stop following when it doesn't fit (2026-10-25, #1256).
 - An open group room keeps a bounded tail: it opens on the last 200 events, and polling trims back to 200 once it holds 400 (2026-10-24, #1184).
+- The delegate tail sheet always follows its end: it is a live log, not a reply to read (2026-10-25, #1256).
 
 **Open gaps**
 - Group rooms have no "Load earlier messages", so history above the 200-event tail isn't reachable in the app.
 - The Responding row reads the kept tail, so a discussion longer than 200 events (when opened, or after a trim) can lose it while a member still works.
 - Trimming a busy room's tail moves rows above a reader scrolled to its top, once per 200 new events.
 - Group rooms keep the scroll position by row id (ScrollViewReader), not by the chat engine's same-pass layout, so a follow can animate where a chat snaps.
+- Opening an unread chat lands at the reply after its last user message, so one whose unread rows came without a new user message (a cron or background result after an already read reply) lands at that older reply, not at the newest row; a chat with no user message at all stays at the end.
+- A chat restored on launch (Continue where you left off) keeps its saved place, unread or not.
+- A group room that opens empty scrolls its first events to the end: that batch is usually the room's history arriving, which should open at its newest row, so only events after a row already seen land at a member message's start.
 
-**Checked:** 2026-10-24, at #1184.
+**Checked:** 2026-10-25, at #1256.
 
 ## Reconnecting to Hermes
 
@@ -1708,7 +1824,7 @@ point at the map and its check
 - Rules: `CONTRIBUTING.md`, `docs/FEATURE_MAP.md` (the intro and the sibling sets), `.github/pull_request_template.md` (Siblings)
 - Reviewers: `.github/workflows/opencode-review.yml` (the Connected features focus area)
 - Notifier: `notifier/CONTRIBUTING.md`, `notifier/.github/pull_request_template.md`, `notifier/.github/workflows/opencode-review.yml`
-- Map check: `scripts/check-feature-map.py` (paths, entry shape, and on a PR the Checked line of each entry it edits), `scripts/tests/test_check_feature_map.py`, run by `.github/workflows/ci.yml` (Feature map paths exist), its PR number and base map pinned by `scripts/tests/test_ci_workflow_contract.py`
+- Map check: `scripts/check-feature-map.py` (paths, entry shape, and on a PR the Checked line of each entry it edits; on a PR into `pulse` that merges main, main's maps where the PR and its base meet main tell which entries came from main), `scripts/tests/test_check_feature_map.py`, run by `.github/workflows/ci.yml` (Feature map paths exist; a PR into `pulse` runs `pulse`'s copy, whose trigger lists `pulse`), its PR number, base map and main's maps pinned by `scripts/tests/test_ci_workflow_contract.py`
 - Pointers: `README.md` (Architecture), `docs/CI.md` (the plan job under Jobs)
 
 **Rulings**
@@ -1717,10 +1833,13 @@ point at the map and its check
 - CONTRIBUTING.md holds the full rules. The intro, the PR templates and the reviewer prompts each carry the part their reader needs, so a rule change starts in CONTRIBUTING.md and then reaches each copy (2026-10-24, #1178).
 - The notifier's reviewers can't read this map, so a notifier PR names its entry, or the hermes-conduit PR that adds or updates it (2026-10-24, #1178).
 - An entry a PR adds or edits names that PR on its Checked line, and CI fails one that doesn't; a commit is only for an entry seeded from main. A carry PR names both, like "#1188, carried in #1200". The PR template asks for a Siblings line for every sibling the entry lists, Settings and model-facing text included (2026-10-24, #1209, Eric).
+- On a PR into `pulse` that merges main, an entry main changed between where `pulse` last met main and where the PR meets it, and that matches main's copy there, came in with main and keeps main's Checked line, so bringing main into `pulse` doesn't name the merge on every entry main changed. A `pulse` PR that doesn't merge main gets no such pass, and neither does an entry main didn't change (2026-10-25, #1248; the first such merge after #1209 failed the check on 48 entries).
 
 **Open gaps**
 - A connection nobody has noticed yet isn't caught by any check; it goes in the first time a fix turns it up.
 - A notifier PR that moves a file listed here fails the next hermes-conduit PR's map check, not its own.
 - A PR that changes a mapped feature's code without touching its entry isn't caught by CI; a reviewer flags it (minor).
+- On a merge of main into `pulse`, an entry both sides changed that the merge settles on main's copy keeps main's Checked line, so CI doesn't flag dropping `pulse`'s edit; a reviewer checks that choice. CI only sees content, and that copy is main's word for word.
+- If GitHub can't say whether a PR into `pulse` merges main, or can't give main's maps, the step warns and checks without them, so a merge of main fails on the entries it brings in until a re-run.
 
-**Checked:** 2026-10-24, at #1216.
+**Checked:** 2026-10-25, #1248.
