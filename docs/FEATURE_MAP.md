@@ -840,6 +840,7 @@ the bot's SOUL messaging section · README.md's bots line
 - A signature is read from the first 320 characters, so a message of any length is still a delivery; tool calls past 64 KB aren't scanned. A signed name may contain "(" ("Atlas (v2)") (2026-10-24).
 - A "Messaged" step names the bot from the roster, and redraws when the roster loads (2026-10-24).
 - Group rooms have no Mention a Bot item: their recipient picks do the same job (2026-10-24).
+- A delivery's note and a folded reply open and close like every other row: the scroll engine hears first, so the tapped row stays put, and the choice outlives the row being rebuilt (2026-10-25, Eric's report: opening either one froze the app until iOS ended it).
 
 **Open gaps**
 - None known.
