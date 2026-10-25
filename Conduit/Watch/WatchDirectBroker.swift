@@ -885,6 +885,7 @@ final class WatchDirectBroker {
         let supervisor = WatchCallJobSupervisor(appState.voiceBackgroundJobSupervisor)
         // Noted in the saved call, as the phone's own calls note theirs.
         supervisor.onJobCreated = { [weak self] jobID in self?.callJobs[id, default: []].append(jobID) }
+        supervisor.callIsLive = { [weak self] in self?.callID == id }
         // Only the running call's: a straggler from an ended one gets none.
         if callID == id, let mode = hostToolsMode {
             supervisor.hostTools = hostTools
@@ -1834,6 +1835,9 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
     /// A first ordinary job is being started: ordinary requests said
     /// meanwhile wait for its chat rather than make their own.
     private var startingCallChat = false
+    /// Whether the call is still on: a request that waited past its end
+    /// goes no further.
+    var callIsLive: (@MainActor () -> Bool)?
     private var callChatWaiters: [CheckedContinuation<Void, Never>] = []
 
     func startJob(instructions: String, profile: String?, joinsCall: Bool, onJobCreated: (@MainActor (UUID) -> Void)?) async -> String {
@@ -1843,9 +1847,12 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
             onJobCreated?(jobID)
         }
         let joins = joinsCall && (profile ?? "").isEmpty
+        var waited = false
         while joins, callChat == nil, startingCallChat {
+            waited = true
             await withCheckedContinuation { callChatWaiters.append($0) }
         }
+        if waited, callIsLive?() == false { return "The call ended before Hermes took this request." }
         if joins, let callChat {
             return await base.continueJob(instructions: instructions, in: callChat, onJobCreated: created)
         }
@@ -1862,8 +1869,12 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
             }
         }
         var startedID: UUID?
+        let base = self.base
         let reply = await base.startJob(instructions: instructions, profile: profile, onJobCreated: { jobID in
             startedID = jobID
+            // Marked before Hermes can answer, so its reply is matched
+            // against replays from the start.
+            if claims { base.markOpensCallChat(jobID) }
             created(jobID)
         })
         if joins, callChat == nil, let startedID, let job = base.jobs.first(where: { $0.id == startedID }), job.profile == nil,
@@ -1872,7 +1883,6 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
             case .failed, .cancelled: break
             case .starting, .running, .needsInput, .finished:
                 callChat = VoiceThreadTarget(runtimeSessionID: runtimeID, storedSessionID: job.storedSessionID, title: job.title)
-                base.markOpensCallChat(startedID)
             }
         }
         return reply
