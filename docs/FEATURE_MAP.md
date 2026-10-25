@@ -1287,7 +1287,7 @@ the socket's keepalive and the foreground connection check
 **Open gaps**
 - Files go up one after another as base64 over the chat socket; nothing shows how far an upload has got.
 
-**Checked:** 2026-10-25, at #PRNUM.
+**Checked:** 2026-10-25, at #1268.
 
 ## Phone change errors
 
