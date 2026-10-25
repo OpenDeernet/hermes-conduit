@@ -2868,7 +2868,11 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     private func pruneSettledJobs() {
         // A notice still waiting to be spoken may be handed back, so its
         // job must still be here.
-        let settled = jobs.filter { !$0.status.isActive && $0.outcomeDelivered && noticesInFlight[$0.id] == nil }
+        // The request whose chat the call took stays: the saved call's line
+        // for it follows the chat's stored id once the poll learns it.
+        let settled = jobs.filter {
+            !$0.status.isActive && $0.outcomeDelivered && noticesInFlight[$0.id] == nil && $0.id != callChatJobID
+        }
         let excess = settled.count - Self.maximumSettledJobs
         guard excess > 0 else { return }
         let dropped = Set(settled.prefix(excess).map(\.id))
