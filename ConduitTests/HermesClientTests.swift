@@ -3099,7 +3099,8 @@ extension HermesClientTests {
     private func connectKeepaliveClient(
         onSend: (() -> Void)? = nil,
         interval: TimeInterval = 0.3,
-        backgroundInterval: TimeInterval? = nil
+        backgroundInterval: TimeInterval? = nil,
+        monitorsPath: Bool = false
     ) async throws -> (client: HermesClient, socket: FakeSocket) {
         let transport = FakeTransport()
         let socket = FakeSocket()
@@ -3111,7 +3112,7 @@ extension HermesClientTests {
             keepaliveInterval: interval,
             backgroundKeepaliveInterval: backgroundInterval,
             keepalivePingTimeout: 0.3,
-            monitorsPath: false
+            monitorsPath: monitorsPath
         )
         let connectTask = Task { try? await client.connect() }
         transport.open(socket)
@@ -3194,6 +3195,28 @@ extension HermesClientTests {
         client.disconnect()
     }
 
+    /// A network path change during the upload doesn't probe behind it
+    /// either: two lost pings would close the working socket (#1265).
+    func testPathChangeDoesNotProbeBehindAFrameStillBeingWritten() async throws {
+        let (client, socket) = try await connectKeepaliveClient(interval: 30, monitorsPath: true)
+        socket.holdsSendCompletion = true
+        let sent = Gate()
+        socket.onSend = { sent.signal() }
+        let picture = String(repeating: "A", count: HermesClient.largeFrameBytes)
+        let upload = Task { try await client.attachImage("s1", base64: picture, filename: "photo.jpg") }
+        try await sent.wait("the image upload to go out")
+        socket.onSend = nil
+
+        client.networkPathChanged()
+        // Past two 0.3 s ping budgets.
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertFalse(socket.sentTexts.contains { $0.contains("\"ping\"") }, "No probe behind the upload")
+        XCTAssertFalse(socket.cancelled, "The upload's socket stays open")
+        upload.cancel()
+        socket.finishHeldSends()
+        client.disconnect()
+    }
+
     /// The foreground check doesn't ping behind a picture still going up:
     /// its 5 s budget would run out and drop a working socket (#1265).
     func testHealthCheckDoesNotPingBehindAFrameStillBeingWritten() async throws {
@@ -3229,7 +3252,7 @@ extension HermesClientTests {
         XCTAssertEqual(
             HermesClient.uploadTimeout(forPayloadCharacters: 64_000_000),
             TimeInterval(GroupRoomFilesClient.timeoutMilliseconds(forBodyBytes: 64_000_000)) / 1_000,
-            "The same rate a group room's upload allows"
+            "The same rate a group room's upload allows (base64 is one byte a character)"
         )
     }
 

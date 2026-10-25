@@ -1102,9 +1102,9 @@ final class HermesClient: ObservableObject {
     var onDisconnected: (() -> Void)?
 
     static let requestTimeout: TimeInterval = 30
-    /// An upload's budget: at least two minutes, plus about 1 s for every
-    /// 64 KB of request (about 0.5 Mbit/s), the rate a group room's upload
-    /// allows, so a large picture on a slow link isn't cut off (#1265).
+    /// An upload's budget: two minutes, or about 1 s for every 64 KB of
+    /// request (about 0.5 Mbit/s) if that is longer, the rate a group room's
+    /// upload allows, so a large file on a slow link isn't cut off (#1265).
     static let minimumUploadTimeout: TimeInterval = 120
     static func uploadTimeout(forPayloadCharacters count: Int) -> TimeInterval {
         max(minimumUploadTimeout, TimeInterval(count) / 64_000)
@@ -1379,6 +1379,11 @@ final class HermesClient: ObservableObject {
     /// reports the disconnect so AppState reconnects as for any other drop.
     private func probe(_ socket: any HermesWebSocket) async {
         guard !isProbing, self.socket === socket, !closedIntentionally else { return }
+        // Behind a large frame still being written the pings can't be
+        // answered in time (#1265). A path change that really killed the
+        // connection fails the write itself, and the request's own budget
+        // answers for the socket meanwhile.
+        guard requestsBeingWritten.isEmpty else { return }
         isProbing = true
         defer { isProbing = false }
         let probeStarted = Date()
@@ -1394,7 +1399,7 @@ final class HermesClient: ObservableObject {
                 if lastInboundAt > probeStarted { return }
             }
         }
-        guard self.socket === socket, !closedIntentionally else { return }
+        guard self.socket === socket, !closedIntentionally, requestsBeingWritten.isEmpty else { return }
         logger.error("Keepalive ping unanswered twice; closing the socket")
         socket.cancel(with: .goingAway, reason: nil)
     }
@@ -1849,6 +1854,8 @@ final class HermesClient: ObservableObject {
     }
 
     private func failAllPendingRequests(with error: Error) {
+        // The socket is gone, and its frames with it.
+        requestsBeingWritten.removeAll()
         for (_, request) in pending {
             request.timer?.invalidate()
             request.continuation.resume(throwing: error)
@@ -1925,7 +1932,8 @@ final class HermesClient: ObservableObject {
     }
 
     private func cancelPendingRequest(id: Int) {
-        requestsBeingWritten.remove(id)
+        // A cancelled request's frame may still be going out: it stays in
+        // `requestsBeingWritten` until the socket says the write is through.
         guard let pending = pending.removeValue(forKey: id) else { return }
         pending.timer?.invalidate()
         pending.continuation.resume(throwing: CancellationError())
@@ -2245,7 +2253,10 @@ final class HermesClient: ObservableObject {
     /// socket: that request's own budget answers for the socket instead
     /// (#1265).
     func healthCheck() async throws {
-        guard requestsBeingWritten.isEmpty else { return }
+        guard requestsBeingWritten.isEmpty else {
+            logger.notice("Connection check skipped: a large frame is still being written")
+            return
+        }
         try await ping(timeout: Self.pingTimeout)
     }
 
