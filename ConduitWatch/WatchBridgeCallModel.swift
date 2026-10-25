@@ -184,6 +184,8 @@ final class WatchBridgeCallModel: ObservableObject {
     private var sendsInFlight = 0
     /// The current connection's text events not yet sent.
     private var eventsInFlight = 0
+    /// Times this call gave a connection up for its text backlog.
+    private var eventsBackloggedTrips = 0
     private var chunksUp = 0
     private var chunksDropped = 0
     private var sendFailures = 0
@@ -1482,17 +1484,18 @@ final class WatchBridgeCallModel: ObservableObject {
 
     private func flushPending() {
         guard live, endRequestedAt == nil, !pendingSends.isEmpty else { return }
-        // A socket that stopped taking text is given up, as the phone's
-        // writer does: the replies stay pending for the rejoined session
-        // rather than piling up behind it.
-        guard eventsInFlight < Self.eventsInFlightLimit else {
-            note("bridgeEventsBacklogged", ["eventsInFlight": eventsInFlight])
-            connectionLost(code: nil, opened: true)
-            return
-        }
         let quiet = isQuiet
         var kept: [Pending] = []
+        var backlogged = false
         for item in pendingSends {
+            // A socket that stopped taking text is given up, as the phone's
+            // writer does: the replies not yet sent stay pending for the
+            // rejoined session rather than piling up behind it.
+            if backlogged || eventsInFlight >= Self.eventsInFlightLimit {
+                backlogged = true
+                kept.append(item)
+                continue
+            }
             guard item.channel == .commentary || quiet else {
                 kept.append(item)
                 continue
@@ -1510,6 +1513,11 @@ final class WatchBridgeCallModel: ObservableObject {
             }
         }
         pendingSends = kept
+        if backlogged {
+            eventsBackloggedTrips += 1
+            note("bridgeEventsBacklogged", ["eventsInFlight": eventsInFlight, "trips": eventsBackloggedTrips, "kept": kept.count])
+            connectionLost(code: nil, opened: true)
+        }
     }
 
     /// The user said more after asking for this, as the phone checks:
@@ -1861,6 +1869,7 @@ final class WatchBridgeCallModel: ObservableObject {
         pendingSamples = []
         sendsInFlight = 0
         eventsInFlight = 0
+        eventsBackloggedTrips = 0
         chunksUp = 0
         chunksDropped = 0
         sendFailures = 0
