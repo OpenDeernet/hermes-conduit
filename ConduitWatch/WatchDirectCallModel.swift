@@ -360,8 +360,12 @@ final class WatchDirectCallModel: ObservableObject {
         /// The check waiting on this send: two jobs can share a notice's
         /// text, so each send claims one entry.
         var check: UUID?
+        /// When its text was queued: sends go out in queue order, so a send
+        /// claims the earliest-queued entry with its text.
+        var queued: Int
     }
     private var unsaidNews: [UnsaidNews] = []
+    private var newsQueued = 0
     /// How long a job's outcome may go unspoken after it was sent before it
     /// is sent once more (GeminiLiveConversationController.outcomeSpeechGrace).
     static let newsSpeechGrace: TimeInterval = 6
@@ -2200,7 +2204,8 @@ final class WatchDirectCallModel: ObservableObject {
                 quietQueue.append(.textWhenIdle(text))
                 if WatchJobAnswer.settledStatuses.contains(item.status) {
                     unsaidNews.removeAll { $0.job.jobID == item.jobID }
-                    unsaidNews.append(UnsaidNews(job: .init(jobID: item.jobID, title: item.title, status: item.status), text: text))
+                    newsQueued += 1
+                    unsaidNews.append(UnsaidNews(job: .init(jobID: item.jobID, title: item.title, status: item.status), text: text, queued: newsQueued))
                 }
             }
         }
@@ -2780,7 +2785,9 @@ final class WatchDirectCallModel: ObservableObject {
     /// A job's outcome counts as said once the model has said something
     /// since it went out; one it let pass goes out once more.
     private func checkNewsSpoken(_ text: String, since sentAt: TimeInterval) {
-        guard let claimed = unsaidNews.firstIndex(where: { $0.text == text && $0.check == nil }) else { return }
+        guard let claimed = unsaidNews.indices
+            .filter({ unsaidNews[$0].text == text && unsaidNews[$0].check == nil })
+            .min(by: { unsaidNews[$0].queued < unsaidNews[$1].queued }) else { return }
         let check = UUID()
         unsaidNews[claimed].check = check
         let id = callID
@@ -2794,6 +2801,8 @@ final class WatchDirectCallModel: ObservableObject {
             }
             self.unsaidNews[index].resent = true
             self.unsaidNews[index].check = nil
+            self.newsQueued += 1
+            self.unsaidNews[index].queued = self.newsQueued
             WatchCallLog.shared.note("directNewsResent", ["status": self.unsaidNews[index].job.status])
             self.quietQueue.append(.textWhenIdle(text))
             self.flushQuietQueue()

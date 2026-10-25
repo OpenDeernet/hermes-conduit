@@ -827,6 +827,8 @@ final class GPTLiveConversationController: ObservableObject {
                     finishedTurn = FinishedTurn(speaker: .assistant, text: finished)
                     noteSendClaim(in: finished)
                 }
+                // A turn whose words come only here was still said.
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lastModelWordsAt = now() }
                 openAssistantEntry = nil
                 assistantTurnEntries = []
                 if endRequestedAt == nil { phase = restingPhase }
