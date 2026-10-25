@@ -67,6 +67,8 @@ extension SpeechRecognitionLocaleTests {
         XCTAssertEqual(WakeSpeechLocale.note(for: "Hey Hermes", among: ["Hey Hermes"], appLocale: Locale(identifier: "en_US"), localeFor: { _ in nil })?.isUnheard, true, "no on-device model for the app locale")
         XCTAssertNil(WakeSpeechLocale.note(for: "小爱同学", among: ["小爱同学"], appLocale: Locale(identifier: "zh_CN"), localeFor: { _ in Locale(identifier: "zh_CN") }))
         XCTAssertEqual(WakeSpeechLocale.script(of: "ﾊﾅｺ"), .kana, "halfwidth katakana")
+        XCTAssertEqual(WakeSpeechLocale.script(of: "ﾾￂ"), .hangul, "halfwidth hangul")
+        XCTAssertEqual(WakeSpeechLocale.script(of: "ㄋㄧˇㄏㄠˇ"), .han, "bopomofo")
     }
 
     func testWakeListensInThreeLanguagesAtMost() {

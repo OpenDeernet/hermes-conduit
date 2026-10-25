@@ -1117,7 +1117,9 @@ the plugin list)
 file either. `profiles.create` (New Bot, Duplicate) writes a new profile's
 first config, which nothing else is saving yet, and Delete Bot
 (`DELETE /api/profiles/{name}`) removes the whole profile, so neither waits. The notifier, the Watch and
-CarPlay don't write a profile's config.
+CarPlay don't write a profile's config, and the host-run plugin update
+(`/self/update`) runs as a job on the host that changes the plugin's files,
+not the config.
 
 **Open gaps**
 - A config edit from Hermes Desktop or the terminal can still land between Conduit's GET and PUT; Hermes has no revision check to refuse the stale PUT.
