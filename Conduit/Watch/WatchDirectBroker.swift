@@ -1450,14 +1450,11 @@ final class WatchDirectBroker {
         // Jobs on another profile are filed there, so the call lists only
         // its own profile's.
         let started = callJobs.removeValue(forKey: id) ?? []
-        // A request still waiting its turn in the call's chat goes no
-        // further, as on the relay and in a phone call (#1250).
         let supervisor = appState.voiceBackgroundJobSupervisor
-        let waiting = supervisor.jobs.filter {
-            started.contains($0.id) && $0.continuesChat && !$0.requestSent && $0.status.isActive
-        }.map(\.id)
+        let waiting = waitingJobs(started)
         let phoneJobs = supervisor.jobs.compactMap { job -> WatchVoiceWire.DirectJob? in
-            guard started.contains(job.id), !waiting.contains(job.id), job.profile == nil else { return nil }
+            guard started.contains(job.id), !waiting.contains(job.id), job.profile == nil,
+                  !(job.continuesChat && job.status == .cancelled && !job.requestSent) else { return nil }
             let sessionID = [job.storedSessionID, job.runtimeSessionID].compactMap { $0 }.first { !$0.isEmpty }
             return .init(jobID: job.id.uuidString, title: job.title, sessionID: sessionID, startedAt: job.startedAt)
         }
@@ -1509,8 +1506,22 @@ final class WatchDirectBroker {
         endCall()
     }
 
+    /// A request still waiting its turn in the call's chat goes no further
+    /// when the call ends, however it ends, as on the relay and in a phone
+    /// call (#1250).
+    private func waitingJobs(_ started: [UUID]) -> [UUID] {
+        appState.voiceBackgroundJobSupervisor.jobs.filter {
+            started.contains($0.id) && $0.continuesChat && !$0.requestSent && $0.status.isActive
+        }.map(\.id)
+    }
+
     /// Unspoken job news goes back to the jobs, which report it as usual.
     private func endCall(keepRecovery: Bool = false) {
+        if let callID {
+            let waiting = waitingJobs(callJobs[callID] ?? [])
+            let supervisor = appState.voiceBackgroundJobSupervisor
+            if !waiting.isEmpty { Task { for jobID in waiting { _ = await supervisor.cancel(jobID: jobID) } } }
+        }
         grantWatchdog?.cancel()
         grantWatchdog = nil
         silenceWatchdog?.cancel()

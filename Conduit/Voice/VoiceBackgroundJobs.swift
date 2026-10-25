@@ -2319,7 +2319,11 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             // A replay of a voice turn's own completion, once it no longer
             // owns the chat, is not a typed turn, nor a Watch call's next
             // request's reply (its jobs share one chat, #1250).
-            if runsInCallChat(before) || before.continuesChat {
+            // A Watch call's first job shares its chat with the ones after it.
+            let sharesChat = jobs.contains {
+                $0.id != before.id && $0.continuesChat && $0.status.isActive && $0.owns(sessionID: sessionID)
+            }
+            if runsInCallChat(before) || before.continuesChat || sharesChat {
                 rememberChatTurn(messageID, reply: content)
             } else if let messageID, !messageID.isEmpty, !notedChatTurns.contains(messageID) {
                 notedChatTurns.append(messageID)
