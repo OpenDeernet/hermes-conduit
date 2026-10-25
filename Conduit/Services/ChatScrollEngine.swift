@@ -565,6 +565,9 @@ final class ChatScrollEngine: ObservableObject {
         if restoration != nil {
             restoration = nil
         }
+        // A new open: an earlier landing no longer keeps its end away.
+        replyStartLandingPending = false
+        landedAtReplyStart = false
         emit(.cancelAutomaticRestoration)
         guard !isDragging else { return }
         setMode(.following)
@@ -761,6 +764,8 @@ final class ChatScrollEngine: ObservableObject {
     private func landAtReplyStartIfPending() {
         guard replyStartLandingPending else { return }
         replyStartLandingPending = false
+        // Switched off since the request.
+        guard holdsRepliesAtStart() else { return }
         let targets = targetCache.targets
         // A reader who already scrolled, or a restoration placing them,
         // keeps their place.
@@ -891,6 +896,10 @@ final class ChatScrollEngine: ObservableObject {
         isDragging = false
         prependAnchor = nil
         latestAnimationUntil = nil
+        // A landing belongs to the open that asked for it. The hold stays
+        // armed: the reply may still be running when the chat is back.
+        replyStartLandingPending = false
+        landedAtReplyStart = false
     }
 
     /// The last reported frame of a laid-out row, in the stack's space.
