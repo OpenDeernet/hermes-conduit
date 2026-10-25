@@ -2494,7 +2494,7 @@ extension HermesVoiceGatewayTimeoutTests {
         }
         // Gemini's nudge when the model stayed quiet after start_job.
         let nudge = GeminiLiveConversationController.acknowledgementPrompt
-        XCTAssertFalse(nudge.contains("like \"On it, Hermes is checking.\""))
+        XCTAssertFalse(nudge.contains("Hermes is checking"))
         XCTAssertTrue(nudge.contains("without saying again that you're asking Hermes"))
     }
 

@@ -1022,10 +1022,13 @@ final class GPTLiveConversationController: ObservableObject {
     }
 
     private static let sendClaimPattern = #"\b(send|sending|pass|passing|forward|forwarding|hand|handing|relay|relaying|give|giving|get|getting|take|taking|put|putting)\b[^.!?]{0,40}?\bto hermes\b|\b(tell|telling|ask|asking|let|letting|ping|pinging|update|updating)\s+hermes\b|\b(check|checking) with hermes\b"#
-    /// A sentence that is nothing but an acknowledgement, and the part of
-    /// one that says work is starting ("Sure." alone answers small talk).
-    private static let acknowledgementOnly = #"^(?:(?:okay|ok|sure|alright|all right|right|got it|you got it|will do|yes|yep)[, ]*)*(?:on it|one (?:sec|second|moment)|just a (?:sec|second|moment)|give me (?:a|one) (?:sec|second|moment)|hang on|hold on|let me (?:check|look|see|find out)(?: (?:into|on|at))?(?: (?:that|it))?|checking(?: (?:on )?(?:that|it))?(?: now)?|looking(?: into it| into that| that up| it up)?(?: now)?|i'll (?:check|look into it|look into that|find out)|working on it)?[, ]*(?:on it|checking(?: now)?|for you)?$"#
-    private static let workUnderway = #"\b(on it|check|checking|look|looking|find out|working on it|one (sec|second|moment)|just a (sec|second|moment)|give me (a|one) (sec|second|moment)|hang on|hold on)\b"#
+    /// A sentence that is nothing but an acknowledgement ("Okay, I'm on
+    /// it.", "Sure thing, I'll handle it."), and the words in one that say
+    /// work is starting ("Sure." or "Got it." alone answers small talk).
+    private static let acknowledgementFiller = #"(?:okay|ok|sure|alright|all right|right|got it|you got it|will do|yes|yep|of course|no problem|absolutely|sounds good|sure thing)"#
+    private static let acknowledgementWork = #"(?:on it|on that|right away|right on it|one (?:sec|second|moment)|just a (?:sec|second|moment)|give me (?:a|one) (?:sec|second|moment)|hang on|hold on|bear with me|(?:(?:let me|i'll|i will|i'm|i am) )?(?:check|checking|look|looking|see|find out|finding out|work|working|take care of|taking care of|handle|handling|get|getting|do|doing|sort|sorting|dig|digging)(?: (?:into|on|at|out))?(?: (?:that|it|this))?(?: (?:up|out|on it))?|(?:i'm|i am) on it|now|right now|for you)"#
+    private static let acknowledgementOnly = "^(?:\(acknowledgementFiller)[, ]*)*(?:\(acknowledgementWork)(?:[, ]*(?:\(acknowledgementWork)|\(acknowledgementFiller)))*)?$"
+    private static let workUnderway = #"\b(?:on it|on that|right away|check|checking|look|looking|find out|finding out|work|working|take care|taking care|handle|handling|get|getting|do|doing|sort|sorting|dig|digging|sec|second|moment|hang on|hold on|bear with me)\b"#
     /// An offer, a condition or a no: nothing is being sent yet.
     private static let sendClaimHedge = #"\b(can|could|should|shall|would|might|may|want me|do you|if you|once you|when you|after you|before|not|never|won't|didn't|don't|can't|couldn't|haven't|hasn't|wasn't)\b|n't\b"#
 

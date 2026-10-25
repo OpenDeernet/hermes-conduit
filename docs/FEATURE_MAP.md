@@ -227,7 +227,9 @@ it heard without hearing the same line every time.
 
 **Siblings:** Gemini Live · Qwen Live · Grok Live · GPT-Live · Local Live agent ·
 Watch calls · CarPlay · calls from Hermes · the web lookup heads-up · the
-instructions preview in Voice settings
+instructions preview in Voice settings · Classic (not needed: Hermes speaks
+for itself) · Local Live, Hermes turns (not needed: Hermes' reply is the
+turn) · the notifier (no acknowledgement text there)
 
 **Code**
 - The shared rule: `Shared/GrokLive/GrokLiveProtocol.swift` (LiveVoiceAcknowledgement, jobClaimInstructions for Grok and Local Live)
@@ -245,7 +247,7 @@ instructions preview in Voice settings
 - Conduit's own tools answer fast and need no acknowledgement (on main by 2026-10-22, b41f56c).
 
 **Open gaps**
-- None known.
+- GPT-Live's send-claim fallback reads English phrases only: an acknowledgement in other words or another language, with no delegation, can still go unsent until the user asks again (#1251).
 
 **Checked:** 2026-10-25, at #1251.
 

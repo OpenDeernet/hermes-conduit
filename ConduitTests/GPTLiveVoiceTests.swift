@@ -1326,6 +1326,11 @@ extension VoiceConversationControllerTests {
             "Sure, one moment.",
             "Okay, checking now.",
             "Got it. Let me look into that.",
+            "Right away.",
+            "Okay, I'm on it.",
+            "Got it, taking care of it.",
+            "Sure thing, I'll handle it.",
+            "Will do, give me a sec.",
         ]
         for claim in claims {
             XCTAssertTrue(GPTLiveConversationController.claimsToSendToHermes(claim), claim)
@@ -1344,6 +1349,9 @@ extension VoiceConversationControllerTests {
             "Okay.",
             "Let me check. It's 4 o'clock in Tokyo.",
             "Sure, one moment. Actually, what time zone?",
+            "You're welcome.",
+            "I'm doing well, thanks.",
+            "No problem.",
         ]
         for text in notClaims {
             XCTAssertFalse(GPTLiveConversationController.claimsToSendToHermes(text), text)
