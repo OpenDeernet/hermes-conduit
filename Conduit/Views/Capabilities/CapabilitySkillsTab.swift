@@ -345,7 +345,8 @@ struct OfficialSkillDetailPage: View {
     @State private var document: SkillFrontmatter?
     @State private var loadError: String?
     /// The dashboard and profile the page was opened for: its installed
-    /// state and Install belong to them, never to one switched to since.
+    /// state, Install and SKILL.md belong to them, and after a switch the
+    /// page shows only the skill's name and description.
     @State private var openedFor: CapabilitySnapshotOwner?
 
     private var isCurrent: Bool {
@@ -403,17 +404,21 @@ struct OfficialSkillDetailPage: View {
                     }
                 }
             }
-            CapabilitySkillDocument(document: document, error: loadError)
+            if isCurrent {
+                CapabilitySkillDocument(document: document, error: loadError)
+            }
         }
         .navigationTitle(Text(verbatim: skill.name))
-        .onAppear {
-            if openedFor == nil { openedFor = appState.currentCapabilitiesOwner }
-        }
         .task(id: skill.identifier) {
+            if openedFor == nil { openedFor = appState.currentCapabilitiesOwner }
+            guard isCurrent else { return }
             do {
-                document = SkillFrontmatter.parse(try await store.skillPreview(identifier: skill.identifier))
+                let content = try await store.skillPreview(identifier: skill.identifier)
+                guard isCurrent else { return }
+                document = SkillFrontmatter.parse(content)
                 loadError = nil
             } catch {
+                guard isCurrent, !Task.isCancelled else { return }
                 loadError = UserFacingError.message(for: error)
             }
         }
