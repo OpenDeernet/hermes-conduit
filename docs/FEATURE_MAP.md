@@ -971,7 +971,7 @@ devices)
 - The Responding row reads the kept tail, so a discussion longer than 200 events (when opened, or after a trim) can lose it while a member still works.
 - Trimming a busy room's tail moves rows above a reader scrolled to its top, once per 200 new events.
 - Group rooms keep the scroll position by row id (ScrollViewReader), not by the chat engine's same-pass layout, so a follow can animate where a chat snaps.
-- Opening an unread chat lands at the reply after its last user message; a chat Hermes wrote to without one (a cron or background result after an already read reply) lands there too, not at the newest row.
+- Opening an unread chat lands at the reply after its last user message, so one whose unread rows came without a new user message (a cron or background result after an already read reply) lands at that older reply, not at the newest row; a chat with no user message at all stays at the end.
 - A chat restored on launch (Continue where you left off) keeps its saved place, unread or not.
 
 **Checked:** 2026-10-25, at #1256.

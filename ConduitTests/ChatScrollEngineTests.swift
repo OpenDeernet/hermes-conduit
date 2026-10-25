@@ -1542,7 +1542,7 @@ final class ChatScrollEngineTests: XCTestCase {
         withExtendedLifetime(surface) {}
     }
 
-    func testALeftChatForgetsItsLandingButKeepsTheHold() {
+    func testALeftChatForgetsItsLanding() {
         let (engine, surface) = makeEngine()
         engine.holdsRepliesAtStart = { true }
         engine.rowFramesChanged(["m8": ChatScrollRowFrame(minY: 2500, maxY: 2580, order: 8)])
@@ -1555,6 +1555,15 @@ final class ChatScrollEngineTests: XCTestCase {
         engine.notificationHandoffFinished()
         XCTAssertEqual(surface.contentOffsetY, 3200)
         XCTAssertTrue(engine.isFollowingLatest)
+    }
+
+    func testALeftChatKeepsAnArmedHold() {
+        let (engine, surface) = sendIntoHold()
+        engine.viewDisappeared()
+        XCTAssertTrue(engine.replyHoldArmed)
+        // Back with the reply still running: it stops at its start.
+        surface.layOut(contentHeight: 5200)
+        XCTAssertEqual(surface.contentOffsetY, 3598)
     }
 
     func testTheLandingWaitsForTheSetting() {

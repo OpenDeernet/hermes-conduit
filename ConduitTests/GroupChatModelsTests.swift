@@ -566,6 +566,17 @@ final class GroupChatModelsTests: XCTestCase {
             current: false, userScrolling: true, distanceFromBottom: GroupRoomFollow.nearBottomTolerance))
     }
 
+    func testALandingDecidesFollowingOnlyWhenItsOver() {
+        // Its own animated scroll passing near the bottom doesn't follow.
+        XCTAssertFalse(GroupRoomFollow.following(
+            current: false, userScrolling: false, distanceFromBottom: 0, landing: true))
+        XCTAssertFalse(GroupRoomFollow.following(
+            current: false, userScrolling: false, distanceFromBottom: 900, landing: true))
+        // The user's own scroll still decides.
+        XCTAssertTrue(GroupRoomFollow.following(
+            current: false, userScrolling: true, distanceFromBottom: 0, landing: true))
+    }
+
     func testANewMemberMessageIsWhereTheRoomLands() {
         let log = [
             userMessage(seq: 1, text: "Hello everyone"),

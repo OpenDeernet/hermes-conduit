@@ -251,10 +251,11 @@ struct GroupChatView: View {
     /// fits clamps at the bottom, where following picks up again.
     private func landAtTop(of eventID: String, _ proxy: ScrollViewProxy) {
         followFlag.isFollowing = false
+        followFlag.isLanding = true
         isFollowingLatest = false
         withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(eventID, anchor: .top) }
-        // The scroll may not move the offset (already there): decide from
-        // where it lands once the animation is over.
+        // Decide from where it lands once the animation is over (it may not
+        // move the offset at all).
         Task { @MainActor [followFlag] in
             try? await Task.sleep(for: .milliseconds(300))
             followFlag.reevaluate?()

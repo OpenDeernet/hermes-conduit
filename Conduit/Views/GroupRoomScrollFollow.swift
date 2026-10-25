@@ -18,8 +18,13 @@ enum GroupRoomFollow {
     static func following(
         current: Bool,
         userScrolling: Bool,
-        distanceFromBottom: CGFloat
+        distanceFromBottom: CGFloat,
+        landing: Bool = false
     ) -> Bool {
+        // A landing's own animated scroll can pass near the bottom (the
+        // content may grow after its first frame): it decides once it's
+        // over, unless the user takes over.
+        if landing, !userScrolling { return current }
         if distanceFromBottom <= nearBottomTolerance { return true }
         return userScrolling ? false : current
     }
@@ -41,6 +46,9 @@ enum GroupRoomFollow {
 /// for the published copy.
 final class GroupRoomFollowFlag {
     var isFollowing = true
+    /// A landing at a new member message is scrolling there (landAtTop):
+    /// only the user's own scroll or the landing's end decides.
+    var isLanding = false
     /// Decides again from where the transcript is now, for a programmatic
     /// scroll that may not move the offset at all (set by the locator).
     var reevaluate: (@MainActor () -> Void)?
@@ -159,6 +167,7 @@ final class GroupRoomScrollLocatorView: UIView {
     }
 
     func reevaluate() {
+        flag.isLanding = false
         scrolled()
     }
 
@@ -166,10 +175,13 @@ final class GroupRoomScrollLocatorView: UIView {
         guard let scrollView else { return }
         let distance = scrollView.contentSize.height + scrollView.adjustedContentInset.bottom
             - (scrollView.contentOffset.y + scrollView.bounds.height)
+        let userScrolling = scrollView.isTracking || scrollView.isDecelerating
+        if userScrolling { flag.isLanding = false }
         let next = GroupRoomFollow.following(
             current: flag.isFollowing,
-            userScrolling: scrollView.isTracking || scrollView.isDecelerating,
-            distanceFromBottom: distance
+            userScrolling: userScrolling,
+            distanceFromBottom: distance,
+            landing: flag.isLanding
         )
         guard next != flag.isFollowing else { return }
         flag.isFollowing = next
