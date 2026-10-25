@@ -89,8 +89,8 @@ final class ChatCardHeight: ObservableObject, ChatScrollMeasuredCard {
     // MARK: - ChatScrollMeasuredCard
 
     var pendingGrowth: CGFloat {
-        let current = taken ?? reserved ?? stackFrame?.height ?? 0
-        return (measured?.height ?? current) - current
+        guard let measured else { return 0 }
+        return measured.height - (stackFrame?.height ?? taken ?? reserved ?? measured.height)
     }
 
     func takeMeasuredHeight() {
@@ -133,7 +133,8 @@ final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
     }
     /// The engine the waiting picture went through.
     private weak var engine: ChatScrollEngine?
-    private var pending: (delta: CGFloat, show: () -> Void)?
+    /// The height the row takes with the picture in it, and what shows it.
+    private var pending: (rowHeight: CGFloat, show: () -> Void)?
 
     /// A reply picture's height in its row: scaled to the row's width, up
     /// to `maxHeight` (`Image.resizable().scaledToFit().frame(maxHeight:)`).
@@ -144,17 +145,16 @@ final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
     }
 
     /// The picture is decoded: `show` puts it in the row, which then takes
-    /// `rowHeight`; nil when the row already holds the picture's size (its
-    /// placeholder took the remembered one). A row not laid out yet (no
-    /// height to grow from), or one that keeps its height, shows it at once.
-    func arrive(rowHeight: CGFloat?, engine: ChatScrollEngine?, show: @escaping () -> Void) {
-        var delta: CGFloat = 0
-        if let rowHeight, rowHeight > 0, let height = stackFrame?.height, height > 0 {
-            delta = rowHeight - height
-        }
-        pending = (delta, show)
+    /// `rowHeight`. Whether the row grows is its frame against that, not
+    /// whether the picture's size is remembered: a placeholder that took the
+    /// remembered size keeps its height and shows it at once, and so does a
+    /// row not laid out yet (no height to grow from), while one laid out
+    /// with the loading line before a cold launch's kept sizes had loaded
+    /// waits like any growth.
+    func arrive(rowHeight: CGFloat, engine: ChatScrollEngine?, show: @escaping () -> Void) {
+        pending = (rowHeight, show)
         self.engine = engine
-        if let engine, abs(delta) > 0.5 {
+        if let engine, abs(pendingGrowth) > 0.5 {
             engine.cardMeasured(self)
         } else {
             takeMeasuredHeight()
@@ -171,7 +171,9 @@ final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
     // MARK: - ChatScrollMeasuredCard
 
     var pendingGrowth: CGFloat {
-        pending?.delta ?? 0
+        guard let rowHeight = pending?.rowHeight, rowHeight > 0,
+              let height = stackFrame?.height, height > 0 else { return 0 }
+        return rowHeight - height
     }
 
     func takeMeasuredHeight() {

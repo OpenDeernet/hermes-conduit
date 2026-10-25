@@ -2357,11 +2357,12 @@ private struct RemoteMarkdownImage: View {
     }
 
     /// The height the row takes with a picture of `size` in it: scaled to
-    /// the row's width, up to the ceiling. Nil when its placeholder already
-    /// holds that size, remembered from an earlier load.
-    private func rowHeight(showing size: CGSize) -> CGFloat? {
-        guard reservedSize == nil else { return nil }
-        return ChatPictureArrival.fittedHeight(of: size, inWidth: arrival.stackFrame?.width ?? 0, maxHeight: Self.maxHeight)
+    /// the row's width, up to the ceiling, which a placeholder at the
+    /// remembered size already has. The arrival compares it with the row's
+    /// frame, since a row laid out before a cold launch's kept sizes loaded
+    /// still draws its loading line.
+    private func rowHeight(showing size: CGSize) -> CGFloat {
+        ChatPictureArrival.fittedHeight(of: size, inWidth: arrival.stackFrame?.width ?? 0, maxHeight: Self.maxHeight)
     }
 
     @ViewBuilder
