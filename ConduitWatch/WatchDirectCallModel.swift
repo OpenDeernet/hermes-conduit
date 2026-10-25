@@ -1583,6 +1583,8 @@ final class WatchDirectCallModel: ObservableObject {
             transcript[open].text = role == .assistant
                 ? Self.joinTranscriptChunk(transcript[open].text, text)
                 : transcript[open].text + text
+            // A growing line can push the settled ones past the limit too.
+            trimTranscript()
             return
         }
         transcript.append(.init(role: role, text: text, at: Date()))
@@ -1598,7 +1600,7 @@ final class WatchDirectCallModel: ObservableObject {
     }
 
     /// Keeps the settled lines to what the saved call can hold (#1008):
-    /// the oldest go once a turn settles, never a line still in use.
+    /// the oldest go as the transcript grows, never a line still in use.
     private func trimTranscript() {
         let inUse = [openUserLine, openAssistantLine, exchangeUserLine].compactMap { $0 }.min()
         let dropped = WatchVoiceWire.DirectTranscript.overflow(transcript, protected: inUse)
