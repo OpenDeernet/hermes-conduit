@@ -153,6 +153,15 @@ final class WatchDirectBroker {
 
     func handle(_ message: WatchVoiceWire.Message, reply: (([String: Any]) -> Void)?) {
         func answer(_ message: WatchVoiceWire.Message) { reply?(WatchVoiceWire.encode(message)) }
+        // A call from Hermes this phone kept on its headset (#1204): the
+        // Watch's call screen controls it, whichever way its start came.
+        if let id = message.watchCallID, let ring = message.watchCallRing, HermesNativeCalls.shared.keepsWatchAnswer(ringID: ring) {
+            answer(.callOnPhone(callID: id))
+            return
+        }
+        // Started on the Watch before this phone could keep it: it's the
+        // Watch's now.
+        if let ring = message.watchCallRing { HermesNativeCalls.shared.startedOnWatch(ringID: ring) }
         switch message {
         case .directStart(let id, let version, let ring):
             guard version == WatchVoiceWire.version else {
@@ -899,7 +908,7 @@ final class WatchDirectBroker {
             // answered the call itself, and nothing reads this answer. What
             // comes after the call's own answer waits for the next poll.
             let late = await handled.value
-            if callID == id { lateOutgoing += late.filter { !$0.answers(call.id) } }
+            if callID == id { lateOutgoing += lateAnswers(late, to: call, in: id, isJob: isJob) }
             var fields: [String: Any] = [
                 "name": call.name,
                 "ms": Self.milliseconds(since: startedAt),
@@ -914,13 +923,15 @@ final class WatchDirectBroker {
         let outgoing: [GeminiLiveToolBridge.Outgoing]
         if let answered = await Self.value(of: handled, within: isJob ? Self.jobStartWait : Self.toolWait) {
             outgoing = answered
+            // Refused at once: nothing started, so a repeat may go again.
+            if isJob, Self.refusedBeforeStarting(answered, answering: call.id) { ledger.forgetJob(call.id, in: id) }
         } else {
             // Still running: answer now, and keep whatever it gives later
             // except the answer to this call, which went already.
-            Task {
+            Task { [weak self] in
                 let late = await handled.value
-                guard self.callID == id else { return }
-                self.lateOutgoing += late.filter { !$0.answers(call.id) }
+                guard let self, self.callID == id else { return }
+                self.lateOutgoing += self.lateAnswers(late, to: call, in: id, isJob: isJob)
             }
             let result: [String: String] = isJob ? Self.jobAccepted : WatchToolAnswer.tookTooLong
             outgoing = [.toolResponse(id: call.id, name: call.name, result: result, scheduling: isJob ? nil : .whenIdle)]
@@ -936,6 +947,55 @@ final class WatchDirectBroker {
         fields.merge(Self.answerSummary(outgoing, answering: call.id)) { first, _ in first }
         link.log.note("watchDirectTool", fields)
         return result(outgoing, bridge: bridge)
+    }
+
+    /// What a call's answer brought after the call was answered without
+    /// it, minus that answer, which went already. A start_job Hermes then
+    /// refused was answered as accepted: the refusal follows as news, so
+    /// the model takes back what it said, and a repeat may be sent again
+    /// since nothing started (#1008).
+    private func lateAnswers(_ late: [GeminiLiveToolBridge.Outgoing], to call: WatchVoiceWire.DirectToolCall, in id: UInt32, isJob: Bool) -> [GeminiLiveToolBridge.Outgoing] {
+        let rest = late.filter { !$0.answers(call.id) }
+        guard isJob, let refusal = Self.jobRefusal(in: late, answering: call.id) else { return rest }
+        let definite = Self.refusedBeforeStarting(late, answering: call.id)
+        if definite { ledger.forgetJob(call.id, in: id) }
+        link.log.note("watchDirectLateJobRefusal", ["chars": refusal.count, "definite": definite, "appState": WatchVoiceLink.appStateName])
+        return [.textWhenIdle(Self.lateJobRefusalText(refusal, definite: definite))] + rest
+    }
+
+    /// The reason in a start_job's answer when the job didn't start; nil
+    /// when it did (its answer names the job) or nothing answered it.
+    static func jobRefusal(in outgoing: [GeminiLiveToolBridge.Outgoing], answering id: String) -> String? {
+        for case .toolResponse(let responseID, _, let result, _) in outgoing where responseID == id {
+            guard result["job_id"] == nil else { return nil }
+            // The phone left the call's connection before Hermes got the
+            // job: not Hermes' refusal, and the call is ending anyway.
+            if result["error"] == WatchVoiceStartFailure.connectionChanged { return nil }
+            if let error = result["error"], !error.isEmpty { return error }
+            guard let status = result["status"], status == "not_started" || status == "not_sent" else { return nil }
+            return result["message"] ?? "Hermes didn't take the job."
+        }
+        return nil
+    }
+
+    /// A start_job whose answer says Hermes never took it: its receipt
+    /// may go. Any other error might have come after Hermes took the
+    /// turn, so a repeat of it still isn't sent.
+    static func refusedBeforeStarting(_ outgoing: [GeminiLiveToolBridge.Outgoing], answering id: String) -> Bool {
+        for case .toolResponse(let responseID, _, let result, _) in outgoing where responseID == id {
+            return result["job_id"] == nil && (result["status"] == "not_started" || result["status"] == "not_sent")
+        }
+        return false
+    }
+
+    /// Written for the model, not shown.
+    /// `definite`: Hermes never took it; otherwise an error that may have
+    /// come after it did.
+    static func lateJobRefusalText(_ reason: String, definite: Bool = true) -> String {
+        guard definite else {
+            return GeminiLiveToolBridge.relayPrompt("Hermes didn't confirm the job you said it was starting: \(reason) It may not have started; the user can ask you to list their jobs. Don't start it again unless they ask.")
+        }
+        return GeminiLiveToolBridge.relayPrompt("The job you said Hermes was starting didn't start after all: \(reason) Don't start it again unless the user asks.")
     }
 
     private func rememberJobCall(_ task: Task<[GeminiLiveToolBridge.Outgoing], Never>, key: String) {
@@ -1046,19 +1106,27 @@ final class WatchDirectBroker {
         let late = bridge === self.bridge ? lateOutgoing : []
         if bridge === self.bridge { lateOutgoing = [] }
         let items = late + outgoing
+        let supervisor = appState.voiceBackgroundJobSupervisor
+        var newsJobs: [WatchVoiceWire.DirectNewsJob] = []
         for item in items {
             switch item {
             case .toolResponse(_, _, let result, _):
                 bridge.outcomeSent(jobID: GeminiLiveConversationController.jobID(of: result))
             case .textWhenIdle(let text):
-                bridge.textUpdateDelivered(jobID: bridge.textUpdateSending(text))
+                let jobID = bridge.textUpdateSending(text)
+                // The Watch lists a settled job until its model says it.
+                if let jobID, let job = supervisor.jobs.first(where: { $0.id == jobID }), !job.status.isActive {
+                    newsJobs.append(.init(text: text, jobID: jobID.uuidString, title: job.title, status: GeminiLiveToolBridge.statusName(job.status)))
+                }
+                bridge.textUpdateDelivered(jobID: jobID)
             case .contextWhenIdle, .endConversation:
                 break
             }
         }
         return WatchVoiceWire.DirectToolResult(
             outgoing: items.map { Self.wire($0) },
-            runningJobs: appState.voiceBackgroundJobSupervisor.activeJobCount
+            runningJobs: supervisor.activeJobCount,
+            newsJobs: newsJobs.isEmpty ? nil : newsJobs
         )
     }
 
@@ -1642,6 +1710,13 @@ struct WatchDirectCallLedger {
         store()
     }
 
+    /// Hermes refused the job: a repeat of its start may go again.
+    mutating func forgetJob(_ toolID: String, in id: UInt32) {
+        guard let index = calls.lastIndex(where: { $0.id == id }), let job = calls[index].jobs.firstIndex(of: toolID) else { return }
+        calls[index].jobs.remove(at: job)
+        store()
+    }
+
     private func store() {
         guard let data = try? JSONEncoder().encode(calls) else { return }
         defaults.set(data, forKey: Self.defaultsKey)
@@ -1698,6 +1773,7 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
     }
 
     func statusSummary() -> String { base.statusSummary() }
+    var listedJobs: [VoiceBackgroundJob] { base.listedJobs }
     func cancelAll() async -> String { await base.cancelAll() }
     func cancel(jobID: UUID) async -> String? { await base.cancel(jobID: jobID) }
     func markOutcomeDelivered(jobID: UUID) { base.markOutcomeDelivered(jobID: jobID) }
