@@ -111,10 +111,11 @@ final class ComposerAttachmentPolicyTests: XCTestCase {
 
     // MARK: - Pictures sent to Hermes (#1265)
 
-    private func pngData(width: Int, height: Int) throws -> Data {
+    private func pngData(width: Int, height: Int, alpha: Bool = false) throws -> Data {
         let context = try XCTUnwrap(CGContext(
             data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: (alpha ? CGImageAlphaInfo.premultipliedLast : .noneSkipLast).rawValue
         ))
         // Noise, so the PNG is large like a photo's.
         let pixels = try XCTUnwrap(context.data).bindMemory(to: UInt8.self, capacity: context.bytesPerRow * height)
@@ -141,6 +142,13 @@ final class ComposerAttachmentPolicyTests: XCTestCase {
         let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
         XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, 2048)
         XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 1536, "2600 x 1950 keeps its shape")
+    }
+
+    func testALargeTransparentPictureStaysAPNG() throws {
+        let data = try pngData(width: 2600, height: 1950, alpha: true)
+        let prepared = try XCTUnwrap(PictureUpload.resized(data, filename: "sticker.png"))
+        XCTAssertEqual(prepared.filename, "sticker.png", "A JPEG would fill in the transparency")
+        XCTAssertEqual(prepared.mimeType, "image/png")
     }
 
     func testAPictureAModelTakesGoesUnchanged() throws {

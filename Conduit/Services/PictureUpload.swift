@@ -6,8 +6,9 @@ import UniformTypeIdentifiers
 /// photo is 3 to 4 MB, about 5 MB as base64 in one socket frame, and on a
 /// slow link Hermes' own socket ping times out behind it and drops the
 /// connection. Models take about 2,000 px per picture at most, so a larger
-/// one goes as a JPEG of that size, a fraction of the bytes. A picture
-/// already that small, or an animated one, goes as it is.
+/// one goes as a JPEG of that size, a fraction of the bytes (a PNG when it
+/// has transparency, which a JPEG would fill in). A picture already that
+/// small, or an animated one, goes as it is.
 enum PictureUpload {
     static let maxPixelSize = 2048
     static let jpegQuality = 0.85
@@ -26,6 +27,7 @@ enum PictureUpload {
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               max(width, height) > maxPixelSize else { return nil }
+        let hasAlpha = properties[kCGImagePropertyHasAlpha] as? Bool ?? false
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             // Upright, so the EXIF orientation the JPEG drops is applied.
@@ -35,18 +37,19 @@ enum PictureUpload {
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         let output = NSMutableData()
+        let type: UTType = hasAlpha ? .png : .jpeg
         guard let destination = CGImageDestinationCreateWithData(
-            output, UTType.jpeg.identifier as CFString, 1, nil
+            output, type.identifier as CFString, 1, nil
         ) else { return nil }
-        CGImageDestinationAddImage(destination, image, [
+        CGImageDestinationAddImage(destination, image, hasAlpha ? nil : [
             kCGImageDestinationLossyCompressionQuality: jpegQuality
         ] as CFDictionary)
         guard CGImageDestinationFinalize(destination), output.length < data.count else { return nil }
         let stem = (filename as NSString).deletingPathExtension
         return Prepared(
             data: output as Data,
-            filename: (stem.isEmpty ? "image" : stem) + ".jpg",
-            mimeType: "image/jpeg"
+            filename: (stem.isEmpty ? "image" : stem) + (hasAlpha ? ".png" : ".jpg"),
+            mimeType: hasAlpha ? "image/png" : "image/jpeg"
         )
     }
 }
