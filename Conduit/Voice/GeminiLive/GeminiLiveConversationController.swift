@@ -486,6 +486,9 @@ final class GeminiLiveConversationController: ObservableObject {
         withdrawnCallIDs = []
         // Nothing from a previous attempt may gate or attach to this one.
         callEpoch &+= 1
+        // Stop then Start leaves `.connecting` again, so an older start's
+        // late availability or permission answer is told apart by epoch.
+        let epoch = callEpoch
         modelTurnActive = false
         suppressingModelTurn = false
         lastUserSpeechAt = nil
@@ -507,7 +510,7 @@ final class GeminiLiveConversationController: ObservableObject {
         }
         do {
             let status = try await availability()
-            guard phase == .connecting else { return }
+            guard isStarting(epoch) else { return }
             guard widgetAuthorization?.mayStartCapture != false else { phase = .idle; initialWidgetCaptureAuthorization = nil; return }
             guard status.isAvailable else {
                 initialWidgetCaptureAuthorization = nil
@@ -516,20 +519,20 @@ final class GeminiLiveConversationController: ObservableObject {
                 return
             }
         } catch {
-            guard phase == .connecting else { return }
+            guard isStarting(epoch) else { return }
             initialWidgetCaptureAuthorization = nil
             hostIssue = LiveVoiceHostIssue(error: error)
             phase = .failed(UserFacingError.message(for: error))
             return
         }
         guard await input.requestPermission() else {
-            guard phase == .connecting else { return }
+            guard isStarting(epoch) else { return }
             initialWidgetCaptureAuthorization = nil
             phase = .failed(VoiceAudioError.microphonePermissionDenied.localizedDescription)
             return
         }
-        guard phase == .connecting, widgetAuthorization?.mayStartCapture != false else {
-            if widgetAuthorization?.mayStartCapture == false { phase = .idle; initialWidgetCaptureAuthorization = nil }
+        guard isStarting(epoch), widgetAuthorization?.mayStartCapture != false else {
+            if isStarting(epoch), widgetAuthorization?.mayStartCapture == false { phase = .idle; initialWidgetCaptureAuthorization = nil }
             return
         }
         // A retry after a failed connection starts a new server session:
@@ -560,6 +563,12 @@ final class GeminiLiveConversationController: ObservableObject {
         input.onChunk = { [weak self] chunk in self?.microphoneChunk(chunk) }
         input.onInterrupted = { [weak self] in self?.captureInterrupted() }
         session.start()
+    }
+
+    /// The start that bumped `callEpoch` to `epoch` is still the one under
+    /// way: nobody stopped it, and no newer start replaced it.
+    private func isStarting(_ epoch: Int) -> Bool {
+        phase == .connecting && callEpoch == epoch
     }
 
     func installInitialWidgetCaptureAuthorization(_ authorization: WidgetInitialCaptureAuthorization?) {
