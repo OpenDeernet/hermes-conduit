@@ -1276,11 +1276,13 @@ the socket's keepalive and the foreground connection check
 
 **Code**
 - The send: `Conduit/Services/AppState.swift` (sendMessage: image.attach_bytes, file.attach when Hermes refuses the image, file.attach for every other file)
+- Resizing a picture: `Conduit/Services/PictureUpload.swift`, `Conduit/Services/AppState.swift` (AttachmentHelper.pictureForHermes)
 - Budgets and the socket: `Conduit/Services/HermesClient.swift` (uploadTimeout, attachImage, attachFile, requestsBeingWritten, keepaliveQuietTimeLeft, healthCheck)
 - Group rooms: `Conduit/Services/GroupRoomFiles.swift` (timeoutMilliseconds)
-- Tests: `ConduitTests/HermesClientTests.swift`
+- Tests: `ConduitTests/HermesClientTests.swift`, `ConduitTests/ComposerAttachmentPolicyTests.swift`
 
 **Rulings**
+- A picture sent as an image whose long edge is over 2048 px goes as a 2048 px JPEG (quality 0.85), upright, with a .jpg name; one that size or smaller, an animated one, or one the JPEG wouldn't make smaller goes as it is. The chat shows the picture as picked. Files sent as files are never changed (Eric, 2026-10-25, #1268, for #1265: a full-size photo on a slow link outlasted Hermes' own socket ping and dropped the connection).
 - An upload's budget is at least two minutes, plus about 1 s for every 64 KB it carries (about 0.5 Mbit/s), for a picture and a file alike; a group room's upload allows the same rate, with its own three-minute floor (2026-10-25, #1265 report: 3 to 4 MB photos failed now and then under the 30 s every request had).
 - While a frame of 256 KB or more is still being written, the keepalive doesn't ping and the foreground check doesn't either: a ping queued behind it can't be answered in time and would drop a working socket. The request's own budget answers for the socket, and once it ends the pings come back (2026-10-25, #1265 report).
 
