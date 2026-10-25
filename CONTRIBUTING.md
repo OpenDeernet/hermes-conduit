@@ -20,7 +20,8 @@ current.
    left open for the maintainer to decide. "No mapped feature" is only for a
    change with no siblings. A refactor that changes no behavior and no text a
    person or model reads (moving code, or changing how state is stored or
-   observed) has none, and needs no new or updated entry.
+   observed) has none and needs no new entry; if it moves code an entry's
+   Code lists, it updates those paths and that entry's Checked line.
 4. Update the entry in the same PR: its siblings, code paths, rulings, the gaps
    opened or closed, and the Checked line, which names this PR (CI fails an
    entry the PR adds or edits whose Checked line doesn't; on a PR into

@@ -200,8 +200,10 @@ jobs:
               with an earlier change it missed without adding that sibling to
               the entry. A refactor that changes no behavior and no text a
               person or model reads (moving code, or changing how state is
-              stored or observed) has no siblings, and needs no new or updated
-              entry: don't ask it for one.
+              stored or observed) has no siblings and needs no new entry:
+              don't ask it for one, and don't flag it for leaving an entry
+              untouched. If it moves code an entry's Code lists, that entry's
+              paths and Checked line still need updating.
 
             If you find no issues, say so explicitly. Do NOT summarize what you did
             or describe your process. Output only the review.
