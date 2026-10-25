@@ -44,6 +44,22 @@ private final class FakeChatScrollSurface: ChatScrollSurface {
     }
 }
 
+/// A card drawn in a web page (HTMLPreviewBlock, MarkupBlock) as the engine
+/// sees it: what taking its measured height would change, and whether it has.
+@MainActor
+private final class FakeMeasuredCard: ChatScrollMeasuredCard {
+    var pendingGrowth: ChatScrollCardGrowth
+    var heightsTaken = 0
+
+    init(delta: CGFloat, minY: CGFloat) {
+        pendingGrowth = ChatScrollCardGrowth(delta: delta, minY: minY)
+    }
+
+    func takeMeasuredHeight() {
+        heightsTaken += 1
+    }
+}
+
 @MainActor
 final class ChatScrollEngineTests: XCTestCase {
     private var clock: TimeInterval = 100
@@ -1207,6 +1223,196 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertNil(engine.restoration)
         XCTAssertEqual(engine.mode, .browsing)
         XCTAssertTrue(events.contains(.cancelAutomaticRestoration))
+    }
+
+    // MARK: - Cards taking their measured height (#1238)
+
+    /// A reader browsing at 2000: the viewport covers stack 1982...2782.
+    private func browsingReader() -> (ChatScrollEngine, FakeChatScrollSurface) {
+        let (engine, surface) = makeEngine()
+        surface.userScroll(to: 2000)
+        XCTAssertEqual(engine.mode, .browsing)
+        surface.sets = []
+        return (engine, surface)
+    }
+
+    private func runScheduled() {
+        let blocks = scheduled
+        scheduled = []
+        blocks.forEach { $0() }
+    }
+
+    func testACardAboveTheReaderTakesItsHeightWithoutMovingThem() {
+        let (engine, surface) = browsingReader()
+        let card = FakeMeasuredCard(delta: 227, minY: 1000)
+        engine.cardMeasured(card)
+        XCTAssertEqual(card.heightsTaken, 1, "at rest the card takes its height at once")
+        XCTAssertEqual(surface.contentOffsetY, 2000, "the offset moves in the layout pass, not before it")
+
+        surface.layOut(contentHeight: 4227)
+        XCTAssertEqual(surface.contentOffsetY, 2227, "the pass that lands the growth moves the reader by it")
+        XCTAssertEqual(surface.sets.map { $0.animated }, [false])
+        XCTAssertEqual(engine.mode, .browsing)
+        XCTAssertNil(engine.cardShift)
+    }
+
+    func testACardOnScreenGrowsBelowWhatTheReaderLooksAt() {
+        let (engine, surface) = browsingReader()
+        let card = FakeMeasuredCard(delta: 227, minY: 2100)
+        engine.cardMeasured(card)
+        XCTAssertEqual(card.heightsTaken, 1)
+        surface.layOut(contentHeight: 4227)
+        XCTAssertEqual(surface.contentOffsetY, 2000)
+        XCTAssertTrue(surface.sets.isEmpty)
+    }
+
+    func testACardShrinkingAboveTheReaderMovesThemUpButNotPastTheTop() {
+        let (engine, surface) = makeEngine()
+        surface.userScroll(to: 100)
+        engine.cardMeasured(FakeMeasuredCard(delta: -227, minY: 10))
+        surface.layOut(contentHeight: 3773)
+        XCTAssertEqual(surface.contentOffsetY, 0, "clamped at the top")
+    }
+
+    func testCardsMeasuredDuringAFlingWaitForItToRest() {
+        let (engine, surface) = browsingReader()
+        surface.isDecelerating = true
+        surface.contentOffsetY = 1900
+        engine.surfaceScrolled()
+        let above = FakeMeasuredCard(delta: 227, minY: 1000)
+        let below = FakeMeasuredCard(delta: 100, minY: 3000)
+        engine.cardMeasured(above)
+        engine.cardMeasured(below)
+        XCTAssertEqual(above.heightsTaken + below.heightsTaken, 0, "no height changes under a fling")
+
+        // The check after a tick finds the fling still running.
+        runScheduled()
+        XCTAssertEqual(above.heightsTaken, 0)
+
+        // The last tick can still report the deceleration; the check after
+        // it finds the rest.
+        surface.contentOffsetY = 1800
+        engine.surfaceScrolled()
+        XCTAssertFalse(scheduled.isEmpty)
+        surface.isDecelerating = false
+        runScheduled()
+        XCTAssertEqual(above.heightsTaken, 1)
+        XCTAssertEqual(below.heightsTaken, 1)
+
+        surface.layOut(contentHeight: 4327)
+        XCTAssertEqual(surface.contentOffsetY, 2027, "moved by the card above the reader only")
+    }
+
+    func testACardMeasuredUnderAFingerWaitsForTheLift() {
+        let (engine, surface) = browsingReader()
+        surface.isTracking = true
+        engine.userDragBegan()
+        let card = FakeMeasuredCard(delta: 227, minY: 1000)
+        engine.cardMeasured(card)
+        XCTAssertEqual(card.heightsTaken, 0)
+        surface.contentOffsetY = 1950
+        engine.surfaceScrolled()
+        surface.isTracking = false
+        engine.userDragEnded()
+        XCTAssertEqual(card.heightsTaken, 0, "not inside the gesture callback")
+        runScheduled()
+        XCTAssertEqual(card.heightsTaken, 1)
+
+        surface.layOut(contentHeight: 4227)
+        XCTAssertEqual(surface.contentOffsetY, 2177)
+    }
+
+    func testFollowingTakesACardsHeightAtOnceAndPinsAsBefore() {
+        let (engine, surface) = makeEngine()
+        XCTAssertTrue(engine.isFollowingLatest)
+        let card = FakeMeasuredCard(delta: 300, minY: 100)
+        engine.cardMeasured(card)
+        XCTAssertEqual(card.heightsTaken, 1)
+        XCTAssertNil(engine.cardShift)
+        surface.layOut(contentHeight: 4300)
+        XCTAssertEqual(surface.contentOffsetY, 3500, "the pin, with nothing added to it")
+    }
+
+    func testADragDropsAnAnnouncedGrowth() {
+        let (engine, surface) = browsingReader()
+        engine.cardMeasured(FakeMeasuredCard(delta: 227, minY: 1000))
+        surface.userScroll(to: 1500)
+        surface.sets = []
+        surface.layOut(contentHeight: 4227)
+        XCTAssertEqual(surface.contentOffsetY, 1500, "the reader took over")
+        XCTAssertTrue(surface.sets.isEmpty)
+    }
+
+    func testAnAnnouncedGrowthWaitsForTheLayoutThatLandsIt() {
+        let (engine, surface) = browsingReader()
+        engine.cardMeasured(FakeMeasuredCard(delta: 227, minY: 1000))
+        // An inset change re-lays out before the growth lands.
+        surface.layOut(contentHeight: 4000)
+        XCTAssertEqual(surface.contentOffsetY, 2000)
+        XCTAssertNotNil(engine.cardShift)
+        surface.layOut(contentHeight: 4227)
+        XCTAssertEqual(surface.contentOffsetY, 2227)
+    }
+
+    func testAnAnnouncedGrowthThatNeverLandsIsDropped() {
+        let (engine, surface) = browsingReader()
+        engine.cardMeasured(FakeMeasuredCard(delta: 227, minY: 1000))
+        clock += ChatScrollEngine.cardGrowthDeadline + 0.1
+        surface.layOut(contentHeight: 4227)
+        XCTAssertEqual(surface.contentOffsetY, 2000)
+        XCTAssertNil(engine.cardShift)
+    }
+
+    func testTwoCardsAboveTheReaderAddUp() {
+        let (engine, surface) = browsingReader()
+        engine.cardMeasured(FakeMeasuredCard(delta: 227, minY: 1000))
+        engine.cardMeasured(FakeMeasuredCard(delta: 381, minY: 1500))
+        surface.layOut(contentHeight: 4608)
+        XCTAssertEqual(surface.contentOffsetY, 2608)
+    }
+
+    func testACardGoneBeforeTheFlingRestsIsSkipped() {
+        let (engine, surface) = browsingReader()
+        surface.isDecelerating = true
+        surface.contentOffsetY = 1900
+        engine.surfaceScrolled()
+        var card: FakeMeasuredCard? = FakeMeasuredCard(delta: 227, minY: 1000)
+        engine.cardMeasured(card!)
+        // Its row left the lazy stack.
+        card = nil
+        surface.isDecelerating = false
+        runScheduled()
+        surface.layOut(contentHeight: 4227)
+        XCTAssertEqual(surface.contentOffsetY, 1900, "nothing announced for a card that is gone")
+    }
+
+    func testASessionSwitchForgetsTheWaitingCards() {
+        let (engine, surface) = browsingReader()
+        surface.isDecelerating = true
+        surface.contentOffsetY = 1900
+        engine.surfaceScrolled()
+        let card = FakeMeasuredCard(delta: 227, minY: 1000)
+        engine.cardMeasured(card)
+        surface.isDecelerating = false
+        engine.renderedSessionChanged(
+            to: keyB,
+            identity: identity("b"),
+            viaNotification: false,
+            viewportTransitionGeneration: 2
+        )
+        runScheduled()
+        XCTAssertEqual(card.heightsTaken, 0)
+    }
+
+    func testAPausedEngineLetsACardTakeItsHeightAtOnce() {
+        let (engine, surface) = browsingReader()
+        engine.setPaused(true)
+        let card = FakeMeasuredCard(delta: 227, minY: 1000)
+        engine.cardMeasured(card)
+        XCTAssertEqual(card.heightsTaken, 1)
+        engine.setPaused(false)
+        surface.layOut(contentHeight: 4227)
+        XCTAssertEqual(surface.contentOffsetY, 2000, "the background leaves the offset alone")
     }
 
     // MARK: - Background

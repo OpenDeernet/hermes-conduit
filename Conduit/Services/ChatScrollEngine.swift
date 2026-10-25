@@ -43,6 +43,23 @@ struct ChatScrollRowFrame: Equatable {
     let order: Int
 }
 
+/// A card drawn in a web page (an HTML preview, a diagram, a formula) whose
+/// page has reported its height, waiting for the engine to let it take it
+/// (`ChatScrollEngine.cardMeasured`).
+@MainActor
+protocol ChatScrollMeasuredCard: AnyObject {
+    /// What taking the height changes: the room the card gains (negative
+    /// when it shrinks) and its top in the transcript stack's space.
+    var pendingGrowth: ChatScrollCardGrowth { get }
+    /// The state write that resizes the card.
+    func takeMeasuredHeight()
+}
+
+struct ChatScrollCardGrowth: Equatable {
+    let delta: CGFloat
+    let minY: CGFloat
+}
+
 /// What the engine asks its view to do. Everything else (following, prepend
 /// anchoring, restoration placement) the engine does directly on the surface.
 enum ChatScrollEngineEvent: Equatable {
@@ -100,8 +117,11 @@ final class ChatScrollChrome: ObservableObject {
 ///    overshoot or snap.
 /// 2. Browsing: the offset is left alone. UIKit keeps the distance from the
 ///    top, so messages arriving below never move what the user is reading.
-///    The one change above the reader, a "Load earlier messages" prepend,
-///    keeps the distance from the bottom instead.
+///    Two changes above the reader are made good in the layout pass that
+///    lands them: a "Load earlier messages" prepend keeps the distance from
+///    the bottom, and a card taking the height its page measured (an HTML
+///    preview, a diagram) moves the offset by what it grew (#1238). A card
+///    measured while the reader scrolls waits for the scrolling to rest.
 /// 3. Only the user leaves following (a drag, or opening or closing a row
 ///    such as Thinking or a tool card), and only being near the bottom (or
 ///    an explicit command) returns to it.
@@ -156,6 +176,20 @@ final class ChatScrollEngine: ObservableObject {
         var settledAt: TimeInterval?
     }
 
+    /// What the cards above the viewport are about to grow by, owed to the
+    /// reader in the layout pass that lands it (`cardMeasured`).
+    struct CardShift: Equatable {
+        var delta: CGFloat
+        /// The content height when the first card announced; the pass that
+        /// lands the growth is the one that changes it by at least `delta`.
+        let contentHeight: CGFloat
+        let announcedAt: TimeInterval
+    }
+
+    private struct MeasuredCard {
+        weak var card: ChatScrollMeasuredCard?
+    }
+
     static let nearBottomTolerance: CGFloat = 40
     static let maximumRestorationChecks = 80
     static let restorationRevealInterval = 4
@@ -179,6 +213,13 @@ final class ChatScrollEngine: ObservableObject {
     /// How long after the settled transcript changes the engine checks
     /// that rows were laid out where the reader is (#887).
     static let blankViewportCheckDelay: TimeInterval = 0.35
+    /// How long after its last scroll tick a fling counts as at rest, when
+    /// the cards measured during it take their heights (#1238). UIKit can
+    /// still report the deceleration on the tick that ends it.
+    static let scrollRestDelay: TimeInterval = 0.1
+    /// How long a card's announced growth waits for the layout pass that
+    /// lands it before it is dropped.
+    static let cardGrowthDeadline: TimeInterval = 1
     static let coordinateSpaceName = "chat-transcript-stack"
 
     var onEvent: (@MainActor (ChatScrollEngineEvent) -> Void)?
@@ -218,6 +259,11 @@ final class ChatScrollEngine: ObservableObject {
     /// Bumped by every settled transcript change, so only the latest blank
     /// viewport check acts.
     private var blankViewportCheckGeneration: UInt64 = 0
+    /// Cards measured while the reader was scrolling, taking their heights
+    /// once it rests. Weak: a card whose row left the lazy stack is gone.
+    private var measuredCards: [MeasuredCard] = []
+    private var restCheckGeneration: UInt64 = 0
+    private(set) var cardShift: CardShift?
     /// Whether rows that report no frame (the running turn's live rows, a
     /// send waiting on screen) sit below the latest row.
     var liveTailShowing: @MainActor () -> Bool = { false }
@@ -318,6 +364,7 @@ final class ChatScrollEngine: ObservableObject {
         surfaceCallbackDepth += 1
         defer { surfaceCallbackDepth -= 1 }
         guard let surface, !isPaused else { return }
+        takeCardShift(on: surface)
         holdPrependAnchor(on: surface)
         relatchIfPastTheBottom(surface)
         if canPinWhileFollowing(surface) {
@@ -332,6 +379,9 @@ final class ChatScrollEngine: ObservableObject {
         surfaceCallbackDepth += 1
         defer { surfaceCallbackDepth -= 1 }
         guard let surface, !isPaused else { return }
+        if !measuredCards.isEmpty, isUserScrolling {
+            scheduleRestCheck()
+        }
         // SwiftUI's ScrollView can write its own offset back after the pass
         // that held a prepend; within the hold window that is not the
         // reader's doing, so the hold is reapplied (a no-op once it sticks).
@@ -406,6 +456,9 @@ final class ChatScrollEngine: ObservableObject {
         surfaceLayoutChanged()
         surfaceScrolled()
         landAtReplyStartIfPending()
+        if !measuredCards.isEmpty {
+            scheduleRestCheck()
+        }
     }
 
     // MARK: - User drag
@@ -418,6 +471,8 @@ final class ChatScrollEngine: ObservableObject {
         cancelDisclosureSettle()
         latestAnimationUntil = nil
         prependAnchor = nil
+        // A finger owns the offset; a growth landing under it is theirs.
+        cardShift = nil
         restoration = nil
         replyStartLandingPending = false
         landedAtReplyStart = false
@@ -442,6 +497,9 @@ final class ChatScrollEngine: ObservableObject {
         // A fling saves once it comes to rest (`isUserScrolling`).
         if surface?.isDecelerating != true {
             emit(.flushPersistence)
+        }
+        if !measuredCards.isEmpty {
+            scheduleRestCheck()
         }
     }
 
@@ -495,6 +553,91 @@ final class ChatScrollEngine: ObservableObject {
         emit(.persistSnapshot(renderedSessionKey))
     }
 
+    // MARK: - Cards taking their measured height
+
+    /// A card drawn in a web page (an HTML preview, a diagram, a formula)
+    /// mounts at the room it reserves and its page reports its real height
+    /// a moment later (#1238). Taking it moves everything under the card,
+    /// and when the card is above the viewport, the reader with it: UIKit
+    /// keeps the distance from the top. So the card asks here first. While
+    /// the reader scrolls it waits: an offset write would stop a fling, and
+    /// a finger owns the offset. At rest, a card above the viewport
+    /// announces its growth, which the layout pass that lands it adds to the
+    /// offset (`takeCardShift`), the way following keeps the bottom. A card
+    /// on screen grows below what the reader looks at, and following and a
+    /// prepend hold already keep the reader still: those take their heights
+    /// without an announcement.
+    func cardMeasured(_ card: ChatScrollMeasuredCard) {
+        guard let surface, !isPaused else {
+            card.takeMeasuredHeight()
+            return
+        }
+        if isUserScrolling {
+            measuredCards.append(MeasuredCard(card: card))
+            scheduleRestCheck()
+            return
+        }
+        takeMeasuredHeight(of: card, on: surface)
+    }
+
+    private func takeMeasuredHeight(of card: ChatScrollMeasuredCard, on surface: ChatScrollSurface) {
+        let growth = card.pendingGrowth
+        if mode == .browsing, prependAnchor == nil, abs(growth.delta) > 0.5,
+           growth.minY < visibleStackRange(of: surface).lowerBound {
+            cardShift = CardShift(
+                delta: (cardShift?.delta ?? 0) + growth.delta,
+                contentHeight: cardShift?.contentHeight ?? surface.contentHeight,
+                announcedAt: now()
+            )
+        }
+        card.takeMeasuredHeight()
+    }
+
+    /// Runs `scrollRestDelay` after the last scroll tick or lift, once a
+    /// fling's last tick, which can still report the deceleration, is over.
+    /// Outside any UIKit callback, so the cards' state writes are too.
+    private func scheduleRestCheck() {
+        restCheckGeneration &+= 1
+        let generation = restCheckGeneration
+        schedule(Self.scrollRestDelay) { [weak self] in
+            guard let self, generation == self.restCheckGeneration else { return }
+            self.takeMeasuredHeightsIfResting()
+        }
+    }
+
+    private func takeMeasuredHeightsIfResting() {
+        // A finger still down: its lift schedules the next check.
+        guard !measuredCards.isEmpty, !isUserScrolling, !isPaused, let surface else { return }
+        let cards = measuredCards
+        measuredCards = []
+        for card in cards.compactMap({ $0.card }) {
+            takeMeasuredHeight(of: card, on: surface)
+        }
+    }
+
+    /// The layout pass that lands an announced growth moves the offset by
+    /// it, inside the pass, so nothing is drawn in between. Another pass
+    /// first (an inset change) leaves it waiting; a reader who moves, or a
+    /// growth that never lands, drops it.
+    private func takeCardShift(on surface: ChatScrollSurface) {
+        guard let shift = cardShift else { return }
+        if mode != .browsing || now() - shift.announcedAt > Self.cardGrowthDeadline {
+            cardShift = nil
+            return
+        }
+        let grown = surface.contentHeight - shift.contentHeight
+        guard shift.delta > 0 ? grown >= shift.delta - 1 : grown <= shift.delta + 1 else { return }
+        cardShift = nil
+        guard !surface.isTracking, !surface.isDecelerating else { return }
+        let target = surface.clampedOffsetY(surface.contentOffsetY + shift.delta)
+        guard abs(target - surface.contentOffsetY) > 0.5 else { return }
+        ChatViewportTrace.shared.log(String(
+            format: "card growth %.1f above the reader: offset %.1f -> %.1f",
+            shift.delta, surface.contentOffsetY, target
+        ))
+        surface.setContentOffsetY(target, animated: false)
+    }
+
     // MARK: - Session identity
 
     /// A different conversation is rendered (session or profile change,
@@ -532,6 +675,8 @@ final class ChatScrollEngine: ObservableObject {
         blankViewportCheckGeneration &+= 1
         topVisibleMessageID = nil
         rowFrames = [:]
+        measuredCards = []
+        cardShift = nil
         // The new conversation's first transcript names its latest user
         // message without arming; an open with an unread reply asks for its
         // landing after this.
@@ -906,6 +1051,8 @@ final class ChatScrollEngine: ObservableObject {
         isDragging = false
         prependAnchor = nil
         latestAnimationUntil = nil
+        measuredCards = []
+        cardShift = nil
         // A landing belongs to the open that asked for it. The hold stays
         // armed: the reply may still be running when the chat is back.
         replyStartLandingPending = false

@@ -15,6 +15,7 @@
 //  bound how many pages mount.
 //
 
+import CryptoKit
 import SwiftUI
 import UIKit
 import WebKit
@@ -45,6 +46,11 @@ struct MarkupBlock: View {
     @Environment(\.markupDrawsInPlace) private var drawsInPlace
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.chatTextSize) private var chatTextSize
+    /// The chat's scroll engine, which says when the card takes its height.
+    @Environment(\.chatRowDisclosure) private var disclosure
+    /// The room the card holds and the height it has taken (#1238).
+    @StateObject private var cardHeight = ChatCardHeight()
+    /// A page's failure, when it reported one or never reported.
     @State private var report: MarkupDrawReport?
     /// Bumped by Try again, which rebuilds the page.
     @State private var attempt = 0
@@ -100,6 +106,9 @@ struct MarkupBlock: View {
         .task(id: MarkupDrawTask(key: key, draws: draws)) {
             await offerRetryIfStillDrawing()
         }
+        // Another page (the theme or text size changed, Try again) draws in
+        // the same room and shows once it reports.
+        .onChange(of: key) { cardHeight.pageReplaced() }
     }
 
     private var title: String { kind == .mermaid ? "Mermaid" : "LaTeX" }
@@ -134,9 +143,9 @@ struct MarkupBlock: View {
         }
     }
 
+    /// The current page's height, once it has reported and taken it.
     private var drawnHeight: CGFloat? {
-        if case .drawn(let height) = outcome { return height }
-        return nil
+        cardHeight.isDrawn(key) ? cardHeight.taken : nil
     }
 
     private var hasFailed: Bool {
@@ -154,7 +163,13 @@ struct MarkupBlock: View {
         }
         .id(attempt)
         .frame(maxWidth: .infinity)
-        .frame(height: drawnHeight ?? MarkupHeights.height(for: document) ?? Self.placeholderHeight(for: kind))
+        // The room the page draws in, held from the card's first frame and
+        // through a redraw; it changes only when the page has measured
+        // itself and the scroll engine lets the card take the height.
+        .frame(height: cardHeight.frameHeight(
+            reserving: TranscriptPictureMemory.height(for: Self.heightKey(for: document)) ?? Self.placeholderHeight(for: kind)
+        ))
+        .cardStackPosition(cardHeight)
         .opacity(drawnHeight == nil ? 0 : 1)
         .overlay {
             if drawnHeight == nil {
@@ -212,9 +227,10 @@ struct MarkupBlock: View {
         case .height(let height):
             // A page measured before it had a width reports nothing useful.
             guard height >= 1 else { return }
-            MarkupHeights.store(height, for: key.document)
-            let next = MarkupDrawReport(key: key, outcome: .drawn(height: height))
-            if report != next { report = next }
+            TranscriptPictureMemory.rememberHeight(height, for: Self.heightKey(for: key.document))
+            // A page already replaced reports to nobody.
+            guard key == self.key else { return }
+            cardHeight.pageMeasured(height, page: key, engine: disclosure?.engine)
         case .failed(let detail):
             report = MarkupDrawReport(key: key, outcome: .failed(detail))
         }
@@ -223,11 +239,20 @@ struct MarkupBlock: View {
     /// A page that never reports (the renderer didn't download, WebKit
     /// stalled) turns into the failure card instead of spinning forever.
     private func offerRetryIfStillDrawing() async {
-        guard draws, outcome == nil else { return }
+        guard draws, outcome == nil, drawnHeight == nil else { return }
         let key = self.key
         try? await Task.sleep(for: Self.drawTimeout)
-        guard !Task.isCancelled, report?.key != key else { return }
+        guard !Task.isCancelled, report?.key != key, !cardHeight.hasMeasured(key) else { return }
         report = MarkupDrawReport(key: key, outcome: .failed(nil))
+    }
+
+    /// Where a page's height is kept across launches: by what decides it,
+    /// the kind, the text size (formulas) and the source, never the theme.
+    /// A digest, so the memo holds no sources.
+    static func heightKey(for document: MarkupDocument) -> String {
+        let kind = document.kind == .mermaid ? "mermaid" : "math"
+        let digest = SHA256.hash(data: Data("\(kind)\u{1f}\(document.fontSize)\u{1f}\(document.source)".utf8))
+        return "markup|" + digest.prefix(12).map { String(format: "%02x", $0) }.joined()
     }
 }
 
@@ -254,43 +279,16 @@ extension EnvironmentValues {
     }
 }
 
-/// What a block's page last reported, and for which page.
+/// A block's page failing, and which page: its heights go through
+/// ChatCardHeight instead.
 struct MarkupDrawReport: Equatable {
     enum Outcome: Equatable {
-        case drawn(height: CGFloat)
         /// The renderer's own message, when it gave one.
         case failed(String?)
     }
 
     let key: MarkupDrawKey
     let outcome: Outcome
-}
-
-/// Measured heights by document. The chat list rebuilds a row it scrolls
-/// back to, and its diagram reserves its real height instead of growing
-/// from the placeholder while it redraws. Keyed by the document's hash so
-/// the cache holds no sources; a collision only misplaces a placeholder,
-/// which the page's own report corrects.
-@MainActor
-enum MarkupHeights {
-    private static var heights: [Int: CGFloat] = [:]
-    private static let limit = 256
-
-    static func height(for document: MarkupDocument) -> CGFloat? {
-        heights[document.hashValue]
-    }
-
-    static func store(_ height: CGFloat, for document: MarkupDocument) {
-        let key = document.hashValue
-        if heights[key] == nil, heights.count >= limit {
-            // Drop half rather than all, so a long session doesn't lose
-            // every height at once.
-            for stale in Array(heights.keys.prefix(limit / 2)) {
-                heights[stale] = nil
-            }
-        }
-        heights[key] = height
-    }
 }
 
 /// The page a block draws in. It takes no touches: the chat scrolls over it

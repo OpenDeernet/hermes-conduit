@@ -354,34 +354,69 @@ extension MessageNormalizerTests {
             TranscriptPictureMemory.forgetAll(sizesFile: elsewhere)
             try? FileManager.default.removeItem(at: file)
         }
-        TranscriptPictureMemory.writeSizes(["kept": CGSize(width: 10, height: 20), "both": CGSize(width: 1, height: 1)], to: file)
+        TranscriptPictureMemory.writeKept(
+            TranscriptKeptSizes(
+                sizes: ["kept": CGSize(width: 10, height: 20), "both": CGSize(width: 1, height: 1)],
+                heights: ["preview|kept": 507, "markup|both": 180]
+            ),
+            to: file
+        )
 
         // Remembered before the read: this launch's size wins.
         TranscriptPictureMemory.rememberSize(CGSize(width: 5, height: 5), for: "both", savingTo: nil)
+        TranscriptPictureMemory.rememberHeight(240, for: "markup|both", savingTo: nil)
         async let first: Void = TranscriptPictureMemory.loadKeptSizes(from: file)
         async let second: Void = TranscriptPictureMemory.loadKeptSizes(from: file)
         _ = await (first, second)
 
         XCTAssertEqual(TranscriptPictureMemory.size(for: "kept"), CGSize(width: 10, height: 20))
         XCTAssertEqual(TranscriptPictureMemory.size(for: "both"), CGSize(width: 5, height: 5))
+        XCTAssertEqual(TranscriptPictureMemory.height(for: "preview|kept"), 507)
+        XCTAssertEqual(TranscriptPictureMemory.height(for: "markup|both"), 240)
 
         // A sign-out forgets the read too.
         TranscriptPictureMemory.forgetAll(sizesFile: elsewhere)
         XCTAssertNil(TranscriptPictureMemory.size(for: "kept"))
+        XCTAssertNil(TranscriptPictureMemory.height(for: "preview|kept"))
     }
 
-    func testPictureSizesAreKeptOnThePhoneAcrossLaunches() throws {
+    func testPictureSizesAndCardHeightsAreKeptOnThePhoneAcrossLaunches() throws {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("TranscriptImageSizes-\(UUID().uuidString).plist")
         defer { try? FileManager.default.removeItem(at: file) }
-        XCTAssertEqual(TranscriptPictureMemory.readSizes(from: file), [:])
+        XCTAssertEqual(TranscriptPictureMemory.readKept(from: file), TranscriptKeptSizes())
 
-        TranscriptPictureMemory.writeSizes(["path|d1|default|/a.png": CGSize(width: 1200, height: 800)], to: file)
-        XCTAssertEqual(TranscriptPictureMemory.readSizes(from: file), ["path|d1|default|/a.png": CGSize(width: 1200, height: 800)])
+        let kept = TranscriptKeptSizes(
+            sizes: ["path|d1|default|/a.png": CGSize(width: 1200, height: 800)],
+            heights: ["preview|path|d1|default|/chart.html": 507]
+        )
+        TranscriptPictureMemory.writeKept(kept, to: file)
+        XCTAssertEqual(TranscriptPictureMemory.readKept(from: file), kept)
 
-        // A damaged file reads as no sizes.
+        // A damaged file reads as nothing.
         try Data("not a plist".utf8).write(to: file)
-        XCTAssertEqual(TranscriptPictureMemory.readSizes(from: file), [:])
+        XCTAssertEqual(TranscriptPictureMemory.readKept(from: file), TranscriptKeptSizes())
+    }
+
+    @MainActor
+    func testACardsHeightIsRememberedSoItsRowReservesItNextTime() {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TranscriptImageSizes-\(UUID().uuidString).plist")
+        TranscriptPictureMemory.forgetAll(sizesFile: file)
+        defer { TranscriptPictureMemory.forgetAll(sizesFile: file) }
+
+        XCTAssertNil(TranscriptPictureMemory.height(for: "preview|a"))
+        TranscriptPictureMemory.rememberHeight(507, for: "preview|a", savingTo: nil)
+        XCTAssertEqual(TranscriptPictureMemory.height(for: "preview|a"), 507)
+        // The page measured again: the new height replaces the old.
+        TranscriptPictureMemory.rememberHeight(661, for: "preview|a", savingTo: nil)
+        XCTAssertEqual(TranscriptPictureMemory.height(for: "preview|a"), 661)
+
+        // A height of nothing is never kept; a sign-out forgets them all.
+        TranscriptPictureMemory.rememberHeight(0, for: "markup|b", savingTo: nil)
+        XCTAssertNil(TranscriptPictureMemory.height(for: "markup|b"))
+        TranscriptPictureMemory.forgetAll(sizesFile: file)
+        XCTAssertNil(TranscriptPictureMemory.height(for: "preview|a"))
     }
 
     func testAPictureFromAReplyIsKeptFromItsDecodedBytes() throws {

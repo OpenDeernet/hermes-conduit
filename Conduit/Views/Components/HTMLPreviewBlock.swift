@@ -120,8 +120,16 @@ struct HTMLPreviewBlock<Fallback: View>: View {
 
     @Environment(\.markupDrawsInPlace) private var drawsInPlace
     @Environment(\.colorScheme) private var colorScheme
+    /// Scopes where the page's height is kept across launches; nil (a
+    /// surface that sets no resolver) keeps it by path alone.
+    @Environment(\.gatewayMediaFiles) private var gatewayMediaFiles
+    /// The chat's scroll engine, which says when the card takes its height.
+    @Environment(\.chatRowDisclosure) private var disclosure
     @State private var state: LoadState = .loading
-    @State private var measuredHeight: CGFloat?
+    /// The room the card holds and the height it has taken (#1238).
+    @StateObject private var cardHeight = ChatCardHeight()
+    /// Counts the file's loads; each page reports under its own number.
+    @State private var load = 0
     @State private var showsFullScreen = false
     /// The page the sheet shows, kept apart from `state` so a reload
     /// underneath doesn't blank an open sheet.
@@ -138,9 +146,16 @@ struct HTMLPreviewBlock<Fallback: View>: View {
     static var drawTimeout: Duration { .seconds(20) }
 
     private var draws: Bool { isComplete && drawsInPlace }
+    private var isDrawn: Bool { cardHeight.isDrawn(load) }
     private var isMeasuring: Bool {
-        if case .loaded = state { return measuredHeight == nil }
+        if case .loaded = state { return !isDrawn }
         return false
+    }
+    /// Where the page's height is kept across launches: by the file on the
+    /// connected Hermes, so another server's same-named file never lends
+    /// its height.
+    private var heightKey: String {
+        "preview|" + (gatewayMediaFiles?.imageCacheKey(forMediaPath: path) ?? path)
     }
     private var name: String {
         path.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
@@ -164,17 +179,27 @@ struct HTMLPreviewBlock<Fallback: View>: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            if case .loaded(let html) = state {
-                page(html)
-            } else {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Loading preview…")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            // The page's room, held from the card's first frame: the file
+            // loading, the page drawing and a reload all happen inside it,
+            // and it changes only when the page has measured itself and the
+            // scroll engine lets the card take the height (ChatCardHeight).
+            ZStack {
+                if case .loaded(let html) = state {
+                    page(html)
+                } else {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading preview…")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .frame(maxWidth: .infinity, minHeight: 56)
             }
+            .frame(maxWidth: .infinity)
+            .frame(height: cardHeight.frameHeight(
+                reserving: TranscriptPictureMemory.height(for: heightKey) ?? HTMLPreviewPage.placeholderHeight
+            ))
+            .cardStackPosition(cardHeight)
         }
         .padding(12)
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
@@ -199,9 +224,9 @@ struct HTMLPreviewBlock<Fallback: View>: View {
             // (before the page loads, the loading row says it). Once
             // measured, the page element carries the name and the action.
             .accessibilityValue(isMeasuring ? Text("Loading preview…") : Text(verbatim: ""))
-            .accessibilityHidden(measuredHeight != nil)
+            .accessibilityHidden(isDrawn)
             Spacer()
-            if measuredHeight != nil {
+            if isDrawn {
                 Button {
                     openFullScreen()
                 } label: {
@@ -218,35 +243,37 @@ struct HTMLPreviewBlock<Fallback: View>: View {
     @ViewBuilder
     private func page(_ html: String) -> some View {
         let light = colorScheme == .light
+        let drawn = isDrawn
+        let load = self.load
+        let heightKey = self.heightKey
+        let engine = disclosure?.engine
         HTMLPreviewWebView(
             html: HTMLPreviewPage.framed(html, theme: HTMLPreviewTheme(light: light), presentation: .inline),
             interactive: false,
             onHeight: { height in
                 let clamped = HTMLPreviewPage.clampedInlineHeight(height)
-                HTMLPreviewHeights.store(clamped, for: path)
-                if measuredHeight != clamped { measuredHeight = clamped }
+                TranscriptPictureMemory.rememberHeight(clamped, for: heightKey)
+                cardHeight.pageMeasured(clamped, page: load, engine: engine)
             },
             // WebKit kept ending the page's process: the file card instead
             // of a blank frame.
             onFailed: { state = .unavailable }
         )
-        .frame(maxWidth: .infinity)
-        .frame(height: measuredHeight ?? HTMLPreviewHeights.height(for: path) ?? HTMLPreviewPage.placeholderHeight)
-        .opacity(measuredHeight == nil ? 0 : 1)
+        .opacity(drawn ? 1 : 0)
         .overlay {
-            if measuredHeight == nil {
-                ProgressView()
-            } else {
+            if drawn {
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture { openFullScreen() }
+            } else {
+                ProgressView()
             }
         }
-        .task(id: html) {
+        .task(id: load) {
             // A page that never reports (WebKit stalled, the file isn't
             // really a page) turns into the file card.
             try? await Task.sleep(for: Self.drawTimeout)
-            guard !Task.isCancelled, measuredHeight == nil else { return }
+            guard !Task.isCancelled, !cardHeight.hasMeasured(load) else { return }
             state = .unavailable
         }
         .accessibilityElement(children: .ignore)
@@ -254,7 +281,7 @@ struct HTMLPreviewBlock<Fallback: View>: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityHint(Text("Open full screen"))
         .accessibilityAction { openFullScreen() }
-        .accessibilityHidden(measuredHeight == nil)
+        .accessibilityHidden(!drawn)
     }
 
     private func openFullScreen() {
@@ -273,9 +300,10 @@ struct HTMLPreviewBlock<Fallback: View>: View {
             return
         }
         // Read on every appearance, so a file the agent rewrote for a later
-        // reply shows its new version; the reserved height keeps the row still.
+        // reply shows its new version; the card keeps its room meanwhile.
         state = .loading
-        measuredHeight = nil
+        load += 1
+        cardHeight.pageReplaced()
         let dataURL = await gatewayMediaDataURL(path)
         guard !Task.isCancelled else { return }
         guard let dataURL, let html = HTMLPreviewPage.decodedDocument(fromDataURL: dataURL) else {
@@ -288,27 +316,6 @@ struct HTMLPreviewBlock<Fallback: View>: View {
     private struct LoadKey: Hashable {
         let path: String
         let draws: Bool
-    }
-}
-
-/// Measured heights by path, so a rebuilt row reserves its real height
-/// while its page draws again.
-@MainActor
-enum HTMLPreviewHeights {
-    private static var heights: [String: CGFloat] = [:]
-    private static let limit = 128
-
-    static func height(for path: String) -> CGFloat? { heights[path] }
-
-    static func store(_ height: CGFloat, for path: String) {
-        if heights[path] == nil, heights.count >= limit {
-            // Drop half rather than all, as MarkupHeights does, so a long
-            // chat doesn't lose every reserved height at once.
-            for stale in Array(heights.keys.prefix(limit / 2)) {
-                heights[stale] = nil
-            }
-        }
-        heights[path] = height
     }
 }
 
