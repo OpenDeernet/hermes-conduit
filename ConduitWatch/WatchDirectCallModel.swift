@@ -2235,8 +2235,10 @@ final class WatchDirectCallModel: ObservableObject {
                 if settled, unsaidNews.contains(where: { $0.job.jobID == item.jobID && $0.text == text }) { continue }
                 quietQueue.append(QuietItem(outgoing: .textWhenIdle(text), newsJobID: settled ? item.jobID : nil))
                 if settled {
+                    // Newer news keeps the job's one resend spent.
+                    let resent = unsaidNews.contains { $0.job.jobID == item.jobID && $0.resent }
                     unsaidNews.removeAll { $0.job.jobID == item.jobID }
-                    unsaidNews.append(UnsaidNews(job: .init(jobID: item.jobID, title: item.title, status: item.status), text: text))
+                    unsaidNews.append(UnsaidNews(job: .init(jobID: item.jobID, title: item.title, status: item.status), text: text, resent: resent))
                 }
             }
         }
@@ -2674,8 +2676,9 @@ final class WatchDirectCallModel: ObservableObject {
                 }
                 let job = newsJobs.remove(at: index)
                 quietQueue.append(QuietItem(outgoing: item, newsJobID: job.jobID))
+                let resent = unsaidNews.contains { $0.job.jobID == job.jobID && $0.resent }
                 unsaidNews.removeAll { $0.job.jobID == job.jobID }
-                unsaidNews.append(UnsaidNews(job: .init(jobID: job.jobID, title: job.title, status: job.status), text: text))
+                unsaidNews.append(UnsaidNews(job: .init(jobID: job.jobID, title: job.title, status: job.status), text: text, resent: resent))
             case .contextWhenIdle:
                 quietQueue.append(QuietItem(outgoing: item))
             }

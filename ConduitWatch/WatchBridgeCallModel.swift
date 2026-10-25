@@ -1695,7 +1695,9 @@ final class WatchBridgeCallModel: ObservableObject {
             // may have had its one resend (#1210).
             if settled, unsaidNews[item.jobID]?.text == text { continue }
             if settled {
-                unsaidNews[item.jobID] = UnsaidNews(title: Self.jobTitle(item.title), status: item.status, text: text)
+                // Newer news keeps the job's one resend spent.
+                let resent = unsaidNews[item.jobID]?.resent ?? false
+                unsaidNews[item.jobID] = UnsaidNews(title: Self.jobTitle(item.title), status: item.status, text: text, resent: resent)
                 statusChanged = true
             }
             let delegationID = settled ? jobDelegations.removeValue(forKey: item.jobID) : nil
