@@ -1933,7 +1933,14 @@ final class HermesClient: ObservableObject {
 
     private func cancelPendingRequest(id: Int) {
         // A cancelled request's frame may still be going out: it stays in
-        // `requestsBeingWritten` until the socket says the write is through.
+        // `requestsBeingWritten` until the socket says the write is through,
+        // or at most an upload's minimum budget, as its own timer is gone.
+        if requestsBeingWritten.contains(id) {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(Self.minimumUploadTimeout))
+                self?.requestsBeingWritten.remove(id)
+            }
+        }
         guard let pending = pending.removeValue(forKey: id) else { return }
         pending.timer?.invalidate()
         pending.continuation.resume(throwing: CancellationError())

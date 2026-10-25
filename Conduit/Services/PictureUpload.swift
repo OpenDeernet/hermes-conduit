@@ -37,7 +37,7 @@ enum PictureUpload {
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         // An alpha channel alone (common in screenshots) still goes as a
         // JPEG; only pixels that are really see-through keep it a PNG.
-        let seeThrough = (properties[kCGImagePropertyHasAlpha] as? Bool ?? false) && !isOpaque(image)
+        let seeThrough = !isOpaque(image)
         let output = NSMutableData()
         let type: UTType = seeThrough ? .png : .jpeg
         guard let destination = CGImageDestinationCreateWithData(
