@@ -1071,19 +1071,20 @@ pile up audio the model can't use.
 Classic's transcription streams · Watch calls (Gemini, Grok, Local Live; GPT-Live over the host's audio bridge)
 
 **Code**
-- The writer: `Shared/GeminiLive/LiveVoiceSocketWriter.swift`; what counts as audio: `Shared/GeminiLive/GeminiLiveProtocol.swift` (LiveVoiceClientMessage.isAudio)
+- The writer: `Shared/GeminiLive/LiveVoiceSocketWriter.swift` (maxQueuedAudio, maxQueuedOther, Backlogged); what counts as audio: `Shared/GeminiLive/GeminiLiveProtocol.swift` (LiveVoiceClientMessage.isAudio)
 - Sessions: `Shared/GeminiLive/GeminiLiveSession.swift`, `Shared/GrokLive/GrokLiveSession.swift`, `Shared/LocalLive/LocalLiveSession.swift`
 - Watch: `ConduitWatch/WatchDirectCallModel.swift` (maxSendsInFlight, flushUplink; the same Gemini, Grok and Local Live sessions), `ConduitWatch/WatchBridgeCallModel.swift` (sendsInFlightLimit, GPT-Live's bridge socket)
 - Classic: `Conduit/Voice/SpeechServerTranscription.swift`, `Conduit/Voice/HermesLiveTranscription.swift` (sendChain)
 
 **Rulings**
-- Each connection's frames go out one at a time, in order. Up to 96 capture chunks of audio may wait, about two seconds of the tap's 1,024-frame buffers at 48 kHz (longer on a route that captures at a lower rate); audio past that is dropped as it arrives. Text turns and tool answers always wait their turn: they are a few each turn, so they aren't capped. Frames for a socket the session replaced fail instead of going out, and dropped audio is logged (2026-10-24, #1223).
+- Each connection's frames go out one at a time, in order. Up to 96 capture chunks of audio may wait: for Gemini about two seconds of the tap's 1,024-frame buffers at 48 kHz (longer on a route that captures at a lower rate), and the same count of Grok's and Local Live's own chunks; audio past that is dropped as it arrives. Frames for a socket the session replaced fail instead of going out, and dropped audio is logged (2026-10-24, #1223).
+- Text turns, context notes and tool answers are never dropped on their own. Up to 32 may wait; one more means the socket stopped taking frames, so everything it holds fails and the session reconnects, each frame's failure handler handing its result back as for any failed send (2026-10-25, #1231).
 - GPT-Live's audio on the phone is WebRTC's to pace; on the Watch it goes over the host's audio bridge, already capped at 20 sends in flight. Classic's transcription streams keep a whole utterance, since dropping audio there loses words (2026-10-24, #1223).
 
 **Open gaps**
-- Text turns and tool answers aren't capped: a socket that stalls without failing or closing keeps them waiting until the session's own timeouts end the connection.
+- None known.
 
-**Checked:** 2026-10-24, #1223.
+**Checked:** 2026-10-25, #1231, for the text cap; 2026-10-24, #1223.
 
 ## Speech stream failures
 
