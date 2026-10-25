@@ -1688,7 +1688,7 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
             $0.result = held
         }
         noticeMayBePending()
-        if job.isThreadTurn { pumpThreadTurns() }
+        if job.isThreadTurn || job.isCallChat { pumpThreadTurns() }
     }
 
     /// Whether `content` is Hermes' marker for a reply a correction cut
@@ -2146,6 +2146,9 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         guard let sessionID = job.runtimeSessionID else { return true }
         do {
             try await backend.cancel(sessionID)
+            // The call's chat is free of its first request: the call's
+            // turns waiting on it go in (#1250).
+            if job.isCallChat { pumpThreadTurns() }
             return true
         } catch {
             if self.job(job.id)?.status == .cancelled {

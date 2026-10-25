@@ -157,6 +157,20 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(supervisor.jobs.first(where: { $0.id == next.jobID })?.result, "Booked.")
     }
 
+    func testCancellingTheCallsChatRequestLetsTheNextTurnGoIn() async {
+        let (supervisor, fake) = makeUnattachedCall()
+        _ = await supervisor.startJob(instructions: "plan the trip", joinsCall: true)
+        guard let first = supervisor.jobs.first?.id else { return XCTFail("no job") }
+        XCTAssertNotNil(supervisor.startThreadTurn(request: "and book the hotel").jobID)
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertTrue(fake.threadSubmissions.isEmpty, "it waits for the first request")
+
+        _ = await supervisor.cancel(jobID: first)
+
+        guard await waitForCallChat({ !fake.threadSubmissions.isEmpty }) else { return }
+        XCTAssertEqual(fake.threadSubmissions.first?.0, "rt-1")
+    }
+
     func testANewRequestWaitsOnTheCallsChatRequestsQuestion() async {
         let (supervisor, fake) = makeUnattachedCall()
         _ = await supervisor.startJob(instructions: "clean the logs", joinsCall: true)
