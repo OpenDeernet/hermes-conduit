@@ -276,8 +276,12 @@ struct PinnedRepliesSheet: View {
                 ConduitBackdrop()
                 List {
                     if sections.isEmpty {
+                        // This chat's last pin gone while others remain.
+                        let thisChatOnly = showsScope && scope == .thisChat && !all.isEmpty
                         ContentUnavailableView(
-                            AppLocalization.string("No pinned replies"),
+                            thisChatOnly
+                                ? AppLocalization.string("No pins in this chat")
+                                : AppLocalization.string("No pinned replies"),
                             systemImage: "pin",
                             description: Text(AppLocalization.string("Long-press a reply and choose Pin for the selected text or Pin reply for all of it. It stays at the top of its chat and shows here."))
                         )
