@@ -1490,7 +1490,8 @@ final class WatchBridgeCallModel: ObservableObject {
         for item in pendingSends {
             // A socket that stopped taking text is given up, as the phone's
             // writer does: the replies not yet sent stay pending for the
-            // rejoined session rather than piling up behind it.
+            // rejoined session rather than piling up behind it. Checked per
+            // reply: its chunks go out together, never half of it.
             if backlogged || eventsInFlight >= Self.eventsInFlightLimit {
                 backlogged = true
                 kept.append(item)
