@@ -220,6 +220,34 @@ consent screens · the tool text each model reads, in Conduit and the notifier
 
 **Checked:** 2026-10-25, Qwen in the siblings, and a Watch token minted after consent was withdrawn, at #1182, carried in #1235; 2026-10-24, at #1223, for send_request's yes; 2026-10-23, seeded from main at 64d53c3; at #1191, Location's rule delete says when no dashboard is open (#972 review), which changes nothing about consent.
 
+## Acknowledging work handed to Hermes
+
+What a live model says when it hands a request to Hermes, so the user knows
+it heard without hearing the same line every time.
+
+**Siblings:** Gemini Live · Qwen Live · Grok Live · GPT-Live · Local Live agent ·
+Watch calls · CarPlay · calls from Hermes · the web lookup heads-up · the
+instructions preview in Voice settings
+
+**Code**
+- The shared rule: `Shared/GrokLive/GrokLiveProtocol.swift` (LiveVoiceAcknowledgement, jobClaimInstructions for Grok and Local Live)
+- Gemini, Qwen and the Watch: `Conduit/Voice/GeminiLive/GeminiLiveConversationController.swift` (instructions, acknowledgementPrompt for a quiet start_job)
+- GPT-Live, phone and Watch: `Conduit/Voice/GPTLive/GPTLiveConversationController.swift` (briefingRules)
+- Local Live agent: `Shared/LocalLive/LocalLiveProtocol.swift` (agentInstructions)
+- Conduit's own tools need none: `Conduit/Voice/VoiceHostTools.swift`
+- Web lookups: `Conduit/Voice/GeminiLive/GeminiLiveToolBridge.swift` (lookupAnswerNote)
+
+**Rulings**
+- Each handoff gets a word or a few, in the model's own words and different each time; Hermes is named at most once on a call, or when the user asks who's doing it; telling the user what it's about to do counts as the acknowledgement (2026-10-25, #1251).
+- Gemini, Qwen and the Watch say it before start_job; Grok and Local Live only once start_job returns started; GPT-Live before the delegation (2026-10-25, #1251).
+- A web lookup's heads-up is said once, varied, and the answer opens without it (2026-10-05, #404).
+- Conduit's own tools answer fast and need no acknowledgement (on main by 2026-10-22, b41f56c).
+
+**Open gaps**
+- None known.
+
+**Checked:** 2026-10-25, at #1251.
+
 ## Starting a call
 
 Every way a call starts, and which chat it joins.
