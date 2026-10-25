@@ -533,19 +533,24 @@ struct CapabilityToolsetDetailPage: View {
         Haptics.selection()
         working = provider.name
         notice = nil
+        let owner = appState.currentCapabilitiesOwner
         Task {
+            defer { working = nil }
             do {
                 let needsNous = try await store.selectProvider(toolset: name, provider: provider.name, capability: capability)
+                guard serves(owner) else { return }
                 if needsNous {
                     notice = AppLocalization.string("Sign in to Nous Portal on your host to use this backend.")
                 }
                 // A failed read keeps what's on screen.
-                if let fresh = try? await store.toolsetConfig(name: name) { config = fresh }
+                let fresh = try? await store.toolsetConfig(name: name)
+                guard serves(owner) else { return }
+                if let fresh { config = fresh }
                 await appState.loadCapabilities()
             } catch {
+                guard serves(owner) else { return }
                 notice = UserFacingError.message(for: error)
             }
-            working = nil
         }
     }
 
@@ -553,14 +558,18 @@ struct CapabilityToolsetDetailPage: View {
         Haptics.selection()
         working = backend.name
         notice = nil
+        let owner = appState.currentCapabilitiesOwner
         Task {
+            defer { working = nil }
             do {
                 try await store.selectTerminalBackend(backend.name)
-                if let fresh = try? await store.terminalBackends() { backends = fresh }
+                let fresh = try? await store.terminalBackends()
+                guard serves(owner) else { return }
+                if let fresh { backends = fresh }
             } catch {
+                guard serves(owner) else { return }
                 notice = UserFacingError.message(for: error)
             }
-            working = nil
         }
     }
 
@@ -569,16 +578,26 @@ struct CapabilityToolsetDetailPage: View {
         keyValue = ""
         guard !trimmed.isEmpty else { return }
         notice = nil
+        let owner = appState.currentCapabilitiesOwner
         Task {
             do {
                 try await store.saveKey(env.key, value: trimmed)
                 Haptics.success()
                 // A failed read keeps what's on screen.
-                if let fresh = try? await store.toolsetConfig(name: name) { config = fresh }
+                let fresh = try? await store.toolsetConfig(name: name)
+                guard serves(owner) else { return }
+                if let fresh { config = fresh }
                 await appState.loadCapabilities()
             } catch {
+                guard serves(owner) else { return }
                 notice = UserFacingError.message(for: error)
             }
         }
+    }
+
+    /// Whether an answer started for `owner` may still land on this page:
+    /// after a dashboard or profile switch it belongs to the old one.
+    private func serves(_ owner: CapabilitySnapshotOwner) -> Bool {
+        appState.currentCapabilitiesOwner == owner && store.serves(owner)
     }
 }
