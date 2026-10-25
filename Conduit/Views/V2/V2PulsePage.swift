@@ -33,9 +33,11 @@ struct V2PulseButton: View {
             : AppLocalization.string("Pulse"))
         .accessibilityIdentifier("chats.pulse")
         // While the Chats tab shows, every minute: new cards light the dot and
-        // mark their messages in the chats.
+        // mark their messages in the chats. At once when the plugin answers
+        // after a launch or a reconnect, so the feed names Pulse's chat.
         .task(id: PulseRefreshKey(dashboard: appState.activeDashboardID,
-                                  active: scenePhase == .active && shell.isTabActive)) {
+                                  active: scenePhase == .active && shell.isTabActive,
+                                  served: appState.notifierPlugin.reports(PulseClient.feedCapability))) {
             guard scenePhase == .active, shell.isTabActive else { return }
             while !Task.isCancelled {
                 await appState.refreshPulseFeed()
@@ -48,6 +50,7 @@ struct V2PulseButton: View {
 private struct PulseRefreshKey: Hashable {
     let dashboard: UUID?
     let active: Bool
+    let served: Bool
 }
 
 /// The mark under a message whose promise Pulse follows up: opens its card.
@@ -152,9 +155,11 @@ struct V2PulsePage: View {
         } message: { _ in
             Text("Pulse changes what it does with your answer. You can undo it under What Pulse learned.")
         }
-        .task(id: PulseRefreshKey(dashboard: appState.activeDashboardID, active: isShown && scenePhase == .active)) {
+        .task(id: PulseRefreshKey(dashboard: appState.activeDashboardID, active: isShown && scenePhase == .active,
+                                  served: appState.notifierPlugin.reports(PulseClient.feedCapability))) {
             guard isShown, scenePhase == .active else { return }
-            // Cards that come in while the page is open show up too.
+            // Cards that come in while the page is open show up too, and the
+            // feed is read again once the plugin answers after a launch.
             while !Task.isCancelled {
                 await load()
                 try? await Task.sleep(for: .seconds(60))
@@ -229,8 +234,10 @@ struct V2PulsePage: View {
         let layout = PulseLayout(cards: page.cards, keeping: focusedCard.map { [$0] } ?? [])
         let fresh = layout.open.filter { newCards?.contains($0.id) == true }
         let earlier = layout.open.filter { newCards?.contains($0.id) != true }
-        // A brief's new cards count too, though they show in its block.
-        let freshInBriefs = layout.briefs.flatMap(\.items).filter { !$0.isCleared && newCards?.contains($0.id) == true }
+        // A brief's new cards count too, though they show in its block; one
+        // that brought none counts as one.
+        let freshInBriefs = layout.briefs.flatMap { $0.isSummary ? [$0.card] : $0.items }
+            .filter { !$0.isCleared && newCards?.contains($0.id) == true }
         return ScrollViewReader { proxy in
             List {
                 Group {
@@ -303,8 +310,7 @@ struct V2PulsePage: View {
 
     /// The line under the title: how many are new, or that nothing is open.
     @ViewBuilder private func summary(_ layout: PulseLayout, new count: Int) -> some View {
-        let open = layout.open.count + layout.briefs.reduce(0) { $0 + $1.left }
-        if count > 0 || open == 0 {
+        if count > 0 || layout.isCaughtUp {
             Text(verbatim: count > 0 ? AppLocalization.string("\(count) new since you last looked")
                                      : AppLocalization.string("You're all caught up"))
                 .font(.subheadline)
@@ -355,14 +361,15 @@ struct V2PulsePage: View {
     /// anything in it is, else one row that opens it again.
     @ViewBuilder private func briefRows(_ brief: PulseLayout.Brief) -> some View {
         // Open when a push pointed at one of its cards, even before focus() could expand it.
-        if brief.isHandled, !expandedBriefs.contains(brief.id), !brief.items.contains(where: { $0.id == focusedCard }) {
+        if !brief.isSummary, brief.isHandled, !expandedBriefs.contains(brief.id),
+           !brief.items.contains(where: { $0.id == focusedCard }) {
             handledBriefRow(brief)
                 .id(brief.card.id)
                 .pulseRow()
         } else {
             briefHeader(brief)
                 .id(brief.card.id)
-                .pulseRow(bottom: 0)
+                .pulseRow(bottom: brief.isSummary ? 6 : 0)
             ForEach(Array(brief.items.enumerated()), id: \.element.id) { index, item in
                 briefItem(item, last: index == brief.items.count - 1)
                     .accessibilityElement(children: .contain)
@@ -386,7 +393,7 @@ struct V2PulsePage: View {
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
-                if brief.isHandled {
+                if brief.isHandled, !brief.isSummary {
                     Button {
                         withAnimation(.snappy) { _ = expandedBriefs.remove(brief.id) }
                     } label: {
@@ -398,9 +405,11 @@ struct V2PulsePage: View {
                     .buttonStyle(.borderless)
                     .accessibilityLabel(AppLocalization.string("Fold the morning brief"))
                 }
-                Text(verbatim: briefStamp(brief))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let stamp = briefStamp(brief) {
+                    Text(verbatim: stamp)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             if !brief.card.news.isEmpty {
                 Text(brief.card.formattedNews)
@@ -411,12 +420,14 @@ struct V2PulsePage: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(briefBackground(top: true, bottom: false))
+        .background(briefBackground(top: true, bottom: brief.isSummary))
     }
 
-    /// "08:00 · 2 left".
-    private func briefStamp(_ brief: PulseLayout.Brief) -> String {
+    /// "08:00 · 2 left", or "08:00" for a brief that brought no cards
+    /// (nothing, when it has no time either).
+    private func briefStamp(_ brief: PulseLayout.Brief) -> String? {
         let time = brief.card.createdAt.map { $0.formatted(date: .omitted, time: .shortened) }
+        if brief.isSummary { return time }
         let left = brief.isHandled ? AppLocalization.string("All handled")
             : AppLocalization.string("\(Int(brief.left)) left")
         return [time, left].compactMap { $0 }.joined(separator: " · ")

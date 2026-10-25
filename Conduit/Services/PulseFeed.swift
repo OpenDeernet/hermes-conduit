@@ -123,8 +123,8 @@ struct PulseCard: Equatable, Identifiable {
     }
 }
 
-/// The Pulse screen's order: morning briefs with the cards they brought,
-/// then what's still open, then what's done or swiped away.
+/// The Pulse screen's order: morning briefs with the cards they brought
+/// (or their summary alone), then what's still open, then what's done or swiped away.
 struct PulseLayout: Equatable {
     struct Brief: Equatable, Identifiable {
         let card: PulseCard
@@ -132,6 +132,8 @@ struct PulseLayout: Equatable {
         let items: [PulseCard]
 
         var id: Int { card.id }
+        /// Brought no held cards (0.76.0): the brief is its summary alone.
+        var isSummary: Bool { items.isEmpty }
         var left: Int { items.filter { !$0.isCleared }.count }
         /// Every card it brought is done or swiped away.
         var isHandled: Bool { left == 0 }
@@ -157,11 +159,11 @@ struct PulseLayout: Equatable {
         var taken: Set<Int> = []
         var newest = true
         for card in cards where card.kind == "brief" && !card.brief.isEmpty {
-            guard let items = grouped[card.brief], !items.isEmpty else { continue }
+            let items = grouped[card.brief] ?? []
             let brief = Brief(card: card, items: items.sorted { ($0.createdAt ?? .distantPast, $0.id) < ($1.createdAt ?? .distantPast, $1.id) })
             taken.insert(card.id)
             taken.formUnion(items.map(\.id))
-            if !brief.isHandled || newest || items.contains(where: { keeping.contains($0.id) }) {
+            if !brief.isHandled || newest || keeping.contains(card.id) || items.contains(where: { keeping.contains($0.id) }) {
                 briefs.append(brief)
             } else {
                 clearedBriefs.append(brief)
@@ -173,7 +175,12 @@ struct PulseLayout: Equatable {
         }
     }
 
-    var clearedCount: Int { cleared.count + clearedBriefs.reduce(0) { $0 + $1.items.count } }
+    /// A brief that brought nothing counts as one.
+    var clearedCount: Int { cleared.count + clearedBriefs.reduce(0) { $0 + max(1, $1.items.count) } }
+
+    /// Nothing left on the screen: no open card, no brief with cards left,
+    /// and no brief that is its summary alone (it lists what's still open).
+    var isCaughtUp: Bool { open.isEmpty && briefs.allSatisfy { $0.isHandled && !$0.isSummary } }
 }
 
 /// A kind's loudness on the ladder, loudest first.
@@ -412,9 +419,27 @@ extension PulseClient {
 
 extension AppState {
     /// The Pulse screen and its button: TestFlight and Xcode builds whose
-    /// plugin serves the feed (0.55.0 and later).
+    /// plugin serves the feed (0.55.0 and later). Until the plugin answers
+    /// after a launch or a reconnect, a dashboard that had Pulse keeps it.
     var showsPulseScreen: Bool {
-        showsPulseSettings && notifierPlugin.reports(PulseClient.feedCapability)
+        (showsPulseSettings && notifierPlugin.reports(PulseClient.feedCapability))
+            || (appInstallSource != .appStore && pulsePluginUnanswered && pulseHomeChat != nil)
+    }
+
+    /// Whether the plugin hasn't answered since the launch or the last reconnect.
+    private var pulsePluginUnanswered: Bool { notifierPlugin.state == .unknown }
+
+    /// Pulse's own chat: the feed's, or until the feed is read, the one it named last time here.
+    var pulseHomeChat: String? {
+        pulseHomeChatID ?? activeDashboardID.flatMap { pulseRememberedHomes[$0.uuidString] }
+    }
+
+    /// A plugin that answered without the feed (or predates reporting):
+    /// this dashboard has no Pulse chat to hide or remember.
+    func forgetPulseHomeIfGone() {
+        guard !pulsePluginUnanswered, !notifierPlugin.reports(PulseClient.feedCapability) else { return }
+        if pulseHomeChatID != nil { pulseHomeChatID = nil }
+        rememberPulseHome(nil)
     }
 
     /// Reads the feed for the button's badge and the chat's Pulse marks.
@@ -424,6 +449,7 @@ extension AppState {
             pulseUnseen = 0
             pulseSources = [:]
             pulseHomeChatID = nil
+            if !pulsePluginUnanswered { rememberPulseHome(nil) }  // the plugin said: no Pulse here
             return
         }
         let dashboard = activeDashboardID
@@ -436,12 +462,13 @@ extension AppState {
         let sources = page.sources
         if sources != pulseSources { pulseSources = sources }
         if page.homeChatID != pulseHomeChatID { pulseHomeChatID = page.homeChatID }
+        rememberPulseHome(page.homeChatID)
     }
 
     /// Pulse's own chat: Conduit shows it as the Pulse screen, not in Chats.
     func isPulseHomeChat(_ session: SessionSummary) -> Bool {
         // By the row's own profile: in All a row can be another profile's.
-        guard let home = pulseHomeChatID, showsPulseScreen, profilesMatch(rowProfile(session), Self.pulseHomeProfile) else {
+        guard let home = pulseHomeChat, showsPulseScreen, profilesMatch(rowProfile(session), Self.pulseHomeProfile) else {
             return false
         }
         return session.nestingIDs.contains(home)
@@ -454,8 +481,8 @@ extension AppState {
         guard target.type == "response.ready", target.decision == nil, target.call == nil, !target.isChatLink,
               target.profile.map({ profilesMatch($0, Self.pulseHomeProfile) }) ?? true,
               showsPulseScreen, !isModalSheetPresented else { return false }
-        if pulseHomeChatID == nil { await refreshPulseFeed() }
-        guard let home = pulseHomeChatID, home == target.sessionId || home == target.durableSessionID else {
+        if pulseHomeChat == nil { await refreshPulseFeed() }
+        guard let home = pulseHomeChat, home == target.sessionId || home == target.durableSessionID else {
             return false
         }
         openPulse(card: nil)
@@ -478,7 +505,7 @@ extension AppState {
     /// The card links a chat to open: not Pulse's own, which is hidden (a
     /// report's or brief's cards point there).
     func pulseCardHasChat(_ card: PulseCard) -> Bool {
-        !card.chatID.isEmpty && card.chatID != pulseHomeChatID
+        !card.chatID.isEmpty && card.chatID != pulseHomeChat
     }
 
     /// It opens at the message the card came from, as an artifact's Show
@@ -539,4 +566,6 @@ extension PulseClient {
     static let actedCapability = "pulse_acted"
     /// Cards can be swiped away, and briefs name the cards they brought (0.68.0).
     static let dismissCapability = "pulse_dismiss"
+    /// The morning brief comes every day with what's still open (0.76.0).
+    static let dailyBriefCapability = "pulse_daily_brief"
 }

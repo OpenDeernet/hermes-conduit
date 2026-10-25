@@ -2185,6 +2185,34 @@ final class AppState: ObservableObject {
     @Published var pulseSources: [String: [Int: Int]] = [:]
     @Published var pulseOpenRequest: PulseOpenRequest?
     @Published var pulseHomeChatID: String?
+    /// Pulse's chat per dashboard as the last feed named it, kept across
+    /// launches: until the feed is read again after a launch or a
+    /// reconnect, the Pulse button and the hidden chat go by it. Views read
+    /// it through `pulseHomeChat`, so every change goes through
+    /// `storePulseHomes`, which tells them.
+    private(set) lazy var pulseRememberedHomes: [String: String] =
+        defaults.dictionary(forKey: Self.pulseHomesKey) as? [String: String] ?? [:]
+    static let pulseHomesKey = "conduit.pulse.homeChats"
+
+    func rememberPulseHome(_ chat: String?) {
+        guard let key = activeDashboardID?.uuidString, pulseRememberedHomes[key] != chat else { return }
+        var homes = pulseRememberedHomes
+        homes[key] = chat
+        storePulseHomes(homes)
+    }
+
+    /// A removed dashboard's Pulse chat goes with it.
+    func forgetPulseHome(of dashboardID: UUID) {
+        var homes = pulseRememberedHomes
+        guard homes.removeValue(forKey: dashboardID.uuidString) != nil else { return }
+        storePulseHomes(homes)
+    }
+
+    private func storePulseHomes(_ homes: [String: String]) {
+        objectWillChange.send()
+        pulseRememberedHomes = homes
+        defaults.set(homes, forKey: Self.pulseHomesKey)
+    }
     @Published private(set) var composerPrefillText = ""
     @Published private(set) var composerPrefillToken = UUID()
     /// The draft the prefill is for, until ComposerBar puts it in. A new
@@ -11577,6 +11605,7 @@ final class AppState: ObservableObject {
         if visibilities.removeValue(forKey: bucket) != nil {
             persistModelVisibilities(visibilities)
         }
+        forgetPulseHome(of: id)
     }
 
     // MARK: Relay gateways each dashboard's host reported
@@ -23556,8 +23585,14 @@ final class AppState: ObservableObject {
     /// What the host's notifier plugin serves; Settings nudges an update.
     @Published private(set) var notifierPlugin = NotifierPluginStatus() {
         // A plugin that just said it takes on-screen reports gets the turn
-        // already running.
-        didSet { if oldValue.state != notifierPlugin.state { updateChatOnScreen() } }
+        // already running; one that answered without Pulse ends the Pulse
+        // this dashboard remembered.
+        didSet {
+            if oldValue.state != notifierPlugin.state {
+                updateChatOnScreen()
+                forgetPulseHomeIfGone()
+            }
+        }
     }
     /// The plugin on its repository's main branch, once read. A reset for
     /// another host keeps it (`freshNotifierPluginStatus`).

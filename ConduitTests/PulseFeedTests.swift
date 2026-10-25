@@ -162,6 +162,64 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertEqual(state.pulseHomeChatID, "p")
     }
 
+    func testPulseKeepsItsButtonAndHiddenChatUntilThePluginReportsAgain() throws {
+        let suite = "PulseFeedTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let dashboard = SavedDashboard(id: UUID(), label: "Home", normalizedURL: "http://127.0.0.1:1")
+        let registry = SavedDashboardRegistry(activeDashboardID: dashboard.id, dashboards: [dashboard])
+        let first = AppState(defaults: defaults, loadSavedConnection: false, dashboardRegistry: registry,
+                             clearSessionPresentationCache: {})
+        first.applyPulseFeed(try XCTUnwrap(PulseFeedPage(json: json(#"{"home_chat_id": "p", "cards": []}"#))))
+
+        // The next launch: the plugin hasn't answered yet.
+        let next = AppState(defaults: defaults, loadSavedConnection: false, dashboardRegistry: registry,
+                            clearSessionPresentationCache: {})
+        XCTAssertNil(next.pulseHomeChatID)
+        XCTAssertEqual(next.pulseHomeChat, "p")
+        XCTAssertTrue(next.showsPulseScreen)
+
+        // It answers with Pulse before the feed is read: still hidden.
+        next.setNotifierPluginStateForTesting(.reported(version: "0.74.0",
+                                                        capabilities: [PulseClient.capability, PulseClient.feedCapability]))
+        XCTAssertEqual(next.pulseHomeChat, "p")
+        XCTAssertTrue(next.showsPulseScreen)
+
+        // It answers without Pulse, or predates reporting: gone, and forgotten.
+        next.setNotifierPluginStateForTesting(.reported(version: "0.40.0", capabilities: []))
+        XCTAssertNil(next.pulseHomeChat)
+        XCTAssertFalse(next.showsPulseScreen)
+        let later = AppState(defaults: defaults, loadSavedConnection: false, dashboardRegistry: registry,
+                             clearSessionPresentationCache: {})
+        XCTAssertNil(later.pulseHomeChat)
+
+        later.applyPulseFeed(try XCTUnwrap(PulseFeedPage(json: json(#"{"home_chat_id": "p", "cards": []}"#))))
+        let older = AppState(defaults: defaults, loadSavedConnection: false, dashboardRegistry: registry,
+                             clearSessionPresentationCache: {})
+        older.setNotifierPluginStateForTesting(.predatesCapabilities)
+        XCTAssertNil(older.pulseHomeChat)
+        XCTAssertFalse(older.showsPulseScreen)
+    }
+
+    func testARemovedDashboardTakesItsRememberedPulseChatWithIt() throws {
+        let suite = "PulseFeedTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let active = SavedDashboard(id: UUID(), label: "Home", normalizedURL: "http://127.0.0.1:1")
+        let other = SavedDashboard(id: UUID(), label: "Office", normalizedURL: "http://127.0.0.1:2")
+        defaults.set([active.id.uuidString: "p", other.id.uuidString: "q"], forKey: AppState.pulseHomesKey)
+        let appState = AppState(defaults: defaults, loadSavedConnection: false,
+                                dashboardRegistry: SavedDashboardRegistry(activeDashboardID: active.id,
+                                                                          dashboards: [active, other]),
+                                clearSessionPresentationCache: {})
+
+        appState.removeDashboard(other.id)
+
+        XCTAssertEqual(defaults.dictionary(forKey: AppState.pulseHomesKey) as? [String: String],
+                       [active.id.uuidString: "p"])
+        XCTAssertEqual(appState.pulseHomeChat, "p")
+    }
+
     func testDoneAndActedPostTheCardToThePlugin() async throws {
         var calls: [(path: String, method: String, body: [String: Any]?)] = []
         var answer: [String: Any] = ["ok": true, "changed": true]
@@ -273,8 +331,31 @@ final class PulseFeedTests: XCTestCase {
         var handled = page
         if let index = handled.cards.firstIndex(where: { $0.id == 7 }) { handled.cards[index].doneAt = Date() }
         XCTAssertEqual(PulseLayout(cards: handled.cards).briefs.map(\.isHandled), [true])
+        XCTAssertFalse(layout.isCaughtUp)
+        XCTAssertTrue(PulseLayout(cards: handled.cards.filter { [8, 7, 6].contains($0.id) }).isCaughtUp)
         // The card a push opened stays where it is, though cleared.
         XCTAssertEqual(PulseLayout(cards: page.cards, keeping: [2]).open.map(\.id), [9, 3, 2])
+    }
+
+    func testABriefThatBroughtNoCardsShowsAsItsSummary() throws {
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 9, "kind": "brief", "level": "push", "news": "A calm day.", "brief": "b3", "created_at": 300},
+          {"id": 8, "kind": "noticed", "topic": "date", "level": "screen", "news": "New", "created_at": 250},
+          {"id": 5, "kind": "brief", "level": "push", "news": "Yesterday", "brief": "b2", "created_at": 200}
+        ]}
+        """)))
+        let layout = PulseLayout(cards: page.cards)
+        XCTAssertEqual(layout.briefs.map(\.id), [9], "the newest brief stays at the top")
+        XCTAssertEqual(layout.briefs.first?.isSummary, true)
+        XCTAssertEqual(layout.open.map(\.id), [8])
+        XCTAssertEqual(layout.clearedBriefs.map(\.id), [5], "older ones fold into Done and cleared")
+        XCTAssertEqual(layout.clearedCount, 1)
+        // The one a push opened stays where it is.
+        XCTAssertEqual(PulseLayout(cards: page.cards, keeping: [5]).briefs.map(\.id), [9, 5])
+        let alone = PulseLayout(cards: page.cards.filter { $0.kind == "brief" })
+        XCTAssertTrue(alone.open.isEmpty)
+        XCTAssertFalse(alone.isCaughtUp, "the summary lists what's still open")
     }
 
     func testNotNowPostsTheCardToThePlugin() async throws {
