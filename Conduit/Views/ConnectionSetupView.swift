@@ -317,10 +317,9 @@ struct ConnectionSetupView: View {
     private func beginRepairSignIn() {
         guard !isActivating, flow.canUseSettings, onRepair != nil else { return }
         guard let result = flow.complete() else { return }
-        // Before the sign-in registers the address: one this sheet
-        // registered on an earlier try is the repair's own.
-        if let owner = appState.repairAddressOwner(result.serverURL, repairing: appState.connection?.baseUrl),
-           owner.id != repairDashboardID {
+        // Before the sign-in registers the address (one a repair registered
+        // on an earlier try is its own).
+        if let owner = appState.repairAddressOwner(result.serverURL, repairing: appState.connection?.baseUrl) {
             repairAddressConflict = owner
             return
         }
@@ -365,9 +364,8 @@ struct ConnectionSetupView: View {
                 return
             }
             guard !Task.isCancelled, request.isCurrent(in: flow), let interactive = resolved else { return }
-            guard let dashboardID = appState.resolveDashboardID(
-                forURL: request.configuration.serverURL,
-                registerIfMissing: true
+            guard let dashboardID = appState.registerRepairDashboard(
+                forURL: request.configuration.serverURL
             ) else {
                 activationFailure = .unexpectedServerResponse
                 return

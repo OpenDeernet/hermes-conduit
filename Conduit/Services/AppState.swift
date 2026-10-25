@@ -12241,6 +12241,7 @@ final class AppState: ObservableObject {
     func beginConnectionRepair() -> ConnectionRepairContext? {
         guard let context = makeConnectionRepairContext() else { return nil }
         cancelChatResumeTransportRecovery()
+        repairRegisteredDashboardIDs = []
         return context
     }
 
@@ -12327,6 +12328,10 @@ final class AppState: ObservableObject {
         return outcome
     }
 
+    /// Dashboards a repair's sign-in registered for a new address this
+    /// repair (`registerRepairDashboard`); cleared when a repair begins.
+    private var repairRegisteredDashboardIDs: Set<UUID> = []
+
     /// The saved dashboard other than the one being repaired that already
     /// has this address, if any. Repair never writes onto it: its saved
     /// password, Face ID choice, Cloudflare token and sign-in cookies stay
@@ -12334,10 +12339,22 @@ final class AppState: ObservableObject {
     func repairAddressOwner(_ baseURL: String, repairing failedTarget: String?) -> SavedDashboard? {
         let normalized = (try? ConnectionURLPolicy.normalizedBaseURL(baseURL))
             ?? baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let owner = savedDashboardRegistry.dashboard(claiming: normalized) else { return nil }
+        guard let owner = savedDashboardRegistry.dashboard(claiming: normalized),
+              !repairRegisteredDashboardIDs.contains(owner.id) else { return nil }
         let repairing = failedTarget.flatMap { resolveDashboardID(forURL: $0, registerIfMissing: false) }
             ?? activeDashboardID
         return owner.id == repairing ? nil : owner
+    }
+
+    /// Registers a repair sign-in's address before its sheet opens. One it
+    /// newly registers stays the repair's own, so a later try at that
+    /// address (a sign-in again, or a password reconnect) isn't refused as
+    /// another dashboard's.
+    func registerRepairDashboard(forURL baseURL: String) -> UUID? {
+        let existing = resolveDashboardID(forURL: baseURL, registerIfMissing: false)
+        guard let id = existing ?? resolveDashboardID(forURL: baseURL, registerIfMissing: true) else { return nil }
+        if existing == nil { repairRegisteredDashboardIDs.insert(id) }
+        return id
     }
 
     /// Activates a normal-login native OAuth result transactionally. The
