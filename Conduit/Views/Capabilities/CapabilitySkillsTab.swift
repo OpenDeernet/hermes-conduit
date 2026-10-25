@@ -325,7 +325,7 @@ struct CapabilitySkillDetailPage: View {
             guard store.serves(owner) else { return }
             do {
                 let content = try await store.skillContent(name: name)
-                guard appState.currentCapabilitiesOwner == owner, store.serves(owner) else { return }
+                guard appState.currentCapabilitiesOwner == owner, store.serves(owner), !Task.isCancelled else { return }
                 document = SkillFrontmatter.parse(content)
             } catch {
                 guard appState.currentCapabilitiesOwner == owner, store.serves(owner), !Task.isCancelled else { return }
@@ -416,7 +416,7 @@ struct OfficialSkillDetailPage: View {
             guard isCurrent, document == nil else { return }
             do {
                 let content = try await store.skillPreview(identifier: skill.identifier)
-                guard isCurrent else { return }
+                guard isCurrent, !Task.isCancelled else { return }
                 document = SkillFrontmatter.parse(content)
                 loadError = nil
             } catch {

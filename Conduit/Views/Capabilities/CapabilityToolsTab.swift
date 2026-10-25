@@ -537,6 +537,7 @@ struct CapabilityToolsetDetailPage: View {
         Task {
             defer { working = nil }
             do {
+                guard serves(owner) else { return }
                 let needsNous = try await store.selectProvider(toolset: name, provider: provider.name, capability: capability)
                 guard serves(owner) else { return }
                 if needsNous {
@@ -562,6 +563,7 @@ struct CapabilityToolsetDetailPage: View {
         Task {
             defer { working = nil }
             do {
+                guard serves(owner) else { return }
                 try await store.selectTerminalBackend(backend.name)
                 let fresh = try? await store.terminalBackends()
                 guard serves(owner) else { return }
@@ -581,6 +583,7 @@ struct CapabilityToolsetDetailPage: View {
         let owner = appState.currentCapabilitiesOwner
         Task {
             do {
+                guard serves(owner) else { return }
                 try await store.saveKey(env.key, value: trimmed)
                 Haptics.success()
                 // A failed read keeps what's on screen.
