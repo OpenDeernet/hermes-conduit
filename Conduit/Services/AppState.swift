@@ -12216,6 +12216,7 @@ final class AppState: ObservableObject {
     func beginSavedConnectionRepair() -> ConnectionRepairContext? {
         guard let context = makeSavedConnectionRepairContext() else { return nil }
         cancelChatResumeTransportRecovery()
+        repairRegisteredDashboardIDs = []
         return context
     }
 
@@ -12323,13 +12324,16 @@ final class AppState: ObservableObject {
                 restoreNativeOAuthTokens(previousTokens, dashboardID: dashboardID, baseURL: baseURL)
             }
         }
+        repairRegisteredDashboardIDs = []
         guard outcome == .activated else { return outcome }
         persistActivatedRepair(handoff, failedTarget: failedTarget)
         return outcome
     }
 
     /// Dashboards a repair's sign-in registered for a new address this
-    /// repair (`registerRepairDashboard`); cleared when a repair begins.
+    /// repair (`registerRepairDashboard`); cleared when a repair begins
+    /// (either entry) and once an activation is tried, so a later repair
+    /// never inherits them.
     private var repairRegisteredDashboardIDs: Set<UUID> = []
 
     /// The saved dashboard other than the one being repaired that already

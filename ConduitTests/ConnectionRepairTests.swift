@@ -622,6 +622,14 @@ final class ConnectionRepairTests: XCTestCase {
         XCTAssertEqual(harness.appState.registerRepairDashboard(forURL: "https://other.example"), other)
         XCTAssertNotNil(harness.appState.repairAddressOwner("https://other.example", repairing: ConnectionRepairTests.failedURL),
                         "An address that was already saved is still another dashboard's")
+        // A later repair doesn't inherit it: an activation clears the set.
+        _ = await harness.appState.performConnectionRepair(.native(candidate(
+            serverURL: "https://other.example",
+            ticket: "again",
+            revision: 5,
+            generation: 3
+        )))
+        XCTAssertNotNil(harness.appState.repairAddressOwner("https://fresh.example", repairing: ConnectionRepairTests.failedURL))
     }
 
     func testChangedEndpointFailsSafelyIntoTheExistingIdentityBoundary() async {
