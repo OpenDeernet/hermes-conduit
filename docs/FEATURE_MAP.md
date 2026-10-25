@@ -1760,9 +1760,9 @@ memory or a skill, and the Chat setting that shows or hides them
 (`display.memory_notifications`: Use Hermes default, Always show, Never show).
 
 **Siblings:** the Chat settings row and its caption · the review row in the
-chat · chats, project chats and group rooms (the dashboard's chats) · Bot
-Chat (Hermes' messaging gateway) · the notifier's live read of the setting
-for chats already open
+chat, live and in the offline copy · chats, project chats, Bot Chat and group
+rooms (all the dashboard's chats) · Hermes' messaging platforms · the
+notifier's live read of the setting for chats already open
 
 **Code**
 - Setting: `Conduit/Views/AuxiliaryViews.swift` (ChatSettingsDetail fields, `display.memory_notifications`), `Conduit/Models/Models.swift` (ProfileDisplayPreferences.showReviews), `Conduit/Services/AppState.swift` (loadProfileDisplayPreferences, setProfileSetting)
@@ -1771,7 +1771,7 @@ for chats already open
 - Notifier: `notifier/review_notices.py`, `notifier/tests/test_review_notices.py`
 
 **Rulings**
-- A changed setting reaches chats already open at their next review, with no restart: the dashboard reads it only when it builds a chat's agent, so the plugin reads it again from the chat's profile before each review. Bot Chat needs nothing, Hermes' gateway reads it every turn (2026-10-25, notifier #373, #1260).
+- A changed setting reaches chats already open at their next review, with no restart: the dashboard reads it only when it builds a chat's agent, so the plugin reads it again from the chat's profile before each review. Hermes' messaging platforms need nothing, its gateway reads it every turn (2026-10-25, notifier #373, #1260).
 - Never show hides the rows a chat already has too, live and in the offline copy, without deleting them: they come back when the setting does. Anything but "off" (or a YAML false) shows them, as Hermes reads it (2026-10-25, #1260; Eric's rule to close gaps in the same change).
 
 **Open gaps**
