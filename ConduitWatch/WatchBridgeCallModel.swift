@@ -880,6 +880,8 @@ final class WatchBridgeCallModel: ObservableObject {
                 if !text.isEmpty { handledLines = transcript.count }
             }
         case .delegation(let id, let text):
+            // Acting on a result counts as taking it, as words do (#1210).
+            lastModelWordsAt = now
             delegated(id: id, itemText: text)
         case .error(let code, let message):
             note("bridgeEngineError", ["code": code as Any, "message": String(message.prefix(200))])

@@ -851,6 +851,9 @@ final class GPTLiveConversationController: ObservableObject {
                 break
             }
         case .delegation(let id, let text):
+            // Acting on a result counts as taking it, as words do: its
+            // resend would ask again (#1210).
+            lastModelWordsAt = now()
             takeDelegation(id: id, text: text)
         case .sessionStarted, .error, .sessionClosed:
             break
