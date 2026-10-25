@@ -12268,6 +12268,8 @@ final class AppState: ObservableObject {
         // the tested URL counts as changed (remember it) and whether the
         // Cloudflare token needs a same-origin re-bind.
         let failedTarget = connection?.baseUrl
+        // Whatever this try's outcome, a later repair starts without them.
+        defer { repairRegisteredDashboardIDs = [] }
         // A sign-in's address was checked before its sheet registered it
         // (ConnectionSetupView.beginRepairSignIn); a tested password
         // reconnect is checked here, before its cookies are committed.
@@ -12324,7 +12326,6 @@ final class AppState: ObservableObject {
                 restoreNativeOAuthTokens(previousTokens, dashboardID: dashboardID, baseURL: baseURL)
             }
         }
-        repairRegisteredDashboardIDs = []
         guard outcome == .activated else { return outcome }
         persistActivatedRepair(handoff, failedTarget: failedTarget)
         return outcome
