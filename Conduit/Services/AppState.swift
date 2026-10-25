@@ -2208,6 +2208,28 @@ final class AppState: ObservableObject {
         storePulseHomes(homes)
     }
 
+    /// Do it's New Chat, for a Pulse item from no chat (PulseFeed.swift):
+    /// only when New Chat can start one at once, never one that waits. The
+    /// chat is the one this call's own create opened, as createNewSession
+    /// returns it, while it's still the one open: another create landing
+    /// meanwhile (a call's chat, Ask Hermes About, a widget) opens a chat
+    /// that isn't this one's. The Pulse screen stays up until it opened, so
+    /// a chat that didn't start leaves it there to say why. Nil when none
+    /// started.
+    func startPulseNewChat() async -> String? {
+        guard canStartNewChatNow, !isStartingNewChat, !showsPendingNewChat else { return nil }
+        guard let created = await createNewSessionMarkingStart(), activeSessionId == created else { return nil }
+        dismissSidebarDrawer()
+        return created
+    }
+
+    /// Do it's switch to Pulse's profile, for a new chat there: whether it
+    /// finished with that profile on screen. False when a newer navigation
+    /// took the screen meanwhile, which a new chat mustn't replace.
+    func switchProfileForPulse() async -> Bool {
+        await switchProfile(to: Self.pulseHomeProfile, reusing: nil)
+    }
+
     private func storePulseHomes(_ homes: [String: String]) {
         objectWillChange.send()
         pulseRememberedHomes = homes
@@ -15584,6 +15606,8 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Returns the chat it created and opened, nil when it opened none.
+    @discardableResult
     private func createAndReconcileSession(
         using client: HermesClient,
         profile: String,
@@ -15594,12 +15618,12 @@ final class AppState: ObservableObject {
         requiredViewportTransitionGeneration: UInt64? = nil,
         cwd: String? = nil,
         widgetLease: WidgetLaunchLease? = nil
-    ) async {
+    ) async -> String? {
         guard automaticChatResumeWorkIsCurrent(
             automaticWorkToken,
             syncOperationID: automaticSyncOperationID
         ), chatViewportTransitionIsCurrent(requiredViewportTransitionGeneration),
-              widgetLease?.isCurrent != false else { return }
+              widgetLease?.isCurrent != false else { return nil }
         do {
             let created: (sessionId: String, storedSessionId: String?, profile: String?)
             if let widgetSessionCreatorOverride {
@@ -15624,7 +15648,7 @@ final class AppState: ObservableObject {
                   activeClient === client else {
                 settleReconciliation(token, automaticSyncOperationID: automaticSyncOperationID)
                 chatResumeCoordinator.abandonPendingAutomaticSync()
-                return
+                return nil
             }
             if let returnedProfile = created.profile,
                !profilesMatch(returnedProfile, profile) {
@@ -15633,7 +15657,7 @@ final class AppState: ObservableObject {
                 settleReconciliation(token, automaticSyncOperationID: automaticSyncOperationID)
                 chatResumeCoordinator.abandonPendingAutomaticSync()
                 await loadSessions(forceRefresh: true)
-                return
+                return nil
             }
             let runtimeSessionID = created.sessionId.isEmpty ? (created.storedSessionId ?? "") : created.sessionId
             guard !runtimeSessionID.isEmpty else {
@@ -15641,7 +15665,7 @@ final class AppState: ObservableObject {
                 errorMessage = AppLocalization.string("Hermes didn't finish creating the conversation. Try again.")
                 settleReconciliation(token, automaticSyncOperationID: automaticSyncOperationID)
                 chatResumeCoordinator.abandonPendingAutomaticSync()
-                return
+                return nil
             }
 
             // `session.create` already returns the active runtime session.
@@ -15747,6 +15771,7 @@ final class AppState: ObservableObject {
                 automaticWorkToken: automaticWorkToken,
                 automaticSyncOperationID: automaticSyncOperationID
             )
+            return runtimeSessionID
         } catch {
             guard automaticChatResumeWorkIsCurrent(
                     automaticWorkToken,
@@ -15759,7 +15784,7 @@ final class AppState: ObservableObject {
                   let activeClient = self.client,
                   activeClient === client else {
                 settleReconciliation(token, automaticSyncOperationID: automaticSyncOperationID)
-                return
+                return nil
             }
             turnState = .idle
             errorMessage = AppLocalization.string("Failed to create session: \(UserFacingError.message(for: error))")
@@ -15768,6 +15793,7 @@ final class AppState: ObservableObject {
             if resumePurpose == .automaticReturn {
                 scheduleReconnectAfterFailedSync()
             }
+            return nil
         }
     }
 
@@ -22338,7 +22364,9 @@ final class AppState: ObservableObject {
         !isStartingNewChat && (canStartNewChatNow || canQueueNewChat || showsPendingNewChat)
     }
 
-    private var canStartNewChatNow: Bool {
+    /// New Chat can start a chat right now, with nothing to wait for. Do
+    /// it's refusal on the Pulse screen goes by it too (PulseFeed.swift).
+    var canStartNewChatNow: Bool {
         isConnected && !isConnecting && !isProfileSwitching && client != nil
             && turnState != .synchronizing && offlineChatPresentation == nil
     }
@@ -22391,12 +22419,15 @@ final class AppState: ObservableObject {
         requestComposerFocus(on: created)
     }
 
-    func createNewSession(cwd: String? = nil, widgetLease: WidgetLaunchLease? = nil) async {
+    /// Returns the chat this call created and opened, nil when it opened
+    /// none (refused, failed, or replaced by a newer navigation).
+    @discardableResult
+    func createNewSession(cwd: String? = nil, widgetLease: WidgetLaunchLease? = nil) async -> String? {
         guard !isProfileSwitching, isConnected, !isConnecting, let client else {
             if isProfileSwitching || isConnecting {
                 errorMessage = AppLocalization.string("Wait for the workspace switch to finish before starting a conversation.")
             }
-            return
+            return nil
         }
         // A new conversation takes the viewport back from an open room, the
         // same as a session open: otherwise the room stays on screen while
@@ -22410,7 +22441,7 @@ final class AppState: ObservableObject {
             newSessionCreationsInFlight -= 1
             cancelChatViewportTransitionIfNoReplacement(generation: transitionGeneration)
         }
-        guard widgetLease?.isCurrent != false else { return }
+        guard widgetLease?.isCurrent != false else { return nil }
         let profile = activeProfile
         let previousSessionID = activeSessionId
         let previousTitle = activeSessionTitle
@@ -22420,7 +22451,7 @@ final class AppState: ObservableObject {
         let previousTurnState = turnState
         let token = beginReconciliation()
         turnState = .synchronizing
-        await createAndReconcileSession(
+        let created = await createAndReconcileSession(
             using: client,
             profile: profile,
             token: token,
@@ -22439,7 +22470,8 @@ final class AppState: ObservableObject {
            activeSessionId == previousSessionID, activeSessionTitle == newTitle {
             activeSessionTitle = previousTitle
         }
-        guard widgetLease?.isCurrent != false else { return }
+        guard widgetLease?.isCurrent != false else { return nil }
+        return created
     }
 
     /// Re-resume the currently visible conversation. This uses the same
@@ -23020,10 +23052,12 @@ final class AppState: ObservableObject {
 
     /// Creates a chat as New Chat does, marked as starting until it is
     /// done, so neither New Chat nor a send starts a second one meanwhile.
-    private func createNewSessionMarkingStart() async {
+    /// Returns the chat it created and opened, as createNewSession does.
+    @discardableResult
+    private func createNewSessionMarkingStart() async -> String? {
         isStartingNewChat = true
         defer { isStartingNewChat = false }
-        await createNewSession()
+        return await createNewSession()
     }
 
     private func performComposerSubmission(

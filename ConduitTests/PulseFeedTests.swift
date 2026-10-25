@@ -260,6 +260,8 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertEqual(owed.heading, PulseCardKind.topic("promise"))
         XCTAssertTrue(date.isRatable)
         XCTAssertFalse(date.canBeDone || date.isActionable)  // nothing remembered behind it
+        XCTAssertTrue(date.isFound)
+        XCTAssertFalse(owed.isFound || report.isFound)
         XCTAssertFalse(report.isRatable)
         XCTAssertEqual(report.heading, PulseCardKind.title("report"))
         XCTAssertEqual(PulseCardKind.topic("something new"), PulseCardKind.topic(""))  // unknown topics read "Noticed"
@@ -276,6 +278,156 @@ final class PulseFeedTests: XCTestCase {
         state.applyPulseFeed(page)
         XCTAssertFalse(state.pulseCardHasChat(page.cards[0]))
         XCTAssertTrue(state.pulseCardHasChat(page.cards[1]))
+    }
+
+    func testDoneAndDoItReachReportItemsPulseFoundOnItsOwnWhereThePluginTakesThem() throws {
+        let state = try appState()
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"home_chat_id": "pulse_chat", "cards": [
+          {"id": 1, "kind": "noticed", "topic": "date", "level": "screen", "news": "Dentist Friday", "chat_id": "pulse_chat"},
+          {"id": 2, "kind": "noticed", "topic": "fact", "level": "screen", "news": "The repo moved", "chat_id": "work"},
+          {"id": 3, "kind": "noticed", "topic": "promise", "item_id": 4, "level": "screen", "news": "Send the deck",
+           "chat_id": "work"},
+          {"id": 4, "kind": "report", "level": "screen", "news": "Here's your report.", "chat_id": "pulse_chat"}
+        ]}
+        """)))
+        let date = page.cards[0], fact = page.cards[1], owed = page.cards[2], report = page.cards[3]
+        // A plugin that takes Done and Do it only on what Pulse remembers (0.64.0).
+        state.setNotifierPluginStateForTesting(.reported(version: "0.76.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.doneCapability, PulseClient.actedCapability
+        ]))
+        state.applyPulseFeed(page)
+        XCTAssertTrue(state.canMarkPulseCardDone(owed) && state.canActOnPulseCard(owed))
+        XCTAssertFalse(state.canMarkPulseCardDone(date) || state.canActOnPulseCard(date))
+        XCTAssertFalse(state.canMarkPulseCardDone(fact) || state.canActOnPulseCard(fact))
+        // One that takes them on every report item (0.77.0).
+        state.setNotifierPluginStateForTesting(.reported(version: "0.77.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.doneCapability, PulseClient.actedCapability,
+            PulseClient.foundActionsCapability
+        ]))
+        XCTAssertTrue(state.canMarkPulseCardDone(date) && state.canActOnPulseCard(date))
+        XCTAssertTrue(state.canMarkPulseCardDone(fact) && state.canActOnPulseCard(fact))
+        XCTAssertFalse(state.canMarkPulseCardDone(report) || state.canActOnPulseCard(report))
+        // Found in a chat, Do it opens that chat; from no chat, Pulse's own is
+        // no chat to open, so it starts a new one.
+        XCTAssertTrue(state.pulseCardHasChat(fact))
+        XCTAssertFalse(state.pulseCardHasChat(date))
+        XCTAssertNil(state.pulseNewChatRefusal(for: fact))  // its own chat opens, connected or not
+        // A plugin without Done takes it on no card.
+        state.setNotifierPluginStateForTesting(.reported(version: "0.77.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.foundActionsCapability
+        ]))
+        XCTAssertFalse(state.canMarkPulseCardDone(date) || state.canMarkPulseCardDone(owed))
+    }
+
+    func testDoItOnAReportItemFromNoChatFillsOnlyTheChatItsNewChatMade() async throws {
+        let state = try appState()
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"home_chat_id": "pulse_chat", "cards": [
+          {"id": 1, "kind": "noticed", "topic": "date", "level": "screen", "news": "Dentist Friday", "chat_id": "pulse_chat"}
+        ]}
+        """)))
+        state.setNotifierPluginStateForTesting(.reported(version: "0.77.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.doneCapability, PulseClient.actedCapability,
+            PulseClient.foundActionsCapability
+        ]))
+        state.applyPulseFeed(page)
+        let date = try XCTUnwrap(page.cards.first)
+        // Offline, Do it says so at once instead of waiting for a chat.
+        XCTAssertEqual(state.pulseNewChatRefusal(for: date),
+                       AppLocalization.string("Couldn't start a new chat. Check your connection and try again."))
+        let refused = await state.actOnPulseCard(date)
+        XCTAssertFalse(refused)
+        // Connecting, it says so too: New Chat would make a chat that waits.
+        state.isConnecting = true
+        XCTAssertEqual(state.pulseNewChatRefusal(for: date),
+                       AppLocalization.string("Conduit is still connecting to your dashboard. Try again in a moment."))
+        state.isConnecting = false
+        state.isConnected = true
+        state.client = HermesClient(connection: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"),
+                                    profile: "default")
+        XCTAssertNil(state.pulseNewChatRefusal(for: date))
+        // A chat an earlier New Chat made is still open, under the chat list.
+        state.activeSessionId = "earlier"
+        state.newChatOpenedSessionID = "earlier"
+        state.showSidebar = true
+        // A new chat that doesn't start gets nothing, and the earlier one isn't taken for it.
+        state.widgetSessionCreatorOverride = { _, _ in throw URLError(.timedOut) }
+        let failed = await state.actOnPulseCard(date)
+        XCTAssertFalse(failed)
+        XCTAssertEqual(state.activeSessionId, "earlier")
+        XCTAssertEqual(state.composerPrefillText, "")
+        XCTAssertTrue(state.showSidebar, "the Pulse screen stays up to say why")
+        // The chat its New Chat made gets the reminder, uncovered.
+        state.showSidebar = true
+        state.widgetSessionCreatorOverride = { _, _ in ("fresh", "fresh", "default") }
+        let opened = await state.actOnPulseCard(date)
+        XCTAssertTrue(opened)
+        XCTAssertEqual(state.activeSessionId, "fresh")
+        XCTAssertFalse(state.showSidebar)
+        XCTAssertEqual(state.composerPrefillText, date.actionMessage)
+        XCTAssertEqual(state.composerPrefillDraftKey, ComposerBar.composerDraftKey(for: "fresh", profile: "default"))
+    }
+
+    func testDoItNeverFillsAChatAnotherCreateOpenedWhileItsOwnWasStarting() async throws {
+        let state = try appState()
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"home_chat_id": "pulse_chat", "cards": [
+          {"id": 1, "kind": "noticed", "topic": "date", "level": "screen", "news": "Dentist Friday", "chat_id": "pulse_chat"}
+        ]}
+        """)))
+        state.setNotifierPluginStateForTesting(.reported(version: "0.77.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.doneCapability, PulseClient.actedCapability,
+            PulseClient.foundActionsCapability
+        ]))
+        state.applyPulseFeed(page)
+        let date = try XCTUnwrap(page.cards.first)
+        state.isConnected = true
+        state.client = HermesClient(connection: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"),
+                                    profile: "default")
+        // Another create (a call's chat, Ask Hermes About) starts while Do
+        // it's own is on its way, and opens its chat first.
+        var creates = 0
+        state.widgetSessionCreatorOverride = { [weak state] _, _ in
+            creates += 1
+            guard creates == 1 else { return ("other", "other", "default") }
+            _ = await state?.createNewSession()
+            return ("mine", "mine", "default")
+        }
+        let opened = await state.actOnPulseCard(date)
+        XCTAssertEqual(creates, 2)
+        XCTAssertFalse(opened)
+        XCTAssertEqual(state.activeSessionId, "other")
+        XCTAssertEqual(state.composerPrefillText, "", "the reminder never goes into a chat Do it didn't start")
+        XCTAssertFalse(state.isStartingNewChat)
+    }
+
+    func testDoItOnAnItemFoundInAChatFillsThatChat() async throws {
+        let state = try appState()
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"home_chat_id": "pulse_chat", "cards": [
+          {"id": 2, "kind": "noticed", "topic": "fact", "level": "screen", "news": "The repo moved", "chat_id": "work",
+           "message_id": 42}
+        ]}
+        """)))
+        state.setNotifierPluginStateForTesting(.reported(version: "0.77.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.doneCapability, PulseClient.actedCapability,
+            PulseClient.foundActionsCapability
+        ]))
+        state.applyPulseFeed(page)
+        let fact = try XCTUnwrap(page.cards.first)
+        var creates = 0
+        state.widgetSessionCreatorOverride = { _, _ in
+            creates += 1
+            return ("fresh", "fresh", "default")
+        }
+        state.activeSessionId = "work"
+        let opened = await state.actOnPulseCard(fact)
+        XCTAssertTrue(opened)
+        XCTAssertEqual(creates, 0, "an item found in a chat starts no new one")
+        XCTAssertEqual(state.pendingArtifactReveal?.messageID, 42)
+        XCTAssertEqual(state.composerPrefillText, fact.actionMessage)
+        XCTAssertEqual(state.composerPrefillDraftKey, ComposerBar.composerDraftKey(for: "work", profile: "default"))
     }
 
     func testOpeningACardsChatShowsTheMessageItCameFrom() throws {

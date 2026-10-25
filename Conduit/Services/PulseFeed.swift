@@ -90,6 +90,11 @@ struct PulseCard: Equatable, Identifiable {
     /// One of a report's items, on its own card.
     var isNoticed: Bool { kind == "noticed" }
 
+    /// A report item Pulse found on its own, in a chat it didn't remember,
+    /// the calendar, reminders or the Shortcuts inbox: nothing remembered
+    /// is behind it.
+    var isFound: Bool { isNoticed && itemID == nil }
+
     /// Done or swiped away: it goes under Done and cleared.
     var isCleared: Bool { doneAt != nil || dismissedAt != nil }
 
@@ -98,13 +103,18 @@ struct PulseCard: Equatable, Identifiable {
     var isRatable: Bool { kind == "followup" || isNoticed }
 
     /// A follow-up, or a report item drawn from something Pulse remembers,
-    /// can be marked done: that thing closes, without a rating.
+    /// can be marked done: that thing closes, without a rating. One Pulse
+    /// found on its own can be too, by a plugin that takes it
+    /// (AppState.canMarkPulseCardDone).
     var canBeDone: Bool { (kind == "followup" || isNoticed) && itemID != nil }
 
     /// It can be acted on in the chat the remembered thing came from.
     var isActionable: Bool {
-        (kind == "followup" || (isNoticed && itemID != nil)) && !chatID.isEmpty && !(news.isEmpty && title.isEmpty)
+        (kind == "followup" || (isNoticed && itemID != nil)) && !chatID.isEmpty && hasReminder
     }
+
+    /// Do it has a reminder to leave in the composer.
+    var hasReminder: Bool { !(news.isEmpty && title.isEmpty) }
 
     /// The card's heading: a report item's topic, else its kind.
     var heading: String { isNoticed ? PulseCardKind.topic(topic) : PulseCardKind.title(kind) }
@@ -376,16 +386,18 @@ extension PulseClient {
         return (response["learned"] as? [Any] ?? []).compactMap(PulseLesson.init(json:))
     }
 
-    /// Marks a follow-up card done (its promise closes, no rating), or
-    /// takes the mark off; whether it changed.
+    /// Marks a card done (a promise behind it closes, no rating), or takes
+    /// the mark off; whether it changed.
     @discardableResult
     func markDone(card: Int, done: Bool) async throws -> Bool {
         let response = try await request("\(Self.path)/done", "POST", ["card": card, "done": done])
         return PulseJSON.bool(response["changed"]) ?? false
     }
 
-    /// Do it on a follow-up card: Pulse reads that chat once Hermes has
-    /// answered and marks the card done if it got done.
+    /// Do it on a card: Pulse reads the chat it opened once Hermes has
+    /// answered and marks the card done if it got done. Only the card is
+    /// named: a new chat Do it started for an item from no chat is found by
+    /// the reminder's words, which it shares with the card (notifier #362).
     func acted(card: Int) async throws {
         _ = try await request("\(Self.path)/acted", "POST", ["card": card])
     }
@@ -501,13 +513,27 @@ extension AppState {
         pulseOpenRequest = PulseOpenRequest(card: card)
     }
 
-    /// Opens the chat a card came from.
     /// The card links a chat to open: not Pulse's own, which is hidden (a
     /// report's or brief's cards point there).
     func pulseCardHasChat(_ card: PulseCard) -> Bool {
         !card.chatID.isEmpty && card.chatID != pulseHomeChat
     }
 
+    /// Done on this card: a follow-up's or a remembered report item's
+    /// (0.64.0), or one Pulse found on its own (0.77.0).
+    func canMarkPulseCardDone(_ card: PulseCard) -> Bool {
+        notifierPlugin.reports(PulseClient.doneCapability)
+            && (card.canBeDone || card.isFound && notifierPlugin.reports(PulseClient.foundActionsCapability))
+    }
+
+    /// Do it on this card: one about something Pulse remembers, or a report
+    /// item Pulse found on its own (0.77.0).
+    func canActOnPulseCard(_ card: PulseCard) -> Bool {
+        card.isActionable
+            || card.isFound && card.hasReminder && notifierPlugin.reports(PulseClient.foundActionsCapability)
+    }
+
+    /// Opens the chat a card came from.
     /// It opens at the message the card came from, as an artifact's Show
     /// in chat does, whatever the chat would otherwise land on.
     func openPulseCardChat(_ card: PulseCard) {
@@ -516,16 +542,57 @@ extension AppState {
         openAppLink(.session(id: card.chatID, profile: card.profile.isEmpty ? Self.pulseHomeProfile : card.profile))
     }
 
-    /// Do it on a follow-up card: opens the chat the promise or to-do came
-    /// from with the reminder in its composer, ready to send. False when the
-    /// chat didn't open.
+    /// Do it: opens the chat the card came from with the reminder in its
+    /// composer, ready to send. A card from no chat (a report item from the
+    /// calendar, reminders or the Shortcuts inbox) gets a new chat in Pulse's
+    /// profile, where Pulse reads what came of it, and only the chat that
+    /// New Chat made gets the reminder (startPulseNewChat). False when no
+    /// chat opened.
     func actOnPulseCard(_ card: PulseCard) async -> Bool {
-        guard card.isActionable else { return false }
+        guard canActOnPulseCard(card), pulseNewChatRefusal(for: card) == nil else { return false }
         let dashboard = activeDashboardID
-        openPulseCardChat(card)
-        guard await waitForOpenChat(card.chatID, on: dashboard) else { return false }
+        if pulseCardHasChat(card) {
+            openPulseCardChat(card)
+            guard await waitForOpenChat(card.chatID, on: dashboard) else { return false }
+        } else {
+            if !profilesMatch(activeProfile, Self.pulseHomeProfile) {
+                // The switch returns with Pulse's profile connected and its chat open.
+                guard await switchProfileForPulse(), activeDashboardID == dashboard,
+                      profilesMatch(activeProfile, Self.pulseHomeProfile) else { return false }
+            }
+            guard await startPulseNewChat() != nil, activeDashboardID == dashboard else { return false }
+        }
         prefillComposer(card.actionMessage)
         return true
+    }
+
+    /// Why Do it can't start a new chat for a card from no chat right now,
+    /// for the Pulse screen to say before a chat covers it; nil when it can,
+    /// or when the card has a chat of its own. Do it starts its chat only
+    /// when New Chat can start one at once (startPulseNewChat, by
+    /// canStartNewChatNow): connecting or synchronizing, New Chat would make
+    /// one that waits, and a New Chat already starting or waiting comes
+    /// first. From another profile, a call stops the switch, as it does New
+    /// Chat's (startNewChat(inProfile:)).
+    func pulseNewChatRefusal(for card: PulseCard) -> String? {
+        guard !pulseCardHasChat(card) else { return nil }
+        if !profilesMatch(activeProfile, Self.pulseHomeProfile), isVoiceCallInProgress {
+            return AppLocalization.string("End the call to open a chat in another profile.")
+        }
+        guard isConnected || isConnecting else {
+            return AppLocalization.string("Couldn't start a new chat. Check your connection and try again.")
+        }
+        if isProfileSwitching {
+            return AppLocalization.string("Wait for the workspace switch to finish before starting a conversation.")
+        }
+        // Connecting, synchronizing, an offline copy on screen, or no client yet.
+        if !canStartNewChatNow {
+            return AppLocalization.string("Conduit is still connecting to your dashboard. Try again in a moment.")
+        }
+        if isStartingNewChat || showsPendingNewChat {
+            return AppLocalization.string("Another new chat is starting. Try again in a moment.")
+        }
+        return nil
     }
 
     /// Waits up to ten seconds for `chatID` to be the open chat. Gives up
@@ -568,4 +635,7 @@ extension PulseClient {
     static let dismissCapability = "pulse_dismiss"
     /// The morning brief comes every day with what's still open (0.76.0).
     static let dailyBriefCapability = "pulse_daily_brief"
+    /// Done and Do it take report items Pulse found on its own, and one found
+    /// in a chat points at that chat (0.77.0).
+    static let foundActionsCapability = "pulse_found_actions"
 }
