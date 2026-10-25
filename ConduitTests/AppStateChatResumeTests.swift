@@ -274,15 +274,18 @@ final class AppStateChatResumeTests: XCTestCase {
         cache.update(for: [
             ChatMessage(id: "u1", role: .user, content: "hi", timestamp: "1"),
             ChatMessage(id: "r1", role: .system, content: "Memory updated", timestamp: "2", review: activity),
+            // Saved before reviews were tagged: told by its text, as the row draws it.
+            ChatMessage(id: "r2", role: .system, content: "💾 Self-improvement review: Memory updated", timestamp: "3"),
+            ChatMessage(id: "u2", role: .user, content: "💾 Self-improvement review: quoted", timestamp: "4"),
         ])
         let disclosure = ChatRowDisclosure()
         var preferences = ProfileDisplayPreferences()
         func drawn() -> [String] {
             cache.targets.filter { $0.drawsRow(preferences: preferences, isBusy: false, disclosure: disclosure) }.map(\.id)
         }
-        XCTAssertEqual(drawn(), ["u1", "r1"])
+        XCTAssertEqual(drawn(), ["u1", "r1", "r2", "u2"])
         preferences.showReviews = false
-        XCTAssertEqual(drawn(), ["u1"])
+        XCTAssertEqual(drawn(), ["u1", "u2"])
     }
 
     /// Self-improvement reviews arrive only as `review.summary` stream events

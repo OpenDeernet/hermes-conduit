@@ -513,13 +513,20 @@ struct ChatStepPlacement: Equatable {
 }
 
 extension ChatMessageScrollTarget {
+    /// A system row the transcript draws as a review card (MessageBubble):
+    /// rows saved before reviews were tagged are told by their text.
+    var isReview: Bool {
+        message.role == .system
+            && (message.review != nil || MessageNormalizer.reviewActivity(fromText: message.content) != nil)
+    }
+
     /// Whether the transcript draws this row: a self-improvement review
     /// while "Self-improvement updates" is off doesn't, and a step follows
     /// ChatStepPlacement.drawsRow. The transcript leaves out a row that
     /// draws nothing, or the stack would space it.
     @MainActor
     func drawsRow(preferences: ProfileDisplayPreferences, isBusy: Bool, disclosure: ChatRowDisclosure) -> Bool {
-        if message.review != nil, !preferences.showReviews { return false }
+        if !preferences.showReviews, isReview { return false }
         return step?.drawsRow(messageID: id, preferences: preferences, isBusy: isBusy, disclosure: disclosure) ?? true
     }
 }
