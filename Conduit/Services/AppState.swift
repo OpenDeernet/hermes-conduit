@@ -22494,7 +22494,11 @@ final class AppState: ObservableObject {
         }
         // Read before the open marks it read: an unread chat lands at the
         // start of its latest reply once its transcript is in (#365).
-        let opensUnreadReply = listedSession.map { isSessionUnread($0) } ?? false
+        // A saved chat's row opens by its stored session id.
+        let unreadRow = listedSession ?? (sessions + cronSessions).first(where: {
+            $0.storedSessionId == sessionId
+        })
+        let opensUnreadReply = unreadRow.map { isSessionUnread($0) } ?? false
         let transitionGeneration: UInt64
         if let viewportTransitionGeneration {
             guard chatViewportTransitionIsCurrent(
