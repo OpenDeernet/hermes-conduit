@@ -473,7 +473,7 @@ final class GPTLiveDelegationBridge {
 
     /// The only background job still running, if just one is.
     private var onlyRunningJob: VoiceBackgroundJob? {
-        let running = supervisor.jobs.filter { !$0.isThreadTurn && $0.status.isActive }
+        let running = supervisor.jobs.filter { !$0.isThreadTurn && !$0.isDetachedThreadTurn && $0.status.isActive }
         return running.count == 1 ? running[0] : nil
     }
 
