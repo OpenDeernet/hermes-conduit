@@ -1796,6 +1796,8 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     func detachLiveThread() {
         liveThread = nil
         let callChatJob = callChatJobID
+        // A first request still starting is the call's too.
+        let claimedJob = callChatClaim?.jobID
         callChatJobID = nil
         callChatClaim = nil
         callChatClosedCallID = liveCallID
@@ -1805,9 +1807,10 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         notedChatTurns.removeAll()
         lastUnidentifiedChatReply = nil
         // Every turn of the ending call, settled ones too, and the request
-        // whose chat it took (#1250): none is read back or announced to a
-        // later call.
-        for index in jobs.indices where (jobs[index].isThreadTurn || jobs[index].id == callChatJob) && !jobs[index].isDetachedThreadTurn {
+        // whose chat it took or was taking (#1250): none is read back or
+        // announced to a later call.
+        for index in jobs.indices where (jobs[index].isThreadTurn || jobs[index].id == callChatJob || jobs[index].id == claimedJob)
+            && !jobs[index].isDetachedThreadTurn {
             if jobs[index].isThreadTurn, jobs[index].status.isActive, !jobs[index].threadTurnSubmitted {
                 jobs[index].status = .cancelled
             }

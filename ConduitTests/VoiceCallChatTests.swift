@@ -265,6 +265,7 @@ extension VoiceConversationControllerTests {
         _ = await first.value
         XCTAssertNil(supervisor.liveThread)
         XCTAssertNil(supervisor.callChatJobID)
+        XCTAssertTrue(supervisor.listedJobs.isEmpty, "the ended call's first request isn't the next call's job")
 
         // The next call makes its own chat.
         supervisor.beginLiveCall()
