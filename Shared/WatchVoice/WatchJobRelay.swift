@@ -337,13 +337,12 @@ enum WatchJobAnswer {
         }
         guard !lines.isEmpty else { return result }
         let summary = result["summary"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let before = summary.isEmpty || summary == noJobsSummary ? [] : [summary]
+        // Nothing listed: its summary says so (in the app's language, from
+        // the iPhone), which the unsaid jobs now contradict.
+        let before = summary.isEmpty || entries.isEmpty ? [] : [summary]
         merged["summary"] = (before + lines).joined(separator: " ")
         return merged
     }
-
-    /// The host's list_jobs summary with nothing listed.
-    static let noJobsSummary = "No background jobs are running."
 
     /// What the model hears about a news item, as the iPhone's supervisor
     /// would tell it; nil when there's nothing to say.

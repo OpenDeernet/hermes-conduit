@@ -855,6 +855,8 @@ final class WatchBridgeCallModel: ObservableObject {
             } else {
                 assistantLine = ""
                 lastModelTurnEndedAt = now
+                // A turn whose words come only here was still said.
+                if !text.isEmpty { lastModelWordsAt = now }
             }
             if !text.isEmpty {
                 transcript.append(.init(role: role == "user" ? .user : .assistant, text: text, at: Date()))

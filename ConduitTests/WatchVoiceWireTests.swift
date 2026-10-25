@@ -1319,7 +1319,8 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(merged["job_2"], "id=b; title=Check the server; status=finished")
         XCTAssertEqual(merged["summary"], "Book a table is still running. Check the server has finished.")
 
-        let none = ["summary": WatchJobAnswer.noJobsSummary]
+        // The iPhone answers in the app's language.
+        let none = ["summary": "Es laufen keine Hintergrundaufgaben."]
         let failed = WatchJobAnswer.UnsaidJob(jobID: "c", title: "Send the report", status: "failed")
         XCTAssertEqual(WatchJobAnswer.listing(none, unsaid: [failed])["summary"], "Send the report failed.")
 
