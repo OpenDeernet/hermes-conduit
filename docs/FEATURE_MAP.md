@@ -232,7 +232,7 @@ instructions preview in Voice settings
 **Code**
 - The shared rule: `Shared/GrokLive/GrokLiveProtocol.swift` (LiveVoiceAcknowledgement, jobClaimInstructions for Grok and Local Live)
 - Gemini, Qwen and the Watch: `Conduit/Voice/GeminiLive/GeminiLiveConversationController.swift` (instructions, acknowledgementPrompt for a quiet start_job)
-- GPT-Live, phone and Watch: `Conduit/Voice/GPTLive/GPTLiveConversationController.swift` (briefingRules)
+- GPT-Live, phone and Watch: `Conduit/Voice/GPTLive/GPTLiveConversationController.swift` (briefingRules; claimsToSendToHermes, which takes an acknowledgement-only turn with no delegation as a send)
 - Local Live agent: `Shared/LocalLive/LocalLiveProtocol.swift` (agentInstructions)
 - Conduit's own tools need none: `Conduit/Voice/VoiceHostTools.swift`
 - Web lookups: `Conduit/Voice/GeminiLive/GeminiLiveToolBridge.swift` (lookupAnswerNote)
@@ -240,6 +240,7 @@ instructions preview in Voice settings
 **Rulings**
 - Each handoff gets a word or a few, in the model's own words and different each time; Hermes is named at most once on a call, or when the user asks who's doing it; telling the user what it's about to do counts as the acknowledgement (2026-10-25, #1251).
 - Gemini, Qwen and the Watch say it before start_job; Grok and Local Live only once start_job returns started; GPT-Live before the delegation (2026-10-25, #1251).
+- GPT-Live's send-claim fallback counts a turn that is only an acknowledgement ("On it.", "One moment, checking.") as well as one naming Hermes, so fewer mentions don't let an undelegated request drop; "Sure." or "Okay." alone never counts (2026-10-25, #1251).
 - A web lookup's heads-up is said once, varied, and the answer opens without it (2026-10-05, #404).
 - Conduit's own tools answer fast and need no acknowledgement (on main by 2026-10-22, b41f56c).
 

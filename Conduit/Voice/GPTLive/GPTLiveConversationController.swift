@@ -994,13 +994,22 @@ final class GPTLiveConversationController: ObservableObject {
     /// Whether the model's turn says it is passing the user's words to
     /// Hermes now ("On it. I'll send that to Hermes now.", "Okay, I'll tell
     /// Hermes you're set."), rather than asking, offering or saying it
-    /// won't. English only: the phrases GPT-Live uses.
+    /// won't. A turn that is only an acknowledgement ("On it.", "One
+    /// moment, checking.") counts too: the briefing asks for one before
+    /// each delegation without naming Hermes every time. English only: the
+    /// phrases GPT-Live uses.
     static func claimsToSendToHermes(_ text: String) -> Bool {
         let normalized = text.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         // A turn that ends asking ("… Send it?") waits for the user.
         guard !normalized.hasSuffix("?") else { return false }
         let sentences = normalized.split(omittingEmptySubsequences: true) { ".!?\n".contains($0) }
+        let acknowledgements = sentences.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        if !acknowledgements.isEmpty, acknowledgements.count <= 3,
+           acknowledgements.allSatisfy({ $0.range(of: Self.acknowledgementOnly, options: .regularExpression) != nil }),
+           acknowledgements.contains(where: { $0.range(of: Self.workUnderway, options: .regularExpression) != nil }) {
+            return true
+        }
         for sentence in sentences {
             // A question ("Shall I send that to Hermes?") asks, it doesn't send.
             if normalized[sentence.endIndex...].first == "?" { continue }
@@ -1013,6 +1022,10 @@ final class GPTLiveConversationController: ObservableObject {
     }
 
     private static let sendClaimPattern = #"\b(send|sending|pass|passing|forward|forwarding|hand|handing|relay|relaying|give|giving|get|getting|take|taking|put|putting)\b[^.!?]{0,40}?\bto hermes\b|\b(tell|telling|ask|asking|let|letting|ping|pinging|update|updating)\s+hermes\b|\b(check|checking) with hermes\b"#
+    /// A sentence that is nothing but an acknowledgement, and the part of
+    /// one that says work is starting ("Sure." alone answers small talk).
+    private static let acknowledgementOnly = #"^(?:(?:okay|ok|sure|alright|all right|right|got it|you got it|will do|yes|yep)[, ]*)*(?:on it|one (?:sec|second|moment)|just a (?:sec|second|moment)|give me (?:a|one) (?:sec|second|moment)|hang on|hold on|let me (?:check|look|see|find out)(?: (?:into|on|at))?(?: (?:that|it))?|checking(?: (?:on )?(?:that|it))?(?: now)?|looking(?: into it| into that| that up| it up)?(?: now)?|i'll (?:check|look into it|look into that|find out)|working on it)?[, ]*(?:on it|checking(?: now)?|for you)?$"#
+    private static let workUnderway = #"\b(on it|check|checking|look|looking|find out|working on it|one (sec|second|moment)|just a (sec|second|moment)|give me (a|one) (sec|second|moment)|hang on|hold on)\b"#
     /// An offer, a condition or a no: nothing is being sent yet.
     private static let sendClaimHedge = #"\b(can|could|should|shall|would|might|may|want me|do you|if you|once you|when you|after you|before|not|never|won't|didn't|don't|can't|couldn't|haven't|hasn't|wasn't)\b|n't\b"#
 

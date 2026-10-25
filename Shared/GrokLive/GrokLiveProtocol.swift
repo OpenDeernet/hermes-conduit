@@ -32,7 +32,7 @@ enum GrokLiveProtocol {
     /// Grok answers start_job as soon as the job exists, so a claim can wait
     /// for it. On a user's call Grok spoke a start_job call as text and said
     /// the work was queued when nothing ran.
-    static let jobClaimInstructions = "\nOn this call start_job answers as soon as Hermes has the job. This replaces the acknowledgement rule above: call start_job without announcing it first, and only once it returns started acknowledge it out loud. \(LiveVoiceAcknowledgement.rule) Never say anything was started, queued, sent or done unless a tool's result said so; if a tool returns an error or not_started, tell the user plainly. Tools are only ever function calls: never speak a tool call, its name or its arguments."
+    static let jobClaimInstructions = "\nOn this call start_job answers as soon as Hermes has the job. This changes only when you acknowledge, not how: call start_job without announcing it first, and only once it returns started, acknowledge it out loud as above. Never say anything was started, queued, sent or done unless a tool's result said so; if a tool returns an error or not_started, tell the user plainly. Tools are only ever function calls: never speak a tool call, its name or its arguments."
 
     /// What Grok's instructions add after the shared ones: the delegation
     /// and job-claim rules, and the clock.
@@ -370,10 +370,11 @@ struct GrokInputUpsampler {
 
 /// How every live mode acknowledges work it hands to Hermes: Gemini, Qwen
 /// and the Watch's calls before start_job, Grok and Local Live once it
-/// returns, GPT-Live before a delegation. One fixed example ("On it, I'll
+/// returns (their job-claim rule points back to it, so it's said once),
+/// GPT-Live before a delegation. One fixed example ("On it, I'll
 /// have Hermes look into that.") was said word for word on every request,
 /// and users tired of hearing "I'll ask Hermes" each time. Written for the
 /// model, so not localized.
 enum LiveVoiceAcknowledgement {
-    static let rule = "Keep that acknowledgement to a word or a few, in your own words and different each time (for example \"Sure.\", \"On it.\" or \"Okay, give me a moment.\"). Don't keep saying you'll ask, tell or check with Hermes: say Hermes is on it at most once on a call, or when the user asks who's doing it. If you just told the user what you're about to do, that was the acknowledgement: don't add another."
+    static let rule = "Keep that acknowledgement to a word or a few, in your own words and different each time; \"Sure.\", \"On it.\" or \"Okay, give me a moment.\" only show the length, so don't reuse them word for word. Don't keep saying you'll ask, tell or check with Hermes: say Hermes is on it at most once on a call, or when the user asks who's doing it. If you just told the user what you're about to do, that was the acknowledgement: don't add another."
 }

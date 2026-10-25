@@ -2477,17 +2477,18 @@ extension HermesVoiceGatewayTimeoutTests {
         // said word for word on every request, in every live mode.
         let rule = LiveVoiceAcknowledgement.rule
         XCTAssertTrue(rule.contains("different each time"))
+        XCTAssertTrue(rule.contains("don't reuse them word for word"))
         XCTAssertTrue(rule.contains("Don't keep saying you'll ask, tell or check with Hermes"))
         let modes: [(String, String)] = [
             ("Gemini and Qwen", GeminiLiveConversationController.instructions(search: .hermes)),
             ("Watch", GeminiLiveConversationController.instructions(search: .hermes, onWatch: true)),
-            ("Grok", GrokLiveProtocol.grokInstructions(now: Date(), timeZone: .current)),
-            ("Local Live agent", LocalLiveProtocol.agentInstructions),
+            ("Grok", GeminiLiveConversationController.instructions(search: .grok) + GrokLiveProtocol.grokInstructions(now: Date(), timeZone: .current)),
+            ("Local Live agent", GeminiLiveConversationController.instructions(search: .none) + LocalLiveProtocol.agentInstructions),
             ("GPT-Live", GPTLiveConversationController.briefing()),
             ("GPT-Live on the Watch", GPTLiveConversationController.briefing(onWatch: true)),
         ]
         for (mode, text) in modes {
-            XCTAssertTrue(text.contains(rule), mode)
+            XCTAssertEqual(text.components(separatedBy: rule).count, 2, "\(mode) carries the rule once")
             XCTAssertFalse(text.contains("I'll have Hermes look into that"), mode)
             XCTAssertFalse(text.contains("that Hermes is on it."), mode)
         }
