@@ -327,13 +327,13 @@ it starts GPT-Live without one · the notifier README's Watch audio section
 
 **Rulings**
 - The plugin never installs into Hermes' own Python: it makes its own environment, with venv and pip from the Python Hermes runs, else uv. A Hermes Python that already has aiortc is used as it is.
-- Every step that makes the environment runs without Hermes' PYTHONPATH, and pip runs isolated, so packages Hermes already has are installed into the environment too; the helper runs isolated and can't see Hermes' (2026-10-25, #9999, notifier #370).
+- Every step that makes the environment runs without Hermes' PYTHONPATH, and pip runs isolated, so packages Hermes already has are installed into the environment too; the helper runs isolated and can't see Hermes' (2026-10-25, #1254, notifier #370).
 - The environment counts as ready only once its marker names the plugin's aiortc pin; a failed prepare writes none, so the next Set up makes it again.
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-25, at #9999.
+**Checked:** 2026-10-25, at #1254.
 ## Calls from Hermes
 
 Hermes rings the user (a job is done, it waits on an answer, a scheduled
