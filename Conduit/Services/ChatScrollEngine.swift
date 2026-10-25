@@ -667,9 +667,9 @@ final class ChatScrollEngine: ObservableObject {
     /// relatch following). One that shrank needs none, since the top bounds
     /// the move.
     /// Another pass first (an inset change) leaves a shift waiting; a
-    /// reader who moves, a landed page of earlier messages (its hold has the
-    /// reader's rows), a card whose row left the stack, or a growth that
-    /// never lands, drops it.
+    /// reader who moves, a jump to the top or to a message, a landed page
+    /// of earlier messages (its hold has the reader's rows), a card whose
+    /// row left the stack, or a growth that never lands, drops it.
     private func takeCardShifts(on surface: ChatScrollSurface) {
         guard !cardShifts.isEmpty else { return }
         guard mode == .browsing, prependAnchor?.landedAt == nil,
@@ -918,6 +918,8 @@ final class ChatScrollEngine: ObservableObject {
               targetCache.targets.contains(where: { $0.id == id }) else { return }
         restoration = nil
         prependAnchor = nil
+        // A growth owed to the place the reader leaves.
+        cardShifts = []
         latestAnimationUntil = nil
         disarmReplyHold()
         cancelPastBottomCheck()
@@ -942,6 +944,8 @@ final class ChatScrollEngine: ObservableObject {
         if surface?.isTracking == true { return }
         restoration = nil
         prependAnchor = nil
+        // A growth owed to the place the reader leaves.
+        cardShifts = []
         latestAnimationUntil = nil
         disarmReplyHold()
         cancelPastBottomCheck()

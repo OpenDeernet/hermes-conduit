@@ -2344,7 +2344,10 @@ private struct RemoteMarkdownImage: View {
     private func placeRemoteImage(_ image: UIImage, generation: Int, fades: Bool) {
         let engine = disclosure?.engine
         let sizeKey = remoteSizeKey
+        let placedURL = url
         arrival.arrive(rowHeight: rowHeight(showing: image.size), engine: engine) {
+            // The row moved on to another address while this one waited.
+            guard remoteOutcomeURL == placedURL else { return }
             if generation == TranscriptImageCache.generation {
                 TranscriptPictureMemory.rememberSize(image.size, for: sizeKey)
             }

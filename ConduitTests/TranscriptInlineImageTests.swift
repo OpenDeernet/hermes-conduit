@@ -380,6 +380,41 @@ extension MessageNormalizerTests {
         XCTAssertNil(TranscriptPictureMemory.height(for: "preview|kept"))
     }
 
+    @MainActor
+    func testAReadAfterASignOutDoesntWaitOnOneFromBeforeIt() async throws {
+        let before = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TranscriptImageSizes-\(UUID().uuidString).plist")
+        let after = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TranscriptImageSizes-\(UUID().uuidString).plist")
+        let elsewhere = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TranscriptImageSizes-\(UUID().uuidString).plist")
+        TranscriptPictureMemory.forgetAll(sizesFile: elsewhere)
+        defer {
+            TranscriptPictureMemory.forgetAll(sizesFile: elsewhere)
+            try? FileManager.default.removeItem(at: before)
+            try? FileManager.default.removeItem(at: after)
+        }
+        TranscriptPictureMemory.writeKept(
+            TranscriptKeptSizes(sizes: ["before": CGSize(width: 10, height: 20)], heights: [:]),
+            to: before
+        )
+        TranscriptPictureMemory.writeKept(
+            TranscriptKeptSizes(sizes: ["after": CGSize(width: 30, height: 40)], heights: [:]),
+            to: after
+        )
+
+        // A read from before the sign-out is usually still under way when
+        // it comes; whichever way the two land, only the later read counts.
+        let stale = Task { await TranscriptPictureMemory.loadKeptSizes(from: before) }
+        await Task.yield()
+        TranscriptPictureMemory.forgetAll(sizesFile: elsewhere)
+        await TranscriptPictureMemory.loadKeptSizes(from: after)
+        await stale.value
+
+        XCTAssertNil(TranscriptPictureMemory.size(for: "before"))
+        XCTAssertEqual(TranscriptPictureMemory.size(for: "after"), CGSize(width: 30, height: 40))
+    }
+
     func testPictureSizesAndCardHeightsAreKeptOnThePhoneAcrossLaunches() throws {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("TranscriptImageSizes-\(UUID().uuidString).plist")

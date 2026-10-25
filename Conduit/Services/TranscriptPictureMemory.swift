@@ -125,7 +125,8 @@ enum TranscriptPictureMemory {
         }
         keptSizesLoad = load
         await load.value
-        keptSizesLoad = nil
+        // A sign-out meanwhile let the next caller start a read of its own.
+        if keptSizesLoad == load { keptSizesLoad = nil }
     }
 
     /// Everything goes with the kept files (sign-out, Delete Saved Chats).
@@ -137,8 +138,11 @@ enum TranscriptPictureMemory {
         previews.removeAllObjects()
         sizes.removeAll()
         heights.removeAll()
-        // The next read finds the file gone, so nothing comes back.
+        // The next read finds the file gone, so nothing comes back. A read
+        // still under way is of the file going, so the next caller starts
+        // its own instead of waiting on it.
         loadedKeptSizes = false
+        keptSizesLoad = nil
         io.async { try? FileManager.default.removeItem(at: file) }
     }
 

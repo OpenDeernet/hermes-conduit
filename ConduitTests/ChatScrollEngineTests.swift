@@ -1408,6 +1408,29 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertEqual(surface.contentOffsetY, 3500, "the pin, with nothing added to it")
     }
 
+    func testAJumpToTheTopDropsAGrowthStillWaiting() {
+        let (engine, surface) = browsingReader()
+        let card = FakeMeasuredCard(delta: 227, minY: 1000)
+        engine.cardMeasured(card)
+        engine.explicitTopRequested()
+        XCTAssertEqual(surface.contentOffsetY, 0)
+        card.lands()
+        surface.layOut(contentHeight: 4227)
+        XCTAssertEqual(surface.contentOffsetY, 0, "the growth was owed to the place the reader left")
+        XCTAssertTrue(engine.cardShifts.isEmpty)
+    }
+
+    func testAJumpToAMessageDropsAGrowthStillWaiting() {
+        let (engine, surface) = browsingReader()
+        let card = FakeMeasuredCard(delta: 227, minY: 1000)
+        engine.cardMeasured(card)
+        engine.explicitMessageRequested(id: "m5")
+        XCTAssertTrue(engine.cardShifts.isEmpty, "the growth was owed to the place the reader leaves")
+        card.lands()
+        surface.layOut(contentHeight: 4227)
+        XCTAssertEqual(surface.contentOffsetY, 2000, "the jump places the reader, not the card")
+    }
+
     func testADragDropsAnAnnouncedGrowth() {
         let (engine, surface) = browsingReader()
         let card = FakeMeasuredCard(delta: 227, minY: 1000)
