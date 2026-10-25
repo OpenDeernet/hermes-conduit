@@ -113,6 +113,7 @@ extension VoiceConversationControllerTests {
         supervisor.detachLiveThread()
         XCTAssertEqual(supervisor.jobs.first?.isDetachedThreadTurn, true)
         XCTAssertEqual(supervisor.jobs.first?.status, .running, "a request Hermes took isn't cancelled")
+        XCTAssertTrue(supervisor.listedJobs.isEmpty, "a later call doesn't list it")
 
         supervisor.beginLiveCall()
         supervisor.observe(.messageComplete(sessionId: "rt-1", messageId: "m1", content: "Plan.", reasoning: nil))

@@ -1280,8 +1280,9 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
     /// Jobs and thread turns still being worked on, for the liveness poll.
     private var activeWorkCount: Int { jobs.filter { $0.status.isActive }.count }
 
-    /// Background jobs, as the Voice sheet and job tools list them.
-    var backgroundJobs: [VoiceBackgroundJob] { jobs.filter { !$0.isThreadTurn } }
+    /// Background jobs, as the Voice sheet and job tools list them. The
+    /// request whose chat an ended call took is that chat's now (#1250).
+    var backgroundJobs: [VoiceBackgroundJob] { jobs.filter { !$0.isThreadTurn && !$0.isDetachedThreadTurn } }
 
     /// The background jobs a job list names: still running or waiting, or
     /// settled with an outcome the user hasn't heard yet. One taken for a
