@@ -948,9 +948,10 @@ final class WatchDirectBroker {
     private func lateAnswers(_ late: [GeminiLiveToolBridge.Outgoing], to call: WatchVoiceWire.DirectToolCall, in id: UInt32, isJob: Bool) -> [GeminiLiveToolBridge.Outgoing] {
         let rest = late.filter { !$0.answers(call.id) }
         guard isJob, let refusal = Self.jobRefusal(in: late, answering: call.id) else { return rest }
-        if Self.refusedBeforeStarting(late, answering: call.id) { ledger.forgetJob(call.id, in: id) }
-        link.log.note("watchDirectLateJobRefusal", ["chars": refusal.count, "appState": WatchVoiceLink.appStateName])
-        return [.textWhenIdle(Self.lateJobRefusalText(refusal))] + rest
+        let definite = Self.refusedBeforeStarting(late, answering: call.id)
+        if definite { ledger.forgetJob(call.id, in: id) }
+        link.log.note("watchDirectLateJobRefusal", ["chars": refusal.count, "definite": definite, "appState": WatchVoiceLink.appStateName])
+        return [.textWhenIdle(Self.lateJobRefusalText(refusal, definite: definite))] + rest
     }
 
     /// The reason in a start_job's answer when the job didn't start; nil
@@ -979,8 +980,13 @@ final class WatchDirectBroker {
     }
 
     /// Written for the model, not shown.
-    static func lateJobRefusalText(_ reason: String) -> String {
-        GeminiLiveToolBridge.relayPrompt("The job you said Hermes was starting didn't start after all: \(reason) Don't start it again unless the user asks.")
+    /// `definite`: Hermes never took it; otherwise an error that may have
+    /// come after it did.
+    static func lateJobRefusalText(_ reason: String, definite: Bool = true) -> String {
+        guard definite else {
+            return GeminiLiveToolBridge.relayPrompt("Hermes didn't confirm the job you said it was starting: \(reason) It may not have started; the user can ask you to list their jobs. Don't start it again unless they ask.")
+        }
+        return GeminiLiveToolBridge.relayPrompt("The job you said Hermes was starting didn't start after all: \(reason) Don't start it again unless the user asks.")
     }
 
     private func rememberJobCall(_ task: Task<[GeminiLiveToolBridge.Outgoing], Never>, key: String) {

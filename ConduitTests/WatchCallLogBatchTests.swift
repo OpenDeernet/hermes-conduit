@@ -221,6 +221,7 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertFalse(WatchDirectBroker.refusedBeforeStarting(started, answering: "c1"))
         let text = WatchDirectBroker.lateJobRefusalText("Too many jobs.")
         XCTAssertTrue(text.contains("didn't start after all: Too many jobs."))
+        XCTAssertTrue(WatchDirectBroker.lateJobRefusalText("Hermes isn't connected.", definite: false).contains("It may not have started"))
     }
 
     func testWatchCallTimersTolerateATenthOfASecondOrLongerInterval() {
