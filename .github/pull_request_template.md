@@ -9,8 +9,8 @@
      the entry in this PR too, adding any sibling an earlier change missed.
      "No mapped feature" is fine when the change has no siblings; one that has
      them adds an entry in this PR. A refactor that changes no behavior and
-     no text a person or model reads has none and needs no new entry; if it
-     moves code an entry's Code lists, update those paths and the Checked
-     line. -->
+     no user-facing or model-facing text has none and needs no new entry;
+     if it moves code an entry's Code lists, update those paths and the
+     Checked line. -->
 
 ## Testing
