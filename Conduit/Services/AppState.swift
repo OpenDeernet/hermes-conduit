@@ -25221,7 +25221,8 @@ final class AppState: ObservableObject {
                         linkID: liveActivityLinkSessionID(for: sessionId),
                         title: activeSessionTitle,
                         profile: activeProfile,
-                        profileName: profileDisplayName(activeProfile),
+                        // A Bot Chat's card names its bot, as the chat does.
+                        profileName: conversationAgentIdentity.name,
                         glowHex: profileGlowColors()[activeProfile]?.hex
                             ?? profileGlowTint(activeProfile).flatMap { ProfileGlowRGB(UIColor($0).resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark)))?.hex },
                         dashboardID: activeDashboardID?.uuidString

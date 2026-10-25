@@ -13,6 +13,10 @@ private final class NotificationObserverToken {
 
 struct ConduitNotificationTarget: Equatable, Identifiable {
     let profile: String?
+    /// The bot's name in Hermes as the Bots list shows it (`profile_name`),
+    /// for a call screen to name the caller; nil when Hermes gave it none or
+    /// an older notifier didn't say. Never routes: `profile` does.
+    let profileName: String?
     /// The runtime identity the notification names. Hermes notifications
     /// identify the live routing session; this is never treated as a durable
     /// conversation id on its own.
@@ -54,6 +58,7 @@ struct ConduitNotificationTarget: Equatable, Identifiable {
 
     init(
         profile: String?,
+        profileName: String? = nil,
         sessionId: String,
         durableSessionID: String? = nil,
         dashboardID: UUID? = nil,
@@ -65,6 +70,7 @@ struct ConduitNotificationTarget: Equatable, Identifiable {
         isChatLink: Bool = false
     ) {
         self.profile = profile
+        self.profileName = profileName
         self.sessionId = sessionId
         self.durableSessionID = durableSessionID
         self.dashboardID = dashboardID
@@ -2067,6 +2073,7 @@ final class PushNotificationService: ObservableObject {
             // it); the preference still decides whether Conduit uses it.
             target = ConduitNotificationTarget(
                 profile: target.profile,
+                profileName: target.profileName,
                 sessionId: target.sessionId,
                 durableSessionID: target.durableSessionID,
                 dashboardID: target.dashboardID,
@@ -2442,6 +2449,7 @@ final class PushNotificationService: ObservableObject {
               !sessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let durableSessionID = Self.routingDurableSessionID(from: payload)
         let profile = (payload["profile"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let profileName = (payload["profile_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let type = (payload["type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         // The relay stamps `dashboard_id` (an opaque Conduit dashboard UUID)
         // from the authenticated gateway's pairing binding. A malformed value
@@ -2469,6 +2477,7 @@ final class PushNotificationService: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return ConduitNotificationTarget(
             profile: profile?.isEmpty == false ? profile : nil,
+            profileName: profileName?.isEmpty == false ? profileName : nil,
             sessionId: sessionId,
             durableSessionID: durableSessionID,
             dashboardID: dashboardID,
