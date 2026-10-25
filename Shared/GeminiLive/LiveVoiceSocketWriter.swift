@@ -78,7 +78,7 @@ final class LiveVoiceSocketWriter {
             queuedAudio += 1
         } else {
             guard queuedOther < maxQueuedOther else {
-                liveVoiceWriterLogger.error("Live voice socket stopped taking frames: \(self.queuedOther, privacy: .public) waiting")
+                liveVoiceWriterLogger.error("Live voice socket stopped taking frames: \(self.queuedOther, privacy: .public) outstanding")
                 fail(with: Backlogged(), also: done)
                 return true
             }
