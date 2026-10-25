@@ -1668,6 +1668,13 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(unwritten, .init(seq: 0, muted: false, ended: false))
         let lost = await HermesRingControl.current(ring) { _ in (Data(), 404) }
         XCTAssertNil(lost, "A ring the relay lost, or an older relay: written instead")
+        var reads = 0
+        let unreachable = await HermesRingControl.current(ring, retryDelay: 0) { _ in
+            reads += 1
+            if reads < 3 { throw URLError(.timedOut) }
+            return (Data(#"{"seq":4,"muted":true,"ended":false}"#.utf8), 200)
+        }
+        XCTAssertEqual(unreachable, .init(seq: 4, muted: true, ended: false), "A read that didn't get through is tried again before anything is written")
 
         var bodies = [Data("garbled".utf8), Data(#"{"seq":3,"muted":true,"ended":false}"#.utf8)]
         let reread = await HermesRingControl.set(ring, by: .phone, muted: true, attempts: 2, retryDelay: 0) { _ in (bodies.removeFirst(), 200) }
