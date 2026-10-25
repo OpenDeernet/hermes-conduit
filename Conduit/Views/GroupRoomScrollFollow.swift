@@ -49,6 +49,9 @@ final class GroupRoomFollowFlag {
     /// A landing at a new member message is scrolling there (landAtTop):
     /// only the user's own scroll or the landing's end decides.
     var isLanding = false
+    /// Stamps each landing, so an earlier landing's end can't end a later
+    /// one still scrolling.
+    var landingGeneration = 0
     /// Decides again from where the transcript is now, for a programmatic
     /// scroll that may not move the offset at all (set by the locator).
     var reevaluate: (@MainActor () -> Void)?

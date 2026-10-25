@@ -252,12 +252,15 @@ struct GroupChatView: View {
     private func landAtTop(of eventID: String, _ proxy: ScrollViewProxy) {
         followFlag.isFollowing = false
         followFlag.isLanding = true
+        followFlag.landingGeneration &+= 1
+        let generation = followFlag.landingGeneration
         isFollowingLatest = false
         withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(eventID, anchor: .top) }
         // Decide from where it lands once the animation is over (it may not
         // move the offset at all).
         Task { @MainActor [followFlag] in
             try? await Task.sleep(for: .milliseconds(300))
+            guard followFlag.landingGeneration == generation else { return }
             // Over even if the locator has gone (the room closed).
             followFlag.isLanding = false
             followFlag.reevaluate?()

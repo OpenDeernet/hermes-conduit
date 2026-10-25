@@ -22484,9 +22484,10 @@ final class AppState: ObservableObject {
         // profile explicitly (its canonical row may legitimately surface in
         // the raw catalog as a stray from older server data), so the guard
         // would only misfire here.
+        // A saved chat's row opens by its stored session id.
         let listedSession = (sessions + cronSessions).first(where: {
             $0.id == sessionId || $0.alternateIds.contains(sessionId)
-        })
+        }) ?? (sessions + cronSessions).first(where: { $0.storedSessionId == sessionId })
         if conversationProfile == nil,
            let session = listedSession, !sessionBelongsToProfile(session, profile: activeProfile) {
             errorMessage = AppLocalization.string("That conversation belongs to another workspace. Switch profiles to open it.")
@@ -22494,11 +22495,7 @@ final class AppState: ObservableObject {
         }
         // Read before the open marks it read: an unread chat lands at the
         // start of its latest reply once its transcript is in (#365).
-        // A saved chat's row opens by its stored session id.
-        let unreadRow = listedSession ?? (sessions + cronSessions).first(where: {
-            $0.storedSessionId == sessionId
-        })
-        let opensUnreadReply = unreadRow.map { isSessionUnread($0) } ?? false
+        let opensUnreadReply = listedSession.map { isSessionUnread($0) } ?? false
         let transitionGeneration: UInt64
         if let viewportTransitionGeneration {
             guard chatViewportTransitionIsCurrent(
