@@ -1813,6 +1813,10 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
     /// requests run there too, as the relay's do (#1250). The call has no
     /// attached chat on the phone, so each is still a job of the call.
     private(set) var callChat: VoiceThreadTarget?
+    /// A first ordinary job is being started: ordinary requests said
+    /// meanwhile wait for its chat rather than make their own.
+    private var startingCallChat = false
+    private var callChatWaiters: [CheckedContinuation<Void, Never>] = []
 
     func startJob(instructions: String, profile: String?, joinsCall: Bool, onJobCreated: (@MainActor (UUID) -> Void)?) async -> String {
         let noted = self.onJobCreated
@@ -1821,8 +1825,23 @@ final class WatchCallJobSupervisor: GeminiLiveJobSupervising {
             onJobCreated?(jobID)
         }
         let joins = joinsCall && (profile ?? "").isEmpty
+        while joins, callChat == nil, startingCallChat {
+            await withCheckedContinuation { callChatWaiters.append($0) }
+        }
         if joins, let callChat {
             return await base.continueJob(instructions: instructions, in: callChat, onJobCreated: created)
+        }
+        let claims = joins
+        if claims { startingCallChat = true }
+        defer {
+            if claims {
+                // Woken after callChat is set: a failed first start lets the
+                // next waiter make the chat instead.
+                startingCallChat = false
+                let waiters = callChatWaiters
+                callChatWaiters = []
+                waiters.forEach { $0.resume() }
+            }
         }
         var startedID: UUID?
         let reply = await base.startJob(instructions: instructions, profile: profile, onJobCreated: { jobID in

@@ -330,6 +330,23 @@ extension VoiceConversationControllerTests {
 
     // MARK: Watch calls the iPhone runs jobs for
 
+    func testAWatchRequestSaidWhileTheFirstStartsJoinsItsChat() async {
+        let fake = FakeVoiceJobBackend()
+        let base = VoiceBackgroundJobSupervisor(backend: fake.backend, pollInterval: .seconds(3_600), threadWaitInterval: .milliseconds(5))
+        let watch = WatchCallJobSupervisor(base)
+        fake.parksCreate = true
+        let first = Task { await watch.startJob(instructions: "plan the trip", profile: nil, joinsCall: true, onJobCreated: nil) }
+        await fake.createParked.waitUntil(1)
+        let second = Task { await watch.startJob(instructions: "and book the hotel", profile: nil, joinsCall: true, onJobCreated: nil) }
+        try? await Task.sleep(for: .milliseconds(20))
+        fake.releaseCreate()
+        _ = await first.value
+        _ = await second.value
+
+        XCTAssertEqual(fake.created, 1, "the second waits for the first's chat")
+        XCTAssertEqual(watch.callChat?.runtimeSessionID, "rt-1")
+    }
+
     func testAWatchCallsLaterOrdinaryJobsRunInTheChatItsFirstMade() async {
         let fake = FakeVoiceJobBackend()
         let base = VoiceBackgroundJobSupervisor(backend: fake.backend, pollInterval: .seconds(3_600), threadWaitInterval: .milliseconds(5))
