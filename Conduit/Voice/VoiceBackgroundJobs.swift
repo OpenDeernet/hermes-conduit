@@ -2309,10 +2309,17 @@ final class VoiceBackgroundJobSupervisor: ObservableObject, VoiceBackgroundJobHa
         case .messageComplete(_, let messageID, let content, _, _):
             // An earlier voice turn's late or replayed completion, once the
             // next turn owns the chat, is not this turn's reply.
-            if before.isThreadTurn, isEarlierCallChatReply(messageID, reply: content, excluding: before.id) { return }
+            if before.isThreadTurn || before.continuesChat,
+               isEarlierCallChatReply(messageID, reply: content, excluding: before.id) { return }
             // A replay of a voice turn's own completion, once it no longer
-            // owns the chat, is not a typed turn.
-            if runsInCallChat(before) { rememberChatTurn(messageID, reply: content) }
+            // owns the chat, is not a typed turn, nor a Watch call's next
+            // request's reply (its jobs share one chat, #1250).
+            if runsInCallChat(before) {
+                rememberChatTurn(messageID, reply: content)
+            } else if let messageID, !messageID.isEmpty, !notedChatTurns.contains(messageID) {
+                notedChatTurns.append(messageID)
+                if notedChatTurns.count > 10 { notedChatTurns.removeFirst() }
+            }
             // Contract: Hermes emits message.complete once per turn, after
             // the tool loop ends (intermediate assistant text arrives as
             // deltas around tool.start/tool.complete). Voice turns rely on

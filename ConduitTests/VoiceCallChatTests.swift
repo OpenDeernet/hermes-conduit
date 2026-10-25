@@ -382,6 +382,21 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(watch.callChat?.runtimeSessionID, "rt-1")
     }
 
+    func testAReplayedReplyOfAWatchCallsEarlierRequestIsNotTheNextOnes() async {
+        let fake = FakeVoiceJobBackend()
+        let base = VoiceBackgroundJobSupervisor(backend: fake.backend, pollInterval: .seconds(3_600), threadWaitInterval: .milliseconds(5))
+        let watch = WatchCallJobSupervisor(base)
+        _ = await watch.startJob(instructions: "plan the trip", profile: nil, joinsCall: true, onJobCreated: nil)
+        base.observe(.messageComplete(sessionId: "rt-1", messageId: "m1", content: "Plan.", reasoning: nil))
+        _ = await watch.startJob(instructions: "and book the hotel", profile: nil, joinsCall: true, onJobCreated: nil)
+        guard await waitForCallChat({ base.jobs.last?.status == .running }) else { return }
+
+        base.observe(.messageComplete(sessionId: "rt-1", messageId: "m1", content: "Plan.", reasoning: nil))
+        XCTAssertEqual(base.jobs.last?.status, .running, "the replay isn't the hotel's reply")
+        base.observe(.messageComplete(sessionId: "rt-1", messageId: "m2", content: "Booked.", reasoning: nil))
+        XCTAssertEqual(base.jobs.map(\.result), ["Plan.", "Booked."])
+    }
+
     func testAWatchCallsLaterOrdinaryJobsRunInTheChatItsFirstMade() async {
         let fake = FakeVoiceJobBackend()
         let base = VoiceBackgroundJobSupervisor(backend: fake.backend, pollInterval: .seconds(3_600), threadWaitInterval: .milliseconds(5))
