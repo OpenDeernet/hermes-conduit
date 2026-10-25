@@ -303,6 +303,7 @@ final class ChatScrollEngine: ObservableObject {
         self.surface = surface
         lastObservedOffsetY = nil
         surfaceLayoutChanged()
+        landAtReplyStartIfPending()
     }
 
     func detach(_ surface: ChatScrollSurface) {
@@ -762,7 +763,9 @@ final class ChatScrollEngine: ObservableObject {
     }
 
     private func landAtReplyStartIfPending() {
-        guard replyStartLandingPending else { return }
+        // A chat view just up may not have found its scroll view yet:
+        // attaching it lands then.
+        guard replyStartLandingPending, surface != nil else { return }
         replyStartLandingPending = false
         // Switched off since the request.
         guard holdsRepliesAtStart() else { return }

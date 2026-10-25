@@ -1387,8 +1387,18 @@ final class AppState: ObservableObject {
     @Published private(set) var chatScrollRequest = 0
     @Published private(set) var chatScrollToTopRequest = 0
     /// Bumped once an unread chat's open has its transcript in: ChatView
-    /// lands it at the start of its latest reply (#365).
+    /// lands it at the start of its latest reply (#365), taking it once
+    /// (takeChatReplyStartLanding), also when it mounts after the bump.
     @Published private(set) var chatReplyStartLandingRequest = 0
+    private var chatReplyStartLandingTaken = 0
+
+    /// Whether a landing is owed that ChatView hasn't taken yet; taking it
+    /// clears it.
+    func takeChatReplyStartLanding() -> Bool {
+        guard chatReplyStartLandingTaken != chatReplyStartLandingRequest else { return false }
+        chatReplyStartLandingTaken = chatReplyStartLandingRequest
+        return true
+    }
 
     /// Profile changes and network refreshes are asynchronous. Keep a final
     /// ownership boundary at the published catalog so a stale row can never

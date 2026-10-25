@@ -1566,6 +1566,26 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertEqual(surface.contentOffsetY, 3598)
     }
 
+    func testALandingBeforeTheScrollViewIsFoundLandsWhenItIs() {
+        let surface = FakeChatScrollSurface()
+        let engine = ChatScrollEngine(
+            now: { [unowned self] in self.clock },
+            schedule: { [unowned self] _, body in self.scheduled.append(body) }
+        )
+        engines.append(engine)
+        engine.onEvent = { [unowned self] event in self.events.append(event) }
+        engine.holdsRepliesAtStart = { true }
+        surface.engine = engine
+        engine.renderedSessionChanged(to: keyA, identity: identity("a"), viaNotification: false, viewportTransitionGeneration: 1)
+        engine.transcriptChanged(messages: Self.messages(0..<10), transcriptRevision: 1, viewportTransitionGeneration: 1, isInitialSync: true)
+        engine.replyStartLandingRequested()
+        scheduled.forEach { $0() }
+        events = []
+        engine.attach(surface)
+        XCTAssertEqual(events.last, .revealRow(id: "m9"))
+        XCTAssertEqual(engine.mode, .browsing)
+    }
+
     func testTheLandingWaitsForTheSetting() {
         let (engine, surface) = makeEngine()
         engine.replyStartLandingRequested()

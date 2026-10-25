@@ -585,6 +585,8 @@ struct ChatView: View {
                     isInitialSync: true
                 )
                 scrollEngine.trackMessageVisibility(of: appState.pendingClarifyMessageID)
+                // An unread open that finished before this view was up.
+                takeReplyStartLanding()
                 appState.installChatViewportSnapshotProvider(
                     id: viewportSnapshotProviderID,
                     capture: { [weak engine = scrollEngine] in
@@ -785,8 +787,7 @@ struct ChatView: View {
                 requestLatest(animated: false, armsReplyHold: true)
             }
             .onChange(of: appState.chatReplyStartLandingRequest) { _, _ in
-                ChatViewportTrace.shared.log("event replyStartLanding (unread chat opened)")
-                scrollEngine.replyStartLandingRequested()
+                takeReplyStartLanding()
             }
             .onChange(of: appState.chatScrollToTopRequest) { _, request in
                 ChatViewportTrace.shared.log("event explicitTop request=\(request)")
@@ -835,6 +836,12 @@ struct ChatView: View {
                     scrollEngine.notificationHandoffFinished()
                 }
             }
+    }
+
+    private func takeReplyStartLanding() {
+        guard appState.takeChatReplyStartLanding() else { return }
+        ChatViewportTrace.shared.log("event replyStartLanding (unread chat opened)")
+        scrollEngine.replyStartLandingRequested()
     }
 
     /// Send and the jump-to-latest button. An animated jump gets one final
