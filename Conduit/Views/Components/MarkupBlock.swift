@@ -169,7 +169,7 @@ struct MarkupBlock: View {
         .frame(height: cardHeight.frameHeight(
             reserving: TranscriptPictureMemory.height(for: Self.heightKey(for: document)) ?? Self.placeholderHeight(for: kind)
         ))
-        .cardStackPosition(cardHeight)
+        .cardStackFrame(cardHeight)
         .opacity(drawnHeight == nil ? 0 : 1)
         .overlay {
             if drawnHeight == nil {

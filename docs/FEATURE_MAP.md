@@ -1053,7 +1053,7 @@ Settings > Chat's Long replies switch and captions (shared by Sync across
 devices)
 
 **Code**
-- Chats: `Conduit/Services/ChatScrollEngine.swift` (pin, replyHoldOffset, replyStartLandingRequested, landAtReplyStartIfPending, ChatReplyStartPreference), `Conduit/Views/ChatScrollSurfaceLocator.swift`, `Conduit/Views/ChatView.swift` (jumpToLatest, the send pulse arming the hold, the unread landing observer)
+- Chats: `Conduit/Services/ChatScrollEngine.swift` (pin, replyHoldOffset, replyStartLandingRequested, landAtReplyStartIfPending, ChatReplyStartPreference; the same engine moves a browsing reader's offset in the pass that lands a prepend or a card's growth above them, see Cards drawn in web pages), `Conduit/Views/ChatScrollSurfaceLocator.swift`, `Conduit/Views/ChatView.swift` (jumpToLatest, the send pulse arming the hold, the unread landing observer)
 - Unread open: `Conduit/Services/AppState.swift` (performSessionOpenNotingRefusal, chatReplyStartLandingRequest, takeChatReplyStartLanding)
 - Group rooms: `Conduit/Views/GroupRoomScrollFollow.swift` (GroupRoomFollow, replyStart, GroupRoomScrollLocator), `Conduit/Views/GroupChatView.swift` (isFollowingLatest, landAtTop, jumpToLatestButton)
 - Delegate tail sheet (its own follow state and Latest button): `Conduit/Views/ChatSupportSheets.swift` (DelegateAgentTailSheet)
@@ -1079,7 +1079,7 @@ devices)
 - A chat restored on launch (Continue where you left off) keeps its saved place, unread or not.
 - A group room that opens empty scrolls its first events to the end: that batch is usually the room's history arriving, which should open at its newest row, so only events after a row already seen land at a member message's start.
 
-**Checked:** 2026-10-25, at #1256.
+**Checked:** 2026-10-25, at #1270.
 
 ## Reconnecting to Hermes
 
@@ -1798,13 +1798,13 @@ pictures load)
 - Attachments: `Conduit/Views/ChatView.swift` (UserImageAttachmentPreview)
 - Reply pictures (`MEDIA:` and web): `Conduit/Views/Components/MarkdownText.swift` (RemoteMarkdownImage), `Conduit/Views/Components/BoundedRemoteImage.swift`, `Conduit/Views/Components/GatewayMediaDataURLResolver.swift` (imageCacheKey, imageCacheKey(forMediaPath:)), set for job sheets in `Conduit/Views/LiveVoiceCallJobs.swift`
 - Kept and remembered: `Conduit/Services/TranscriptImageCache.swift` (files on the phone), `Conduit/Services/TranscriptPictureMemory.swift` (decoded reply pictures, attachment previews, every picture's size and the card heights, loaded from ChatView), both forgotten in `Conduit/Services/AppState.swift` (wipeOfflineChatCache, deleteSavedChats)
-- A picture's first arrival: `Conduit/Views/Components/ChatCardHeight.swift` (ChatPictureArrival, chatRowFrame), `Conduit/Services/ChatScrollEngine.swift` (cardMeasured, takeCardShift), reached through `Conduit/Views/ChatRowDisclosure.swift` (engine)
+- A picture's first arrival: `Conduit/Views/Components/ChatCardHeight.swift` (ChatPictureArrival, chatRowFrame), `Conduit/Services/ChatScrollEngine.swift` (cardMeasured, cardFrameChanged, takeCardShifts), reached through `Conduit/Views/ChatRowDisclosure.swift` (engine)
 - Tests: `ConduitTests/TranscriptInlineImageTests.swift`
 
 **Rulings**
 - A row never changes height when its picture arrives, if the picture has loaded on this phone before: its size is remembered (kept next to the pictures, read once off the main thread) and its placeholder takes it (2026-10-25, #1239, #1238).
 - Reading, decoding and keeping a picture, and its size, stay off the main thread: a body looks pictures and sizes up in memory only (a local photo's existence is still checked there: a stat, never a picture read). A picture kept on the phone is never fetched again (2026-10-25, #1239).
-- A picture with no remembered size arrives the way a card takes its height: its row keeps the loading line while the reader scrolls, and once at rest, a row above the viewport grows in the same layout pass that moves the offset by the growth (ChatScrollEngine.cardMeasured). The picture and its size are remembered only as it shows, never before: a remembered size would resize the loading line on its own. In a chat a web picture lands without its fade, since the move needs the growth in one pass (2026-10-25, #1270, #1238).
+- A picture with no remembered size arrives the way a card takes its height: its row keeps the loading line while the reader scrolls, and once at rest, a row above the viewport grows in the same layout pass that moves the offset by the growth (ChatScrollEngine.cardMeasured). The picture and its size are remembered only as it shows, never before: a remembered size would resize the loading line on its own. A web picture already decoded shows on the row's first frame only when its size is remembered, so the row keeps its height. A picture still waiting when its row leaves the screen is dropped and loads again when the row is back. In a chat a web picture lands without its fade, since the move needs the growth in one pass (2026-10-25, #1270, #1238).
 
 **Open gaps**
 - A picture never loaded on this phone, or kept by a build before #1239 and not shown since, still grows its row once, at rest: above the reader the offset moves with it, on screen it grows below what they look at, unanimated. Its height follows the row's width, so the memo can't reserve it before it loads.
@@ -1828,7 +1828,7 @@ today: no Settings caption, briefing or doc says how these cards draw)
 **Code**
 - HTML previews: `Conduit/Views/Components/HTMLPreviewBlock.swift` (HTMLPreviewBlock, heightKey, HTMLPreviewPage.placeholderHeight)
 - Diagrams and formulas: `Conduit/Views/Components/MarkupBlock.swift` (MarkupBlock, heightKey(for:), placeholderHeight(for:))
-- The room a card holds, and when it takes its height: `Conduit/Views/Components/ChatCardHeight.swift` (ChatCardHeight; ChatPictureArrival for pictures), `Conduit/Services/ChatScrollEngine.swift` (cardMeasured, takeCardShift, scrollRestDelay, cardGrowthDeadline), reached through `Conduit/Views/ChatRowDisclosure.swift` (engine)
+- The room a card holds, and when it takes its height: `Conduit/Views/Components/ChatCardHeight.swift` (ChatCardHeight, cardStackFrame; ChatPictureArrival for pictures), `Conduit/Services/ChatScrollEngine.swift` (cardMeasured, cardFrameChanged, takeCardShifts, scrollRestDelay, cardGrowthDeadline), reached through `Conduit/Views/ChatRowDisclosure.swift` (engine)
 - Heights kept across launches: `Conduit/Services/TranscriptPictureMemory.swift` (height, rememberHeight, with the picture sizes), forgotten in `Conduit/Services/AppState.swift` (wipeOfflineChatCache, deleteSavedChats)
 - Built from Markdown: `Conduit/Views/Components/MarkdownText.swift` (htmlPreview, math and mermaid blocks)
 - Tests: `ConduitTests/ChatScrollEngineTests.swift` (Cards taking their measured height), `ConduitTests/TranscriptInlineImageTests.swift`, `ConduitTests/MarkupBlockTests.swift`, `ConduitTests/MarkdownLargeDocumentTests+HTMLPreview.swift`
@@ -1837,11 +1837,14 @@ today: no Settings caption, briefing or doc says how these cards draw)
 - A card holds one height from its first frame until its page has measured itself: the height it measured on this phone before (kept with the picture sizes; a preview by its file on the connected Hermes, a diagram or formula by kind, text size and source), else a placeholder (280 pt for a preview, 180 for a diagram, 56 for a formula). Loading the file, the page drawing and a redraw (theme, text size, Try again) all happen inside that room (2026-10-25, #1270, #1238).
 - A card measured while the reader scrolls (a finger down, or a fling) keeps its room until the scrolling has rested, 0.1 s after the last tick: an offset write would stop a fling, and a finger owns the offset. At rest, a card whose top is above the viewport announces its growth, and the layout pass that lands it moves the offset by the same, inside the pass, so nothing the reader looks at moves; a card on screen grows below what they look at. Following and a prepend hold keep the reader still on their own, so those cards take their heights at once (2026-10-25, #1270, #1238).
 - Outside the chat's scroll engine (job sheets, the saved copy, group rooms) a card takes its height as soon as its page reports, as before.
+- A growth has landed when the card's own frame has changed the way it announced, and the content by as much: a reply streaming in below the reader grows the content too, and never passes for a card above them. The offset moves by the card's own change, which for a picture can differ a little from its estimate. The pass that lands it can report the card's frame after the content size; the shift then lands from the frame report, still inside the pass (2026-10-25, #1270).
+- When the chat closes, cards and pictures still waiting for a rest take their heights then: one kept with the view (a pushed screen, then back) never waits for a rest that doesn't come. A session switch forgets them, since their rows go with the session (2026-10-25, #1270).
 
 **Open gaps**
 - A card never measured on this phone still grows once, at rest; the first scroll up through a chat from another device lands its cards one rest at a time.
 - A kept height is for the width and text size it was measured at: an iPad whose chat column changed width, or a formula after a text size change, takes the kept height and then its new one, announced like any growth.
 - A page that fails (the file card, Couldn't draw) replaces the card at the fallback's height without telling the engine.
+- Past 2,000 remembered heights the memo starts again (no LRU), so cards grow once more until each is measured again; the picture sizes have the same limit at 4,000 (see Pictures in messages).
 - The saved-chat copy and job sheets have no engine, so their cards grow where they are; group rooms draw diagrams and formulas the same way, and show no HTML previews (no gateway resolver).
 
 **Checked:** 2026-10-25, at #1270.

@@ -1857,6 +1857,9 @@ private struct UserImageAttachmentPreview: View {
             }
         }
         .chatRowFrame(arrival)
+        // A picture still waiting to show is dropped with the row; the task
+        // loads it again when the row is back.
+        .onDisappear { arrival.rowDisappeared() }
         .task(id: "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.imageCacheKey(for: attachment) ?? "")") {
             // Local file: cache hits are already shown by `body` on the first
             // frame via `cachedLocalImage`, so only misses reach here. Decode

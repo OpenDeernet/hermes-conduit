@@ -2178,7 +2178,11 @@ private struct RemoteMarkdownImage: View {
 
     private var shownRemoteOutcome: BoundedRemoteImage.Outcome? {
         if let remoteOutcome, remoteOutcomeURL == url { return remoteOutcome }
-        guard !isGatewayMedia, let remoteURL = URL(string: url),
+        // A picture decoded already shows on the row's first frame when the
+        // row takes its height anyway (its size is remembered). One that
+        // would grow the row waits for the task, which asks the scroll
+        // engine (#1238).
+        guard !isGatewayMedia, reservedSize != nil, let remoteURL = URL(string: url),
               let cached = BoundedRemoteImage.cachedImage(remoteURL, maxPixelSize: Self.remoteMaxPixelSize) else { return nil }
         return .image(cached)
     }
@@ -2233,21 +2237,29 @@ private struct RemoteMarkdownImage: View {
             openTask?.cancel()
             openTask = nil
             openingRemote = false
+            // A picture still waiting to show is dropped with the row; the
+            // task loads it again when the row is back.
+            arrival.rowDisappeared()
         }
         .task(id: "\(url)|\(gatewayCacheKey ?? "")") {
             guard isGatewayMedia else {
+                // An outcome for another address goes; this one's stays
+                // while it loads again (the task restarting as the row
+                // comes back), so the row doesn't flash its loading line.
+                if remoteOutcomeURL != url {
+                    remoteOutcomeURL = url
+                    remoteOutcome = nil
+                }
                 // A URL that isn't RFC-valid goes to the web view, which
                 // escapes it.
-                remoteOutcomeURL = url
                 guard let remoteURL = URL(string: url) else {
                     remoteOutcome = .unavailable
                     return
                 }
                 if let cached = BoundedRemoteImage.cachedImage(remoteURL, maxPixelSize: Self.remoteMaxPixelSize) {
-                    remoteOutcome = .image(cached)
+                    placeRemoteImage(cached, generation: TranscriptImageCache.generation, fades: false)
                     return
                 }
-                remoteOutcome = nil
                 let started = TranscriptImageCache.generation
                 let outcome = await BoundedRemoteImage.load(remoteURL, maxPixelSize: Self.remoteMaxPixelSize)
                 guard !Task.isCancelled else { return }
@@ -2255,23 +2267,7 @@ private struct RemoteMarkdownImage: View {
                     withAnimation(.easeInOut(duration: 0.2)) { remoteOutcome = outcome }
                     return
                 }
-                // Shows once the reader's scrolling allows, its size
-                // remembered then: remembered first, it would resize the
-                // loading line on its own. In a chat the engine makes the
-                // row's growth good in one pass, so the picture lands
-                // unanimated there.
-                let engine = disclosure?.engine
-                let height = ChatPictureArrival.fittedHeight(of: image.size, inWidth: arrival.frame.width, maxHeight: Self.maxHeight)
-                arrival.arrive(rowHeight: height, engine: engine) {
-                    if started == TranscriptImageCache.generation {
-                        TranscriptPictureMemory.rememberSize(image.size, for: remoteSizeKey)
-                    }
-                    if engine == nil {
-                        withAnimation(.easeInOut(duration: 0.2)) { remoteOutcome = outcome }
-                    } else {
-                        remoteOutcome = outcome
-                    }
-                }
+                placeRemoteImage(image, generation: started, fades: true)
                 return
             }
             guard gatewayFileKind == nil else { return }
@@ -2333,14 +2329,39 @@ private struct RemoteMarkdownImage: View {
     /// its size would resize the loading line on its own. After a sign-out
     /// it shows, but isn't remembered.
     private func placeGatewayImage(_ image: UIImage, for cacheKey: String?, generation: Int) {
-        let height = ChatPictureArrival.fittedHeight(of: image.size, inWidth: arrival.frame.width, maxHeight: Self.maxHeight)
-        arrival.arrive(rowHeight: height, engine: disclosure?.engine) {
+        arrival.arrive(rowHeight: rowHeight(showing: image.size), engine: disclosure?.engine) {
             if let cacheKey, generation == TranscriptImageCache.generation {
                 TranscriptPictureMemory.remember(image, for: cacheKey)
             }
             gatewayImage = image
             gatewayImageKey = cacheKey
         }
+    }
+
+    /// Puts a web picture in the row the same way, its size remembered as
+    /// it shows. Outside a chat a fresh load fades in; in a chat it lands
+    /// in one pass, which the engine makes good above the reader.
+    private func placeRemoteImage(_ image: UIImage, generation: Int, fades: Bool) {
+        let engine = disclosure?.engine
+        let sizeKey = remoteSizeKey
+        arrival.arrive(rowHeight: rowHeight(showing: image.size), engine: engine) {
+            if generation == TranscriptImageCache.generation {
+                TranscriptPictureMemory.rememberSize(image.size, for: sizeKey)
+            }
+            if fades, engine == nil {
+                withAnimation(.easeInOut(duration: 0.2)) { remoteOutcome = .image(image) }
+            } else {
+                remoteOutcome = .image(image)
+            }
+        }
+    }
+
+    /// The height the row takes with a picture of `size` in it: scaled to
+    /// the row's width, up to the ceiling. Nil when its placeholder already
+    /// holds that size, remembered from an earlier load.
+    private func rowHeight(showing size: CGSize) -> CGFloat? {
+        guard reservedSize == nil else { return nil }
+        return ChatPictureArrival.fittedHeight(of: size, inWidth: arrival.stackFrame?.width ?? 0, maxHeight: Self.maxHeight)
     }
 
     @ViewBuilder

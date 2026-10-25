@@ -32,18 +32,30 @@ final class ChatCardHeight: ObservableObject, ChatScrollMeasuredCard {
     /// reload, another document) hides until it reports again, in the same
     /// room.
     @Published private(set) var drawnPage: AnyHashable?
-    /// The room the card took when it mounted, fixed for its lifetime so a
-    /// height remembered after the first frame never resizes it unannounced.
+    /// The room the card took when it was first laid out, fixed for its
+    /// lifetime so a height remembered after the first frame never resizes
+    /// it unannounced.
     private(set) var reserved: CGFloat?
-    /// The card's top in the transcript stack's space (`cardStackPosition`).
-    var stackMinY: CGFloat = 0
+    /// The card's frame in the transcript stack's space (`cardStackFrame`),
+    /// nil before its first layout. The first one fixes the room; a change
+    /// in height is a growth landing, which the engine waits for.
+    var stackFrame: CGRect? {
+        didSet {
+            guard let stackFrame else { return }
+            if reserved == nil, stackFrame.height > 0 { reserved = stackFrame.height }
+            if stackFrame.height != oldValue?.height { engine?.cardFrameChanged(self) }
+        }
+    }
+    /// The engine the last measurement went through.
+    private weak var engine: ChatScrollEngine?
     private var measured: (height: CGFloat, page: AnyHashable)?
 
-    /// The height the card's frame takes now, reserving `height` on the
-    /// first call.
+    /// The height the card's frame takes now: the taken one, else the room
+    /// it reserved when first laid out, else `height`, which the first
+    /// layout then reserves (`stackFrame`). Reading it changes nothing, so a
+    /// body can call it.
     func frameHeight(reserving height: CGFloat) -> CGFloat {
-        if reserved == nil { reserved = height }
-        return taken ?? reserved ?? height
+        taken ?? reserved ?? height
     }
 
     /// Whether `page` has reported and shows.
@@ -59,6 +71,7 @@ final class ChatCardHeight: ObservableObject, ChatScrollMeasuredCard {
     /// The page reported its height: through the engine when there is one.
     func pageMeasured(_ height: CGFloat, page: AnyHashable, engine: ChatScrollEngine?) {
         measured = (height, page)
+        self.engine = engine
         if let engine {
             engine.cardMeasured(self)
         } else {
@@ -75,9 +88,9 @@ final class ChatCardHeight: ObservableObject, ChatScrollMeasuredCard {
 
     // MARK: - ChatScrollMeasuredCard
 
-    var pendingGrowth: ChatScrollCardGrowth {
-        let current = taken ?? reserved ?? 0
-        return ChatScrollCardGrowth(delta: (measured?.height ?? current) - current, minY: stackMinY)
+    var pendingGrowth: CGFloat {
+        let current = taken ?? reserved ?? stackFrame?.height ?? 0
+        return (measured?.height ?? current) - current
     }
 
     func takeMeasuredHeight() {
@@ -88,15 +101,16 @@ final class ChatCardHeight: ObservableObject, ChatScrollMeasuredCard {
 }
 
 extension View {
-    /// Keeps `card` told where this view's top is in the transcript stack's
-    /// space, which changes with layout, never with a scroll tick.
-    func cardStackPosition(_ card: ChatCardHeight) -> some View {
-        onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.frame(in: CoordinateSpace.named(ChatScrollEngine.coordinateSpaceName)).minY
-        } action: { minY in
+    /// Keeps `card` told where this view is in the transcript stack's space
+    /// and how tall it is, which change with layout, never with a scroll
+    /// tick.
+    func cardStackFrame(_ card: ChatCardHeight) -> some View {
+        onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: CoordinateSpace.named(ChatScrollEngine.coordinateSpaceName))
+        } action: { frame in
             // Layout callbacks arrive on the main thread; said so, whatever
             // isolation the SDK gives this closure.
-            MainActor.assumeIsolated { card.stackMinY = minY }
+            MainActor.assumeIsolated { card.stackFrame = frame }
         }
     }
 }
@@ -110,8 +124,15 @@ extension View {
 /// row already at that height, or one outside a chat, shows it at once.
 @MainActor
 final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
-    /// The row's frame in the transcript stack's space.
-    var frame: CGRect = .zero
+    /// The row's frame in the transcript stack's space (`chatRowFrame`),
+    /// nil before its first layout.
+    var stackFrame: CGRect? {
+        didSet {
+            if stackFrame?.height != oldValue?.height { engine?.cardFrameChanged(self) }
+        }
+    }
+    /// The engine the waiting picture went through.
+    private weak var engine: ChatScrollEngine?
     private var pending: (delta: CGFloat, show: () -> Void)?
 
     /// A reply picture's height in its row: scaled to the row's width, up
@@ -123,11 +144,16 @@ final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
     }
 
     /// The picture is decoded: `show` puts it in the row, which then takes
-    /// `rowHeight`. A row not laid out yet (no height to grow from) shows
-    /// it at once.
-    func arrive(rowHeight: CGFloat, engine: ChatScrollEngine?, show: @escaping () -> Void) {
-        let delta = rowHeight > 0 && frame.height > 0 ? rowHeight - frame.height : 0
+    /// `rowHeight`; nil when the row already holds the picture's size (its
+    /// placeholder took the remembered one). A row not laid out yet (no
+    /// height to grow from), or one that keeps its height, shows it at once.
+    func arrive(rowHeight: CGFloat?, engine: ChatScrollEngine?, show: @escaping () -> Void) {
+        var delta: CGFloat = 0
+        if let rowHeight, rowHeight > 0, let height = stackFrame?.height, height > 0 {
+            delta = rowHeight - height
+        }
         pending = (delta, show)
+        self.engine = engine
         if let engine, abs(delta) > 0.5 {
             engine.cardMeasured(self)
         } else {
@@ -135,10 +161,17 @@ final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
         }
     }
 
+    /// The row left the screen: a picture still waiting is dropped (the
+    /// row's task loads it again when the row is back), and with it the
+    /// view `show` wrote to, so nothing keeps the decoded picture.
+    func rowDisappeared() {
+        pending = nil
+    }
+
     // MARK: - ChatScrollMeasuredCard
 
-    var pendingGrowth: ChatScrollCardGrowth {
-        ChatScrollCardGrowth(delta: pending?.delta ?? 0, minY: frame.minY)
+    var pendingGrowth: CGFloat {
+        pending?.delta ?? 0
     }
 
     func takeMeasuredHeight() {
@@ -156,7 +189,7 @@ extension View {
         onGeometryChange(for: CGRect.self) { proxy in
             proxy.frame(in: CoordinateSpace.named(ChatScrollEngine.coordinateSpaceName))
         } action: { frame in
-            MainActor.assumeIsolated { arrival.frame = frame }
+            MainActor.assumeIsolated { arrival.stackFrame = frame }
         }
     }
 }

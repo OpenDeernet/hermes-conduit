@@ -111,10 +111,8 @@ enum TranscriptPictureMemory {
             let kept = await withCheckedContinuation { continuation in
                 io.async { continuation.resume(returning: readKept(from: file)) }
             }
-            guard generation == started else {
-                loadedKeptSizes = false
-                return
-            }
+            // `forgetAll` moved the generation on, and reset the flag itself.
+            guard generation == started else { return }
             let room = max(0, sizeLimit - sizes.count)
             for (key, size) in kept.sizes.prefix(room) where sizes[key] == nil {
                 sizes[key] = size

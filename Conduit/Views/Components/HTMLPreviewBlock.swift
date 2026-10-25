@@ -199,7 +199,7 @@ struct HTMLPreviewBlock<Fallback: View>: View {
             .frame(height: cardHeight.frameHeight(
                 reserving: TranscriptPictureMemory.height(for: heightKey) ?? HTMLPreviewPage.placeholderHeight
             ))
-            .cardStackPosition(cardHeight)
+            .cardStackFrame(cardHeight)
         }
         .padding(12)
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
