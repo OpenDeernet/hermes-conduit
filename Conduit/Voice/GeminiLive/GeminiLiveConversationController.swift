@@ -1104,8 +1104,10 @@ final class GeminiLiveConversationController: ObservableObject {
                 inFlightCallIDs.insert(call.id)
                 Task { [weak self] in
                     guard let self else { return }
-                    // The model is told to acknowledge before it calls, so
-                    // any speech since the user's request counts.
+                    // Gemini and Qwen acknowledge before they call, so any
+                    // speech since the user's request counts. Grok and Local
+                    // Live are told to stay quiet until it returns, so speech
+                    // there counts too; only silence brings the nudge.
                     let calledAt = self.now()
                     let requestedAt = min(calledAt, self.lastUserSpeechAt ?? calledAt)
                     self.trace("Running \(call.name)")

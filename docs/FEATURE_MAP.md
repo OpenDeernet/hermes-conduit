@@ -229,12 +229,14 @@ it heard without hearing the same line every time.
 Watch calls · CarPlay · calls from Hermes · the web lookup heads-up · the
 instructions preview in Voice settings · Classic (not needed: Hermes speaks
 for itself) · Local Live, Hermes turns (not needed: Hermes' reply is the
-turn) · the notifier (no acknowledgement text there)
+turn) · the notifier (no acknowledgement text there) · Settings captions,
+README and docs (none today: nothing describes the wording)
 
 **Code**
 - The shared rule: `Shared/GeminiLive/LiveVoiceAcknowledgement.swift`; Grok and Local Live's job-claim rule (no acknowledgement text): `Shared/GrokLive/GrokLiveProtocol.swift` (jobClaimInstructions)
 - Gemini, Qwen and the Watch: `Conduit/Voice/GeminiLive/GeminiLiveConversationController.swift` (instructions, acknowledgementPrompt for a quiet start_job); Grok and Local Live build the same instructions with acknowledgesOnceStarted
 - The Voice settings preview shows the instructions as sent: `Conduit/Services/AppState.swift` (liveVoiceInstructionsPreview)
+- Where each call builds them, phone, CarPlay and Watch: `Conduit/Services/AppState.swift` (localLiveAgentSetup, prepareWatchDirectCall, prepareWatchGrokCall)
 - GPT-Live, phone and Watch: `Conduit/Voice/GPTLive/GPTLiveConversationController.swift` (briefingRules; claimsToSendToHermes, which takes an acknowledgement-only turn with no delegation as a send)
 - Local Live agent: `Shared/LocalLive/LocalLiveProtocol.swift` (agentInstructions)
 - Conduit's own tools need none: `Conduit/Voice/VoiceHostTools.swift`
