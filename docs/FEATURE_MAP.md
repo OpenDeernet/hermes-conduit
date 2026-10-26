@@ -2226,13 +2226,13 @@ Hermes Desktop's sidebar (upstream, leaves `kanban` out too)
 - Tests: `ConduitTests/SessionContentSearchTests.swift`, `ConduitTests/VoiceChatFinderTests.swift`, `notifier/tests/test_watch_chats.py`
 
 **Rulings**
-- Kanban workers aren't chats: lists, search and voice leave them out with `exclude_sources`, as Desktop does, and the board's Worker Log shows them (2026-10-26, #PRNUM, tester report via Eric).
-- A worker reached anyway (a link, a cached row) says it belongs to the board and points at its Worker Log instead of "Failed to restore this conversation" (2026-10-26, #PRNUM).
+- Kanban workers aren't chats: lists, search and voice leave them out with `exclude_sources`, as Desktop does, and the board's Worker Log shows them (2026-10-26, #1305, tester report via Eric).
+- A worker reached anyway (a link, a cached row) says it belongs to the board and points at its Worker Log instead of "Failed to restore this conversation" (2026-10-26, #1305).
 
 **Open gaps**
 - A worker's transcript (its messages, not the log) can't be read in Conduit. Hermes would serve it read-only over `GET /api/sessions/{id}/messages`; a read-only view is the maintainer's call.
 
-**Checked:** 2026-10-26, #PRNUM.
+**Checked:** 2026-10-26, #1305.
 
 ## Feature map rules
 
