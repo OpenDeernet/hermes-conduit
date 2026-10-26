@@ -69,8 +69,9 @@ struct GroupRoomComposer: View {
         (hasText || !attachments.isEmpty) && roomAccepts && !isUploading
     }
 
+    /// A dictation's settle counts, so typing then ends it as in a chat.
     private var isDictationActive: Bool {
-        dictation.isCapturing || dictation.isStarting || dictation.isTranscribing
+        dictation.isDictating || dictation.isCapturing || dictation.isStarting || dictation.isTranscribing
     }
 
     /// Send's place is dictation's Stop until its words are in, as in a
@@ -80,11 +81,9 @@ struct GroupRoomComposer: View {
     }
 
     /// Resting, it is one slim bar: attach beside the field. Anything in
-    /// progress opens the controls row under the field, a dictation's
-    /// settle included, so its Stop stays in reach.
+    /// progress opens the controls row under the field.
     private var rests: Bool {
-        !isFocused && !hasText && attachments.isEmpty && !isDictationActive && !dictationHoldsSendSlot
-            && !isUploading
+        !isFocused && !hasText && attachments.isEmpty && !isDictationActive && !isUploading
             && composerError == nil && replyReference == nil && recipients.isEmpty
     }
 

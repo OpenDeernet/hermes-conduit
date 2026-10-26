@@ -1577,8 +1577,8 @@ go. Talking and sending in one go is Voice message's or Voice's job.
 **Siblings:** chat composer (chats, project chats, Bot Chat; done) · group
 rooms (done) · the full editor, both composers' (done, it shows the same
 Stop) · the hardware Return key with Return sends on (done, it stops the
-dictation) · the big voice button set to Dictation (not needed, its second
-tap already stops, and the composer shows the Stop meanwhile) · Voice
+dictation) · the big voice button set to Dictation (done, its second
+tap does what the Stop does, a settle included) · Voice
 message's hold to record, let go to send (not changed, it's the one-tap
 path) · docs/VOICE_SETTINGS.md "Dictate into the composer" (done) · strings (not
 needed, Stop, Cancel, Transcribing and the dictation labels are already
@@ -1586,7 +1586,7 @@ translated) · Watch and CarPlay (not needed, no composer dictation) · the
 notifier (not needed, dictation is app-side)
 
 **Code**
-- Policy: `Conduit/Voice/ComposerDictationService.swift` (ComposerDictation.holdsSendSlot, slotFace)
+- Policy: `Conduit/Voice/ComposerDictationService.swift` (ComposerDictation.holdsSendSlot, slotFace, slotTap)
 - The Stop: `Conduit/Views/Components/ComposerDictationStopButton.swift`
 - Chat composer: `Conduit/Views/Components/ComposerBar.swift` (trailingControl, dictationHoldsSendSlot, submitFromReturnKey, the full editor's buttons)
 - Group rooms: `Conduit/Views/Components/GroupRoomComposer.swift` (sendSlot, dictationHoldsSendSlot)

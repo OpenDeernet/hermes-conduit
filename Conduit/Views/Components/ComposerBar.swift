@@ -1520,7 +1520,8 @@ struct ComposerBar: View, Equatable {
     /// instead, and sends nothing (#1309).
     /// The gate is re-checked here so the existing composer action state —
     /// not the text view — stays authoritative. Reports whether the press
-    /// was handled (a message went out, or a dictation was stopped), so a
+    /// was handled (a message went out, a dictation was stopped, or the
+    /// Stop is waiting for its words and the press does nothing), so a
     /// declined shortcut press falls back to the text view's default
     /// newline behavior instead of being swallowed.
     @discardableResult
@@ -1979,6 +1980,20 @@ struct ComposerBar: View, Equatable {
         appState.consumeComposerDictationRequest(request.id)
         // Left for another chat before it applied: dropped.
         guard request.sessionID == appState.activeSessionId else { return }
+        // Already dictating: the button's second tap does what the Stop in
+        // Send's place does, a settle included (#1309).
+        if dictationHoldsSendSlot {
+            switch ComposerDictation.slotTap(
+                isCapturing: dictation.isCapturing,
+                isStarting: dictation.isStarting,
+                isTranscribing: dictation.isTranscribing
+            ) {
+            case .stop: dictation.stop()
+            case .cancelStart: dictation.cancel()
+            case .start, .nothing: break
+            }
+            return
+        }
         switch ComposerDictation.tap(
             isCapturing: dictation.isCapturing,
             isStarting: dictation.isStarting,
