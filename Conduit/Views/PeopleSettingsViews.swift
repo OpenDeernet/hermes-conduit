@@ -92,7 +92,9 @@ struct PeopleSettingsPage: View {
     /// A read that failed once the page showed the Links, which stay up.
     @State private var refreshError: String?
     @State private var actionError: String?
-    /// The Link or invite a request is changing: one at a time.
+    /// The Link or invite a request is changing: one at a time. A request
+    /// lets go of it only while it's still its own, as another dashboard's
+    /// can start once the page shows that one.
     @State private var changingID: String?
     @State private var unlinking: RoomLink?
 
@@ -102,9 +104,10 @@ struct PeopleSettingsPage: View {
     private var shown: Loaded? { loaded?.key == key ? loaded : nil }
 
     /// While a Link waits for the other side's Hermes, the page reads the
-    /// list again now and then.
+    /// list again now and then. Sorted, so the same Links in another order
+    /// don't start the wait over.
     private var waitingIDs: [String] {
-        shown?.list.links.filter { $0.status == "waiting" }.map(\.id) ?? []
+        shown?.list.links.filter { $0.status == "waiting" }.map(\.id).sorted() ?? []
     }
 
     var body: some View {
@@ -298,6 +301,8 @@ struct PeopleSettingsPage: View {
             loaded = nil
             refreshError = nil
             actionError = nil
+            changingID = nil
+            unlinking = nil
         }
         loadError = nil
         let client = appState.roomLinksClient
@@ -340,7 +345,7 @@ struct PeopleSettingsPage: View {
         changingID = link.id
         actionError = nil
         Task {
-            defer { changingID = nil }
+            defer { if changingID == link.id { changingID = nil } }
             do {
                 // False when it was already gone: the list says the same.
                 _ = try await appState.roomLinksClient.unlink(link.id)
@@ -353,6 +358,8 @@ struct PeopleSettingsPage: View {
                 actionError = AppLocalization.string("Could not unlink \(link.name): \(RoomLinksClient.message(for: error))")
             }
             await load(key)
+            // One whose answer didn't come may have gone through: the list says.
+            if loaded?.key == key, loaded?.list.links.contains(where: { $0.id == link.id }) == false { actionError = nil }
         }
     }
 
@@ -362,7 +369,7 @@ struct PeopleSettingsPage: View {
         changingID = invite.id
         actionError = nil
         Task {
-            defer { changingID = nil }
+            defer { if changingID == invite.id { changingID = nil } }
             do {
                 // False when it was used or ran out meanwhile.
                 _ = try await appState.roomLinksClient.cancel(inviteID: invite.id)
@@ -375,6 +382,7 @@ struct PeopleSettingsPage: View {
                 actionError = AppLocalization.string("Could not cancel the invite: \(RoomLinksClient.message(for: error))")
             }
             await load(key)
+            if loaded?.key == key, loaded?.list.invites.contains(where: { $0.id == invite.id }) == false { actionError = nil }
         }
     }
 }
@@ -402,6 +410,8 @@ struct RoomSetupSection: View {
     @State private var loadedKey: String?
     @State private var picked: Set<String> = []
     @State private var editing = false
+    /// A Set up is on its way, for this profile or the one shown before:
+    /// one at a time, as the plugin does them.
     @State private var working = false
     @State private var loadError: String?
     /// How the last Set up and its restart went.
@@ -418,6 +428,10 @@ struct RoomSetupSection: View {
     /// The API server's error from before the restart, which the first
     /// reads after it may still show.
     @State private var errorBeforeRestart: String?
+    /// The key the section shows now, which a request that comes back
+    /// checks its own against: `key` there is the section's as it was, with
+    /// the profile it had then.
+    @State private var currentKey: String?
 
     private var key: String { "\(appState.activeDashboardID?.uuidString ?? "")|\(profile)" }
 
@@ -459,7 +473,10 @@ struct RoomSetupSection: View {
                 }
             }
         }
-        .task(id: key) { await load(key) }
+        .task(id: key) {
+            currentKey = key
+            await load(key)
+        }
         .task(id: restartWait) { await followRestart() }
         .confirmationDialog(AppLocalization.string("Restart the gateway now?"), isPresented: busyPresented, titleVisibility: .visible) {
             Button(AppLocalization.string("Restart now"), role: .destructive) { setUp(interrupt: true) }
@@ -492,15 +509,18 @@ struct RoomSetupSection: View {
         if !state.blockers.isEmpty {
             Text(AppLocalization.string("This Hermes can't be set up for rooms yet:"))
                 .font(.subheadline.weight(.semibold))
-            ForEach(state.blockers) { blocker in
+            ForEach(Array(state.blockers.enumerated()), id: \.offset) { _, blocker in
                 Label(blocker.message, systemImage: "exclamationmark.triangle")
                     .font(.footnote)
                     .foregroundStyle(.orange)
                     .textSelection(.enabled)
             }
-            Button(AppLocalization.string("Check again")) { Task { await load(key) } }
-                .buttonStyle(.settings)
-                .disabled(working)
+            Button(AppLocalization.string("Check again")) {
+                outcome = nil
+                Task { await load(key) }
+            }
+            .buttonStyle(.settings)
+            .disabled(working)
         } else if state.ready && !editing {
             Label(AppLocalization.string("Ready for rooms"), systemImage: "checkmark.circle.fill")
                 .font(.subheadline.weight(.semibold))
@@ -595,20 +615,24 @@ struct RoomSetupSection: View {
     /// Reads what the host needs. The tools picked follow what it saved,
     /// except while they're being changed.
     private func load(_ key: String) async {
+        guard key == currentKey else { return }
         if loadedKey != key {
             state = nil
             loadedKey = nil
             editing = false
             outcome = nil
             refreshError = nil
+            busyRestart = nil
+            confirmsChange = false
+            restartWait = nil
         }
         loadError = nil
         do {
             let read = try await appState.roomSetupClient.state(profile: profile)
-            guard key == self.key else { return }
+            guard key == currentKey else { return }
             show(read, key: key)
         } catch {
-            guard !(error is CancellationError), !Task.isCancelled, key == self.key else { return }
+            guard !(error is CancellationError), !Task.isCancelled, key == currentKey else { return }
             peopleLogger.notice("Room setup not read: \(LogRedaction.message(error), privacy: .public)")
             let text = AppLocalization.string("Could not read this setting from the host: \(RoomLinksClient.message(for: error))")
             if loadedKey == key { refreshError = text } else { loadError = text }
@@ -635,13 +659,13 @@ struct RoomSetupSection: View {
             defer { working = false }
             do {
                 let result = try await appState.roomSetupClient.setUp(profile: profile, ceiling: ceiling, interrupt: interrupt)
-                guard key == self.key else { return }
+                guard key == currentKey else { return }
                 Haptics.success()
                 editing = false
                 show(result.state, key: key)
                 follow(result)
             } catch {
-                guard !(error is CancellationError), key == self.key else { return }
+                guard !(error is CancellationError), key == currentKey else { return }
                 Haptics.error()
                 peopleLogger.notice("Room setup not saved: \(LogRedaction.message(error), privacy: .public)")
                 outcome = Outcome(text: AppLocalization.string("Could not set this Hermes up: \(RoomLinksClient.message(for: error))"), trouble: true)
@@ -677,8 +701,8 @@ struct RoomSetupSection: View {
         let key = key
         for check in 1...15 {
             try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled, key == self.key else { return }
-            guard let read = try? await appState.roomSetupClient.state(profile: profile), key == self.key else { continue }
+            guard !Task.isCancelled, key == currentKey else { return }
+            guard let read = try? await appState.roomSetupClient.state(profile: profile), key == currentKey else { continue }
             show(read, key: key)
             let server = read.apiServer
             if server.running {

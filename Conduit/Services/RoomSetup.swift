@@ -17,10 +17,9 @@ struct RoomSetupState: Equatable {
     /// What the plugin can't fix, with what to change: YOLO mode, a
     /// managed install, a profile the host gateway doesn't serve, no free
     /// port.
-    struct Blocker: Equatable, Identifiable {
+    struct Blocker: Equatable {
         let code: String
         let message: String
-        var id: String { code + message }
     }
 
     struct APIServer: Equatable {
