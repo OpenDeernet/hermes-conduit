@@ -1687,7 +1687,8 @@ final class HermesClient: ObservableObject {
             onEvent?(.clarify(sessionId: sessionId, activity: activity))
         case _ where InputPromptActivity.Kind(rawValue: method) != nil:
             guard let activity = InputPromptActivity.from(requestId: requestID, method: method, params: params) else {
-                writeServerRequestReply(id: id, error: (Self.invalidParamsCode, "\(method) request without a session"))
+                let missing = method == InputPromptActivity.Kind.vaultSaveLogin.rawValue ? "a session or origin" : "a session"
+                writeServerRequestReply(id: id, error: (Self.invalidParamsCode, "\(method) request without \(missing)"))
                 return
             }
             openServerRequestIDs.insert(requestID)

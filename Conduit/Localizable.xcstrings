@@ -346295,7 +346295,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enregistrer votre identifiant %@ ?"
+            "value" : "Enregistrer vos identifiants pour %@ ?"
           }
         },
         "id" : {
@@ -346337,7 +346337,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Сохранить ваш вход для %@?"
+            "value" : "Сохранить данные для входа на %@?"
           }
         },
         "tr" : {
@@ -346623,7 +346623,7 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enregistrer et se connecter donne à Hermes cet identifiant pour le site. Le modèle ne voit jamais le mot de passe."
+            "value" : "Enregistrer et se connecter donne à Hermes ces identifiants pour le site. Le modèle ne voit jamais le mot de passe."
           }
         },
         "id" : {
@@ -346653,7 +346653,7 @@
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zapisz i zaloguj przekazuje Hermesowi ten login do strony. Model nigdy nie widzi hasła."
+            "value" : "Zapisanie i zalogowanie przekazuje Hermesowi ten login do strony. Model nigdy nie widzi hasła."
           }
         },
         "pt-BR" : {
@@ -346665,7 +346665,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "«Сохранить и войти» передаёт Hermes этот вход для сайта. Модель никогда не видит пароль."
+            "value" : "«Сохранить и войти» передаёт Hermes эти данные для входа на сайт. Модель никогда не видит пароль."
           }
         },
         "tr" : {
@@ -346711,13 +346711,13 @@
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Masukkan kode membuat Hermes mengetikkannya ke halaman. Model tidak pernah melihatnya."
+            "value" : "Memasukkan kode membuat Hermes mengetikkannya ke halaman. Model tidak pernah melihatnya."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Inserisci codice fa sì che Hermes lo digiti nella pagina. Il modello non lo vede mai."
+            "value" : "Inserire il codice fa sì che Hermes lo digiti nella pagina. Il modello non lo vede mai."
           }
         },
         "ja" : {
@@ -346735,7 +346735,7 @@
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wpisz kod sprawia, że Hermes wpisze go na stronie. Model nigdy go nie widzi."
+            "value" : "Wprowadzenie kodu sprawia, że Hermes wpisze go na stronie. Model nigdy go nie widzi."
           }
         },
         "pt-BR" : {
@@ -346753,7 +346753,7 @@
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kodu gir, Hermes'in kodu sayfaya yazmasını sağlar. Model kodu asla görmez."
+            "value" : "Kodu girmek, Hermes'in kodu sayfaya yazmasını sağlar. Model kodu asla görmez."
           }
         },
         "zh-Hans" : {
@@ -346981,7 +346981,7 @@
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zapisz i zaloguj"
+            "value" : "Zapisz i zaloguj się"
           }
         },
         "pt-BR" : {
