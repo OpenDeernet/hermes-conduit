@@ -4418,6 +4418,7 @@ struct InputPromptCard: View {
             // settles, iOS would offer to save the site's login to the
             // keychain under Conduit's own domain.
             TextField(AppLocalization.string("Email or username"), text: $identifier)
+                .accessibilityHint(AppLocalization.string("Save & sign in gives Hermes this login for the site. The model never sees the password."))
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()

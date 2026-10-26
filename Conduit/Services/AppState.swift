@@ -32950,8 +32950,10 @@ final class AppState: ObservableObject {
                 && existing.status == .submitting
                 && !liveInputPromptSubmissions.contains(activity.requestId)
             guard existing.isAnswerable || orphanedSubmission else { return }
+            var replacement = activity
+            replacement.profile = activeProfile
             messages[index].content = activity.title
-            messages[index].inputPrompt = activity
+            messages[index].inputPrompt = replacement
             return
         }
         settleReasoningSegmentIntoTranscript()
@@ -32960,6 +32962,7 @@ final class AppState: ObservableObject {
         // request whose answer is still in flight comes back here: it stays
         // `.submitting` for that send to settle, never answerable twice.
         var appended = activity
+        appended.profile = activeProfile
         if liveInputPromptSubmissions.contains(activity.requestId) {
             appended.status = .submitting
             appended.error = nil
@@ -33043,6 +33046,14 @@ final class AppState: ObservableObject {
         guard let index = messages.firstIndex(where: { $0.id == messageId }),
               let current = messages[index].inputPrompt,
               current.isAnswerable else { return }
+        // A card left from the profile before a switch: its answer (a
+        // password, a login) must not go out on the new profile's
+        // connection.
+        guard current.profile.isEmpty || current.profile == activeProfile else {
+            messages[index].inputPrompt?.status = .expired
+            messages[index].inputPrompt?.error = Self.inputPromptWithdrawnNotice(reason: nil)
+            return
+        }
         let skipped = value == nil
         liveInputPromptSubmissions.insert(current.requestId)
         defer { liveInputPromptSubmissions.remove(current.requestId) }

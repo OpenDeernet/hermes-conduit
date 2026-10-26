@@ -560,6 +560,10 @@ struct InputPromptActivity: Equatable {
     var site: String = ""
     var status: Status = .pending
     var error: String?
+    /// The profile whose chat showed the card (AppState sets it), so an
+    /// answer typed after a profile switch never goes out on the new
+    /// profile's connection. Empty until shown.
+    var profile: String = ""
 
     /// Parses a server request (live frame or `open_requests` entry).
     /// Returns nil for any other method, a request without a session, or
