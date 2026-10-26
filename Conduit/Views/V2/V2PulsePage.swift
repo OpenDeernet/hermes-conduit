@@ -14,7 +14,9 @@
 //  From 0.84.0 a card's Why? names the biggest part learning played, What
 //  Pulse learned lists what learning holds with Reset and Start over, and
 //  What Pulse left out lists what the reports didn't bring up, with Bring
-//  it up.
+//  it up. From 0.86.0 a thumbs down's Wrong time puts the card away as Not
+//  now does, until a better time, and Not now's later today ends when the
+//  night starts.
 //  Pulse's own chat, where its hidden turns run, isn't shown: the cards are
 //  the way to answer it.
 //
@@ -191,7 +193,7 @@ struct V2PulsePage: View {
             titleVisibility: .visible,
             presenting: reasonCard
         ) { card in
-            ForEach(PulseDownReason.allCases) { reason in
+            ForEach(appState.pulseDownReasons) { reason in
                 Button(reason.title) { rate(card, up: false, reason: reason) }
             }
             Button(AppLocalization.string("Just thumbs down")) { rate(card, up: false, reason: nil) }
@@ -204,7 +206,7 @@ struct V2PulsePage: View {
             titleVisibility: .visible,
             presenting: restCard
         ) { card in
-            ForEach(PulseRest.choices()) { rest in
+            ForEach(PulseRest.choices(night: page?.night, brief: page?.briefTime)) { rest in
                 Button(rest.title) { dismiss(card, true, until: rest) }
             }
         } message: { _ in
@@ -581,9 +583,12 @@ struct V2PulsePage: View {
                             .strikethrough(card.doneAt != nil)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
-                        // Put off until a time: when it comes back, as a cleared card says it.
+                        // Put off until a time: when it comes back, as a cleared card says it, and
+                        // Wrong time's says why.
                         if card.dismissedAt != nil, let back = card.restUntil {
-                            Text(verbatim: PulseRest.backText(back))
+                            Text(verbatim: card.isAwayForWrongTime
+                                ? PulseDownReason.wrongTime.title + " · " + PulseRest.backText(back)
+                                : PulseRest.backText(back))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -793,7 +798,8 @@ struct V2PulsePage: View {
             }
             whyNote(card)
             actionRow(card)
-            if card.rating == "down", let reason = PulseDownReason(rawValue: card.reason) {
+            // Put away by Wrong time, its cleared label says so already.
+            if card.rating == "down", let reason = PulseDownReason(rawValue: card.reason), !card.isAwayForWrongTime {
                 Text(verbatim: reason.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -926,7 +932,9 @@ struct V2PulsePage: View {
     }
 
     private func clearedLabel(_ card: PulseCard) -> some View {
-        var title = card.dismissedAt != nil ? AppLocalization.string("Not now")
+        // Put away by Wrong time, or by Not now.
+        let away = card.isAwayForWrongTime ? PulseDownReason.wrongTime.title : AppLocalization.string("Not now")
+        var title = card.dismissedAt != nil ? away
             : card.doneBy == "pulse" ? AppLocalization.string("Done, seen in the chat") : AppLocalization.string("Done")
         if card.dismissedAt != nil, let back = card.restUntil { title += " · " + PulseRest.backText(back) }
         return Label(title, systemImage: card.dismissedAt != nil ? "clock" : "checkmark.circle.fill")
@@ -1098,15 +1106,28 @@ struct V2PulsePage: View {
         Task {
             defer { ratingCards.remove(card.id) }
             do {
-                let lessons = try await client.rate(card: card.id, up: up, reason: reason)
+                let rated = try await client.rate(card: card.id, up: up, reason: reason)
                 guard appState.activeDashboardID == dashboard else { return }
+                let now = Date()
                 if let index = page?.cards.firstIndex(where: { $0.id == card.id }) {
                     page?.cards[index].rating = up ? "up" : "down"
                     page?.cards[index].reason = reason?.rawValue ?? ""
+                    page?.cards[index].ratedAt = now
+                }
+                if !up, reason == .wrongTime, let back = rated.restUntil {
+                    // Wrong time put it away until a better time: it moves as Not now's does, with Undo.
+                    withAnimation(.snappy) {
+                        if let index = page?.cards.firstIndex(where: { $0.id == card.id }) {
+                            page?.cards[index].dismissedAt = now
+                            page?.cards[index].restUntil = back
+                        }
+                        if focusedCard == card.id { focusedCard = nil; voiceOverCard = nil }
+                    }
+                    showUndo(.dismissed, card: card.id, back: back)
                 }
                 errorMessage = nil
-                learnedNote = lessons.isEmpty ? nil
-                    : AppLocalization.string("Pulse learned: \(lessons.map(\.text).joined(separator: "; "))")
+                learnedNote = rated.lessons.isEmpty ? nil
+                    : AppLocalization.string("Pulse learned: \(rated.lessons.map(\.text).joined(separator: "; "))")
             } catch {
                 guard appState.activeDashboardID == dashboard else { return }
                 showError(PulseRefusal.message(for: error))

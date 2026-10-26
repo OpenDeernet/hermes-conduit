@@ -48,7 +48,9 @@ struct PulseSettingsPage: View {
                 if state.enabled {
                     let budgets = appState.notifierPlugin.reports(PulseClient.nudgeCapability)
                     speakUpSection(state, budgets: budgets)
-                    if appState.notifierPlugin.reports(PulseClient.quietCapability) { quietSection(state) }
+                    let quiet = appState.notifierPlugin.reports(PulseClient.quietCapability)
+                    let hours = appState.notifierPlugin.reports(PulseClient.hoursCapability)
+                    if quiet || hours { quietSection(state, quiet: quiet, hours: hours) }
                     if appState.notifierPlugin.reports(PulseClient.noteCapability) { noteSection(state) }
                     readsSection(state)
                     if state.memory || state.backfill.phase != .none {
@@ -226,57 +228,118 @@ struct PulseSettingsPage: View {
         }
     }
 
-    /// Quiet times (0.80.2): the days of the week Pulse keeps to itself, and
-    /// a vacation until a day. Quiet for today is on the Pulse screen and on
-    /// a Pulse notification; it shows here as a vacation back tomorrow.
-    private func quietSection(_ state: PulseState) -> some View {
+    /// Quiet times (0.80.2, `quiet`): the days of the week Pulse keeps to
+    /// itself, and a vacation until a day. Quiet for today is on the Pulse
+    /// screen and on a Pulse notification; it shows here as a vacation back
+    /// tomorrow. From 0.86.0 (`hours`), the night.
+    private func quietSection(_ state: PulseState, quiet: Bool, hours: Bool) -> some View {
+        ConduitSettingsSection(title: AppLocalization.string("Quiet times"), symbol: "moon.zzz", tint: .conduitAccent) {
+            if quiet { quietRows(state) }
+            if hours { nightRows(state) }
+        }
+    }
+
+    @ViewBuilder
+    private func quietRows(_ state: PulseState) -> some View {
         // Days as the plugin keeps them: in its time zone, Gregorian on the wire.
         let host = PulseQuiet.calendar(zone: state.timeZone)
-        return ConduitSettingsSection(title: AppLocalization.string("Quiet times"), symbol: "moon.zzz", tint: .conduitAccent) {
-            Text("Quiet days")
-                .font(.subheadline.weight(.semibold))
-            PulseQuietDaysPicker(days: Set(state.quietDays)) { days in
-                change(["quiet_days": days]) { $0.quietDays = days }
-            }
-            .disabled(working)
-            .accessibilityIdentifier("settings.pulse.quiet-days")
-            Toggle("Vacation", isOn: Binding(
-                get: { state.quietUntil != nil },
-                set: { on in
-                    if on {
-                        let back = PulseQuiet.defaultReturn(calendar: host)
-                        change(["quiet_until": PulseQuiet.dayText(back, calendar: host)]) { $0.quietUntil = back }
-                    } else {
-                        change(["quiet_until": NSNull()]) { $0.quietUntil = nil }
-                    }
+        Text("Quiet days")
+            .font(.subheadline.weight(.semibold))
+        PulseQuietDaysPicker(days: Set(state.quietDays)) { days in
+            change(["quiet_days": days]) { $0.quietDays = days }
+        }
+        .disabled(working)
+        .accessibilityIdentifier("settings.pulse.quiet-days")
+        Toggle("Vacation", isOn: Binding(
+            get: { state.quietUntil != nil },
+            set: { on in
+                if on {
+                    let back = PulseQuiet.defaultReturn(calendar: host)
+                    change(["quiet_until": PulseQuiet.dayText(back, calendar: host)]) { $0.quietUntil = back }
+                } else {
+                    change(["quiet_until": NSNull()]) { $0.quietUntil = nil }
                 }
-            ))
-            .disabled(working)
-            .accessibilityIdentifier("settings.pulse.vacation")
-            if let back = state.quietUntil {
-                DatePicker(
-                    AppLocalization.string("Back on"),
-                    selection: Binding(
-                        get: { back },
-                        set: { day in
-                            let text = PulseQuiet.dayText(day, calendar: host)
-                            guard text != PulseQuiet.dayText(back, calendar: host) else { return }
-                            let start = host.startOfDay(for: day)
-                            change(["quiet_until": text]) { $0.quietUntil = start }
-                        }
-                    ),
-                    in: PulseQuiet.returnDays(calendar: host),
-                    displayedComponents: .date
-                )
-                // The days in the plugin's time zone, so the one shown is the one kept.
-                .environment(\.timeZone, host.timeZone)
-                .disabled(working)
-                .accessibilityIdentifier("settings.pulse.vacation-end")
             }
-            Text("On quiet days and on vacation, Pulse sends nothing on its own: no report and no morning brief, and follow-ups wait for the first brief after. It keeps remembering, and Do it still checks.")
+        ))
+        .disabled(working)
+        .accessibilityIdentifier("settings.pulse.vacation")
+        if let back = state.quietUntil {
+            DatePicker(
+                AppLocalization.string("Back on"),
+                selection: Binding(
+                    get: { back },
+                    set: { day in
+                        let text = PulseQuiet.dayText(day, calendar: host)
+                        guard text != PulseQuiet.dayText(back, calendar: host) else { return }
+                        let start = host.startOfDay(for: day)
+                        change(["quiet_until": text]) { $0.quietUntil = start }
+                    }
+                ),
+                in: PulseQuiet.returnDays(calendar: host),
+                displayedComponents: .date
+            )
+            // The days in the plugin's time zone, so the one shown is the one kept.
+            .environment(\.timeZone, host.timeZone)
+            .disabled(working)
+            .accessibilityIdentifier("settings.pulse.vacation-end")
+        }
+        Text("On quiet days and on vacation, Pulse sends nothing on its own: no report and no morning brief, and follow-ups wait for the first brief after. It keeps remembering, and Do it still checks.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+    }
+
+    /// The night (0.86.0): Pulse's notifications wait for the morning brief
+    /// then, unless they can't wait. Its times are in Pulse's time zone, as
+    /// the brief's is.
+    @ViewBuilder
+    private func nightRows(_ state: PulseState) -> some View {
+        Toggle("Night", isOn: Binding(
+            get: { state.night != nil },
+            set: { on in
+                let night = on ? PulseNight.default : nil
+                change(["night": night?.setting ?? []]) { $0.night = night }
+            }
+        ))
+        .disabled(working)
+        .accessibilityIdentifier("settings.pulse.night")
+        if let night = state.night {
+            nightTime(AppLocalization.string("Night starts"), minutes: night.start, other: night.end) {
+                PulseNight(start: $0, end: night.end)
+            }
+            .accessibilityIdentifier("settings.pulse.night-start")
+            nightTime(AppLocalization.string("Night ends"), minutes: night.end, other: night.start) {
+                PulseNight(start: night.start, end: $0)
+            }
+            .accessibilityIdentifier("settings.pulse.night-end")
+        }
+        if state.night != nil {
+            Text("At night, Pulse's notifications wait for the morning brief unless they can't.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        Text("During an event on your calendar, while you drive, or while a Focus holds Hermes' calls, Pulse's notifications wait until you're free.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+    }
+
+    /// One end of the night. The same time at both ends would be no night,
+    /// so the picker doesn't take the other end's.
+    private func nightTime(_ label: String, minutes: Int, other: Int,
+                           night: @escaping (Int) -> PulseNight) -> some View {
+        DatePicker(
+            label,
+            selection: Binding(
+                get: { PulseReportTime.date(PulseReportTime.text(minutes: minutes)) },
+                set: { date in
+                    guard let picked = PulseReportTime.minutes(PulseReportTime.text(from: date)),
+                          picked != minutes, picked != other else { return }
+                    let next = night(picked)
+                    change(["night": next.setting]) { $0.night = next }
+                }
+            ),
+            displayedComponents: .hourAndMinute
+        )
+        .disabled(working)
     }
 
     /// What the user wants from Pulse, in their own words: the plugin's

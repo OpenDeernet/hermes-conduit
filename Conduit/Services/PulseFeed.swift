@@ -14,7 +14,10 @@
 //  From 0.84.0 (`pulse_explains`) it shows what it learned: a card's Why?
 //  names the biggest part learning played, What Pulse learned lists what
 //  learning holds with Reset, and What Pulse left out lists what the reports
-//  didn't bring up, with Bring it up.
+//  didn't bring up, with Bring it up. From 0.86.0 (`pulse_hours`) a thumbs
+//  down's Wrong time puts the card away until a better time and keeps its
+//  kind's notifications out of that part of the day, and Not now's later
+//  today ends when the night starts.
 //
 
 import Foundation
@@ -49,10 +52,12 @@ struct PulseCard: Equatable, Identifiable {
     /// The morning brief it went out in (0.68.0): the brief's own card and
     /// the held cards it brought share it, and show together.
     let brief: String
-    /// Swiped away ("Not now"): in Done and cleared, nothing learned.
+    /// Swiped away ("Not now"), or put away by Wrong time on a thumbs down
+    /// (0.86.0): in Done and cleared.
     var dismissedAt: Date?
-    /// Not now until a time (later today, tomorrow, next week): when it
-    /// comes back as new (0.78.3), nil for one swiped away for good.
+    /// Not now until a time (later today, tomorrow, next week), or Wrong
+    /// time until a better one (0.86.0): when it comes back as new
+    /// (0.78.3), nil for one swiped away for good.
     var restUntil: Date?
     /// When it was marked done: by the user on the Pulse screen, or by
     /// Pulse after Do it, once the chat showed it got done.
@@ -62,6 +67,7 @@ struct PulseCard: Equatable, Identifiable {
     /// "up", "down" or "".
     var rating: String
     var reason: String
+    var ratedAt: Date?
     /// Hermes' reply as it wrote it (a report, a brief): bold, links and
     /// lines kept. Parsed once, not on every redraw.
     let formattedNews: AttributedString
@@ -94,6 +100,7 @@ struct PulseCard: Equatable, Identifiable {
         doneBy = object["done_by"] as? String ?? ""
         rating = object["rating"] as? String ?? ""
         reason = object["reason"] as? String ?? ""
+        ratedAt = PulseJSON.date(object["rated_at"])
         formattedNews = Self.formatted(news, markdown: kind != "followup")
         learned = PulsePreference(json: object["learned"], chatPlace: PulsePreference.chatPlace(profile, chatID),
                                   chatTitle: chatTitle)
@@ -101,6 +108,14 @@ struct PulseCard: Equatable, Identifiable {
 
     /// Held for the morning brief and not in one yet.
     var isHeld: Bool { level == PulseLevel.brief.rawValue && briefedAt == nil }
+
+    /// Put away by Wrong time, not by Not now: the plugin rates it and puts
+    /// it away at the same moment, and a rating stays when the card is put
+    /// back and swiped away again.
+    var isAwayForWrongTime: Bool {
+        guard let dismissedAt, let ratedAt, reason == PulseDownReason.wrongTime.rawValue else { return false }
+        return abs(dismissedAt.timeIntervalSince(ratedAt)) < 1
+    }
 
     /// One of a report's items, on its own card.
     var isNoticed: Bool { kind == "noticed" }
@@ -191,7 +206,8 @@ struct PulseLayout: Equatable {
         /// `openCards` then) until it's opened again, or with every card it
         /// brought handled, unless `opened` on this visit. Not once a card in
         /// it is open that wasn't then, or has come again since: one back
-        /// from Not now (the host makes it new again), or put back with Undo.
+        /// from Not now or Wrong time (the host makes it new again), or put
+        /// back with Undo.
         /// Nor while `focused`, the card a Pulse mark or Bring it up opened
         /// (a push opens the screen at its top), is it or one of its cards.
         func isFolded(folded: [Int: Double]?, opened: Bool, focused: Int?) -> Bool {
@@ -274,6 +290,11 @@ enum PulseDownReason: String, CaseIterable, Identifiable {
     case alreadyKnew = "already_knew"
     case tooLate = "too_late"
     case tooOften = "too_often"
+    /// It came at a bad time, which says nothing about whether it was
+    /// worth bringing up (0.86.0): it comes back at a better time, and a
+    /// card that came with a notification keeps its kind's notifications
+    /// out of that part of the day.
+    case wrongTime = "wrong_time"
 
     var id: String { rawValue }
 
@@ -283,7 +304,13 @@ enum PulseDownReason: String, CaseIterable, Identifiable {
         case .alreadyKnew: return AppLocalization.string("I already knew")
         case .tooLate: return AppLocalization.string("Too late")
         case .tooOften: return AppLocalization.string("Too often")
+        case .wrongTime: return AppLocalization.string("Wrong time")
         }
+    }
+
+    /// The reasons the plugin acts on: Wrong time from 0.86.0.
+    static func offered(knowsHours: Bool) -> [PulseDownReason] {
+        knowsHours ? allCases : allCases.filter { $0 != .wrongTime }
     }
 }
 
@@ -329,10 +356,12 @@ enum PulseCardKind {
 struct PulseLesson: Equatable, Identifiable {
     let id: Int
     let kind: String
-    /// "level", "rule", "sooner", "seen" or "reset" (whose kind is the
-    /// scope it forgot, 0.84.0).
+    /// "level", "rule", "sooner", "seen", "reset" (whose kind is the
+    /// scope it forgot, 0.84.0) or "part" (no notifications in a part of
+    /// the day, 0.86.0).
     let what: String
-    /// The level, a rule's topic, or what a reset forgot.
+    /// The level, a rule's topic, what a reset forgot, or the part of the
+    /// day: "morning", "midday", "evening" or "night".
     let value: String
     /// Why it was learned ("2 thumbs down", "too often", "set").
     let cause: String
@@ -370,6 +399,15 @@ struct PulseLesson: Equatable, Identifiable {
             // A reset is about what learning held (its kind is the scope), or everything.
             return kind == "everything" ? AppLocalization.string("Forgot everything learned before this")
                 : AppLocalization.string("Reset: \(PulsePreference.subject(scope: kind, value: value, chatTitle: chatTitle))")
+        case "part":
+            let name = PulseCardKind.name(kind)
+            switch value {
+            case "morning": return AppLocalization.string("\(name): No notifications in the morning")
+            case "midday": return AppLocalization.string("\(name): No notifications in the middle of the day")
+            case "evening": return AppLocalization.string("\(name): No notifications in the evening")
+            case "night": return AppLocalization.string("\(name): No notifications at night")
+            default: return AppLocalization.string("\(name): No notifications at that time of day")
+            }
         default:
             return what
         }
@@ -383,6 +421,7 @@ struct PulseLesson: Equatable, Identifiable {
         case "too late": return AppLocalization.string("You said too late")
         case "already knew": return AppLocalization.string("You said you already knew")
         case "not relevant": return AppLocalization.string("You said not relevant")
+        case "wrong time": return AppLocalization.string("You said wrong time")
         default:
             return cause.hasSuffix("thumbs up") ? AppLocalization.string("After thumbs up")
                 : cause.hasSuffix("thumbs down") ? AppLocalization.string("After thumbs down") : cause
@@ -402,6 +441,12 @@ struct PulseFeedPage: Equatable {
     /// while it isn't, and from an older plugin.
     var quietNow: PulseQuietReason?
     var quietEndsAt: Date?
+    /// The night (0.86.0), for Not now's choices; nil when there's none,
+    /// and from an older plugin.
+    var night: PulseNight?
+    /// The morning brief's time in minutes into the day (0.86.0), for Not
+    /// now's choices at night; nil from an older plugin.
+    var briefTime: Int?
 
     init() {}
 
@@ -414,6 +459,8 @@ struct PulseFeedPage: Equatable {
         homeChatID = home?.isEmpty == false ? home : nil
         quietNow = (json["quiet_now"] as? String).flatMap(PulseQuietReason.init(rawValue:))
         quietEndsAt = quietNow == nil ? nil : PulseJSON.date(json["quiet_ends_at"])
+        night = PulseNight(json: json["night"])
+        briefTime = (json["brief_time"] as? String).flatMap(PulseReportTime.minutes)
     }
 
     static func levels(_ value: Any?) -> [String: PulseLevel] {
@@ -690,12 +737,14 @@ extension PulseClient {
         _ = try await request("\(Self.path)/feed/seen", "POST", ["ids": ids.map { $0 as Any } ?? NSNull()])
     }
 
-    /// The lessons the rating made.
-    func rate(card: Int, up: Bool, reason: PulseDownReason? = nil) async throws -> [PulseLesson] {
+    /// The lessons the rating made, and for Wrong time, when the card
+    /// comes back.
+    func rate(card: Int, up: Bool, reason: PulseDownReason? = nil) async throws -> PulseRated {
         var body: [String: Any] = ["card": card, "rating": up ? "up" : "down"]
         if let reason, !up { body["reason"] = reason.rawValue }
         let response = try await request("\(Self.path)/rate", "POST", body)
-        return (response["learned"] as? [Any] ?? []).compactMap(PulseLesson.init(json:))
+        return PulseRated(lessons: (response["learned"] as? [Any] ?? []).compactMap(PulseLesson.init(json:)),
+                          restUntil: PulseJSON.date(response["rest_until"]))
     }
 
     /// Marks a card done (a promise behind it closes, no rating), or takes
@@ -899,6 +948,12 @@ extension AppState {
         card.kind == "followup" || card.isNoticed && notifierPlugin.reports(PulseClient.learnsCapability)
     }
 
+    /// The reasons a thumbs down offers: Wrong time once the plugin picks
+    /// the time (0.86.0).
+    var pulseDownReasons: [PulseDownReason] {
+        PulseDownReason.offered(knowsHours: notifierPlugin.reports(PulseClient.hoursCapability))
+    }
+
     /// Opens the chat a card came from.
     /// It opens at the message the card came from, as an artifact's Show
     /// in chat does, whatever the chat would otherwise land on.
@@ -1022,9 +1077,13 @@ extension PulseClient {
     /// learning holds with reset, and what the reports left out with Bring
     /// it up (0.84.0).
     static let explainsCapability = "pulse_explains"
+    /// Pulse picks the time: the night in Settings > Pulse, waits while the
+    /// user is busy, and a thumbs down's Wrong time (0.86.0).
+    static let hoursCapability = "pulse_hours"
 }
 
-/// What Not now puts a card off until, as the plugin names it.
+/// What Not now puts a card off until, as the plugin names it. Wrong time
+/// puts a card away until a time of the plugin's, told the same way.
 enum PulseRest: String, CaseIterable, Identifiable {
     case laterToday = "later_today"
     case tomorrow
@@ -1050,16 +1109,31 @@ enum PulseRest: String, CaseIterable, Identifiable {
     }
 
     /// What the dialog offers: later today only while it is still today's
-    /// to give. From 22:30 the plugin makes it tomorrow (three hours, by
-    /// 23:00, and never under half an hour), so it would say tomorrow twice.
-    static func choices(now: Date = Date(), calendar: Calendar = .current) -> [PulseRest] {
+    /// to give. The plugin gives three hours, by 23:00 and by the night's
+    /// start (0.86.0), and never under half an hour, so from half an hour
+    /// before then it makes it tomorrow. At night it gives ten minutes
+    /// before the next morning brief (`brief`, minutes into the day; 07:00,
+    /// the brief's own default, when the feed doesn't say), so once today's
+    /// brief has gone, or is under forty minutes away, it's tomorrow's, as
+    /// Tomorrow is. It would say tomorrow twice.
+    static func choices(now: Date = Date(), night: PulseNight? = nil, brief: Int? = nil,
+                        calendar: Calendar = .current) -> [PulseRest] {
         let parts = calendar.dateComponents([.hour, .minute], from: now)
-        let lateEvening = (parts.hour ?? 0) * 60 + (parts.minute ?? 0) >= 22 * 60 + 30
-        return lateEvening ? [.tomorrow, .nextWeek] : allCases
+        let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        var end = 23 * 60
+        if let night {
+            if night.contains(minute) {
+                let today = (brief ?? 7 * 60) - 10 - minute >= 30
+                return today ? allCases : [.tomorrow, .nextWeek]
+            }
+            if night.start > minute { end = min(end, night.start) }
+        }
+        return minute >= end - 30 ? [.tomorrow, .nextWeek] : allCases
     }
 
-    /// The choice a time the plugin set comes to, for the Undo bar: later
-    /// today, tomorrow, or next week (the brief's day a week on).
+    /// The choice a time the plugin set comes to, for the Undo bar (Not
+    /// now's or Wrong time's): later today, tomorrow, or next week (the
+    /// brief's day a week on).
     static func returning(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> PulseRest {
         switch Self.days(to: date, now: now, calendar: calendar) {
         case ...0: .laterToday
@@ -1068,8 +1142,9 @@ enum PulseRest: String, CaseIterable, Identifiable {
         }
     }
 
-    /// When a card put off comes back, as its cleared row says it: later
-    /// today, tomorrow, a weekday this week, or next week.
+    /// When a card put off, by Not now or Wrong time, comes back, as its
+    /// cleared row says it: later today, tomorrow, a weekday this week, or
+    /// next week.
     static func backText(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
         let ahead = Self.days(to: date, now: now, calendar: calendar)
         if ahead <= 0 { return AppLocalization.string("Back later today") }
@@ -1092,5 +1167,12 @@ enum PulseRest: String, CaseIterable, Identifiable {
 /// The plugin's answer to Not now or Put back.
 struct PulseDismissal: Equatable {
     let changed: Bool
+    let restUntil: Date?
+}
+
+/// The plugin's answer to a rating.
+struct PulseRated: Equatable {
+    let lessons: [PulseLesson]
+    /// Wrong time put the card away until then (0.86.0).
     let restUntil: Date?
 }

@@ -158,6 +158,8 @@ struct PulseState: Equatable {
     /// When Pulse speaks up again: the spell's end, past any quiet days
     /// after it; nil while it isn't quiet, or when every day is.
     var quietEndsAt: Date?
+    /// The night (0.86.0); nil when there's none, and from an older plugin.
+    var night: PulseNight?
     /// Follow-ups on promises and to-dos are on.
     var followups = false
     var followupDailyTokens = 0
@@ -217,6 +219,7 @@ struct PulseState: Equatable {
         quietUntil = PulseJSON.date(json["quiet_until"])
         quietNow = (json["quiet_now"] as? String).flatMap(PulseQuietReason.init(rawValue:))
         quietEndsAt = PulseJSON.date(json["quiet_ends_at"])
+        night = PulseNight(json: json["night"])
         followups = PulseJSON.bool(json["followups"]) ?? false
         followupDailyTokens = PulseJSON.int(json["followup_daily_tokens"]) ?? 0
         followupTokensToday = PulseJSON.int(json["followup_tokens_today"]) ?? 0
@@ -333,6 +336,40 @@ enum PulseQuiet {
         formatter.setLocalizedDateFormatFromTemplate(
             calendar.isDate(date, equalTo: now, toGranularity: .year) ? "EEEEMMMMd" : "EEEEMMMMdy")
         return AppLocalization.string("Back on \(formatter.string(from: date))")
+    }
+}
+
+/// The night (0.86.0, `pulse_hours`): from `start` to `end`, minutes after
+/// midnight in Pulse's time zone. Then Pulse's notifications wait for the
+/// morning brief, unless they can't wait, and Not now's later today ends
+/// when it starts. The plugin sends it as two "HH:MM" times, or none.
+struct PulseNight: Equatable {
+    /// What Night turns on at: the plugin's default.
+    static let `default` = PulseNight(start: 22 * 60, end: 7 * 60)
+
+    let start: Int
+    let end: Int
+
+    init(start: Int, end: Int) {
+        self.start = start
+        self.end = end
+    }
+
+    /// Nil for no night: an empty list, the same time twice, or anything
+    /// but two "HH:MM" times.
+    init?(json: Any?) {
+        let times = json as? [Any] ?? []
+        guard times.count == 2, let start = (times[0] as? String).flatMap(PulseReportTime.minutes),
+              let end = (times[1] as? String).flatMap(PulseReportTime.minutes), start != end else { return nil }
+        self.init(start: start, end: end)
+    }
+
+    /// PUT /pulse's "night".
+    var setting: [String] { [PulseReportTime.text(minutes: start), PulseReportTime.text(minutes: end)] }
+
+    /// Whether a time of day, in minutes after midnight, is in it.
+    func contains(_ minute: Int) -> Bool {
+        start < end ? (start..<end).contains(minute) : minute >= start || minute < end
     }
 }
 
@@ -588,7 +625,8 @@ struct PulseClient {
 
     /// Any of enabled, memory, daily_report, report_profiles, report_times,
     /// brief_time, time_zone, model, nudge, memory_daily_tokens,
-    /// followup_daily_tokens and note; answers with the new state.
+    /// followup_daily_tokens, note, quiet_days, quiet_until and night;
+    /// answers with the new state.
     func update(_ changes: [String: Any]) async throws -> PulseState {
         let response = try await request(Self.path, "PUT", changes)
         return try Self.state(from: response)
