@@ -45,6 +45,26 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertNil(older.quietEndsAt)
     }
 
+    func testStateReadsTheNight() throws {
+        let state = try XCTUnwrap(PulseState(json: json(#"{"enabled": true, "night": ["23:30", "06:15"]}"#)))
+        let night = try XCTUnwrap(state.night)
+        XCTAssertEqual(night, PulseNight(start: 23 * 60 + 30, end: 6 * 60 + 15))
+        XCTAssertEqual(night.setting, ["23:30", "06:15"])
+        XCTAssertTrue(night.contains(23 * 60 + 30) && night.contains(0) && night.contains(6 * 60 + 14))
+        XCTAssertFalse(night.contains(6 * 60 + 15) || night.contains(12 * 60) || night.contains(23 * 60 + 29))
+        let evening = PulseNight(start: 18 * 60, end: 22 * 60)  // one that doesn't cross midnight
+        XCTAssertTrue(evening.contains(18 * 60) && evening.contains(21 * 60 + 59))
+        XCTAssertFalse(evening.contains(22 * 60) || evening.contains(60))
+        // Night turns on at the plugin's default.
+        XCTAssertEqual(PulseNight.default.setting, ["22:00", "07:00"])
+        // No night, the same time twice, anything but two times, or a plugin from before.
+        for body in [#"{"enabled": true, "night": []}"#, #"{"enabled": true, "night": ["22:00", "22:00"]}"#,
+                     #"{"enabled": true, "night": ["22:00"]}"#, #"{"enabled": true, "night": [22, 7]}"#,
+                     #"{"enabled": true, "night": ["22:00", "7:00"]}"#, #"{"enabled": true}"#] {
+            XCTAssertNil(try XCTUnwrap(PulseState(json: json(body))).night, body)
+        }
+    }
+
     func testQuietDaysRunInTheUsersWeekAndAVacationEndsOnADay() {
         var sundayFirst = Calendar(identifier: .gregorian)
         sundayFirst.firstWeekday = 1

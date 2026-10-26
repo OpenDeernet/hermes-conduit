@@ -14,7 +14,10 @@
 //  From 0.84.0 (`pulse_explains`) it shows what it learned: a card's Why?
 //  names the biggest part learning played, What Pulse learned lists what
 //  learning holds with Reset, and What Pulse left out lists what the reports
-//  didn't bring up, with Bring it up.
+//  didn't bring up, with Bring it up. From 0.85.0 (`pulse_hours`) a thumbs
+//  down's Wrong time puts the card away until a better time and keeps its
+//  kind's notifications out of that part of the day, and Not now's later
+//  today ends when the night starts.
 //
 
 import Foundation
@@ -274,6 +277,11 @@ enum PulseDownReason: String, CaseIterable, Identifiable {
     case alreadyKnew = "already_knew"
     case tooLate = "too_late"
     case tooOften = "too_often"
+    /// It came at a bad time, which says nothing about whether it was
+    /// worth bringing up (0.85.0): it comes back at a better time, and a
+    /// card that came with a notification keeps its kind's notifications
+    /// out of that part of the day.
+    case wrongTime = "wrong_time"
 
     var id: String { rawValue }
 
@@ -283,7 +291,13 @@ enum PulseDownReason: String, CaseIterable, Identifiable {
         case .alreadyKnew: return AppLocalization.string("I already knew")
         case .tooLate: return AppLocalization.string("Too late")
         case .tooOften: return AppLocalization.string("Too often")
+        case .wrongTime: return AppLocalization.string("Wrong time")
         }
+    }
+
+    /// The reasons the plugin acts on: Wrong time from 0.85.0.
+    static func offered(knowsHours: Bool) -> [PulseDownReason] {
+        knowsHours ? allCases : allCases.filter { $0 != .wrongTime }
     }
 }
 
@@ -329,10 +343,12 @@ enum PulseCardKind {
 struct PulseLesson: Equatable, Identifiable {
     let id: Int
     let kind: String
-    /// "level", "rule", "sooner", "seen" or "reset" (whose kind is the
-    /// scope it forgot, 0.84.0).
+    /// "level", "rule", "sooner", "seen", "reset" (whose kind is the
+    /// scope it forgot, 0.84.0) or "part" (no notifications in a part of
+    /// the day, 0.85.0).
     let what: String
-    /// The level, a rule's topic, or what a reset forgot.
+    /// The level, a rule's topic, what a reset forgot, or the part of the
+    /// day: "morning", "midday", "evening" or "night".
     let value: String
     /// Why it was learned ("2 thumbs down", "too often", "set").
     let cause: String
@@ -370,6 +386,15 @@ struct PulseLesson: Equatable, Identifiable {
             // A reset is about what learning held (its kind is the scope), or everything.
             return kind == "everything" ? AppLocalization.string("Forgot everything learned before this")
                 : AppLocalization.string("Reset: \(PulsePreference.subject(scope: kind, value: value, chatTitle: chatTitle))")
+        case "part":
+            let name = PulseCardKind.name(kind)
+            switch value {
+            case "morning": return AppLocalization.string("\(name): No notifications in the morning")
+            case "midday": return AppLocalization.string("\(name): No notifications in the middle of the day")
+            case "evening": return AppLocalization.string("\(name): No notifications in the evening")
+            case "night": return AppLocalization.string("\(name): No notifications at night")
+            default: return AppLocalization.string("\(name): No notifications at that time of day")
+            }
         default:
             return what
         }
@@ -383,6 +408,7 @@ struct PulseLesson: Equatable, Identifiable {
         case "too late": return AppLocalization.string("You said too late")
         case "already knew": return AppLocalization.string("You said you already knew")
         case "not relevant": return AppLocalization.string("You said not relevant")
+        case "wrong time": return AppLocalization.string("You said wrong time")
         default:
             return cause.hasSuffix("thumbs up") ? AppLocalization.string("After thumbs up")
                 : cause.hasSuffix("thumbs down") ? AppLocalization.string("After thumbs down") : cause
@@ -402,6 +428,9 @@ struct PulseFeedPage: Equatable {
     /// while it isn't, and from an older plugin.
     var quietNow: PulseQuietReason?
     var quietEndsAt: Date?
+    /// The night (0.85.0), for Not now's choices; nil when there's none,
+    /// and from an older plugin.
+    var night: PulseNight?
 
     init() {}
 
@@ -414,6 +443,7 @@ struct PulseFeedPage: Equatable {
         homeChatID = home?.isEmpty == false ? home : nil
         quietNow = (json["quiet_now"] as? String).flatMap(PulseQuietReason.init(rawValue:))
         quietEndsAt = quietNow == nil ? nil : PulseJSON.date(json["quiet_ends_at"])
+        night = PulseNight(json: json["night"])
     }
 
     static func levels(_ value: Any?) -> [String: PulseLevel] {
@@ -690,12 +720,14 @@ extension PulseClient {
         _ = try await request("\(Self.path)/feed/seen", "POST", ["ids": ids.map { $0 as Any } ?? NSNull()])
     }
 
-    /// The lessons the rating made.
-    func rate(card: Int, up: Bool, reason: PulseDownReason? = nil) async throws -> [PulseLesson] {
+    /// The lessons the rating made, and for Wrong time, when the card
+    /// comes back.
+    func rate(card: Int, up: Bool, reason: PulseDownReason? = nil) async throws -> PulseRated {
         var body: [String: Any] = ["card": card, "rating": up ? "up" : "down"]
         if let reason, !up { body["reason"] = reason.rawValue }
         let response = try await request("\(Self.path)/rate", "POST", body)
-        return (response["learned"] as? [Any] ?? []).compactMap(PulseLesson.init(json:))
+        return PulseRated(lessons: (response["learned"] as? [Any] ?? []).compactMap(PulseLesson.init(json:)),
+                          restUntil: PulseJSON.date(response["rest_until"]))
     }
 
     /// Marks a card done (a promise behind it closes, no rating), or takes
@@ -899,6 +931,12 @@ extension AppState {
         card.kind == "followup" || card.isNoticed && notifierPlugin.reports(PulseClient.learnsCapability)
     }
 
+    /// The reasons a thumbs down offers: Wrong time once the plugin picks
+    /// the time (0.85.0).
+    var pulseDownReasons: [PulseDownReason] {
+        PulseDownReason.offered(knowsHours: notifierPlugin.reports(PulseClient.hoursCapability))
+    }
+
     /// Opens the chat a card came from.
     /// It opens at the message the card came from, as an artifact's Show
     /// in chat does, whatever the chat would otherwise land on.
@@ -1022,6 +1060,9 @@ extension PulseClient {
     /// learning holds with reset, and what the reports left out with Bring
     /// it up (0.84.0).
     static let explainsCapability = "pulse_explains"
+    /// Pulse picks the time: the night in Settings > Pulse, waits while the
+    /// user is busy, and a thumbs down's Wrong time (0.85.0).
+    static let hoursCapability = "pulse_hours"
 }
 
 /// What Not now puts a card off until, as the plugin names it.
@@ -1050,12 +1091,20 @@ enum PulseRest: String, CaseIterable, Identifiable {
     }
 
     /// What the dialog offers: later today only while it is still today's
-    /// to give. From 22:30 the plugin makes it tomorrow (three hours, by
-    /// 23:00, and never under half an hour), so it would say tomorrow twice.
-    static func choices(now: Date = Date(), calendar: Calendar = .current) -> [PulseRest] {
+    /// to give. The plugin gives three hours, by 23:00 and by the night's
+    /// start (0.85.0), and never under half an hour, so from half an hour
+    /// before then it makes it tomorrow; at night before midnight it's the
+    /// morning brief's time, tomorrow too. It would say tomorrow twice.
+    static func choices(now: Date = Date(), night: PulseNight? = nil, calendar: Calendar = .current) -> [PulseRest] {
         let parts = calendar.dateComponents([.hour, .minute], from: now)
-        let lateEvening = (parts.hour ?? 0) * 60 + (parts.minute ?? 0) >= 22 * 60 + 30
-        return lateEvening ? [.tomorrow, .nextWeek] : allCases
+        let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        var end = 23 * 60
+        if let night {
+            // After midnight, the morning brief is still today's.
+            if night.contains(minute) { return minute >= 12 * 60 ? [.tomorrow, .nextWeek] : allCases }
+            if night.start > minute { end = min(end, night.start) }
+        }
+        return minute >= end - 30 ? [.tomorrow, .nextWeek] : allCases
     }
 
     /// The choice a time the plugin set comes to, for the Undo bar: later
@@ -1092,5 +1141,12 @@ enum PulseRest: String, CaseIterable, Identifiable {
 /// The plugin's answer to Not now or Put back.
 struct PulseDismissal: Equatable {
     let changed: Bool
+    let restUntil: Date?
+}
+
+/// The plugin's answer to a rating.
+struct PulseRated: Equatable {
+    let lessons: [PulseLesson]
+    /// Wrong time put the card away until then (0.85.0).
     let restUntil: Date?
 }

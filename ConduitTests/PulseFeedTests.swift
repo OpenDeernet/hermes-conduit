@@ -878,6 +878,93 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertEqual(PulseClient.quietCapability, "pulse_quiet")
     }
 
+    func testWrongTimeIsOfferedOnceThePluginPicksTheTimeAndPutsTheCardAway() async throws {
+        let state = try appState()
+        state.setNotifierPluginStateForTesting(.reported(version: "0.84.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.learnsCapability
+        ]))
+        XCTAssertEqual(state.pulseDownReasons, [.notRelevant, .alreadyKnew, .tooLate, .tooOften])
+        state.setNotifierPluginStateForTesting(.reported(version: "0.85.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.learnsCapability, PulseClient.hoursCapability
+        ]))
+        XCTAssertEqual(state.pulseDownReasons, PulseDownReason.allCases)
+        XCTAssertEqual(PulseDownReason.wrongTime.rawValue, "wrong_time")
+        XCTAssertEqual(PulseDownReason.wrongTime.title, AppLocalization.string("Wrong time"))
+        XCTAssertEqual(PulseClient.hoursCapability, "pulse_hours")
+
+        // The plugin answers with when the card comes back, and what it learned.
+        var calls: [(path: String, body: [String: Any]?)] = []
+        let client = PulseClient { path, _, body in
+            calls.append((path, body))
+            return ["ok": true, "rest_until": 1_800_000_000, "learned": [
+                ["id": 4, "kind": "followup", "what": "part", "value": "evening", "cause": "wrong time"] as [String: Any]
+            ]]
+        }
+        let rated = try await client.rate(card: 9, up: false, reason: .wrongTime)
+        XCTAssertEqual(calls.first?.path, "\(PulseClient.path)/rate")
+        XCTAssertEqual(calls.first?.body?["reason"] as? String, "wrong_time")
+        XCTAssertEqual(rated.restUntil, Date(timeIntervalSince1970: 1_800_000_000))
+        XCTAssertEqual(rated.lessons.map(\.id), [4])
+        // Any other rating, or a plugin from before, leaves the card where it is.
+        let older = PulseClient { _, _, _ in ["ok": true, "learned": [Any]()] }
+        let plain = try await older.rate(card: 9, up: false, reason: .tooOften)
+        XCTAssertEqual(plain, PulseRated(lessons: [], restUntil: nil))
+    }
+
+    func testWrongTimeTeachesNoNotificationsInAPartOfTheDay() throws {
+        let learned = try XCTUnwrap(PulseLearned(json: json("""
+        {"levels": {}, "lessons": [
+          {"id": 1, "kind": "followup", "what": "part", "value": "morning", "cause": "wrong time"},
+          {"id": 2, "kind": "followup", "what": "part", "value": "midday", "cause": "wrong time"},
+          {"id": 3, "kind": "date", "what": "part", "value": "evening", "cause": "wrong time"},
+          {"id": 4, "kind": "followup", "what": "part", "value": "night", "cause": "wrong time"},
+          {"id": 5, "kind": "followup", "what": "part", "value": "teatime", "cause": "wrong time"}]}
+        """)))
+        let followups = PulseCardKind.title("followup")
+        XCTAssertEqual(learned.lessons.map(\.text), [
+            AppLocalization.string("\(followups): No notifications in the morning"),
+            AppLocalization.string("\(followups): No notifications in the middle of the day"),
+            AppLocalization.string("\(PulseCardKind.topic("date")): No notifications in the evening"),
+            AppLocalization.string("\(followups): No notifications at night"),
+            AppLocalization.string("\(followups): No notifications at that time of day")
+        ])
+        XCTAssertEqual(learned.lessons.first?.causeText, AppLocalization.string("You said wrong time"))
+    }
+
+    func testNotNowsLaterTodayEndsWhenTheNightStarts() throws {
+        let page = try XCTUnwrap(PulseFeedPage(json: json(#"{"cards": [], "night": ["22:00", "07:00"]}"#)))
+        XCTAssertEqual(page.night, PulseNight(start: 22 * 60, end: 7 * 60))
+        for body in [#"{"cards": [], "night": []}"#, #"{"cards": []}"#] {
+            XCTAssertNil(try XCTUnwrap(PulseFeedPage(json: json(body))).night)  // no night, or a plugin from before
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let midnight = Date(timeIntervalSince1970: 1_799_971_200)  // 2027-01-15 00:00 UTC
+        let choices = { (hour: Int, minute: Int, night: PulseNight?) in
+            PulseRest.choices(now: midnight.addingTimeInterval(Double(hour * 3600 + minute * 60)), night: night,
+                              calendar: calendar)
+        }
+        let tomorrow: [PulseRest] = [.tomorrow, .nextWeek]
+        let night = PulseNight(start: 22 * 60, end: 7 * 60)
+        // The plugin gives three hours, by the night's start, and never under half an hour.
+        XCTAssertEqual(choices(21, 29, night), PulseRest.allCases)
+        XCTAssertEqual(choices(21, 30, night), tomorrow)
+        // At night it's the morning brief's time: tomorrow's before midnight, today's after.
+        XCTAssertEqual(choices(23, 0, night), tomorrow)
+        XCTAssertEqual(choices(2, 0, night), PulseRest.allCases)
+        // A night that starts after 23:00, or after midnight, leaves 23:00 the end of today.
+        XCTAssertEqual(choices(22, 29, PulseNight(start: 23 * 60 + 30, end: 6 * 60)), PulseRest.allCases)
+        XCTAssertEqual(choices(22, 30, PulseNight(start: 23 * 60 + 30, end: 6 * 60)), tomorrow)
+        let late = PulseNight(start: 60, end: 8 * 60)
+        XCTAssertEqual(choices(22, 30, late), tomorrow)
+        XCTAssertEqual(choices(0, 29, late), PulseRest.allCases)
+        XCTAssertEqual(choices(0, 30, late), tomorrow)
+        XCTAssertEqual(choices(3, 0, late), PulseRest.allCases)
+        // No night: by 23:00, as before.
+        XCTAssertEqual(choices(22, 29, nil), PulseRest.allCases)
+        XCTAssertEqual(choices(22, 30, nil), tomorrow)
+    }
+
     func testNotNowPostsTheCardToThePlugin() async throws {
         var calls: [(path: String, body: [String: Any]?)] = []
         let client = PulseClient { path, _, body in
