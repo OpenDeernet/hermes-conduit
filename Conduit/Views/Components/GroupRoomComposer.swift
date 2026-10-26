@@ -80,9 +80,11 @@ struct GroupRoomComposer: View {
     }
 
     /// Resting, it is one slim bar: attach beside the field. Anything in
-    /// progress opens the controls row under the field.
+    /// progress opens the controls row under the field, a dictation's
+    /// settle included, so its Stop stays in reach.
     private var rests: Bool {
-        !isFocused && !hasText && attachments.isEmpty && !isDictationActive && !isUploading
+        !isFocused && !hasText && attachments.isEmpty && !isDictationActive && !dictationHoldsSendSlot
+            && !isUploading
             && composerError == nil && replyReference == nil && recipients.isEmpty
     }
 

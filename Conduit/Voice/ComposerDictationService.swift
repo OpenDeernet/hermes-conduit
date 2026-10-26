@@ -371,7 +371,8 @@ enum ComposerDictation {
         case start
         /// Listening: stop, keeping the words.
         case stop
-        /// Still coming up (permission, microphone): call it off.
+        /// Still coming up (permission, microphone): call it off. Send's
+        /// Stop also uses it to end a settle, keeping the draft's words.
         case cancelStart
         case nothing
     }
