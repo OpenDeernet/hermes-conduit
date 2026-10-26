@@ -134,6 +134,26 @@ struct PulseCard: Equatable, Identifiable {
     /// it shows as done, and Undo leaves it put away.
     var isResting: Bool { dismissedAt != nil && doneAt == nil }
 
+    /// A cleared card's label: what put it away and when it comes back, or,
+    /// done (while it rested too), who saw it done.
+    var clearedTitle: String {
+        guard isResting else {
+            return doneBy == "pulse" ? AppLocalization.string("Done, seen in the chat") : AppLocalization.string("Done")
+        }
+        let away = isAwayForWrongTime ? PulseDownReason.wrongTime.title : AppLocalization.string("Not now")
+        guard let restUntil else { return away }
+        return away + " · " + PulseRest.backText(restUntil)
+    }
+
+    /// What Undo of Done does, for VoiceOver: a card put away stays away;
+    /// one about something Pulse remembers has that thing checked on again;
+    /// any other is back on the list.
+    var undoDoneHint: String {
+        if dismissedAt != nil { return AppLocalization.string("Keeps the card put away") }
+        return itemID != nil ? AppLocalization.string("Pulse checks on it again")
+            : AppLocalization.string("Puts the card back on the list")
+    }
+
     /// Follow-ups and report items take ratings; a whole report or a brief
     /// is Hermes' own reply.
     var isRatable: Bool { kind == "followup" || isNoticed }

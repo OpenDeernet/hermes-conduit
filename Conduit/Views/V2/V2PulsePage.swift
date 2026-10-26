@@ -933,12 +933,7 @@ struct V2PulsePage: View {
     }
 
     private func clearedLabel(_ card: PulseCard) -> some View {
-        // Put away by Wrong time, or by Not now; done comes first, as it doesn't come back.
-        let away = card.isAwayForWrongTime ? PulseDownReason.wrongTime.title : AppLocalization.string("Not now")
-        var title = card.isResting ? away
-            : card.doneBy == "pulse" ? AppLocalization.string("Done, seen in the chat") : AppLocalization.string("Done")
-        if card.isResting, let back = card.restUntil { title += " · " + PulseRest.backText(back) }
-        return Label(title, systemImage: card.isResting ? "clock" : "checkmark.circle.fill")
+        Label(card.clearedTitle, systemImage: card.isResting ? "clock" : "checkmark.circle.fill")
             .font(.footnote.weight(.semibold))
             .foregroundStyle(card.isResting ? Color.secondary : Color.green)
     }
@@ -968,18 +963,9 @@ struct V2PulsePage: View {
             .buttonStyle(.borderless)
             .disabled(isBusy(card))
             .accessibilityLabel(Text(AppLocalization.string("Undo Done")))
-            .accessibilityHint(Text(Self.undoDoneHint(card)))
+            .accessibilityHint(Text(card.undoDoneHint))
             .accessibilityIdentifier("pulse.card.undo-done")
         }
-    }
-
-    /// What Undo does: a card put away stays away; one about something
-    /// Pulse remembers has that thing checked on again; any other is back
-    /// on the list.
-    private static func undoDoneHint(_ card: PulseCard) -> String {
-        if card.dismissedAt != nil { return AppLocalization.string("Keeps the card put away") }
-        return card.itemID != nil ? AppLocalization.string("Pulse checks on it again")
-            : AppLocalization.string("Puts the card back on the list")
     }
 
     private func doItButton(_ card: PulseCard) -> some View {

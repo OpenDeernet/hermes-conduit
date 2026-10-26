@@ -1052,12 +1052,31 @@ final class PulseFeedTests: XCTestCase {
           {"id": 1, "kind": "followup", "level": "screen", "news": "Call the bank", "item_id": 7, "created_at": 30,
            "dismissed_at": 60, "rest_until": 90, "done_at": 70, "done_by": "pulse"},
           {"id": 2, "kind": "followup", "level": "screen", "news": "Book the car", "item_id": 8, "created_at": 30,
-           "dismissed_at": 60, "rest_until": 90}
+           "dismissed_at": 60, "rest_until": 90},
+          {"id": 3, "kind": "followup", "level": "screen", "news": "Pay the rent", "item_id": 9, "created_at": 30,
+           "done_at": 70, "done_by": "user"},
+          {"id": 4, "kind": "noticed", "topic": "date", "level": "screen", "news": "Concert", "created_at": 30,
+           "done_at": 70, "done_by": "pulse"}
         ]}
         """)))
-        XCTAssertEqual(page.cards.map(\.isResting), [false, true])
-        XCTAssertEqual(page.cards.map(\.doneBy), ["pulse", ""])
-        XCTAssertTrue(page.cards.allSatisfy(\.isCleared))
+        let cards = page.cards
+        XCTAssertEqual(cards.map(\.isResting), [false, true, false, false])
+        XCTAssertTrue(cards.allSatisfy(\.isCleared))
+        // In whatever language the test host's app is in.
+        XCTAssertEqual(cards.map(\.clearedTitle), [
+            AppLocalization.string("Done, seen in the chat"),
+            AppLocalization.string("Not now") + " · " + PulseRest.backText(Date(timeIntervalSince1970: 90)),
+            AppLocalization.string("Done"),
+            AppLocalization.string("Done, seen in the chat"),
+        ])
+        // Undo there: the one put off stays put off, a remembered thing is checked on again, and a
+        // found item is back on the list.
+        XCTAssertEqual(cards.map(\.undoDoneHint), [
+            AppLocalization.string("Keeps the card put away"),
+            AppLocalization.string("Keeps the card put away"),
+            AppLocalization.string("Pulse checks on it again"),
+            AppLocalization.string("Puts the card back on the list"),
+        ])
     }
 
     func testTheClearedRowSaysWhenAPutOffCardComesBack() {
