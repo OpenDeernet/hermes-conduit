@@ -803,10 +803,11 @@ final class AppState: ObservableObject {
                     ? AppLocalization.string("Couldn't start a new chat. Check your connection and try again.")
                     : widgetMessage
                 self.errorMessage = message
-                // The composer shows errorMessage; over the V2 lists (the
-                // chat covered) nothing would, and the tap looks ignored.
-                // Only V2 draws the notice.
-                if self.showSidebar, V2ShellPreference.isOn { self.showNotice(message, systemImage: "exclamationmark.circle") }
+                // The composer shows errorMessage only while it's locked,
+                // and the V2 lists or a call's screen cover it, so a notice
+                // says it too, or the tap looks ignored (a call stops a
+                // launch for another workspace). Only V2 draws the notice.
+                if V2ShellPreference.isOn { self.showNotice(message, systemImage: "exclamationmark.circle") }
             },
             pendingLinkChanged: { [weak self] link in
                 self?.widgetLaunchPendingLinkChanged(link)
@@ -932,6 +933,8 @@ final class AppState: ObservableObject {
     /// A pin change that stayed on this phone because Hermes didn't take
     /// it, shown for a moment with Hermes' reason (#555).
     @Published private(set) var pinSyncNotice: PinSyncNotice?
+    /// The refusal `showCallRefusal` left on the drawer shell's error line (V2 off).
+    private var callRefusalOnErrorLine: String?
     /// What the user has and hasn't seen, per conversation (#454).
     @Published private(set) var chatReadState = ChatReadState()
     /// The latest `session.active_list` snapshot and the profile it belongs
@@ -2351,6 +2354,19 @@ final class AppState: ObservableObject {
     /// A turn ended while the hidden prompt was on its way: when it comes
     /// back queued, it was queued behind that one.
     var predictiveFollowUpAheadEnded = false
+    /// Turns of messages sent before the hidden prompt was queued that
+    /// ran ahead of it, so a reply Conduit never sees end is stopped
+    /// waiting for.
+    var predictiveFollowUpTurnsAhead = 0
+    /// When the hidden prompt was sent, if Hermes queued it: only a message
+    /// sent before then can run ahead of it.
+    var predictiveFollowUpQueuedAt: Date?
+    /// Row ids of messages other clients sent while the follow-up waits;
+    /// a reply ending before one is read can't be told apart.
+    var predictiveFollowUpUnreadMessages: Set<Int> = []
+    /// Bumped by each follow-up sent and each stop: a send that returns
+    /// after either leaves the follow-up waiting now as it is.
+    var predictiveFollowUpSend = 0
     /// When the last reply settled here, so a follow-up check can say how
     /// long ago without reading timestamps.
     var predictiveReplyEnded: (anchor: PredictiveStore.Anchor, at: Date)?
@@ -6435,11 +6451,39 @@ final class AppState: ObservableObject {
         publishNotice(PinSyncNotice(error: error, pinned: pinned))
     }
 
-    /// Says something briefly over the V2 lists (`pinSyncNotice` carries
-    /// every such notice).
+    /// Says something briefly over the V2 lists and over a call's screen
+    /// (`pinSyncNotice` carries every such notice).
     func showNotice(_ message: String, systemImage: String) {
         publishNotice(PinSyncNotice(message: message, systemImage: systemImage))
     }
+
+    /// A tap a call kept from switching says why, over the screen and over
+    /// the call's own: `errorMessage` shows only while the composer is
+    /// locked or the connection needs repair, and a call does neither. Only
+    /// V2 draws the notice: the drawer shell keeps its error line, as
+    /// before, which says nothing during the call (`clearCallRefusal`).
+    func showCallRefusal(_ message: String, drawsNotices: Bool = V2ShellPreference.isOn) {
+        if drawsNotices {
+            showNotice(message, systemImage: "exclamationmark.triangle.fill")
+        } else {
+            errorMessage = message
+            callRefusalOnErrorLine = message
+        }
+    }
+
+    /// The call a tap waited for is over, or a newer tap replaced it: the
+    /// drawer shell's error line drops the refusal it still has, or the line
+    /// would say a tap waits just as the next switch locks the composer and
+    /// shows it.
+    func clearCallRefusal() {
+        if let refusal = callRefusalOnErrorLine, errorMessage == refusal { errorMessage = nil }
+        callRefusalOnErrorLine = nil
+    }
+
+    /// No call, and Conduit on screen (not only launched in the background,
+    /// where a waiting tap is restored too): a tap or a retry waiting for a
+    /// call goes through then.
+    var callWaitCanEnd: Bool { !isVoiceCallInProgress && isSceneActive && sceneHasBeenActive }
 
     /// A call that failed in the car for a reason the car couldn't name
     /// ("See your iPhone"), waiting for the phone's screen to come on.
@@ -7664,7 +7708,7 @@ final class AppState: ObservableObject {
                 }
                 if owner != activeDashboardID {
                     guard !isVoiceCallInProgress else {
-                        errorMessage = AppLocalization.string("End the call to open a chat in another workspace.")
+                        showCallRefusal(AppLocalization.string("End the call to open a chat in another workspace."))
                         return
                     }
                     PushNotificationService.shared.routeChatLink(
@@ -7714,7 +7758,7 @@ final class AppState: ObservableObject {
             return
         }
         guard !isVoiceCallInProgress else {
-            errorMessage = AppLocalization.string("End the call to open a chat in another profile.")
+            showCallRefusal(AppLocalization.string("End the call to open a chat in another profile."))
             return
         }
         if let listed = notificationProfileID(profile), listed != "default", !profiles.contains(listed) {
@@ -10139,10 +10183,7 @@ final class AppState: ObservableObject {
         predictiveRepliesAsked = nil
         predictiveDraftAsked = nil
         predictiveFollowUp = PredictiveFollowUpState()
-        predictiveFollowUpTurn = nil
-        predictiveFollowUpQueued = false
-        predictiveFollowUpSending = false
-        predictiveFollowUpAheadEnded = false
+        stopWaitingForPredictiveFollowUp()
         predictiveReplyEnded = nil
         predictiveComposerRequest = nil
         predictive.forgetAll()
@@ -10400,6 +10441,9 @@ final class AppState: ObservableObject {
             .flatMap(Self.normalizedStoredChatResumeIdentity)
             ?? initialChatResumeServerIdentity
         defaults.set(identity, forKey: Self.chatResumeServerIdentityKey)
+        // A follow-up's turn may have ended while disconnected: its reply
+        // isn't watched for across a reconnect, so none is tagged wrongly.
+        stopWaitingForPredictiveFollowUp()
         guard let previousIdentity, previousIdentity != identity else { return false }
 
         retireSpeechOperationsForServerReplacement(previousIdentity: previousIdentity, identity: identity)
@@ -17612,6 +17656,8 @@ final class AppState: ObservableObject {
               Self.uiTestFailedConnectionStub() == nil else { return }
         #endif
         guard let savedConnection = connection else { return }
+        // As on every connect: a follow-up's turn may have ended unseen.
+        stopWaitingForPredictiveFollowUp()
         // The renewal's ownership is captured BEFORE any await: the renewed
         // ticket belongs to exactly this dashboard and this switch
         // generation. After the mint (or the silent re-auth), the fences
@@ -20161,17 +20207,22 @@ final class AppState: ObservableObject {
 
     /// Hermes announced a user message in a chat (`user.message`). Every
     /// client of the chat hears it, this one's own sends included: one
-    /// arriving with a turn running here, already shown here by its row id,
-    /// or matching the latest user message here is this device's (so is
-    /// the same text resent elsewhere; its stored count still reads it).
+    /// already shown here by its row id, or matching the latest user
+    /// message here while that one has no row id yet, is this device's
+    /// (so is the same text resent elsewhere then; its stored count still
+    /// reads it).
     private func noteUserMessageElsewhere(sessionId: String, rowId: Int?, text: String) {
-        if eventBelongsToActiveSession(sessionId), !turnState.isRunning,
-           openChatSync.sessionID == activeSessionId,
-           rowId.map({ id in !messages.contains(where: { $0.rowId == id }) }) ?? true {
-            let latestHere = messages.last(where: { $0.role == .user })?.content ?? ""
-            if OpenChatSync.squashed(latestHere) != OpenChatSync.squashed(text) {
-                openChatSync.noteUserMessageElsewhere()
-            }
+        let latestHere = messages.last(where: { $0.role == .user })
+        let elsewhere = eventBelongsToActiveSession(sessionId)
+            && (rowId.map({ id in !messages.contains(where: { $0.rowId == id }) }) ?? true)
+            && (rowId != nil && latestHere?.rowId != nil
+                || OpenChatSync.squashed(latestHere?.content ?? "") != OpenChatSync.squashed(text))
+        // A follow-up waiting in this chat: whatever turn is running here.
+        if elsewhere, let activeSessionId {
+            notePredictiveFollowUpMessageElsewhere(sessionId: activeSessionId, rowId: rowId)
+        }
+        if elsewhere, !turnState.isRunning, openChatSync.sessionID == activeSessionId {
+            openChatSync.noteUserMessageElsewhere()
         }
         noteCatalogChanged()
     }
@@ -22746,10 +22797,14 @@ final class AppState: ObservableObject {
         case retry
         case unverified(String)
         case failed
+        /// The open needs a switch that would end the call running: it
+        /// opens once that call has ended.
+        case afterCall
     }
 
     /// One open with no retry after it, so an `.unverified` failure says why
-    /// at once.
+    /// at once. Only a call's own open uses it: that never spares calls, so
+    /// it never gets `.afterCall`, which needs the route's wait (ConduitApp).
     func openNotificationTarget(_ target: ConduitNotificationTarget) async -> Bool {
         let outcome = await openNotificationTargetOutcome(target)
         if case .unverified(let message) = outcome { errorMessage = message }
@@ -22763,6 +22818,15 @@ final class AppState: ObservableObject {
         // Where an open for a call from Hermes stopped (#449).
         var traceStage = "dashboard check"
         defer { HermesCallTrace.shared.note("Chat open ended at: \(traceStage)") }
+        // Switching dashboard or profile ends a call that's running, so an
+        // open that needs a switch stops while one runs. A call from Hermes
+        // opening its own chat (answered, or its notification tapped, a
+        // missed call's included) still switches: talking to Hermes leaves
+        // the other call.
+        let sparesCalls = target.call == nil
+        // A chat link can be tapped again once the call ends; a tapped
+        // notification is gone, so it waits for the call instead.
+        let callOutcome: NotificationOpenOutcome = target.isChatLink ? .failed : .afterCall
         // Dashboard ownership gate (#148 / B3): a push from dashboard A is
         // never processed against active dashboard B, even when profile,
         // session, and request ids all collide. A push belonging to another
@@ -22785,11 +22849,15 @@ final class AppState: ObservableObject {
             }
         case .switchFirst(let dashboardID):
             traceStage = "dashboard check (switching to another saved dashboard)"
-            // A chat link routed before a call started can reach here after
-            // it did: switching dashboards would tear that call down.
-            if target.isChatLink, isVoiceCallInProgress {
-                errorMessage = AppLocalization.string("End the call to open a chat in another workspace.")
-                return .failed
+            // A notification tapped during a call, or a chat link routed
+            // before one started, stops here: switching dashboards would
+            // tear that call down.
+            if sparesCalls, isVoiceCallInProgress {
+                traceStage = "call in progress"
+                showCallRefusal(target.isChatLink
+                    ? AppLocalization.string("End the call to open a chat in another workspace.")
+                    : AppLocalization.string("This notification opens in the other workspace when the call ends."))
+                return callOutcome
             }
             await switchDashboard(to: dashboardID)
             guard isConnected, activeDashboardID == dashboardID, client != nil else {
@@ -22853,6 +22921,13 @@ final class AppState: ObservableObject {
             )
         }
         let targetProfile = notificationProfileID(target.profile)
+        // What a notification or a chat link for another profile says when a
+        // call keeps it from switching; nil for a call's own open.
+        let profileCallRefusal: String? = sparesCalls
+            ? (target.isChatLink
+                ? AppLocalization.string("End the call to open a chat in another profile.")
+                : AppLocalization.string("This notification opens in the other profile when the call ends."))
+            : nil
         if let notified = target.profile, let targetProfile,
            targetProfile != activeProfile,
            botModePhase != .gatewayUnsupported {
@@ -22894,6 +22969,13 @@ final class AppState: ObservableObject {
                 // its profile would hand it the workspace's context. Fail
                 // closed rather than guess. The roster can load on a retry
                 // (it's read again above), so nothing is adopted until then.
+                // During a call that retry waits for the call to end, as the
+                // switch would: retried now, it could run out of time first.
+                if let profileCallRefusal, isVoiceCallInProgress {
+                    traceStage = "call in progress (bot roster)"
+                    showCallRefusal(profileCallRefusal)
+                    return callOutcome
+                }
                 return .unverified(AppLocalization.string(
                     "Could not verify that workspace for this notification. Reconnect and try again."
                 ))
@@ -22917,6 +22999,12 @@ final class AppState: ObservableObject {
                 ) else { return .retry }
                 // A lookup that failed proves nothing either way: it is
                 // asked again on a retry, and nothing is adopted until then.
+                // During a call, the retry waits for the call to end.
+                if let profileCallRefusal, isVoiceCallInProgress {
+                    traceStage = "call in progress (bot chat lookup)"
+                    showCallRefusal(profileCallRefusal)
+                    return callOutcome
+                }
                 return .unverified(AppLocalization.string(
                     "Could not verify that workspace for this notification. Reconnect and try again."
                 ))
@@ -22966,22 +23054,24 @@ final class AppState: ObservableObject {
         }
         if let targetProfile, targetProfile != activeProfile {
             // A call can have started (one from Hermes needs no tap) while
-            // the checks above waited on the gateway; a chat link never ends
-            // it with the switch.
-            if target.isChatLink, isVoiceCallInProgress {
+            // the checks above waited on the gateway; a notification or a
+            // chat link never ends it with the switch.
+            if let profileCallRefusal, isVoiceCallInProgress {
                 traceStage = "call in progress"
-                errorMessage = AppLocalization.string("End the call to open a chat in another profile.")
-                return .failed
+                showCallRefusal(profileCallRefusal)
+                return callOutcome
             }
             traceStage = "profile switch"
             guard await switchProfile(
                 to: targetProfile,
                 reusing: transitionGeneration,
-                sparingCalls: target.isChatLink
+                refusingCallsWith: profileCallRefusal
             ) else {
                 // A call that started during the switch refuses it the
                 // same way, and says so; anything else may pass on a retry.
-                return target.isChatLink && isVoiceCallInProgress ? .failed : .retry
+                guard sparesCalls, isVoiceCallInProgress else { return .retry }
+                traceStage = "call in progress (profile switch)"
+                return callOutcome
             }
         }
         guard notificationOpenAttemptIsCurrent(
@@ -29375,7 +29465,7 @@ final class AppState: ObservableObject {
     private func switchProfile(
         to profile: String,
         reusing viewportTransitionGeneration: UInt64?,
-        sparingCalls: Bool = false,
+        refusingCallsWith callRefusal: String? = nil,
         widgetLease: WidgetLaunchLease? = nil
     ) async -> Bool {
         let target = profile.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -29383,11 +29473,12 @@ final class AppState: ObservableObject {
             return false
         }
         guard !isProfileSwitching else { return false }
-        // A switch that spares calls (a chat link's) mints its ticket before
-        // anything changes, so nothing waits between its call check and the
-        // voice teardown below.
+        // A switch that spares calls (a notification's or a chat link's)
+        // mints its ticket before anything changes, so nothing waits between
+        // its call check and the voice teardown below; it refuses while a
+        // call runs, saying `callRefusal`.
         var sparedCallTicket: String?
-        if sparingCalls {
+        if let callRefusal {
             var mintError: Error?
             do {
                 sparedCallTicket = try await mintChatResumeTicket(for: savedConnection)
@@ -29407,12 +29498,22 @@ final class AppState: ObservableObject {
                 return false
             }
             guard !isProfileSwitching, target != activeProfile, connection == savedConnection else { return false }
-            if let mintError {
-                errorMessage = AppLocalization.string("Could not switch workspace: \(UserFacingError.message(for: mintError))")
+            // A call that rang in meanwhile says so, whether or not the
+            // ticket came: the call alone stops the switch.
+            guard !isVoiceCallInProgress else {
+                showCallRefusal(callRefusal)
                 return false
             }
-            guard !isVoiceCallInProgress else {
-                errorMessage = AppLocalization.string("End the call to open a chat in another profile.")
+            if let mintError {
+                let message = AppLocalization.string("Could not switch workspace: \(UserFacingError.message(for: mintError))")
+                errorMessage = message
+                // The composer shows errorMessage only while it's locked, so
+                // a notice says it too, or the tap looks ignored: once while
+                // it's up, since the route retries the open for its window.
+                // Only V2 draws the notice.
+                if V2ShellPreference.isOn, pinSyncNotice?.message != message {
+                    showNotice(message, systemImage: "exclamationmark.circle")
+                }
                 return false
             }
         }
