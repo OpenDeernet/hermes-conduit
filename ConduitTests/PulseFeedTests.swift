@@ -884,7 +884,7 @@ final class PulseFeedTests: XCTestCase {
             PulseClient.feedCapability, PulseClient.learnsCapability
         ]))
         XCTAssertEqual(state.pulseDownReasons, [.notRelevant, .alreadyKnew, .tooLate, .tooOften])
-        state.setNotifierPluginStateForTesting(.reported(version: "0.85.0", capabilities: [
+        state.setNotifierPluginStateForTesting(.reported(version: "0.86.0", capabilities: [
             PulseClient.feedCapability, PulseClient.learnsCapability, PulseClient.hoursCapability
         ]))
         XCTAssertEqual(state.pulseDownReasons, PulseDownReason.allCases)

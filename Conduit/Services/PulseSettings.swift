@@ -158,7 +158,7 @@ struct PulseState: Equatable {
     /// When Pulse speaks up again: the spell's end, past any quiet days
     /// after it; nil while it isn't quiet, or when every day is.
     var quietEndsAt: Date?
-    /// The night (0.85.0); nil when there's none, and from an older plugin.
+    /// The night (0.86.0); nil when there's none, and from an older plugin.
     var night: PulseNight?
     /// Follow-ups on promises and to-dos are on.
     var followups = false
@@ -339,7 +339,7 @@ enum PulseQuiet {
     }
 }
 
-/// The night (0.85.0, `pulse_hours`): from `start` to `end`, minutes after
+/// The night (0.86.0, `pulse_hours`): from `start` to `end`, minutes after
 /// midnight in Pulse's time zone. Then Pulse's notifications wait for the
 /// morning brief, unless they can't wait, and Not now's later today ends
 /// when it starts. The plugin sends it as two "HH:MM" times, or none.

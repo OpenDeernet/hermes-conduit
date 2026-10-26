@@ -231,7 +231,7 @@ struct PulseSettingsPage: View {
     /// Quiet times (0.80.2, `quiet`): the days of the week Pulse keeps to
     /// itself, and a vacation until a day. Quiet for today is on the Pulse
     /// screen and on a Pulse notification; it shows here as a vacation back
-    /// tomorrow. From 0.85.0 (`hours`), the night.
+    /// tomorrow. From 0.86.0 (`hours`), the night.
     private func quietSection(_ state: PulseState, quiet: Bool, hours: Bool) -> some View {
         ConduitSettingsSection(title: AppLocalization.string("Quiet times"), symbol: "moon.zzz", tint: .conduitAccent) {
             if quiet { quietRows(state) }
@@ -288,7 +288,7 @@ struct PulseSettingsPage: View {
             .foregroundStyle(.secondary)
     }
 
-    /// The night (0.85.0): Pulse's notifications wait for the morning brief
+    /// The night (0.86.0): Pulse's notifications wait for the morning brief
     /// then, unless they can't wait. Its times are in Pulse's time zone, as
     /// the brief's is.
     @ViewBuilder

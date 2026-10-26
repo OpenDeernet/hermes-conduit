@@ -14,7 +14,7 @@
 //  From 0.84.0 (`pulse_explains`) it shows what it learned: a card's Why?
 //  names the biggest part learning played, What Pulse learned lists what
 //  learning holds with Reset, and What Pulse left out lists what the reports
-//  didn't bring up, with Bring it up. From 0.85.0 (`pulse_hours`) a thumbs
+//  didn't bring up, with Bring it up. From 0.86.0 (`pulse_hours`) a thumbs
 //  down's Wrong time puts the card away until a better time and keeps its
 //  kind's notifications out of that part of the day, and Not now's later
 //  today ends when the night starts.
@@ -53,10 +53,10 @@ struct PulseCard: Equatable, Identifiable {
     /// the held cards it brought share it, and show together.
     let brief: String
     /// Swiped away ("Not now"), or put away by Wrong time on a thumbs down
-    /// (0.85.0): in Done and cleared.
+    /// (0.86.0): in Done and cleared.
     var dismissedAt: Date?
     /// Not now until a time (later today, tomorrow, next week), or Wrong
-    /// time until a better one (0.85.0): when it comes back as new
+    /// time until a better one (0.86.0): when it comes back as new
     /// (0.78.3), nil for one swiped away for good.
     var restUntil: Date?
     /// When it was marked done: by the user on the Pulse screen, or by
@@ -291,7 +291,7 @@ enum PulseDownReason: String, CaseIterable, Identifiable {
     case tooLate = "too_late"
     case tooOften = "too_often"
     /// It came at a bad time, which says nothing about whether it was
-    /// worth bringing up (0.85.0): it comes back at a better time, and a
+    /// worth bringing up (0.86.0): it comes back at a better time, and a
     /// card that came with a notification keeps its kind's notifications
     /// out of that part of the day.
     case wrongTime = "wrong_time"
@@ -308,7 +308,7 @@ enum PulseDownReason: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The reasons the plugin acts on: Wrong time from 0.85.0.
+    /// The reasons the plugin acts on: Wrong time from 0.86.0.
     static func offered(knowsHours: Bool) -> [PulseDownReason] {
         knowsHours ? allCases : allCases.filter { $0 != .wrongTime }
     }
@@ -358,7 +358,7 @@ struct PulseLesson: Equatable, Identifiable {
     let kind: String
     /// "level", "rule", "sooner", "seen", "reset" (whose kind is the
     /// scope it forgot, 0.84.0) or "part" (no notifications in a part of
-    /// the day, 0.85.0).
+    /// the day, 0.86.0).
     let what: String
     /// The level, a rule's topic, what a reset forgot, or the part of the
     /// day: "morning", "midday", "evening" or "night".
@@ -441,10 +441,10 @@ struct PulseFeedPage: Equatable {
     /// while it isn't, and from an older plugin.
     var quietNow: PulseQuietReason?
     var quietEndsAt: Date?
-    /// The night (0.85.0), for Not now's choices; nil when there's none,
+    /// The night (0.86.0), for Not now's choices; nil when there's none,
     /// and from an older plugin.
     var night: PulseNight?
-    /// The morning brief's time in minutes into the day (0.85.0), for Not
+    /// The morning brief's time in minutes into the day (0.86.0), for Not
     /// now's choices at night; nil from an older plugin.
     var briefTime: Int?
 
@@ -949,7 +949,7 @@ extension AppState {
     }
 
     /// The reasons a thumbs down offers: Wrong time once the plugin picks
-    /// the time (0.85.0).
+    /// the time (0.86.0).
     var pulseDownReasons: [PulseDownReason] {
         PulseDownReason.offered(knowsHours: notifierPlugin.reports(PulseClient.hoursCapability))
     }
@@ -1078,7 +1078,7 @@ extension PulseClient {
     /// it up (0.84.0).
     static let explainsCapability = "pulse_explains"
     /// Pulse picks the time: the night in Settings > Pulse, waits while the
-    /// user is busy, and a thumbs down's Wrong time (0.85.0).
+    /// user is busy, and a thumbs down's Wrong time (0.86.0).
     static let hoursCapability = "pulse_hours"
 }
 
@@ -1110,7 +1110,7 @@ enum PulseRest: String, CaseIterable, Identifiable {
 
     /// What the dialog offers: later today only while it is still today's
     /// to give. The plugin gives three hours, by 23:00 and by the night's
-    /// start (0.85.0), and never under half an hour, so from half an hour
+    /// start (0.86.0), and never under half an hour, so from half an hour
     /// before then it makes it tomorrow. At night it gives ten minutes
     /// before the next morning brief (`brief`, minutes into the day; 07:00,
     /// the brief's own default, when the feed doesn't say), so once today's
@@ -1173,6 +1173,6 @@ struct PulseDismissal: Equatable {
 /// The plugin's answer to a rating.
 struct PulseRated: Equatable {
     let lessons: [PulseLesson]
-    /// Wrong time put the card away until then (0.85.0).
+    /// Wrong time put the card away until then (0.86.0).
     let restUntil: Date?
 }

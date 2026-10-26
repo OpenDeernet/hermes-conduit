@@ -14,7 +14,7 @@
 //  From 0.84.0 a card's Why? names the biggest part learning played, What
 //  Pulse learned lists what learning holds with Reset and Start over, and
 //  What Pulse left out lists what the reports didn't bring up, with Bring
-//  it up. From 0.85.0 a thumbs down's Wrong time puts the card away as Not
+//  it up. From 0.86.0 a thumbs down's Wrong time puts the card away as Not
 //  now does, until a better time, and Not now's later today ends when the
 //  night starts.
 //  Pulse's own chat, where its hidden turns run, isn't shown: the cards are
