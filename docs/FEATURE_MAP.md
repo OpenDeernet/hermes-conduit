@@ -1096,13 +1096,13 @@ shows · the `/help` text and the slash suggestions' "Start a new conversation"
 - Tests: `ConduitTests/AppStateSessionCompressTests.swift`, `ConduitTests/BotMentionTests.swift`
 
 **Rulings**
-- A Bot Chat is one continuous conversation: `/new` there compacts it, whatever follows the command, and never opens a chat in Chats. Saved memory and skills stay (upstream Bot Mode's forever chat; 2026-10-26, #XXXX, issue #1307).
+- A Bot Chat is one continuous conversation: `/new` there compacts it, whatever follows the command, and never opens a chat in Chats. Saved memory and skills stay (upstream Bot Mode's forever chat; 2026-10-26, #1310, issue #1307).
 - The chat is a Bot Chat by positive evidence only: an id this process registered when it opened the Bot Chat (a reopened one runs under a fresh runtime id), or the roster's canonical id among the chat's own ids. Without either, `/new` starts a new chat.
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-26, #XXXX.
+**Checked:** 2026-10-26, #1310.
 
 ## Composer Return key
 
