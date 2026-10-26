@@ -963,6 +963,39 @@ final class PulseFeedTests: XCTestCase {
         // No night: by 23:00, as before.
         XCTAssertEqual(choices(22, 29, nil), PulseRest.allCases)
         XCTAssertEqual(choices(22, 30, nil), tomorrow)
+        // With the brief's time, at night it's ten minutes before that brief, half an hour away or more:
+        // a night past the 07:00 brief has no later today left after it.
+        let page07 = try XCTUnwrap(PulseFeedPage(json: json(#"{"cards": [], "brief_time": "07:00"}"#)))
+        XCTAssertEqual(page07.briefTime, 7 * 60)
+        XCTAssertNil(try XCTUnwrap(PulseFeedPage(json: json(#"{"cards": []}"#))).briefTime)
+        let briefed = { (hour: Int, minute: Int, night: PulseNight, brief: Int) in
+            PulseRest.choices(now: midnight.addingTimeInterval(Double(hour * 3600 + minute * 60)), night: night,
+                              brief: brief, calendar: calendar)
+        }
+        let longer = PulseNight(start: 23 * 60, end: 8 * 60)
+        XCTAssertEqual(briefed(3, 0, longer, 7 * 60), PulseRest.allCases)
+        XCTAssertEqual(briefed(6, 20, longer, 7 * 60), PulseRest.allCases)
+        XCTAssertEqual(briefed(6, 21, longer, 7 * 60), tomorrow)
+        XCTAssertEqual(briefed(7, 30, longer, 7 * 60), tomorrow)
+        XCTAssertEqual(briefed(23, 30, longer, 7 * 60), tomorrow)
+        // A night over noon, and a brief after it: today's brief is still to come.
+        XCTAssertEqual(briefed(12, 30, PulseNight(start: 22 * 60, end: 13 * 60), 14 * 60), PulseRest.allCases)
+    }
+
+    func testACardIsAwayForWrongTimeOnlyWhileTheRatingPutItAway() throws {
+        let card = { (dismissed: Int?, reason: String) throws -> PulseCard in
+            let away = dismissed.map { String($0) } ?? "null"
+            return try XCTUnwrap(PulseCard(json: self.json("""
+            {"id": 3, "kind": "followup", "level": "push", "rating": "down", "reason": "\(reason)",
+             "rated_at": 1800000000, "dismissed_at": \(away)}
+            """)))
+        }
+        XCTAssertEqual(try card(1_800_000_000, "wrong_time").ratedAt, Date(timeIntervalSince1970: 1_800_000_000))
+        XCTAssertTrue(try card(1_800_000_000, "wrong_time").isAwayForWrongTime)
+        // Put back and swiped away later, it's Not now's; and a card back from its rest isn't away.
+        XCTAssertFalse(try card(1_800_003_600, "wrong_time").isAwayForWrongTime)
+        XCTAssertFalse(try card(nil, "wrong_time").isAwayForWrongTime)
+        XCTAssertFalse(try card(1_800_000_000, "too_often").isAwayForWrongTime)
     }
 
     func testNotNowPostsTheCardToThePlugin() async throws {

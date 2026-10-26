@@ -206,7 +206,7 @@ struct V2PulsePage: View {
             titleVisibility: .visible,
             presenting: restCard
         ) { card in
-            ForEach(PulseRest.choices(night: page?.night)) { rest in
+            ForEach(PulseRest.choices(night: page?.night, brief: page?.briefTime)) { rest in
                 Button(rest.title) { dismiss(card, true, until: rest) }
             }
         } message: { _ in
@@ -795,7 +795,8 @@ struct V2PulsePage: View {
             }
             whyNote(card)
             actionRow(card)
-            if card.rating == "down", let reason = PulseDownReason(rawValue: card.reason) {
+            // Put away by Wrong time, its cleared label says so already.
+            if card.rating == "down", let reason = PulseDownReason(rawValue: card.reason), !card.isAwayForWrongTime {
                 Text(verbatim: reason.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -929,8 +930,7 @@ struct V2PulsePage: View {
 
     private func clearedLabel(_ card: PulseCard) -> some View {
         // Put away by Wrong time, or by Not now.
-        let away = card.reason == PulseDownReason.wrongTime.rawValue ? PulseDownReason.wrongTime.title
-            : AppLocalization.string("Not now")
+        let away = card.isAwayForWrongTime ? PulseDownReason.wrongTime.title : AppLocalization.string("Not now")
         var title = card.dismissedAt != nil ? away
             : card.doneBy == "pulse" ? AppLocalization.string("Done, seen in the chat") : AppLocalization.string("Done")
         if card.dismissedAt != nil, let back = card.restUntil { title += " · " + PulseRest.backText(back) }
@@ -1105,15 +1105,17 @@ struct V2PulsePage: View {
             do {
                 let rated = try await client.rate(card: card.id, up: up, reason: reason)
                 guard appState.activeDashboardID == dashboard else { return }
+                let now = Date()
                 if let index = page?.cards.firstIndex(where: { $0.id == card.id }) {
                     page?.cards[index].rating = up ? "up" : "down"
                     page?.cards[index].reason = reason?.rawValue ?? ""
+                    page?.cards[index].ratedAt = now
                 }
-                if let back = rated.restUntil {
+                if !up, reason == .wrongTime, let back = rated.restUntil {
                     // Wrong time put it away until a better time: it moves as Not now's does, with Undo.
                     withAnimation(.snappy) {
                         if let index = page?.cards.firstIndex(where: { $0.id == card.id }) {
-                            page?.cards[index].dismissedAt = Date()
+                            page?.cards[index].dismissedAt = now
                             page?.cards[index].restUntil = back
                         }
                         if focusedCard == card.id { focusedCard = nil; voiceOverCard = nil }

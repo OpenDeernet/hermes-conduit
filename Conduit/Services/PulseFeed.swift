@@ -52,7 +52,8 @@ struct PulseCard: Equatable, Identifiable {
     /// The morning brief it went out in (0.68.0): the brief's own card and
     /// the held cards it brought share it, and show together.
     let brief: String
-    /// Swiped away ("Not now"): in Done and cleared, nothing learned.
+    /// Swiped away ("Not now"), or put away by Wrong time on a thumbs down
+    /// (0.85.0): in Done and cleared.
     var dismissedAt: Date?
     /// Not now until a time (later today, tomorrow, next week): when it
     /// comes back as new (0.78.3), nil for one swiped away for good.
@@ -65,6 +66,7 @@ struct PulseCard: Equatable, Identifiable {
     /// "up", "down" or "".
     var rating: String
     var reason: String
+    var ratedAt: Date?
     /// Hermes' reply as it wrote it (a report, a brief): bold, links and
     /// lines kept. Parsed once, not on every redraw.
     let formattedNews: AttributedString
@@ -97,6 +99,7 @@ struct PulseCard: Equatable, Identifiable {
         doneBy = object["done_by"] as? String ?? ""
         rating = object["rating"] as? String ?? ""
         reason = object["reason"] as? String ?? ""
+        ratedAt = PulseJSON.date(object["rated_at"])
         formattedNews = Self.formatted(news, markdown: kind != "followup")
         learned = PulsePreference(json: object["learned"], chatPlace: PulsePreference.chatPlace(profile, chatID),
                                   chatTitle: chatTitle)
@@ -104,6 +107,14 @@ struct PulseCard: Equatable, Identifiable {
 
     /// Held for the morning brief and not in one yet.
     var isHeld: Bool { level == PulseLevel.brief.rawValue && briefedAt == nil }
+
+    /// Put away by Wrong time, not by Not now: the plugin rates it and puts
+    /// it away at the same moment, and a rating stays when the card is put
+    /// back and swiped away again.
+    var isAwayForWrongTime: Bool {
+        guard let dismissedAt, let ratedAt, reason == PulseDownReason.wrongTime.rawValue else { return false }
+        return abs(dismissedAt.timeIntervalSince(ratedAt)) < 1
+    }
 
     /// One of a report's items, on its own card.
     var isNoticed: Bool { kind == "noticed" }
@@ -431,6 +442,9 @@ struct PulseFeedPage: Equatable {
     /// The night (0.85.0), for Not now's choices; nil when there's none,
     /// and from an older plugin.
     var night: PulseNight?
+    /// The morning brief's time in minutes into the day (0.85.0), for Not
+    /// now's choices at night; nil from an older plugin.
+    var briefTime: Int?
 
     init() {}
 
@@ -444,6 +458,7 @@ struct PulseFeedPage: Equatable {
         quietNow = (json["quiet_now"] as? String).flatMap(PulseQuietReason.init(rawValue:))
         quietEndsAt = quietNow == nil ? nil : PulseJSON.date(json["quiet_ends_at"])
         night = PulseNight(json: json["night"])
+        briefTime = (json["brief_time"] as? String).flatMap(PulseReportTime.minutes)
     }
 
     static func levels(_ value: Any?) -> [String: PulseLevel] {
@@ -1093,15 +1108,21 @@ enum PulseRest: String, CaseIterable, Identifiable {
     /// What the dialog offers: later today only while it is still today's
     /// to give. The plugin gives three hours, by 23:00 and by the night's
     /// start (0.85.0), and never under half an hour, so from half an hour
-    /// before then it makes it tomorrow; at night before midnight it's the
-    /// morning brief's time, tomorrow too. It would say tomorrow twice.
-    static func choices(now: Date = Date(), night: PulseNight? = nil, calendar: Calendar = .current) -> [PulseRest] {
+    /// before then it makes it tomorrow. At night it gives ten minutes
+    /// before the next morning brief (`brief`, minutes into the day), so
+    /// once that brief has gone, or is under forty minutes away, it's
+    /// tomorrow too. It would say tomorrow twice.
+    static func choices(now: Date = Date(), night: PulseNight? = nil, brief: Int? = nil,
+                        calendar: Calendar = .current) -> [PulseRest] {
         let parts = calendar.dateComponents([.hour, .minute], from: now)
         let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
         var end = 23 * 60
         if let night {
-            // After midnight, the morning brief is still today's.
-            if night.contains(minute) { return minute >= 12 * 60 ? [.tomorrow, .nextWeek] : allCases }
+            if night.contains(minute) {
+                // Without the brief's time, it's in the morning: after midnight it's still today's.
+                let today = brief.map { $0 - 10 - minute >= 30 } ?? (minute < 12 * 60)
+                return today ? allCases : [.tomorrow, .nextWeek]
+            }
             if night.start > minute { end = min(end, night.start) }
         }
         return minute >= end - 30 ? [.tomorrow, .nextWeek] : allCases

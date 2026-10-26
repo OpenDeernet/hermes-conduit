@@ -366234,84 +366234,166 @@
         }
       }
     },
-    "At night, Pulse's notifications wait for the morning brief unless they can't. During an event on your calendar, while you drive, or while a Focus holds Hermes' calls, they wait until you're free." : {
+    "At night, Pulse's notifications wait for the morning brief unless they can't." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nachts warten die Mitteilungen von Pulse auf das Morgenbriefing, außer sie können nicht warten. Während eines Termins in deinem Kalender, beim Fahren oder solange ein Fokus die Anrufe von Hermes zurückhält, warten sie, bis du frei bist."
+            "value" : "Nachts warten die Mitteilungen von Pulse auf das Morgenbriefing, außer sie können nicht warten."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Por la noche, las notificaciones de Pulse esperan al resumen matutino, salvo que no puedan esperar. Durante un evento de tu calendario, mientras conduces o mientras un modo de Concentración retiene las llamadas de Hermes, esperan hasta que estés libre."
+            "value" : "Por la noche, las notificaciones de Pulse esperan al resumen matutino, salvo que no puedan esperar."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La nuit, les notifications de Pulse attendent le point du matin, sauf si elles ne peuvent pas attendre. Pendant un événement de votre calendrier, en voiture ou tant qu'un mode Concentration retient les appels de Hermes, elles attendent que vous soyez disponible."
+            "value" : "La nuit, les notifications de Pulse attendent le point du matin, sauf si elles ne peuvent pas attendre."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Di malam hari, notifikasi Pulse menunggu ringkasan pagi kecuali tidak bisa menunggu. Selama ada acara di kalender Anda, saat Anda menyetir, atau selama mode Fokus menahan panggilan Hermes, notifikasi menunggu hingga Anda senggang."
+            "value" : "Di malam hari, notifikasi Pulse menunggu ringkasan pagi kecuali tidak bisa menunggu."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Di notte, le notifiche di Pulse aspettano il riepilogo del mattino, a meno che non possano aspettare. Durante un evento del tuo calendario, mentre guidi o mentre una modalità Full immersion trattiene le chiamate di Hermes, aspettano che tu sia libero."
+            "value" : "Di notte, le notifiche di Pulse aspettano il riepilogo del mattino, a meno che non possano aspettare."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "夜間は、待てないものを除き、Pulseの通知は朝のブリーフまで待ちます。カレンダーの予定中、運転中、集中モードがHermesの電話を保留している間は、空くまで待ちます。"
+            "value" : "夜間は、待てないものを除き、Pulseの通知は朝のブリーフまで待ちます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "밤에는 기다릴 수 없는 것이 아니면 Pulse 알림이 아침 브리핑까지 기다립니다. 캘린더 일정 중, 운전 중, 또는 집중 모드가 Hermes의 전화를 보류하는 동안에는 여유가 생길 때까지 기다립니다."
+            "value" : "밤에는 기다릴 수 없는 것이 아니면 Pulse 알림이 아침 브리핑까지 기다립니다."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "W nocy powiadomienia Pulse czekają na poranny przegląd, chyba że nie mogą czekać. W trakcie wydarzenia w kalendarzu, podczas jazdy lub gdy tryb Skupienie wstrzymuje połączenia od Hermesa, czekają, aż będziesz wolny."
+            "value" : "W nocy powiadomienia Pulse czekają na poranny przegląd, chyba że nie mogą czekać."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "À noite, as notificações do Pulse esperam o resumo da manhã, a menos que não possam esperar. Durante um evento no seu calendário, enquanto você dirige ou enquanto um modo Foco segura as chamadas do Hermes, elas esperam até você estar livre."
+            "value" : "À noite, as notificações do Pulse esperam o resumo da manhã, a menos que não possam esperar."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ночью уведомления Pulse ждут утренней сводки, если только не могут ждать. Во время события в календаре, пока вы за рулём или пока режим «Фокусирование» задерживает звонки Hermes, они ждут, пока вы освободитесь."
+            "value" : "Ночью уведомления Pulse ждут утренней сводки, если только не могут ждать."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Geceleri Pulse bildirimleri, bekleyemeyecek olanlar dışında sabah özetini bekler. Takviminizde bir etkinlik sürerken, araç kullanırken ya da bir Odak modu Hermes'in aramalarını bekletirken, müsait olana kadar beklerler."
+            "value" : "Geceleri Pulse bildirimleri, bekleyemeyecek olanlar dışında sabah özetini bekler."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "夜间，除非等不了，Pulse 的通知会等到晨间简报。在日历日程进行中、驾驶时，或专注模式拦下 Hermes 的来电时，通知会等到你有空。"
+            "value" : "夜间，除非等不了，Pulse 的通知会等到晨间简报。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "夜間，除非等不了，Pulse 的通知會等到晨間簡報。在行事曆活動進行中、駕駛時，或專注模式擋下 Hermes 的來電時，通知會等到你有空。"
+            "value" : "夜間，除非等不了，Pulse 的通知會等到晨間簡報。"
+          }
+        }
+      }
+    },
+    "During an event on your calendar, while you drive, or while a Focus holds Hermes' calls, Pulse's notifications wait until you're free." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Während eines Termins in deinem Kalender, beim Fahren oder solange ein Fokus die Anrufe von Hermes zurückhält, warten die Mitteilungen von Pulse, bis du frei bist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durante un evento de tu calendario, mientras conduces o mientras un modo de Concentración retiene las llamadas de Hermes, las notificaciones de Pulse esperan hasta que estés libre."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pendant un événement de votre calendrier, en voiture ou tant qu'un mode Concentration retient les appels de Hermes, les notifications de Pulse attendent que vous soyez disponible."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selama ada acara di kalender Anda, saat Anda menyetir, atau selama mode Fokus menahan panggilan Hermes, notifikasi Pulse menunggu hingga Anda senggang."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durante un evento del tuo calendario, mentre guidi o mentre una modalità Full immersion trattiene le chiamate di Hermes, le notifiche di Pulse aspettano che tu sia libero."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カレンダーの予定中、運転中、集中モードがHermesの電話を保留している間は、Pulseの通知は空くまで待ちます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캘린더 일정 중, 운전 중, 또는 집중 모드가 Hermes의 전화를 보류하는 동안에는 Pulse 알림이 여유가 생길 때까지 기다립니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "W trakcie wydarzenia w kalendarzu, podczas jazdy lub gdy tryb Skupienie wstrzymuje połączenia od Hermesa, powiadomienia Pulse czekają, aż będziesz wolny."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durante um evento no seu calendário, enquanto você dirige ou enquanto um modo Foco segura as chamadas do Hermes, as notificações do Pulse esperam até você estar livre."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Во время события в календаре, пока вы за рулём или пока режим «Фокусирование» задерживает звонки Hermes, уведомления Pulse ждут, пока вы освободитесь."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Takviminizde bir etkinlik sürerken, araç kullanırken ya da bir Odak modu Hermes'in aramalarını bekletirken Pulse bildirimleri müsait olana kadar bekler."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在日历日程进行中、驾驶时，或专注模式拦下 Hermes 的来电时，Pulse 的通知会等到你有空。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在行事曆活動進行中、駕駛時，或專注模式擋下 Hermes 的來電時，Pulse 的通知會等到你有空。"
           }
         }
       }
