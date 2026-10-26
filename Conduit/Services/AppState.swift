@@ -10567,16 +10567,15 @@ final class AppState: ObservableObject {
 
     /// Upstream's canonical-forever-chat guard: `/new` or `/reset` inside a
     /// bot's canonical chat would fork the relationship into a scratch
-    /// session — the one thing Bot Mode promises never happens. Returns
-    /// "/compact" (fresh working context, SAME conversation) ONLY when the
-    /// active session is positively a bot's canonical chat (see
-    /// `activeChatIsCanonicalBotChat`). No evidence, no reroute: ordinary
+    /// session — the one thing Bot Mode promises never happens. True ONLY
+    /// when the active session is positively a bot's canonical chat (see
+    /// `activeChatIsCanonicalBotChat`), whatever follows the command (`/new
+    /// A title` is still a reset). No evidence, no reroute: ordinary
     /// sessions keep full `/new` freedom.
-    private func canonicalForeverChatRerouteText(for text: String) -> String? {
-        BotMentions.foreverChatRerouteText(
-            for: text,
-            isCanonicalBotChat: activeChatIsCanonicalBotChat
-        )
+    private func isCanonicalForeverChatReset(_ text: String) -> Bool {
+        guard let command = Self.parseSlashCommand(text),
+              ["new", "reset", "clear"].contains(command.name) else { return false }
+        return activeChatIsCanonicalBotChat
     }
 
     /// Whether the open chat is a bot's canonical chat, by positive
@@ -10588,8 +10587,8 @@ final class AppState: ObservableObject {
     /// Chat and `/new` forked it into a workspace chat (#1307).
     private var activeChatIsCanonicalBotChat: Bool {
         guard let sessionId = activeSessionId else { return false }
-        if activeBotChatProfile != nil { return true }
-        return botOwnership.bot(owningAny: chatOwnSessionIDs(for: sessionId).union([sessionId])) != nil
+        let ids = chatOwnSessionIDs(for: sessionId).union([sessionId])
+        return botOwnership.botProfileName(owningAny: ids) != nil
     }
 
     /// The composer's @mention middleware, shared by every routing path (a
@@ -24125,7 +24124,7 @@ final class AppState: ObservableObject {
         }
         // The canonical-chat `/new` reroute is a compaction, which carries no
         // attachments; refuse rather than submit a literal `/compact` turn.
-        if !attachments.isEmpty, canonicalForeverChatRerouteText(for: text) != nil {
+        if !attachments.isEmpty, isCanonicalForeverChatReset(text) {
             errorMessage = AppLocalization.string(
                 "This bot chat never resets. Remove the attachments to compact it instead."
             )
@@ -26497,9 +26496,8 @@ final class AppState: ObservableObject {
             // The canonical-forever-chat guard for ordinary composer input:
             // attachment-free slash commands arrive HERE, never through
             // sendMessage's reroute, so a bot's canonical chat compacts
-            // instead of forking into a scratch session, whatever follows
-            // the command (`/new A title` is still a reset).
-            if activeChatIsCanonicalBotChat {
+            // instead of forking into a scratch session.
+            if isCanonicalForeverChatReset(text) {
                 cancelChatResumeRestoration()
                 appendSlashOutput(
                     AppLocalization.string(

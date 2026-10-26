@@ -1092,12 +1092,13 @@ the draft kept) · group rooms (no slash commands) · the notice the compaction
 shows · the `/help` text and the slash suggestions' "Start a new conversation"
 
 **Code**
-- The guard: `Conduit/Services/AppState.swift` (activeChatIsCanonicalBotChat, canonicalForeverChatRerouteText, executeSlashCommand's new/reset/clear case, the attachment refusal in performComposerSubmission), `Conduit/Services/BotMentions.swift` (foreverChatRerouteText)
-- Tests: `ConduitTests/AppStateSessionCompressTests.swift`, `ConduitTests/BotMentionTests.swift`
+- The guard: `Conduit/Services/AppState.swift` (activeChatIsCanonicalBotChat, isCanonicalForeverChatReset, executeSlashCommand's new/reset/clear case, the attachment refusal in performComposerSubmission)
+- Tests: `ConduitTests/AppStateSessionCompressTests.swift`
 
 **Rulings**
 - A Bot Chat is one continuous conversation: `/new` there compacts it, whatever follows the command, and never opens a chat in Chats. Saved memory and skills stay (upstream Bot Mode's forever chat; 2026-10-26, #1310, issue #1307).
-- The chat is a Bot Chat by positive evidence only: an id this process registered when it opened the Bot Chat (a reopened one runs under a fresh runtime id), or the roster's canonical id among the chat's own ids. Without either, `/new` starts a new chat.
+- The chat is a Bot Chat by positive evidence only: one of the chat's own ids is one this process registered when it opened the Bot Chat (a reopened one runs under a fresh runtime id), or the roster's canonical id. Without either, `/new` starts a new chat.
+- With attachments, `/new` in a Bot Chat (title or not) is refused and the draft kept: a compaction carries no attachments, and the text is never sent to the bot.
 
 **Open gaps**
 - None known.
