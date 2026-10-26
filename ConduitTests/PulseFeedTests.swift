@@ -546,10 +546,62 @@ final class PulseFeedTests: XCTestCase {
             calls.append((path, body))
             return ["ok": true, "changed": true]
         }
-        let changed = try await client.dismiss(card: 4, dismissed: true)
-        XCTAssertTrue(changed)
+        let answer = try await client.dismiss(card: 4, dismissed: true)
+        XCTAssertTrue(answer.changed)
+        XCTAssertNil(answer.restUntil)
         XCTAssertEqual(calls.first?.path, "\(PulseClient.path)/dismiss")
         XCTAssertEqual(calls.first?.body?["card"] as? Int, 4)
         XCTAssertEqual(calls.first?.body?["dismissed"] as? Bool, true)
+        XCTAssertNil(calls.first?.body?["until"])
+    }
+
+    func testNotNowUntilATimeSendsTheChoiceAndReadsWhenItComesBack() async throws {
+        var calls: [(path: String, body: [String: Any]?)] = []
+        let client = PulseClient { path, _, body in
+            calls.append((path, body))
+            return ["ok": true, "changed": true, "rest_until": 1_800_000_000]
+        }
+        let answer = try await client.dismiss(card: 4, dismissed: true, until: .tomorrow)
+        XCTAssertEqual(answer, PulseDismissal(changed: true, restUntil: Date(timeIntervalSince1970: 1_800_000_000)))
+        XCTAssertEqual(calls.first?.body?["until"] as? String, "tomorrow")
+        XCTAssertEqual(PulseRest.allCases.map(\.rawValue), ["later_today", "tomorrow", "next_week"])
+        // A card put off carries when it comes back; one swiped away for good doesn't.
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 1, "kind": "noticed", "topic": "date", "level": "screen", "news": "Dentist", "created_at": 30,
+           "dismissed_at": 60, "rest_until": 90},
+          {"id": 2, "kind": "noticed", "topic": "fact", "level": "screen", "news": "Gone", "dismissed_at": 60,
+           "created_at": 30}
+        ]}
+        """)))
+        XCTAssertEqual(page.cards.map(\.restUntil), [Date(timeIntervalSince1970: 90), nil])
+        XCTAssertTrue(page.cards.allSatisfy(\.isCleared))
+    }
+
+    func testTheClearedRowSaysWhenAPutOffCardComesBack() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let noon = Date(timeIntervalSince1970: 1_800_014_400)  // 2027-01-15 12:00 UTC
+        let back = { (hours: Double) in
+            PulseRest.backText(noon.addingTimeInterval(hours * 3600), now: noon, calendar: calendar)
+        }
+        // In whatever language the test host's app is in.
+        XCTAssertEqual(back(3), AppLocalization.string("Back later today"))
+        XCTAssertEqual(back(-1), AppLocalization.string("Back later today"))  // its time came; the plugin brings it back on its next pass
+        XCTAssertEqual(back(19), AppLocalization.string("Back tomorrow"))
+        let weekday = back(3 * 24)
+        XCTAssertFalse(weekday.contains("%@"))
+        XCTAssertFalse([back(3), back(19), back(7 * 24)].contains(weekday))
+        XCTAssertEqual(back(7 * 24), AppLocalization.string("Back next week"))
+        // The Undo bar says the time the plugin set, not the one asked for:
+        // later today asked for at 22:40 comes back tomorrow.
+        let returning = { (hours: Double) in
+            PulseRest.returning(noon.addingTimeInterval(hours * 3600), now: noon, calendar: calendar)
+        }
+        XCTAssertEqual([returning(3), returning(19), returning(7 * 24 - 1)], [.laterToday, .tomorrow, .nextWeek])
+        // Later today isn't offered once the plugin would make it tomorrow.
+        XCTAssertEqual(PulseRest.choices(now: noon, calendar: calendar), PulseRest.allCases)
+        XCTAssertEqual(PulseRest.choices(now: noon.addingTimeInterval(10.5 * 3600), calendar: calendar), [.tomorrow, .nextWeek])
+        XCTAssertEqual(PulseRest.choices(now: noon.addingTimeInterval(10.4 * 3600), calendar: calendar), PulseRest.allCases)
     }
 }
