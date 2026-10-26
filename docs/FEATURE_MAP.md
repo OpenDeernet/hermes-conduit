@@ -2225,13 +2225,14 @@ Hermes Desktop's sidebar (upstream, leaves `kanban` out too)
 - Sources: `Conduit/Models/Models.swift` (SessionSource.hermesKanbanSource, chatListExcludedSources)
 - Lists: `Conduit/Services/AppState.swift` (profileSessionsPath, archivedSessionsPath), `Conduit/Models/AllProfilesChats.swift` (sessionsPath), `Conduit/Services/HermesClient.swift` (MessageNormalizer.normalizeSessions drops `kanban` rows from every list it builds: the `session.list` fallback, project lanes and previews)
 - Search: `Conduit/Services/SessionContentSearch.swift` (path), `Conduit/Voice/VoiceChatFinder.swift` (path), `notifier/dashboard/plugin_api.py` (run_watch_find_chat, CHAT_SEARCH_EXCLUDED_SOURCES)
-- Opening one anyway: `Conduit/Services/AppState.swift` (the 4132 case where a resume fails)
+- Opening one anyway: `Conduit/Services/AppState.swift` (the 4132 case where a resume fails, reconciliationWasKanbanWorker)
 - Worker Log: `Conduit/Views/Kanban/KanbanWorkerLogScreen.swift`
-- Tests: `ConduitTests/SessionContentSearchTests.swift`, `ConduitTests/VoiceChatFinderTests.swift`, `ConduitTests/MessageNormalizerTests.swift`, `ConduitTests/SidebarLayoutTests+AllProfiles.swift`, `ConduitTests/AppStateChatResumeTests.swift` (testOpeningAKanbanWorkerPointsAtTheBoard), `notifier/tests/test_watch_chats.py`
+- Tests: `ConduitTests/SessionContentSearchTests.swift`, `ConduitTests/VoiceChatFinderTests.swift`, `ConduitTests/MessageNormalizerTests.swift`, `ConduitTests/SidebarLayoutTests+AllProfiles.swift`, `ConduitTests/AppStateChatResumeTests.swift` (testOpeningAKanbanWorkerPointsAtTheBoard, testAutomaticReturnRetiresASavedKanbanWorker), `notifier/tests/test_watch_chats.py`
 
 **Rulings**
 - Kanban workers aren't chats: lists, search and voice leave them out with `exclude_sources`, as Desktop does, and the board's Worker Log shows them. The session normalizer drops them too, so a list whose source doesn't filter (projects, `session.list`) can't show one. Classic voice needs nothing: Hermes' `session_search` already hides `kanban` (2026-10-26, #1305, tester report via Eric).
 - A worker reached anyway (a link, a cached row) says it belongs to the board and points at its Worker Log instead of "Failed to restore this conversation" (2026-10-26, #1305).
+- A 4132 counts as "not found" everywhere a missing chat is handled: a worker saved as the last conversation is retired on the next return (the newest chat opens instead) and a notification for one isn't retried; only the message differs (2026-10-26, #1305 review).
 - A launcher widget still holding a worker (picked or saved before this change) says the conversation is unavailable, since the worker isn't in the chats list any more; it doesn't try the resume that would show the board message (2026-10-26, #1305 review).
 - Rows saved before this change stay in the saved chat list until a full, non-empty read replaces them: a saved `SessionSummary` keeps no raw Hermes source (a worker is `.other`), and storing one for that window isn't worth the code (2026-10-26, #1305 review).
 

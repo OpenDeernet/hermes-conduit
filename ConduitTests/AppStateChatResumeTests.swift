@@ -1144,6 +1144,35 @@ final class AppStateChatResumeTests: XCTestCase {
         XCTAssertEqual(scheduler.scheduledCount, 1, "Only the failed create remains retryable")
     }
 
+    func testAutomaticReturnRetiresASavedKanbanWorker() async {
+        // Hermes refuses a Kanban worker for good (4132): the saved target is
+        // retired like a deleted chat instead of being retried on every return.
+        let scheduler = ControlledReconnectScheduler()
+        var requests: [String] = []
+        let harness = makeHarness(
+            reconnectScheduler: scheduler.schedule(after:operation:),
+            lifecycleOperations: ChatResumeLifecycleOperations(
+                loadCatalog: { _, _ in [] },
+                openSession: { _, sessionID, _ in
+                    requests.append(sessionID)
+                    throw RpcError(code: 4132, message: "Session worker is a Kanban worker transcript.")
+                }
+            )
+        )
+        installComposerClient(in: harness)
+        harness.store.setLastSessionID("worker", for: "default")
+
+        await harness.appState.syncSession(
+            purpose: .automaticReturn,
+            using: nil,
+            automaticWorkToken: nil
+        )
+
+        XCTAssertEqual(requests, ["worker"])
+        XCTAssertNil(harness.store.lastSessionID(for: "default"))
+        XCTAssertEqual(scheduler.scheduledCount, 1, "Only the failed create remains retryable")
+    }
+
     func testTranscriptRpc4007DoesNotRetireMissingSavedSession() async {
         let scheduler = ControlledReconnectScheduler()
         var requests: [String] = []

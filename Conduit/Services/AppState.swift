@@ -4739,8 +4739,10 @@ final class AppState: ObservableObject {
     /// that its requested session no longer exists. Callers use this to
     /// retire a saved automatic-return target instead of retrying it forever.
     private var reconciliationSessionWasNotFound = false
-    /// Set when the resume RPC refused a Kanban worker's transcript (4132):
-    /// Hermes never reopens one as a chat, so a retry would only repeat it.
+    /// Set when the resume RPC refused a Kanban worker's transcript (4132).
+    /// Hermes never reopens one as a chat, so it also counts as not found:
+    /// a saved automatic-return target is retired and a notification isn't
+    /// retried. This flag keeps its own message from being reworded.
     private var reconciliationWasKanbanWorker = false
     /// Catalog rows `session.resume` answered 4007 for during an automatic
     /// resume, per dashboard and profile, for this app run. The catalog can
@@ -7888,7 +7890,10 @@ final class AppState: ObservableObject {
             let opened = await self.requestOpenSession(target ?? fallback ?? id) { [weak self] in
                 // A failed resume says "session not found"; the link's own
                 // words say what's missing. Other refusals keep their text.
-                guard let self, self.errorMessage == nil || self.reconciliationSessionWasNotFound else { return }
+                guard let self,
+                      self.errorMessage == nil
+                        || (self.reconciliationSessionWasNotFound && !self.reconciliationWasKanbanWorker)
+                else { return }
                 self.errorMessage = unavailable
             }.value
             // From outside a chat (a Live Activity, another app) the chat
@@ -16124,6 +16129,7 @@ final class AppState: ObservableObject {
                 // A Kanban worker's transcript: Hermes lets only the board
                 // run it. Lists leave these out; a link can still reach one.
                 reconciliationWasKanbanWorker = true
+                reconciliationSessionWasNotFound = true
                 errorMessage = AppLocalization.string("This chat is a Kanban task's worker, so only the board can run it. Open the task on the Kanban board and check its Worker Log.")
             default:
                 errorMessage = AppLocalization.string("Failed to restore this conversation: \(UserFacingError.message(for: error))")
@@ -22788,8 +22794,7 @@ final class AppState: ObservableObject {
             // This open still owns the viewport, so the reconcile failure is
             // genuine (identity rejection and friends set their own message).
             // Read before any await: the flags describe the reconcile above.
-            return (.failed, reconciliationWasIdentityRejected || reconciliationSessionWasNotFound
-                || reconciliationWasKanbanWorker)
+            return (.failed, reconciliationWasIdentityRejected || reconciliationSessionWasNotFound)
         }
         if opensUnreadReply { chatReplyStartLandingRequest &+= 1 }
         return (.opened, false)
