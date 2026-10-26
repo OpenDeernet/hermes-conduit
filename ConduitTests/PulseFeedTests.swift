@@ -288,15 +288,22 @@ final class PulseFeedTests: XCTestCase {
         // A plugin from before gave report and brief cards stock lines: only a follow-up's reason shows.
         state.setNotifierPluginStateForTesting(.reported(version: "0.80.0", capabilities: [PulseClient.feedCapability]))
         XCTAssertTrue(state.explainsPulseCard(followup))
-        XCTAssertFalse(state.explainsPulseCard(dated) || state.explainsPulseCard(plain))
-        XCTAssertFalse(state.explainsPulseCard(brief) || state.explainsPulseCard(whole))
+        XCTAssertFalse(state.explainsPulseCard(dated))
+        XCTAssertFalse(state.explainsPulseCard(plain))
+        XCTAssertFalse(state.explainsPulseCard(brief))
+        XCTAssertFalse(state.explainsPulseCard(whole))
         // One that gives each report item its candidate's reason (0.80.1): Why? where there is one.
         state.setNotifierPluginStateForTesting(.reported(version: "0.80.1", capabilities: [
             PulseClient.feedCapability, PulseClient.cardWhyCapability
         ]))
-        XCTAssertTrue(state.explainsPulseCard(followup) && state.explainsPulseCard(dated) && state.explainsPulseCard(brief))
-        // A whole report's card has no reason from such a plugin, so no Why?.
-        XCTAssertFalse(state.explainsPulseCard(plain) || state.explainsPulseCard(wholeNow))
+        XCTAssertTrue(state.explainsPulseCard(followup))
+        XCTAssertTrue(state.explainsPulseCard(dated))
+        XCTAssertTrue(state.explainsPulseCard(brief))
+        // Such a plugin clears the old stock lines, so a whole report's card has no why;
+        // one that had a why would show it.
+        XCTAssertFalse(state.explainsPulseCard(wholeNow))
+        XCTAssertTrue(state.explainsPulseCard(whole))
+        XCTAssertFalse(state.explainsPulseCard(plain))
     }
 
     func testDoItsMessageFitsWhatTheCardIsAbout() throws {
@@ -570,6 +577,22 @@ final class PulseFeedTests: XCTestCase {
         let alone = PulseLayout(cards: page.cards.filter { $0.kind == "brief" })
         XCTAssertTrue(alone.open.isEmpty)
         XCTAssertFalse(alone.isCaughtUp, "the summary lists what's still open")
+    }
+
+    func testFeedSaysWhenPulseIsQuiet() throws {
+        let quiet = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [], "quiet_now": "day", "quiet_ends_at": 1800000000}
+        """)))
+        XCTAssertEqual(quiet.quietNow, .day)
+        XCTAssertEqual(quiet.quietEndsAt, Date(timeIntervalSince1970: 1_800_000_000))
+        // Not quiet, a plugin from before quiet times, or a reason this build doesn't know.
+        for body in [#"{"cards": [], "quiet_now": "", "quiet_ends_at": null}"#, #"{"cards": []}"#,
+                     #"{"cards": [], "quiet_now": "later", "quiet_ends_at": 5}"#] {
+            let page = try XCTUnwrap(PulseFeedPage(json: json(body)))
+            XCTAssertNil(page.quietNow)
+            XCTAssertNil(page.quietEndsAt)
+        }
+        XCTAssertEqual(PulseClient.quietCapability, "pulse_quiet")
     }
 
     func testNotNowPostsTheCardToThePlugin() async throws {

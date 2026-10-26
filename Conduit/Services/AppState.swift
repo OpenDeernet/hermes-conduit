@@ -12078,6 +12078,12 @@ final class AppState: ObservableObject {
         Set(storedRelayGatewayIDs()[dashboardID.uuidString]?.values.map { $0 } ?? [])
     }
 
+    /// Every relay gateway a saved dashboard's host said it pairs this
+    /// iPhone through.
+    var knownRelayGatewayIDs: Set<String> {
+        Set(storedRelayGatewayIDs().values.flatMap(\.values))
+    }
+
     /// Nil unless every pairing of this dashboard's hosts is end-to-end
     /// encrypted with a key the host confirmed; true when every one is also
     /// quantum-safe (the details are in Settings > Notifications). Drawn on
@@ -12120,10 +12126,12 @@ final class AppState: ObservableObject {
         saveRelayGatewayIDs(stored)
     }
 
-    /// Settings > Notifications sorts pairings by these, so it redraws.
+    /// Settings > Notifications sorts pairings by these, so it redraws; and
+    /// Pulse pushes from a host's gateways offer Quiet for today by them.
     private func saveRelayGatewayIDs(_ stored: [String: [String: String]]) {
         objectWillChange.send()
         defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
+        sharePulseQuiet()
     }
 
     private func storedRelayGatewayIDs() -> [String: [String: String]] {
@@ -24483,6 +24491,7 @@ final class AppState: ObservableObject {
             if oldValue.state != notifierPlugin.state {
                 updateChatOnScreen()
                 forgetPulseHomeIfGone()
+                sharePulseQuiet()
             }
         }
     }
