@@ -212,21 +212,34 @@ struct HermesCallWaiting: Equatable {
     /// words themselves.
     static func answerValue(for words: String, question: Question) -> String? {
         let trimmed = words.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !asksFirst(trimmed), let picked = pickedChoices(in: trimmed, choices: question.choices, multiSelect: question.multiSelect) {
-            let values = picked.map { question.choices[$0].value }
-            return question.multiSelect ? ClarifyQuestion.multiSelectAnswer(values) : values[0]
+        if leavesBlank(trimmed, question: question) { return nil }
+        guard !asksFirst(trimmed), let picked = pickedChoices(in: trimmed, choices: question.choices, multiSelect: question.multiSelect) else {
+            return trimmed
         }
-        // A choice named like it ("Pass") is still picked first.
-        if question.mayLeaveBlank, isSkip(trimmed) { return nil }
-        return trimmed
+        let values = picked.map { question.choices[$0].value }
+        return question.multiSelect ? ClarifyQuestion.multiSelectAnswer(values) : values[0]
     }
 
     /// The label of what `answerValue` sends, for the model to confirm.
     static func answerLabel(for words: String, question: Question) -> String? {
-        if !asksFirst(words), let picked = pickedChoices(in: words, choices: question.choices, multiSelect: question.multiSelect) {
-            return picked.map { question.choices[$0].label }.joined(separator: ", ")
-        }
-        return question.mayLeaveBlank && isSkip(words) ? skippedLabel : nil
+        if leavesBlank(words, question: question) { return skippedLabel }
+        guard !asksFirst(words), let picked = pickedChoices(in: words, choices: question.choices, multiSelect: question.multiSelect) else { return nil }
+        return picked.map { question.choices[$0].label }.joined(separator: ", ")
+    }
+
+    /// Whether `words` leave a form's question blank. A choice named whole
+    /// ("Pass") is picked instead; other words that leave it blank do, even
+    /// with a choice's name in them ("leave it blank" beside a choice
+    /// called Blank).
+    private static func leavesBlank(_ words: String, question: Question) -> Bool {
+        question.mayLeaveBlank && isSkip(words) && !namesOneChoice(words, choices: question.choices)
+    }
+
+    /// Whether the whole answer is one choice's label, as written. The
+    /// plugin's is calls_store.names_one_choice: the two move together.
+    static func namesOneChoice(_ words: String, choices: [Choice]) -> Bool {
+        let said = normalizedWords(words)
+        return !said.isEmpty && choices.filter { normalizedWords(strippingRecommended($0.label)) == said }.count == 1
     }
 
     /// The choices `words` point at, by index: a choice's label said whole,

@@ -74,7 +74,16 @@ extension VoiceConversationControllerTests {
             choices: [.init(label: "Beach", value: "Beach"), .init(label: "Pass", value: "Pass")],
             multiSelect: false, mayLeaveBlank: true
         )
-        XCTAssertEqual(HermesCallWaiting.answerValue(for: "pass", question: pass), "Pass", "A choice named like it is picked first")
+        XCTAssertEqual(HermesCallWaiting.answerValue(for: "pass", question: pass), "Pass", "A choice named whole is picked first")
+        XCTAssertNil(HermesCallWaiting.answerValue(for: "I'll pass", question: pass), "Only named whole")
+        let cushion = HermesCallWaiting.Question(
+            id: "q2", text: "Which cushion?",
+            choices: [.init(label: "Blank", value: "Blank"), .init(label: "Striped", value: "Striped")],
+            multiSelect: false, mayLeaveBlank: true
+        )
+        XCTAssertNil(HermesCallWaiting.answerValue(for: "leave it blank", question: cushion), "Not the choice inside the words")
+        XCTAssertEqual(HermesCallWaiting.answerLabel(for: "leave it blank", question: cushion), HermesCallWaiting.skippedLabel)
+        XCTAssertEqual(HermesCallWaiting.answerValue(for: "the blank one", question: cushion), "Blank")
 
         XCTAssertTrue(HermesCallWaiting(item: .questions([question])).block.contains(HermesCallWaiting.mayLeaveBlankNote))
         XCTAssertEqual(WatchCallAnswer.mayLeaveBlankNote, HermesCallWaiting.mayLeaveBlankNote, "One note on the phone and the Watch")
