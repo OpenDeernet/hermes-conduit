@@ -4,7 +4,8 @@
 //
 //  The Pulse screen reads the notifier plugin's /pulse/feed and
 //  /pulse/learned as pulse_learning.py writes them: cards, the unseen
-//  count, each kind's loudness and the lessons ratings made.
+//  count, each kind's loudness and the lessons ratings made, what
+//  learning holds, and what the reports left out (/pulse/left_out).
 //
 
 import XCTest
@@ -159,6 +160,79 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertEqual(PulseLearned.noLessons(learns: true), AppLocalization.string(
             "Nothing yet. When you give a reason with a thumbs down, what it changes shows up here."))
         XCTAssertEqual(PulseClient.learnsCapability, "pulse_learns")
+    }
+
+    func testLearnedListsWhatLearningHoldsAndResetsSayWhatTheyForgot() throws {
+        let learned = try XCTUnwrap(PulseLearned(json: json("""
+        {"ok": true, "levels": {},
+         "lessons": [
+          {"id": 11, "kind": "place", "what": "reset", "value": "chat::c1", "cause": "reset", "chat_title": "Deploy"},
+          {"id": 12, "kind": "everything", "what": "reset", "value": "", "cause": "reset"},
+          {"id": 13, "kind": "timely", "what": "reset", "value": "yes", "cause": "reset"}],
+         "preferences": [
+          {"scope": "place", "value": "chat::c1", "effect": -1.8, "useful": 0, "votes": 2,
+           "profile": "", "chat_id": "c1", "chat_title": "Deploy"},
+          {"scope": "loud", "value": "followup", "effect": 0.6, "pushes": 3},
+          {"scope": "kind", "value": "promise", "effect": 0.7, "useful": 2.5, "votes": 3},
+          {"scope": "place", "value": "area:health", "effect": -0.3, "useful": 1, "votes": 4},
+          {"scope": "place", "value": "source:calendar", "effect": 0.2, "useful": 1, "votes": 1},
+          {"scope": "timely", "value": "no", "effect": -0.2, "useful": 0, "votes": 0},
+          {"scope": "all", "value": "", "effect": 0.4, "useful": 3, "votes": 5},
+          {"scope": "place", "value": "chat::c2", "effect": 0.2, "useful": 1, "votes": 1},
+          {"scope": "everything", "value": "", "effect": 1},
+          {"scope": "kind", "value": "date"}]}
+        """)))
+
+        let found = learned.preferences
+        XCTAssertEqual(found.map(\.id), [
+            "place|chat::c1", "loud|followup", "kind|promise", "place|area:health", "place|source:calendar",
+            "timely|no", "all|", "place|chat::c2"
+        ])
+        // Every vote leans over Pulse's cards in general: only Start over forgets that.
+        XCTAssertEqual(found.map(\.canReset), [true, true, true, true, true, true, false, true])
+        XCTAssertEqual(found.map(\.subject), [
+            AppLocalization.string("Things from “\("Deploy")”"),
+            AppLocalization.string("How loudly “\(PulseCardKind.title("followup"))” cards come up"),
+            AppLocalization.string("“\(PulseCardKind.topic("promise"))” cards"),
+            AppLocalization.string("Things about “\(AppLocalization.string("Health and wellbeing"))”"),
+            AppLocalization.string("Things from “\(AppLocalization.string("Calendar"))”"),
+            AppLocalization.string("What isn't due within a day"),
+            AppLocalization.string("Pulse's cards in general"),
+            AppLocalization.string("Things from a chat")
+        ])
+        let dot = " · "
+        XCTAssertEqual(found[0].detail, [
+            AppLocalization.string("Brings up less"), AppLocalization.string("Strong effect"),
+            AppLocalization.string("Useful \(PulsePreference.number(0)) out of \(PulsePreference.number(2)) lately")
+        ].joined(separator: dot))
+        let pushCount = 3
+        XCTAssertEqual(found[1].detail, AppLocalization.string("Louder") + dot
+            + AppLocalization.string("After \(pushCount) notifications you acted on within the hour"))
+        XCTAssertEqual(found[2].detail, [
+            AppLocalization.string("Brings up more"), AppLocalization.string("Moderate effect"),
+            AppLocalization.string("Useful \(PulsePreference.number(2.5)) out of \(PulsePreference.number(3)) lately")
+        ].joined(separator: dot))
+        XCTAssertEqual(found[3].strength, AppLocalization.string("Slight effect"))
+        // No votes left in the window: which way, and how strongly.
+        XCTAssertEqual(found[5].detail, AppLocalization.string("Brings up less") + dot + AppLocalization.string("Slight effect"))
+        XCTAssertEqual(PulsePlace.area("travel"), AppLocalization.string("Trips and travel"))
+        XCTAssertEqual(PulsePlace.area("something new"), AppLocalization.string("Other matters"))
+        XCTAssertEqual(PulsePlace.source("notes"), AppLocalization.string("Hermes' notes"))
+        XCTAssertEqual(PulsePlace.source("chat"), AppLocalization.string("Chats"))
+
+        // A reset says what it forgot; Undo takes it back like any lesson.
+        let lessons = learned.lessons
+        XCTAssertEqual(lessons.map(\.id), [11, 12, 13])
+        XCTAssertEqual(lessons[0].text, AppLocalization.string("Reset: \(AppLocalization.string("Things from “\("Deploy")”"))"))
+        XCTAssertNil(lessons[0].causeText)
+        XCTAssertEqual(lessons[1].text, AppLocalization.string("Forgot everything learned before this"))
+        XCTAssertEqual(lessons[2].text, AppLocalization.string("Reset: \(AppLocalization.string("What's overdue or due within a day"))"))
+        XCTAssertEqual(PulseLearned.noPreferences, AppLocalization.string(
+            "Nothing stands out yet. The more you use thumbs, Do it and Done, the more Pulse learns what to bring up."))
+        // A plugin from before lists none.
+        let older = try XCTUnwrap(PulseLearned(json: json(#"{"lessons": []}"#)))
+        XCTAssertEqual(older.preferences, [])
+        XCTAssertEqual(PulseClient.explainsCapability, "pulse_explains")
     }
 
     func testPulseCardsForChatFindsTheOpenChat() throws {
@@ -328,6 +402,50 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertFalse(state.explainsPulseCard(wholeNow))
         XCTAssertTrue(state.explainsPulseCard(whole))
         XCTAssertFalse(state.explainsPulseCard(plain))
+    }
+
+    func testWhyNamesWhatLearningDidOnceThePluginSays() throws {
+        let state = try appState()
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 1, "kind": "followup", "level": "brief", "news": "The deploy is still waiting.", "why": "",
+           "profile": "", "chat_id": "c1", "chat_title": "Deploy",
+           "learned": {"scope": "place", "value": "chat::c1", "effect": -0.9, "useful": 0, "votes": 2}},
+          {"id": 2, "kind": "noticed", "topic": "promise", "level": "screen", "news": "Send the deck",
+           "why": "You said you'd send it.",
+           "learned": {"scope": "kind", "value": "promise", "effect": 0.6, "useful": 2, "votes": 2}},
+          {"id": 3, "kind": "noticed", "topic": "fact", "level": "screen", "news": "Ana is in town", "why": "",
+           "learned": null},
+          {"id": 4, "kind": "noticed", "topic": "date", "level": "screen", "news": "Dentist", "why": "",
+           "chat_id": "c1", "chat_title": "Deploy",
+           "learned": {"scope": "place", "value": "chat::c2", "effect": 0.5}},
+          {"id": 5, "kind": "noticed", "topic": "date", "level": "screen", "news": "Flight", "why": "",
+           "learned": {"scope": "bogus", "value": "x", "effect": 1}}
+        ]}
+        """)))
+        let held = page.cards[0], promised = page.cards[1], plain = page.cards[2]
+        let elsewhere = page.cards[3], odd = page.cards[4]
+        state.setNotifierPluginStateForTesting(.reported(version: "0.84.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.cardWhyCapability, PulseClient.learnsCapability,
+            PulseClient.explainsCapability
+        ]))
+        XCTAssertTrue(state.pulseExplainsLearning)
+        // Held for the brief by what thumbs taught about its chat: Why? says so, by the card's chat title.
+        XCTAssertEqual(held.learned?.subject, AppLocalization.string("Things from “\("Deploy")”"))
+        XCTAssertTrue(state.explainsPulseCard(held))
+        XCTAssertFalse(state.explainsPulseCardReason(held))
+        XCTAssertEqual(promised.learned?.subject, AppLocalization.string("“\(PulseCardKind.topic("promise"))” cards"))
+        XCTAssertTrue(state.explainsPulseCardReason(promised))
+        XCTAssertNil(plain.learned)
+        XCTAssertFalse(state.explainsPulseCard(plain))
+        // Another chat's title isn't the card's to give.
+        XCTAssertEqual(elsewhere.learned?.subject, AppLocalization.string("Things from a chat"))
+        XCTAssertNil(odd.learned)
+        // A plugin from before has no What Pulse left out and no Reset.
+        state.setNotifierPluginStateForTesting(.reported(version: "0.82.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.cardWhyCapability, PulseClient.learnsCapability
+        ]))
+        XCTAssertFalse(state.pulseExplainsLearning)
     }
 
     func testAReportCardsThumbsDownAsksWhyOnceThePluginActsOnIt() throws {
@@ -704,5 +822,103 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertEqual(PulseRest.choices(now: noon, calendar: calendar), PulseRest.allCases)
         XCTAssertEqual(PulseRest.choices(now: noon.addingTimeInterval(10.5 * 3600), calendar: calendar), [.tomorrow, .nextWeek])
         XCTAssertEqual(PulseRest.choices(now: noon.addingTimeInterval(10.4 * 3600), calendar: calendar), PulseRest.allCases)
+    }
+
+    func testWhatPulseLeftOutSaysWhyEachStayedOut() throws {
+        let entries = try XCTUnwrap(json("""
+        {"left_out": [
+          {"id": 1, "kind": "watch", "text": "The gym at 7", "decision": "quieted", "skip": "", "profile": "",
+           "chat_id": "c1", "chat_title": "Deploy", "created_at": 1761033600, "card_id": null,
+           "learned": {"scope": "place", "value": "chat::c1", "effect": -0.8, "useful": 0, "votes": 3}},
+          {"id": 2, "kind": "date", "text": "Dinner", "decision": "muted"},
+          {"id": 3, "kind": "date", "text": "Flight", "decision": "off"},
+          {"id": 4, "kind": "fact", "text": "Ana's birthday", "decision": "over_limit", "card_id": 40},
+          {"id": 5, "text": "Book the dentist", "decision": "not_picked"},
+          {"id": 6, "text": "Water the plants", "decision": "unanswered"},
+          {"id": 7, "text": "Call Sam", "decision": "resting", "skip": "rated"},
+          {"id": 8, "text": "Pay the rent", "decision": "resting", "skip": "put away"},
+          {"id": 9, "text": "Renew the passport", "decision": "skipped", "skip": "done"},
+          {"id": 10, "text": "Standup at 9", "decision": "skipped", "skip": "covered"},
+          {"id": 11, "text": "The release", "decision": "skipped", "skip": "raised"},
+          {"id": 12, "text": "The weather", "decision": "skipped", "skip": "rated"},
+          {"id": 13, "text": "A typo", "decision": "skipped", "skip": "minor"},
+          {"id": 14, "text": "Something else", "decision": "skipped", "skip": "other"},
+          {"id": 15, "text": "", "decision": "not_picked"},
+          {"text": "No id", "decision": "not_picked"}]}
+        """)["left_out"] as? [Any])
+
+        let found = entries.compactMap(PulseLeftOut.init(json:))
+        XCTAssertEqual(found.map(\.id), Array(1...14))
+        // What the user taught or set kept these out, so they're listed first.
+        XCTAssertEqual(found.filter(\.isKeptOut).map(\.id), [1, 2, 3])
+        XCTAssertEqual(found.map(\.reason), [
+            AppLocalization.string("What you did with cards like this kept it out"),
+            AppLocalization.string("You said things from this chat aren't relevant"),
+            AppLocalization.string("You turned this kind off"),
+            AppLocalization.string("Picked, but the report was full"),
+            AppLocalization.string("Not picked for the report"),
+            AppLocalization.string("The report passed over it"),
+            AppLocalization.string("Resting after your thumbs down"),
+            AppLocalization.string("Resting after you said Not now"),
+            AppLocalization.string("Already done"),
+            AppLocalization.string("Your calendar, reminders or a scheduled job covers it"),
+            AppLocalization.string("Brought up lately, and nothing changed since"),
+            AppLocalization.string("You said before that it wasn't useful"),
+            AppLocalization.string("Too minor to bring up"),
+            AppLocalization.string("Pulse chose to leave it out")
+        ])
+        let gym = found[0]
+        XCTAssertEqual(gym.kind, "watch")
+        XCTAssertEqual(gym.chatTitle, "Deploy")
+        XCTAssertEqual(gym.createdAt, Date(timeIntervalSince1970: 1761033600))
+        XCTAssertEqual(gym.learned?.subject, AppLocalization.string("Things from “\("Deploy")”"))
+        XCTAssertNil(gym.cardID)
+        // One already brought up says which card it became.
+        XCTAssertEqual(found[3].cardID, 40)
+        XCTAssertNil(found[1].learned)
+    }
+
+    func testResetLeftOutAndBringUpReachThePlugin() async throws {
+        var calls: [(path: String, method: String, body: [String: Any]?)] = []
+        var answer = try json(#"{"ok": true, "levels": {}, "lessons": [], "preferences": []}"#)
+        let client = PulseClient { path, method, body in
+            calls.append((path, method, body))
+            return answer
+        }
+        let raw = try json(#"{"scope": "place", "value": "chat::c1", "effect": -1.0}"#)
+        let chat = try XCTUnwrap(PulsePreference(json: raw))
+
+        _ = try await client.reset(chat)
+        _ = try await client.reset(nil)
+        answer = try json(#"{"ok": true, "left_out": [{"id": 3, "text": "The gym at 7", "decision": "not_picked"}, {"id": 4}]}"#)
+        let left = try await client.leftOut()
+        XCTAssertEqual(left.map(\.id), [3])
+        answer = try json(#"{"ok": true, "card": {"id": 21, "kind": "noticed", "topic": "watch", "level": "screen", "news": "The gym at 7"}}"#)
+        let card = try await client.bringUp(3)
+        XCTAssertEqual(card.id, 21)
+
+        XCTAssertEqual(calls.map(\.path), [
+            "\(PulseClient.path)/learned/reset", "\(PulseClient.path)/learned/reset",
+            "\(PulseClient.path)/left_out", "\(PulseClient.path)/left_out/bring_up"
+        ])
+        XCTAssertEqual(calls.map(\.method), ["POST", "POST", "GET", "POST"])
+        XCTAssertEqual(calls[0].body?["scope"] as? String, "place")
+        XCTAssertEqual(calls[0].body?["value"] as? String, "chat::c1")
+        // Start over forgets everything.
+        XCTAssertEqual(calls[1].body?["scope"] as? String, "everything")
+        XCTAssertEqual(calls[1].body?["value"] as? String, "")
+        XCTAssertNil(calls[2].body)
+        XCTAssertEqual(calls[3].body?["id"] as? Int, 3)
+
+        // An answer without its list or card is no answer.
+        answer = try json(#"{"ok": true}"#)
+        do {
+            _ = try await client.leftOut()
+            XCTFail("an answer without left_out")
+        } catch {}
+        do {
+            _ = try await client.bringUp(3)
+            XCTFail("an answer without a card")
+        } catch {}
     }
 }

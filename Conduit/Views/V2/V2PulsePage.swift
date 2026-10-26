@@ -11,6 +11,10 @@
 //  what Pulse does on the host (PulseFeed.swift). Swiping a card away is
 //  Not now: off the list, nothing learned, with Undo. What Pulse learned is
 //  listed, with the loudest each kind gets, and every lesson can be undone.
+//  From 0.84.0 a card's Why? names the biggest part learning played, What
+//  Pulse learned lists what learning holds with Reset and Start over, and
+//  What Pulse left out lists what the reports didn't bring up, with Bring
+//  it up.
 //  Pulse's own chat, where its hidden turns run, isn't shown: the cards are
 //  the way to answer it.
 //
@@ -90,6 +94,7 @@ struct V2PulsePage: View {
     @AccessibilityFocusState private var voiceOverCard: Int?
     @State private var reasonCard: PulseCard?
     @State private var showsLearned = false
+    @State private var showsLeftOut = false
     @State private var expandedWhy: Set<Int> = []
     @State private var ratingCards: Set<Int> = []
     @State private var actingCard: Int?
@@ -131,6 +136,16 @@ struct V2PulsePage: View {
                     .accessibilityIdentifier("pulse.quiet-today")
                 }
             }
+            if appState.pulseExplainsLearning {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showsLeftOut = true
+                    } label: {
+                        Label(AppLocalization.string("What Pulse left out"), systemImage: "tray.full")
+                    }
+                    .accessibilityIdentifier("pulse.left-out")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showsLearned = true
@@ -156,6 +171,17 @@ struct V2PulsePage: View {
             PulseLearnedSheet {
                 learnedNote = nil  // it may name a lesson just undone
                 Task { await load() }
+            }
+            .environmentObject(appState)
+        }
+        .sheet(isPresented: $showsLeftOut) {
+            PulseLeftOutSheet { card in
+                // It shows as new, at the card, once the sheet is down.
+                newCards?.insert(card)
+                Task {
+                    await load()
+                    focus(PulseOpenRequest(card: card))
+                }
             }
             .environmentObject(appState)
         }
@@ -257,6 +283,10 @@ struct V2PulsePage: View {
                         Label(AppLocalization.string("Nothing yet"), systemImage: "waveform.path.ecg")
                     } description: {
                         Text("Your reports, your morning brief and the news on what Hermes promised to check land here.")
+                    } actions: {
+                        if appState.pulseExplainsLearning {
+                            Button(AppLocalization.string("What Pulse left out")) { showsLeftOut = true }
+                        }
                     }
                 }
             } else {
@@ -790,19 +820,27 @@ struct V2PulsePage: View {
         }
     }
 
-    /// The chat it came from, a tap away.
-    /// Why Pulse brought the card up, once "Why?" is tapped.
+    /// Why Pulse brought the card up, once "Why?" is tapped: its reason,
+    /// and what Pulse learned played in it (0.84.0).
     @ViewBuilder private func whyNote(_ card: PulseCard) -> some View {
         if expandedWhy.contains(card.id), appState.explainsPulseCard(card) {
-            Text(verbatim: card.why)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.quaternary))
+            VStack(alignment: .leading, spacing: 8) {
+                if appState.explainsPulseCardReason(card) {
+                    Text(verbatim: card.why)
+                }
+                if let learned = card.learned {
+                    PulseLearnedLine(preference: learned)
+                }
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.quaternary))
         }
     }
 
+    /// The chat it came from, a tap away.
     private func chatLink(_ card: PulseCard) -> some View {
         Button {
             appState.openPulseCardChat(card)
@@ -1139,8 +1177,12 @@ struct PulseUndo: Equatable {
 /// A card's colour by what it's about, and when it came, as the card says it.
 enum PulseTopicTint {
     static func color(_ card: PulseCard) -> Color {
-        guard card.isNoticed else { return .conduitAccent }
-        switch card.topic {
+        card.isNoticed ? color(topic: card.topic) : .conduitAccent
+    }
+
+    /// A report item's colour by its topic (a card's, or a left-out item's kind).
+    static func color(topic: String) -> Color {
+        switch topic {
         case "commitment", "promise", "follow-up": return .conduitAccent
         case "date", "reminder": return .blue
         case "watch": return .purple
@@ -1168,8 +1210,37 @@ private extension View {
     }
 }
 
-/// What Pulse learned: each kind's loudness, and the lessons ratings made,
-/// each with Undo.
+/// What learning holds about one thing (0.84.0): what it's about, then
+/// which way it moves things, how strongly and the votes behind it.
+struct PulseLearnedLine: View {
+    let preference: PulsePreference
+    /// Under a "What Pulse learned" heading, as on a card's Why?.
+    var headed = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if headed {
+                Label {
+                    Text("What Pulse learned")
+                } icon: {
+                    Image(systemName: "sparkles")
+                }
+                .font(.caption.weight(.semibold))
+            }
+            Text(verbatim: preference.subject)
+                .foregroundStyle(.primary)
+            Text(verbatim: preference.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// What Pulse learned: each kind's loudness, what learning holds with Reset
+/// and Start over (0.84.0), and the lessons ratings and resets made, each
+/// with Undo.
 struct PulseLearnedSheet: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -1178,6 +1249,7 @@ struct PulseLearnedSheet: View {
     @State private var learned: PulseLearned?
     @State private var errorMessage: String?
     @State private var working = false
+    @State private var confirmsStartOver = false
 
     private var client: PulseClient { appState.pulseClient }
     /// A plugin that learns from thumbs, Do it and Done (0.81.1): thumbs no longer move the levels.
@@ -1203,6 +1275,9 @@ struct PulseLearnedSheet: View {
                         Text("How Pulse tells you")
                     } footer: {
                         Text(verbatim: PulseLearned.levelsFooter(learns: learns))
+                    }
+                    if appState.pulseExplainsLearning {
+                        preferencesSection(learned)
                     }
                     Section {
                         if learned.lessons.isEmpty {
@@ -1246,10 +1321,51 @@ struct PulseLearnedSheet: View {
                     Button(AppLocalization.string("Done")) { dismiss() }
                 }
             }
+            .confirmationDialog(
+                AppLocalization.string("Forget everything Pulse learned?"),
+                isPresented: $confirmsStartOver,
+                titleVisibility: .visible
+            ) {
+                Button(AppLocalization.string("Forget everything"), role: .destructive) { reset(nil) }
+            } message: {
+                Text("Pulse forgets what your thumbs, Do it and Done taught it so far and learns again from what you do next. The levels you set and the lessons from your reasons stay, and Undo takes it back.")
+            }
             .task(id: appState.activeDashboardID) { await load() }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    /// What learning holds, strongest first, each with Reset (but the lean
+    /// over Pulse's cards in general, which only Start over forgets).
+    private func preferencesSection(_ learned: PulseLearned) -> some View {
+        Section {
+            if learned.preferences.isEmpty {
+                Text(verbatim: PulseLearned.noPreferences)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(learned.preferences) { preference in
+                HStack {
+                    PulseLearnedLine(preference: preference, headed: false)
+                    Spacer(minLength: 8)
+                    if preference.canReset {
+                        Button(AppLocalization.string("Reset")) { reset(preference) }
+                            .buttonStyle(.borderless)
+                            .disabled(working)
+                            .accessibilityHint(Text(AppLocalization.string("Pulse forgets what it learned about this")))
+                    }
+                }
+            }
+            if !learned.preferences.isEmpty {
+                Button(AppLocalization.string("Start over"), role: .destructive) { confirmsStartOver = true }
+                    .disabled(working)
+                    .accessibilityIdentifier("pulse.learned.start-over")
+            }
+        } header: {
+            Text("From your thumbs, Do it and Done")
+        } footer: {
+            Text("Reset makes Pulse forget what it learned about one of these, and Start over forgets all of it. Undo takes either back, under Learned from your ratings.")
+        }
     }
 
     private func load() async {
@@ -1269,6 +1385,11 @@ struct PulseLearnedSheet: View {
         run { try await client.undo(lesson: lesson.id) }
     }
 
+    /// Forgets one thing learning holds, or everything for nil.
+    private func reset(_ preference: PulsePreference?) {
+        run { try await client.reset(preference) }
+    }
+
     private func run(_ step: @escaping @MainActor () async throws -> PulseLearned) {
         working = true
         let dashboard = appState.activeDashboardID
@@ -1283,6 +1404,191 @@ struct PulseLearnedSheet: View {
             } catch {
                 guard appState.activeDashboardID == dashboard else { return }
                 errorMessage = PulseRefusal.message(for: error)
+            }
+        }
+    }
+}
+
+/// What Pulse left out (0.84.0): what the latest reports considered and
+/// didn't bring up, and why, what learning or the user's own rules kept out
+/// first, each with Bring it up, which makes it a card on the Pulse screen.
+struct PulseLeftOutSheet: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    /// A card was made of one: the Pulse screen shows it.
+    let onBroughtUp: (Int) -> Void
+
+    @State private var entries: [PulseLeftOut]?
+    @State private var errorMessage: String?
+    @State private var bringing: Int?
+
+    private var client: PulseClient { appState.pulseClient }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let entries {
+                    let kept = entries.filter(\.isKeptOut)
+                    let passed = entries.filter { !$0.isKeptOut }
+                    if entries.isEmpty {
+                        Section {
+                            Text("Nothing left out lately.")
+                                .foregroundStyle(.secondary)
+                        } footer: {
+                            footer
+                        }
+                    }
+                    if !kept.isEmpty {
+                        Section {
+                            ForEach(kept) { entry in row(entry) }
+                        } header: {
+                            Text("Kept out by what you taught Pulse")
+                        } footer: {
+                            if passed.isEmpty { footer }
+                        }
+                    }
+                    if !passed.isEmpty {
+                        Section {
+                            ForEach(passed) { entry in row(entry) }
+                        } header: {
+                            Text("Left out of the report")
+                        } footer: {
+                            footer
+                        }
+                    }
+                } else if let errorMessage {
+                    Text(verbatim: errorMessage).foregroundStyle(.red)
+                } else {
+                    ProgressView()
+                }
+                if entries != nil, let errorMessage {
+                    Text(verbatim: errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
+            .navigationTitle(Text("What Pulse left out"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(AppLocalization.string("Done")) { dismiss() }
+                }
+            }
+            .task(id: appState.activeDashboardID) {
+                entries = nil
+                await load()
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var footer: some View {
+        Text("From the latest reports. Bring it up makes it a card on the Pulse screen, without a notification, and what you do with it teaches Pulse about things like it.")
+    }
+
+    private func row(_ entry: PulseLeftOut) -> some View {
+        let tint = PulseTopicTint.color(topic: entry.kind)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                Text(verbatim: PulseCardKind.topic(entry.kind))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(tint)
+                if let created = entry.createdAt {
+                    Text(verbatim: "· " + PulseTopicTint.stamp(created))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text(verbatim: entry.text)
+                .fixedSize(horizontal: false, vertical: true)
+            if !entry.chatTitle.isEmpty {
+                Label {
+                    Text(verbatim: entry.chatTitle)
+                        .lineLimit(1)
+                } icon: {
+                    Image(systemName: "bubble.left")
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            Text(verbatim: entry.reason)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            // What learning held against it, for one learning kept out.
+            if entry.decision == "quieted", let learned = entry.learned {
+                PulseLearnedLine(preference: learned)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer(minLength: 0)
+                if entry.cardID != nil {
+                    Label(AppLocalization.string("On the Pulse screen"), systemImage: "checkmark.circle.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.green)
+                } else {
+                    Button {
+                        Haptics.selection()
+                        bringUp(entry)
+                    } label: {
+                        Label(AppLocalization.string("Bring it up"), systemImage: "arrow.up.circle")
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(.conduitAccent)
+                    .disabled(bringing != nil)
+                    .accessibilityHint(Text(AppLocalization.string("Makes it a card on the Pulse screen")))
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func load() async {
+        let dashboard = appState.activeDashboardID
+        do {
+            let loaded = try await client.leftOut()
+            guard appState.activeDashboardID == dashboard else { return }
+            entries = loaded
+            errorMessage = nil
+        } catch {
+            guard appState.activeDashboardID == dashboard else { return }
+            errorMessage = PulseRefusal.message(for: error)
+        }
+    }
+
+    private func bringUp(_ entry: PulseLeftOut) {
+        bringing = entry.id
+        let dashboard = appState.activeDashboardID
+        Task {
+            defer { bringing = nil }
+            do {
+                let card = try await client.bringUp(entry.id)
+                guard appState.activeDashboardID == dashboard else { return }
+                if let index = entries?.firstIndex(where: { $0.id == entry.id }) {
+                    entries?[index].cardID = card.id
+                }
+                errorMessage = nil
+                Haptics.success()
+                onBroughtUp(card.id)
+            } catch {
+                guard appState.activeDashboardID == dashboard else { return }
+                if PulseRefusal(error: error)?.code == "invalid" {
+                    // It came up meanwhile, or the journal let it go: the list as it is now.
+                    await load()
+                    errorMessage = AppLocalization.string("Pulse no longer has that one.")
+                } else {
+                    errorMessage = PulseRefusal.message(for: error)
+                }
+                Haptics.error()
             }
         }
     }
