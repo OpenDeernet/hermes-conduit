@@ -1,0 +1,665 @@
+//
+//  PeopleSettingsViews.swift
+//  Conduit
+//
+//  Settings > People (designs/cross-owner-agents, C2): getting this Hermes
+//  ready for rooms with other people's agents (RoomSetup.swift), the people
+//  it's linked with, and the invites still waiting (RoomLinks.swift).
+//
+
+import OSLog
+import SwiftUI
+
+private let peopleLogger = Logger(subsystem: "com.milim.relay", category: "People")
+
+/// What Settings > People says, apart from its views.
+enum PeopleSettingsText {
+    /// A Link's status, or nil for one a newer plugin added.
+    static func status(of link: RoomLink) -> String? {
+        switch link.status {
+        case "linked":
+            return AppLocalization.string("Linked")
+        case "waiting":
+            return AppLocalization.string("Waiting for \(link.name)'s Hermes to confirm")
+        case "unanswered":
+            return AppLocalization.string("\(link.name)'s Hermes never confirmed. Ask them for a new invite.")
+        default:
+            return nil
+        }
+    }
+
+    /// What Set up does, one line each, in the order the plugin does it.
+    static func setupLines(_ state: RoomSetupState, profileName: String) -> [String] {
+        let changes = Set(state.changes)
+        let address = state.apiServer.address
+        var lines: [String] = []
+        if changes.contains("api_server_key") {
+            lines.append(AppLocalization.string("Turn on Hermes' API server at \(address), with a new key that stays on your Hermes"))
+        } else if changes.contains("api_server_enabled") || changes.contains("api_server_port") {
+            lines.append(AppLocalization.string("Turn on Hermes' API server at \(address), with the key it has"))
+        }
+        if changes.contains("profile_key") {
+            lines.append(AppLocalization.string("Give \(profileName) its own key for the API server, which serves a profile's agent only with that profile's key"))
+        }
+        if changes.contains("ceiling") {
+            lines.append(AppLocalization.string("Save the tools rooms may let \(profileName) use"))
+        }
+        if changes.contains("plugin_tools") {
+            lines.append(AppLocalization.string("Keep tools that plugins and Hermes updates add out of rooms until you add them here"))
+        }
+        if changes.contains("approvals") {
+            lines.append(AppLocalization.string("Turn \(profileName)'s approvals back on, since rooms refuse an agent that runs tools without asking"))
+        }
+        if state.needs.contains("restart") {
+            lines.append(AppLocalization.string("Restart the gateway, which starts the API server"))
+        }
+        return lines
+    }
+
+    /// The tools rooms may let the profile's agent use.
+    static func tools(_ state: RoomSetupState, profileName: String) -> String {
+        let labels = state.ceiling.map(state.label(of:))
+        guard !labels.isEmpty else {
+            return AppLocalization.string("Rooms can't let \(profileName) use tools: it only talks there.")
+        }
+        let list = labels.formatted(.list(type: .and).locale(AppLocalization.formattingLocale))
+        return AppLocalization.string("Rooms may let \(profileName) use \(list).")
+    }
+
+    /// Four fingerprint words, as both sides read them out.
+    static func words(_ words: [String]) -> String {
+        words.joined(separator: " · ")
+    }
+}
+
+/// Settings > People: this Hermes' setup for rooms with other people's
+/// agents, the people it's linked with and the invites waiting. Shown while
+/// the host's plugin keeps Links (`room-links`).
+@MainActor
+struct PeopleSettingsPage: View {
+    @ObservedObject var appLanguage = AppLanguageStore.shared
+    @EnvironmentObject private var appState: AppState
+
+    /// What the plugin answered, and for which dashboard.
+    private struct Loaded {
+        let key: String
+        let list: RoomLinksList
+        let identity: RoomIdentity
+    }
+
+    @State private var loaded: Loaded?
+    @State private var loadError: String?
+    @State private var actionError: String?
+    /// The Link or invite a request is changing: one at a time.
+    @State private var changingID: String?
+    @State private var unlinking: RoomLink?
+
+    /// Links are the installation's, so the dashboard is the whole key.
+    private var key: String { appState.activeDashboardID?.uuidString ?? "" }
+
+    private var shown: Loaded? { loaded?.key == key ? loaded : nil }
+
+    /// While a Link waits for the other side's Hermes, the page reads the
+    /// list again now and then.
+    private var waitingIDs: [String] {
+        shown?.list.links.filter { $0.status == "waiting" }.map(\.id) ?? []
+    }
+
+    var body: some View {
+        let profile = appState.activeProfile
+        SettingsDetailContainer {
+            if appState.canSetUpRooms {
+                RoomSetupSection(profile: profile, profileName: appState.profileDisplayName(profile))
+            } else {
+                ConduitSettingsSection(title: AppLocalization.string("This Hermes"), symbol: "server.rack", tint: .conduitAura) {
+                    Text(AppLocalization.string("Update the Conduit plugin on your Hermes host to set it up for rooms from here."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            linksSection
+            if let invites = shown?.list.invites, !invites.isEmpty {
+                invitesSection(invites)
+            }
+        }
+        .navigationTitle(Text(AppLocalization.string("People")))
+        .task(id: key) { await load(key) }
+        .task(id: waitingIDs) { await followWaitingLinks() }
+        .confirmationDialog(unlinkTitle, isPresented: unlinkPresented, titleVisibility: .visible, presenting: unlinking) { link in
+            Button(AppLocalization.string("Unlink"), role: .destructive) { unlink(link) }
+            Button(AppLocalization.string("Cancel"), role: .cancel) {}
+        } message: { link in
+            Text(AppLocalization.string("This unlinks \(link.name)'s Hermes from yours, on both sides. Linking again takes a new invite."))
+        }
+    }
+
+    private var unlinkTitle: String {
+        guard let unlinking else { return "" }
+        return AppLocalization.string("Unlink \(unlinking.name)?")
+    }
+
+    private var unlinkPresented: Binding<Bool> {
+        Binding(get: { unlinking != nil }, set: { if !$0 { unlinking = nil } })
+    }
+
+    private var linksSection: some View {
+        ConduitSettingsSection(title: AppLocalization.string("Linked with"), symbol: "link", tint: .conduitAccent) {
+            Text(AppLocalization.string("A Link lets you and someone else bring your agents into rooms together. It grants nothing by itself: in each room, you choose what your agents may do."))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            if let shown {
+                yourWords(shown.identity)
+                // Nothing waits in the mailbox without a Link or an invite.
+                if !shown.list.mailboxReading, !shown.list.links.isEmpty || !shown.list.invites.isEmpty {
+                    Label(AppLocalization.string("Nothing on your Hermes reads its rooms mailbox right now, so what the other side sends waits there, for up to 7 days."), systemImage: "tray.and.arrow.down")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                    Button(AppLocalization.string("Check again")) { Task { await load(key) } }
+                        .buttonStyle(.settings)
+                        .disabled(changingID != nil)
+                }
+                if shown.list.links.isEmpty {
+                    Text(AppLocalization.string("No Links yet."))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(shown.list.links) { link in
+                        linkRow(link)
+                    }
+                }
+            } else if let loadError {
+                Label(loadError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                Button(AppLocalization.string("Try again")) { Task { await load(key) } }
+                    .buttonStyle(.settings)
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+            }
+            if let actionError {
+                Label(actionError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func yourWords(_ identity: RoomIdentity) -> some View {
+        if !identity.crypto {
+            Label(AppLocalization.string("This Hermes can't make Links: Linked Rooms needs Python's cryptography package, which it doesn't have. Install it where Hermes runs, then restart Hermes' dashboard."), systemImage: "exclamationmark.triangle.fill")
+                .font(.footnote)
+                .foregroundStyle(.orange)
+        } else if let words = identity.words {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(AppLocalization.string("Your Hermes' words"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(verbatim: PeopleSettingsText.words(words))
+                    .font(.body.weight(.semibold))
+                    .textSelection(.enabled)
+                Text(AppLocalization.string("Someone opening your invite sees these four words. Read them to each other: if theirs match, the invite is yours."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            Text(AppLocalization.string("Your Hermes gets its four words when it first makes or accepts an invite."))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func linkRow(_ link: RoomLink) -> some View {
+        let words = PeopleSettingsText.words(link.words)
+        return HStack(alignment: .firstTextBaseline, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(verbatim: link.name)
+                    .font(.subheadline.weight(.semibold))
+                if let status = PeopleSettingsText.status(of: link) {
+                    Text(verbatim: status)
+                        .font(.footnote)
+                        .foregroundStyle(link.status == "unanswered" ? Color.orange : Color.secondary)
+                }
+                Text(verbatim: AppLocalization.string("Words: \(words)"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            if changingID == link.id {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Button(AppLocalization.string("Unlink"), role: .destructive) { unlinking = link }
+                    .buttonStyle(.borderless)
+                    .font(.subheadline)
+                    .disabled(changingID != nil)
+                    .accessibilityValue(Text(verbatim: link.name))
+            }
+        }
+    }
+
+    private func invitesSection(_ invites: [RoomLinkInvite]) -> some View {
+        ConduitSettingsSection(title: AppLocalization.string("Invites waiting"), symbol: "envelope", tint: .conduitAccent) {
+            Text(AppLocalization.string("Each invite works once, for whoever opens it first, until it runs out."))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            ForEach(invites) { invite in
+                inviteRow(invite)
+            }
+        }
+    }
+
+    private func inviteRow(_ invite: RoomLinkInvite) -> some View {
+        let until = invite.expiresAt.formatted(
+            .dateTime.weekday(.abbreviated).hour().minute().locale(AppLocalization.formattingLocale)
+        )
+        return HStack(alignment: .firstTextBaseline, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(verbatim: AppLocalization.string("Shows you as \(invite.name)"))
+                    .font(.subheadline.weight(.semibold))
+                Text(verbatim: AppLocalization.string("Works until \(until)"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            if changingID == invite.id {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Button(AppLocalization.string("Cancel invite"), role: .destructive) { cancel(invite) }
+                    .buttonStyle(.borderless)
+                    .font(.subheadline)
+                    .disabled(changingID != nil)
+            }
+        }
+    }
+
+    /// Reads the Links and this Hermes' words. A read that fails once the
+    /// page shows them leaves them up and says so.
+    private func load(_ key: String) async {
+        if loaded?.key != key { loaded = nil }
+        loadError = nil
+        let client = appState.roomLinksClient
+        do {
+            let list = try await client.list()
+            let identity = try await client.identity()
+            guard key == self.key else { return }
+            loaded = Loaded(key: key, list: list, identity: identity)
+        } catch {
+            guard !(error is CancellationError), !Task.isCancelled, key == self.key else { return }
+            peopleLogger.notice("Links not read: \(LogRedaction.message(error), privacy: .public)")
+            let text = AppLocalization.string("Could not read your Links: \(RoomLinksClient.message(for: error))")
+            if loaded?.key == key { actionError = text } else { loadError = text }
+        }
+    }
+
+    /// Every 5 s for up to 3 minutes: a confirm comes within seconds while
+    /// the other Hermes runs, or not until it's back.
+    private func followWaitingLinks() async {
+        guard !waitingIDs.isEmpty else { return }
+        let key = key
+        for _ in 0..<36 {
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled, key == self.key else { return }
+            if changingID != nil { continue }
+            await load(key)
+            if waitingIDs.isEmpty { return }
+        }
+    }
+
+    private func unlink(_ link: RoomLink) {
+        guard changingID == nil else { return }
+        let key = key
+        changingID = link.id
+        actionError = nil
+        Task {
+            defer { changingID = nil }
+            do {
+                // False when it was already gone: the list says the same.
+                _ = try await appState.roomLinksClient.unlink(link.id)
+                guard key == self.key else { return }
+                Haptics.success()
+            } catch {
+                guard !(error is CancellationError), key == self.key else { return }
+                Haptics.error()
+                peopleLogger.notice("Link not removed: \(LogRedaction.message(error), privacy: .public)")
+                actionError = AppLocalization.string("Could not unlink \(link.name): \(RoomLinksClient.message(for: error))")
+            }
+            await load(key)
+        }
+    }
+
+    private func cancel(_ invite: RoomLinkInvite) {
+        guard changingID == nil else { return }
+        let key = key
+        changingID = invite.id
+        actionError = nil
+        Task {
+            defer { changingID = nil }
+            do {
+                // False when it was used or ran out meanwhile.
+                _ = try await appState.roomLinksClient.cancel(inviteID: invite.id)
+                guard key == self.key else { return }
+                Haptics.success()
+            } catch {
+                guard !(error is CancellationError), key == self.key else { return }
+                Haptics.error()
+                peopleLogger.notice("Invite not cancelled: \(LogRedaction.message(error), privacy: .public)")
+                actionError = AppLocalization.string("Could not cancel the invite: \(RoomLinksClient.message(for: error))")
+            }
+            await load(key)
+        }
+    }
+}
+
+/// Settings > People's host setup for the profile in use: what this Hermes
+/// needs before rooms with other people's agents can reach the profile's
+/// agent, and Set up, which the plugin does on the host (room_setup.py).
+/// Once it's ready, Change picks the tools rooms may let the agent use.
+@MainActor
+struct RoomSetupSection: View {
+    @ObservedObject var appLanguage = AppLanguageStore.shared
+    @EnvironmentObject private var appState: AppState
+    let profile: String
+    let profileName: String
+
+    private struct Outcome {
+        let text: String
+        var trouble = false
+        /// The API server may still come up: Check again reads it.
+        var checksAgain = false
+    }
+
+    /// What the plugin answered for `loadedKey`.
+    @State private var state: RoomSetupState?
+    @State private var loadedKey: String?
+    @State private var picked: Set<String> = []
+    @State private var editing = false
+    @State private var working = false
+    @State private var loadError: String?
+    /// How the last Set up and its restart went.
+    @State private var outcome: Outcome?
+    /// Hermes' words while chats run on the gateway, which restarting it
+    /// now would stop.
+    @State private var busyRestart: String?
+    @State private var confirmsChange = false
+    /// Set when the gateway restarts: the section reads the API server
+    /// again until it runs or says why not.
+    @State private var restartWait: UUID?
+    /// The API server's error from before the restart, which the first
+    /// reads after it may still show.
+    @State private var errorBeforeRestart: String?
+
+    private var key: String { "\(appState.activeDashboardID?.uuidString ?? "")|\(profile)" }
+
+    private var shown: RoomSetupState? { loadedKey == key ? state : nil }
+
+    var body: some View {
+        ConduitSettingsSection(title: AppLocalization.string("This Hermes"), symbol: "server.rack", tint: .conduitAura) {
+            if let state = shown {
+                content(state)
+            } else if let loadError {
+                Label(loadError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                Button(AppLocalization.string("Try again")) { Task { await load(key) } }
+                    .buttonStyle(.settings)
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+            }
+            if let outcome {
+                Text(verbatim: outcome.text)
+                    .font(.footnote)
+                    .foregroundStyle(outcome.trouble ? Color.orange : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if outcome.checksAgain {
+                    Button(AppLocalization.string("Check again")) {
+                        self.outcome = nil
+                        Task { await load(key) }
+                    }
+                    .buttonStyle(.settings)
+                }
+            }
+        }
+        .task(id: key) { await load(key) }
+        .task(id: restartWait) { await followRestart() }
+        .confirmationDialog(AppLocalization.string("Restart the gateway now?"), isPresented: busyPresented, titleVisibility: .visible) {
+            Button(AppLocalization.string("Restart now"), role: .destructive) { setUp(interrupt: true) }
+            Button(AppLocalization.string("Later"), role: .cancel) {}
+        } message: {
+            Text(verbatim: busyMessage)
+        }
+        .confirmationDialog(AppLocalization.string("Change what rooms may use?"), isPresented: $confirmsChange, titleVisibility: .visible) {
+            Button(AppLocalization.string("Change")) { setUp() }
+            Button(AppLocalization.string("Cancel"), role: .cancel) {}
+        } message: {
+            // Each room pins its members' tools, approvals and turn limit
+            // when it starts (designs/cross-owner-agents, decision 13).
+            Text(AppLocalization.string("\(profileName) then stops answering in rooms already started with other people's agents, which hold it to the tools it had when they started. New rooms use these."))
+        }
+    }
+
+    private var busyPresented: Binding<Bool> {
+        Binding(get: { busyRestart != nil }, set: { if !$0 { busyRestart = nil } })
+    }
+
+    private var busyMessage: String {
+        let stops = AppLocalization.string("Chats running on it stop if it restarts now.")
+        guard let words = busyRestart, !words.isEmpty else { return stops }
+        return "\(words)\n\n\(stops)"
+    }
+
+    @ViewBuilder
+    private func content(_ state: RoomSetupState) -> some View {
+        if !state.blockers.isEmpty {
+            Text(AppLocalization.string("This Hermes can't be set up for rooms yet:"))
+                .font(.subheadline.weight(.semibold))
+            ForEach(state.blockers) { blocker in
+                Label(blocker.message, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .textSelection(.enabled)
+            }
+            Button(AppLocalization.string("Check again")) { Task { await load(key) } }
+                .buttonStyle(.settings)
+                .disabled(working)
+        } else if state.ready && !editing {
+            Label(AppLocalization.string("Ready for rooms"), systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.green)
+            SettingsMetricRow(label: AppLocalization.string("API server"), value: state.apiServer.address, statusDot: .green, lineLimit: 1)
+            Text(verbatim: PeopleSettingsText.tools(state, profileName: profileName))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button(AppLocalization.string("Change")) {
+                Haptics.selection()
+                picked = Set(state.ceiling)
+                outcome = nil
+                editing = true
+            }
+            .buttonStyle(.settings)
+            .disabled(working)
+        } else {
+            if !state.ready {
+                Text(AppLocalization.string("Rooms reach your agents through Hermes' API server. For \(profileName), Set up will:"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                ForEach(PeopleSettingsText.setupLines(state, profileName: profileName), id: \.self) { line in
+                    Label(line, systemImage: "checkmark")
+                        .font(.footnote)
+                }
+                if let error = state.apiServer.error {
+                    Text(verbatim: AppLocalization.string("The API server didn't start the last time: \(error)"))
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                }
+            }
+            toolChoices(state)
+            if state.apiServer.enabled {
+                Text(AppLocalization.string("Hermes' API server is already on, so other apps that use it with \(profileName), such as Open WebUI, get only these tools too."))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 12) {
+                if editing {
+                    Button(AppLocalization.string("Cancel")) {
+                        picked = Set(state.ceiling)
+                        editing = false
+                    }
+                    .buttonStyle(.settings)
+                }
+                Spacer(minLength: 0)
+                if working {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Button(editing ? AppLocalization.string("Save") : AppLocalization.string("Set up")) {
+                    if state.changesSavedCeiling(picking: picked) { confirmsChange = true } else { setUp() }
+                }
+                .buttonStyle(.settingsPrimary)
+                .disabled(working || (editing && picked == Set(state.ceiling)))
+            }
+        }
+    }
+
+    private func toolChoices(_ state: RoomSetupState) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(AppLocalization.string("Tools rooms may let \(profileName) use"))
+                .font(.subheadline.weight(.semibold))
+            ForEach(state.choices) { choice in
+                Toggle(isOn: Binding(
+                    get: { picked.contains(choice.id) },
+                    set: { on in
+                        Haptics.selection()
+                        if on { picked.insert(choice.id) } else { picked.remove(choice.id) }
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: choice.label)
+                            .font(.subheadline)
+                        if !choice.description.isEmpty {
+                            Text(verbatim: choice.description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .tint(.conduitAccent)
+                .disabled(working)
+            }
+            Text(AppLocalization.string("Each room's choices work within these. Tools added later, by a plugin, an MCP server or a Hermes update, stay out of rooms until you add them here."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Reads what the host needs. The tools picked follow what it saved,
+    /// except while they're being changed.
+    private func load(_ key: String) async {
+        if loadedKey != key {
+            state = nil
+            loadedKey = nil
+            editing = false
+            outcome = nil
+        }
+        loadError = nil
+        do {
+            let read = try await appState.roomSetupClient.state(profile: profile)
+            guard key == self.key else { return }
+            show(read, key: key)
+        } catch {
+            guard !(error is CancellationError), !Task.isCancelled, key == self.key else { return }
+            peopleLogger.notice("Room setup not read: \(LogRedaction.message(error), privacy: .public)")
+            let text = AppLocalization.string("Could not read this setting from the host: \(RoomLinksClient.message(for: error))")
+            if loadedKey == key { outcome = Outcome(text: text, trouble: true) } else { loadError = text }
+        }
+    }
+
+    private func show(_ read: RoomSetupState, key: String) {
+        let first = loadedKey != key
+        state = read
+        loadedKey = key
+        if first || !editing { picked = Set(read.ceiling) }
+    }
+
+    /// Saves the tools picked when they changed, and sets up whatever else
+    /// the host needs.
+    private func setUp(interrupt: Bool = false) {
+        guard let state = shown, !working else { return }
+        let key = key
+        let ceiling = state.ceilingToSave(picking: picked)
+        working = true
+        outcome = nil
+        Task {
+            defer { working = false }
+            do {
+                let result = try await appState.roomSetupClient.setUp(profile: profile, ceiling: ceiling, interrupt: interrupt)
+                guard key == self.key else { return }
+                Haptics.success()
+                editing = false
+                show(result.state, key: key)
+                follow(result)
+            } catch {
+                guard !(error is CancellationError), key == self.key else { return }
+                Haptics.error()
+                peopleLogger.notice("Room setup not saved: \(LogRedaction.message(error), privacy: .public)")
+                outcome = Outcome(text: AppLocalization.string("Could not set this Hermes up: \(RoomLinksClient.message(for: error))"), trouble: true)
+                // A blocker that came up since shows in place of Set up.
+                await load(key)
+            }
+        }
+    }
+
+    /// What the gateway's restart did after a save. What was saved stays
+    /// whatever it did.
+    private func follow(_ result: RoomSetupResult) {
+        guard let restart = result.restart else {
+            outcome = Outcome(text: AppLocalization.string("Saved"))
+            return
+        }
+        if restart.busy {
+            outcome = Outcome(text: AppLocalization.string("Saved. The API server starts the next time the gateway restarts."))
+            busyRestart = restart.error ?? ""
+        } else if restart.started {
+            outcome = Outcome(text: AppLocalization.string("Saved. The gateway is restarting to start the API server…"))
+            errorBeforeRestart = result.state.apiServer.error
+            restartWait = UUID()
+        } else {
+            let why = restart.error ?? AppLocalization.string("Hermes didn't say why.")
+            outcome = Outcome(text: AppLocalization.string("Saved, but the gateway didn't restart: \(why)"), trouble: true)
+        }
+    }
+
+    /// Every 2 s for up to 30 s after the restart starts.
+    private func followRestart() async {
+        guard restartWait != nil else { return }
+        let key = key
+        for check in 1...15 {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, key == self.key else { return }
+            guard let read = try? await appState.roomSetupClient.state(profile: profile), key == self.key else { continue }
+            show(read, key: key)
+            let server = read.apiServer
+            if server.running {
+                outcome = Outcome(text: AppLocalization.string("The gateway restarted, and its API server runs at \(server.address)."))
+                restartWait = nil
+                return
+            }
+            // The error from before the restart counts once the new gateway
+            // had time to write its own.
+            if let error = server.error, error != errorBeforeRestart || check >= 5 {
+                outcome = Outcome(text: AppLocalization.string("The gateway restarted, but its API server isn't running: \(error)"), trouble: true)
+                restartWait = nil
+                return
+            }
+        }
+        outcome = Outcome(text: AppLocalization.string("The gateway is taking a while to start its API server."), checksAgain: true)
+        restartWait = nil
+    }
+}
