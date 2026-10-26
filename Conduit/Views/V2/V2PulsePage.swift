@@ -583,9 +583,12 @@ struct V2PulsePage: View {
                             .strikethrough(card.doneAt != nil)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
-                        // Put off until a time: when it comes back, as a cleared card says it.
+                        // Put off until a time: when it comes back, as a cleared card says it, and
+                        // Wrong time's says why.
                         if card.dismissedAt != nil, let back = card.restUntil {
-                            Text(verbatim: PulseRest.backText(back))
+                            Text(verbatim: card.isAwayForWrongTime
+                                ? PulseDownReason.wrongTime.title + " · " + PulseRest.backText(back)
+                                : PulseRest.backText(back))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

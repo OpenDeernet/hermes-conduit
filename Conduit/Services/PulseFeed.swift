@@ -55,8 +55,9 @@ struct PulseCard: Equatable, Identifiable {
     /// Swiped away ("Not now"), or put away by Wrong time on a thumbs down
     /// (0.85.0): in Done and cleared.
     var dismissedAt: Date?
-    /// Not now until a time (later today, tomorrow, next week): when it
-    /// comes back as new (0.78.3), nil for one swiped away for good.
+    /// Not now until a time (later today, tomorrow, next week), or Wrong
+    /// time until a better one (0.85.0): when it comes back as new
+    /// (0.78.3), nil for one swiped away for good.
     var restUntil: Date?
     /// When it was marked done: by the user on the Pulse screen, or by
     /// Pulse after Do it, once the chat showed it got done.
@@ -205,7 +206,8 @@ struct PulseLayout: Equatable {
         /// `openCards` then) until it's opened again, or with every card it
         /// brought handled, unless `opened` on this visit. Not once a card in
         /// it is open that wasn't then, or has come again since: one back
-        /// from Not now (the host makes it new again), or put back with Undo.
+        /// from Not now or Wrong time (the host makes it new again), or put
+        /// back with Undo.
         /// Nor while `focused`, the card a Pulse mark or Bring it up opened
         /// (a push opens the screen at its top), is it or one of its cards.
         func isFolded(folded: [Int: Double]?, opened: Bool, focused: Int?) -> Bool {
@@ -1080,7 +1082,8 @@ extension PulseClient {
     static let hoursCapability = "pulse_hours"
 }
 
-/// What Not now puts a card off until, as the plugin names it.
+/// What Not now puts a card off until, as the plugin names it. Wrong time
+/// puts a card away until a time of the plugin's, told the same way.
 enum PulseRest: String, CaseIterable, Identifiable {
     case laterToday = "later_today"
     case tomorrow
@@ -1109,9 +1112,10 @@ enum PulseRest: String, CaseIterable, Identifiable {
     /// to give. The plugin gives three hours, by 23:00 and by the night's
     /// start (0.85.0), and never under half an hour, so from half an hour
     /// before then it makes it tomorrow. At night it gives ten minutes
-    /// before the next morning brief (`brief`, minutes into the day), so
-    /// once that brief has gone, or is under forty minutes away, it's
-    /// tomorrow too. It would say tomorrow twice.
+    /// before the next morning brief (`brief`, minutes into the day; 07:00,
+    /// the brief's own default, when the feed doesn't say), so once today's
+    /// brief has gone, or is under forty minutes away, it's tomorrow's, as
+    /// Tomorrow is. It would say tomorrow twice.
     static func choices(now: Date = Date(), night: PulseNight? = nil, brief: Int? = nil,
                         calendar: Calendar = .current) -> [PulseRest] {
         let parts = calendar.dateComponents([.hour, .minute], from: now)
@@ -1119,8 +1123,7 @@ enum PulseRest: String, CaseIterable, Identifiable {
         var end = 23 * 60
         if let night {
             if night.contains(minute) {
-                // Without the brief's time, it's in the morning: after midnight it's still today's.
-                let today = brief.map { $0 - 10 - minute >= 30 } ?? (minute < 12 * 60)
+                let today = (brief ?? 7 * 60) - 10 - minute >= 30
                 return today ? allCases : [.tomorrow, .nextWeek]
             }
             if night.start > minute { end = min(end, night.start) }
@@ -1128,8 +1131,9 @@ enum PulseRest: String, CaseIterable, Identifiable {
         return minute >= end - 30 ? [.tomorrow, .nextWeek] : allCases
     }
 
-    /// The choice a time the plugin set comes to, for the Undo bar: later
-    /// today, tomorrow, or next week (the brief's day a week on).
+    /// The choice a time the plugin set comes to, for the Undo bar (Not
+    /// now's or Wrong time's): later today, tomorrow, or next week (the
+    /// brief's day a week on).
     static func returning(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> PulseRest {
         switch Self.days(to: date, now: now, calendar: calendar) {
         case ...0: .laterToday
@@ -1138,8 +1142,9 @@ enum PulseRest: String, CaseIterable, Identifiable {
         }
     }
 
-    /// When a card put off comes back, as its cleared row says it: later
-    /// today, tomorrow, a weekday this week, or next week.
+    /// When a card put off, by Not now or Wrong time, comes back, as its
+    /// cleared row says it: later today, tomorrow, a weekday this week, or
+    /// next week.
     static func backText(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
         let ahead = Self.days(to: date, now: now, calendar: calendar)
         if ahead <= 0 { return AppLocalization.string("Back later today") }

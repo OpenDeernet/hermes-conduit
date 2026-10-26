@@ -980,6 +980,14 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertEqual(briefed(23, 30, longer, 7 * 60), tomorrow)
         // A night over noon, and a brief after it: today's brief is still to come.
         XCTAssertEqual(briefed(12, 30, PulseNight(start: 22 * 60, end: 13 * 60), 14 * 60), PulseRest.allCases)
+        // A brief just after midnight: before it, later today would be tomorrow's brief, as Tomorrow is.
+        XCTAssertEqual(briefed(22, 30, night, 5), tomorrow)
+        // Without the brief's time it's the brief's own 07:00, not the morning's end: a night in the
+        // morning, or over noon, has no later today left once 07:00 has gone.
+        XCTAssertEqual(choices(6, 20, night), PulseRest.allCases)
+        XCTAssertEqual(choices(6, 21, night), tomorrow)
+        XCTAssertEqual(choices(10, 30, PulseNight(start: 10 * 60, end: 11 * 60)), tomorrow)
+        XCTAssertEqual(choices(12, 30, PulseNight(start: 22 * 60, end: 13 * 60)), tomorrow)
     }
 
     func testACardIsAwayForWrongTimeOnlyWhileTheRatingPutItAway() throws {
