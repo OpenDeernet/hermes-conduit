@@ -26,31 +26,15 @@ struct ComposerDictationStopButton: View {
             case .start, .nothing: break
             }
         } label: {
-            HStack(spacing: 6) {
-                switch face {
-                case .stop:
-                    Image(systemName: "stop.fill")
-                case .cancelStart:
-                    Image(systemName: "xmark")
-                case .finishing:
-                    Image(systemName: "checkmark")
-                case .transcribing:
-                    ProgressView()
-                        .controlSize(.small)
-                }
-                title(face)
-                    // Longer translations shrink rather than wrap or
-                    // widen the row.
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .font(.caption.weight(.semibold))
-            .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: face)
-            .foregroundStyle(waits ? Color.secondary : Color.white)
-            // One width for every face, so the row keeps its layout.
-            .frame(width: 112, height: ComposerBar.controlSize)
-            .padding(.horizontal, 4)
-            .contentShape(ComposerBar.controlHitShape)
+            // Named by accessibilityTitle below.
+            faceLabel(face)
+                .font(.caption.weight(.semibold))
+                .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: face)
+                .foregroundStyle(waits ? Color.secondary : Color.white)
+                // One width for every face, so the row keeps its layout.
+                .frame(width: 112, height: ComposerBar.controlSize)
+                .padding(.horizontal, 4)
+                .contentShape(ComposerBar.controlHitShape)
         }
         .buttonStyle(.plain)
         // None of its words are in yet: stopping now would lose them.
@@ -75,6 +59,22 @@ struct ComposerDictationStopButton: View {
         .accessibilityIdentifier(identifier)
     }
 
+    private func faceLabel(_ face: ComposerDictation.SlotFace) -> some View {
+        HStack(spacing: 6) {
+            if face == .transcribing {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: symbol(face))
+            }
+            title(face)
+                // Longer translations shrink rather than wrap or widen
+                // the row.
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+    }
+
     private func title(_ face: ComposerDictation.SlotFace) -> Text {
         switch face {
         case .stop: return Text(AppLocalization.string("Stop"))
@@ -89,7 +89,7 @@ struct ComposerDictationStopButton: View {
         case .stop: return "stop.fill"
         case .cancelStart: return "xmark"
         case .finishing: return "checkmark"
-        case .transcribing: return "waveform"
+        case .transcribing: return "hourglass"
         }
     }
 
@@ -97,7 +97,7 @@ struct ComposerDictationStopButton: View {
         switch face {
         case .stop: return Text(AppLocalization.string("Stop dictation"))
         case .cancelStart: return Text(AppLocalization.string("Cancel dictation"))
-        case .finishing: return Text(AppLocalization.string("Stop dictation"))
+        case .finishing: return Text(AppLocalization.string("Done"))
         case .transcribing: return Text(AppLocalization.string("Transcribing"))
         }
     }

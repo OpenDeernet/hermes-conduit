@@ -1519,9 +1519,10 @@ struct ComposerBar: View, Equatable {
     /// While a dictation runs it does what the Stop in Send's place does
     /// instead, and sends nothing (#1309).
     /// The gate is re-checked here so the existing composer action state —
-    /// not the text view — stays authoritative. Reports whether the message
-    /// actually went out, so a declined shortcut press falls back to the
-    /// text view's default newline behavior instead of being swallowed.
+    /// not the text view — stays authoritative. Reports whether the press
+    /// was handled (a message went out, or a dictation was stopped), so a
+    /// declined shortcut press falls back to the text view's default
+    /// newline behavior instead of being swallowed.
     @discardableResult
     private func submitFromReturnKey() -> Bool {
         // Return stands for Send, which is dictation's Stop while it runs.
