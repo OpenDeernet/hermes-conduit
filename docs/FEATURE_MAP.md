@@ -1089,7 +1089,10 @@ bot starts from a summary with fresh context and the user stays in Bots.
 **Siblings:** the composer's `/new` in chats and project chats (starts a new
 chat) · Bot Chat (compacts) · a Bot Chat `/new` with attachments (refused,
 the draft kept) · group rooms (no slash commands) · the notice the compaction
-shows · the `/help` text and the slash suggestions' "Start a new conversation"
+shows (says the chat compacts and keeps its memory and skills) · the `/help`
+text and the slash suggestions' "Start a new conversation" (the general
+command, still right outside Bot Chats) · "A new chat that something waits
+on" (a Bot Chat's `/new` opens no chat, so nothing waits on one)
 
 **Code**
 - The guard: `Conduit/Services/AppState.swift` (activeChatIsCanonicalBotChat, isCanonicalForeverChatReset, executeSlashCommand's new/reset/clear case, the attachment refusal in performComposerSubmission)

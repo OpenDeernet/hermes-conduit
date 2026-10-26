@@ -10565,9 +10565,10 @@ final class AppState: ObservableObject {
         return activeProfile
     }
 
-    /// Upstream's canonical-forever-chat guard: `/new` or `/reset` inside a
-    /// bot's canonical chat would fork the relationship into a scratch
-    /// session — the one thing Bot Mode promises never happens. True ONLY
+    /// Upstream's canonical-forever-chat guard: `/new`, `/reset` or
+    /// `/clear` inside a bot's canonical chat would fork the relationship
+    /// into a scratch session — the one thing Bot Mode promises never
+    /// happens. True ONLY
     /// when the active session is positively a bot's canonical chat (see
     /// `activeChatIsCanonicalBotChat`), whatever follows the command (`/new
     /// A title` is still a reset). No evidence, no reroute: ordinary
@@ -25586,8 +25587,8 @@ final class AppState: ObservableObject {
                     acceptedSessionIDs: submissionSessionIDs,
                     baseline: submissionBaseline,
                     // Exactly what prompt.submit sent (a mention annotation
-                    // or the forever-chat reroute changes it, staged files'
-                    // references lead it); the check projects it the way
+                    // changes it, staged files' references lead it); the
+                    // check projects it the way
                     // the persisted user row is shown.
                     submittedText: promptText,
                     submissionContext: submissionContext

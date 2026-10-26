@@ -120,7 +120,10 @@ final class AppStateSessionCompressTests: XCTestCase {
         let harness = makeHarness(lifecycleOperations: operations)
         installComposerClient(in: harness)
         harness.appState.isConnected = true
-        harness.appState.noteBotChatSessionForTesting("bot-runtime-2", profile: "default")
+        // Only the durable id is registered; the chat is open by the
+        // runtime id its row pairs with it.
+        harness.appState.noteBotChatSessionForTesting("bot-stored", profile: "default")
+        harness.appState.sessions = [session("bot-runtime-2", storedID: "bot-stored")]
         harness.appState.activeSessionId = "bot-runtime-2"
 
         for command in ["/new", "/new Fresh start", "/reset", "/clear"] {
