@@ -559,20 +559,26 @@ struct V2Shell: View {
     /// for a separate circle: a search-role tab sat inside the bar as a
     /// second Voice item under the button.
     /// Split (a wide iPad window), the bar stays up under the list column,
-    /// beside the open chat. A wide window's screens with no list column
-    /// (Tasks, Settings, a list the user hid beside the chat) center their
-    /// content, and the bar centers under it rather than sitting alone in
-    /// the corner.
+    /// beside the open chat. Settings opens where the chat would be, the
+    /// Chats list kept beside it (`V2SplitLayout.settingsBesideList`).
+    /// A wide window's screens with no list column (Tasks, a list the user
+    /// hid beside the chat) center their content, and the bar centers
+    /// under it rather than sitting alone in the corner.
     private func tabs(split: Bool, canSplit: Bool) -> some View {
-        ZStack {
+        let settingsBeside = V2SplitLayout.settingsBesideList(split: split)
+        return ZStack {
             ForEach(V2Tab.destinations) { tab in
                 // The selected tab shows from the tap's own frame; it joins
-                // the visited ones right after.
-                if visitedTabs.contains(tab) || selectedTab == tab {
-                    let isSelected = selectedTab == tab
+                // the visited ones right after. Split, Settings shows in
+                // the Chats tab's chat column instead of a tab of its own.
+                if (visitedTabs.contains(tab) || selectedTab == tab || (settingsBeside && tab == .chats && selectedTab == .settings)),
+                   !(settingsBeside && tab == .settings) {
+                    let isSelected = selectedTab == tab || (settingsBeside && tab == .chats && selectedTab == .settings)
                     let rootCovered = isRootCovered(tab, split: split)
-                    let chatBeside = split && path(of: tab).contains(.conversation)
-                    let chatVoiceBeside = V2SplitLayout.hasChatVoiceBeside(split: split, path: path(of: tab), inRoom: appState.activeRoomSurface != nil)
+                    // Settings in the chat column covers the chat.
+                    let chatShown = !(tab == .chats && selectedTab == .settings)
+                    let chatBeside = split && chatShown && path(of: tab).contains(.conversation)
+                    let chatVoiceBeside = chatShown && V2SplitLayout.hasChatVoiceBeside(split: split, path: path(of: tab), inRoom: appState.activeRoomSurface != nil)
                     tabRoot(tab, split: split, canSplit: canSplit)
                         .transformEnvironment(\.v2Shell) {
                             $0.isTabActive = isSelected
@@ -656,11 +662,11 @@ struct V2Shell: View {
     private func tabRoot(_ tab: V2Tab, split: Bool, canSplit: Bool) -> some View {
         switch tab {
         case .chats where split:
-            splitColumns(path: $chatsPath, offersNewChat: true) {
+            splitColumns(path: $chatsPath, offersNewChat: true, hostsSettings: true) {
                 tabBarClearance(V2ChatsView(appState: appState).equatable())
             }
         case .bots where split:
-            splitColumns(path: $botsPath, offersNewChat: false) {
+            splitColumns(path: $botsPath, offersNewChat: false, hostsSettings: false) {
                 tabBarClearance(V2BotsView())
             }
         case .chats:
@@ -707,12 +713,17 @@ struct V2Shell: View {
     /// path stays the one a phone's stack follows, the conversation last
     /// in it, so every route in and out of a chat works the same; only the
     /// list's own stack leaves the conversation out.
+    /// `hostsSettings`: Chats, whose chat column also holds Settings while
+    /// that tab is picked. It stays mounted once opened, as a hidden tab
+    /// does, so its pushed page survives a trip to a chat and back.
     private func splitColumns<Root: View>(
         path: Binding<[V2Route]>,
         offersNewChat: Bool,
+        hostsSettings: Bool,
         @ViewBuilder root: () -> Root
     ) -> some View {
         let list = root()
+        let showsSettings = hostsSettings && selectedTab == .settings
         return HStack(spacing: 0) {
             NavigationStack(path: V2SplitLayout.listPath(path)) {
                 list
@@ -726,23 +737,43 @@ struct V2Shell: View {
                 .frame(width: 1)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
-            if path.wrappedValue.contains(.conversation) {
-                NavigationStack {
-                    V2ConversationScreen()
+            ZStack {
+                Group {
+                    if path.wrappedValue.contains(.conversation) {
+                        NavigationStack {
+                            V2ConversationScreen()
+                        }
+                        // Pushed or popped on a phone, VoiceOver follows; beside
+                        // the list the column says so itself, opening or closing.
+                        .onAppear {
+                            UIAccessibility.post(notification: .screenChanged, argument: nil)
+                        }
+                        .onDisappear {
+                            UIAccessibility.post(notification: .screenChanged, argument: nil)
+                        }
+                    } else {
+                        V2SplitPlaceholder(offersNewChat: offersNewChat)
+                    }
                 }
-                // Pushed or popped on a phone, VoiceOver follows; beside
-                // the list the column says so itself, opening or closing.
-                .onAppear {
-                    UIAccessibility.post(notification: .screenChanged, argument: nil)
+                .opacity(showsSettings ? 0 : 1)
+                .allowsHitTesting(!showsSettings)
+                .accessibilityHidden(showsSettings)
+                if hostsSettings, showsSettings || visitedTabs.contains(.settings) {
+                    // No bar under this column: the bar sits under the list.
+                    V2SettingsTab(link: $settingsLink)
+                        .environment(\.v2TabBarClearance, 0)
+                        .transformEnvironment(\.v2Shell) {
+                            $0.isTabActive = showsSettings
+                            // Its own root: a page over the list doesn't cover it.
+                            $0.isRootCovered = false
+                        }
+                        .opacity(showsSettings ? 1 : 0)
+                        .allowsHitTesting(showsSettings)
+                        .accessibilityHidden(!showsSettings)
                 }
-                .onDisappear {
-                    UIAccessibility.post(notification: .screenChanged, argument: nil)
-                }
-                .clipped()
-            } else {
-                V2SplitPlaceholder(offersNewChat: offersNewChat)
-                    .clipped()
             }
+            .animation(nil, value: selectedTab)
+            .clipped()
         }
     }
 
@@ -912,10 +943,16 @@ enum V2SplitLayout {
     }
 
     /// The bar sits under the list column only where there is one: Chats
-    /// and Bots, split. Elsewhere on a wide window it centers under the
-    /// screen's readable column.
+    /// and Bots, split, and Settings beside the Chats list. Tasks, and a
+    /// list shown alone, center it under the screen.
     static func tabBarUnderList(split: Bool, tab: V2Tab) -> Bool {
-        split && (tab == .chats || tab == .bots)
+        split && tab != .tasks
+    }
+
+    /// Split, Settings opens in the chat's column with the Chats list kept
+    /// beside it, rather than alone across the window.
+    static func settingsBesideList(split: Bool) -> Bool {
+        split
     }
 
     /// The list column's stack: the tab's path without the conversation,

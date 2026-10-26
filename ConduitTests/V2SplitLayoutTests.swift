@@ -51,9 +51,13 @@ extension SidebarLayoutTests {
     func testV2TabBarSitsUnderTheListColumnOnly() {
         XCTAssertTrue(V2SplitLayout.tabBarUnderList(split: true, tab: .chats))
         XCTAssertTrue(V2SplitLayout.tabBarUnderList(split: true, tab: .bots))
-        // No list column: Tasks and Settings, or the list hidden (one column).
+        // Settings opens beside the Chats list.
+        XCTAssertTrue(V2SplitLayout.settingsBesideList(split: true))
+        XCTAssertTrue(V2SplitLayout.tabBarUnderList(split: true, tab: .settings))
+        // No list column: Tasks, or the list hidden (one column).
         XCTAssertFalse(V2SplitLayout.tabBarUnderList(split: true, tab: .tasks))
-        XCTAssertFalse(V2SplitLayout.tabBarUnderList(split: true, tab: .settings))
+        XCTAssertFalse(V2SplitLayout.settingsBesideList(split: false))
+        XCTAssertFalse(V2SplitLayout.tabBarUnderList(split: false, tab: .settings))
         XCTAssertFalse(V2SplitLayout.tabBarUnderList(split: false, tab: .chats))
     }
 

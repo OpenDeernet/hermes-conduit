@@ -372,7 +372,7 @@ Tasks and Settings on a wide window · Bots and Bot Chat · group rooms · the
 Main button caption
 
 **Code**
-- Round button and bar: `Conduit/Views/V2/V2Shell.swift` (voiceButton, tabs, V2SplitLayout.hasChatVoiceBeside, V2SplitLayout.tabBarUnderList, V2MainButtonPreference)
+- Round button and bar: `Conduit/Views/V2/V2Shell.swift` (voiceButton, tabs, splitColumns' hostsSettings, V2SplitLayout.hasChatVoiceBeside, V2SplitLayout.tabBarUnderList, V2SplitLayout.settingsBesideList, V2MainButtonPreference)
 - Swapped voice: `Conduit/Views/V2/V2ChatsView.swift` (trailingControls), `Conduit/Views/V2/V2ProjectPage.swift` (toolbar)
 - Caption: `Conduit/Views/AuxiliaryViews.swift` (Main button)
 - Tests: `ConduitTests/V2SplitLayoutTests.swift`
@@ -381,7 +381,7 @@ Main button caption
 - Swapped, the round button starts a new chat and voice moves to the top bar; a minimised call turns it back into voice (2026-10-17, #707).
 - Split, a chat beside the list that shows its own voice button takes voice: the round voice button, and the swapped top bar and project page voice, step aside while it shows; New chat stays. A group room has none, so the list keeps its voice beside one (Eric, 2026-10-26, #1319).
 - The round button's touch-and-hold Recent menu goes with it while a chat is beside the list; the chat's own button offers a call or dictation, not Recent, so closing the chat brings the menu back (2026-10-26, #1319).
-- On a wide window the bar sits under the list column only where there is one (Chats and Bots, split). Tasks, Settings and a list shown alone center it under the screen, at the list column's width (Eric, 2026-10-26, #1319; replaces #1169's bar kept at the leading edge).
+- Split, Settings opens in the chat's column with the Chats list kept beside it, and the bar stays under the list; a chat tapped there opens in Chats. Tasks and a list shown alone have no list column and center the bar under the screen, at the list column's width (Eric, 2026-10-26, #1319; replaces #1169's bar kept at the leading edge).
 
 **Open gaps**
 - Recent isn't reachable beside a chat on a split window (see Rulings).
