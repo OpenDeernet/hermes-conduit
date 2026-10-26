@@ -22666,6 +22666,9 @@ final class AppState: ObservableObject {
         case retry
         case unverified(String)
         case failed
+        /// The open needs a switch that would end the call running: it
+        /// opens once that call has ended.
+        case afterCall
     }
 
     /// One open with no retry after it, so an `.unverified` failure says why
@@ -22689,6 +22692,9 @@ final class AppState: ObservableObject {
         // missed call's included) still switches: talking to Hermes leaves
         // the other call.
         let sparesCalls = target.call == nil
+        // A chat link can be tapped again once the call ends; a tapped
+        // notification is gone, so it waits for the call instead.
+        let callOutcome: NotificationOpenOutcome = target.isChatLink ? .failed : .afterCall
         // Dashboard ownership gate (#148 / B3): a push from dashboard A is
         // never processed against active dashboard B, even when profile,
         // session, and request ids all collide. A push belonging to another
@@ -22718,8 +22724,8 @@ final class AppState: ObservableObject {
                 traceStage = "call in progress"
                 errorMessage = target.isChatLink
                     ? AppLocalization.string("End the call to open a chat in another workspace.")
-                    : AppLocalization.string("End the call to open this notification in another workspace.")
-                return .failed
+                    : AppLocalization.string("This notification opens in the other workspace when the call ends.")
+                return callOutcome
             }
             await switchDashboard(to: dashboardID)
             guard isConnected, activeDashboardID == dashboardID, client != nil else {
@@ -22905,12 +22911,12 @@ final class AppState: ObservableObject {
             let callRefusal: String? = sparesCalls
                 ? (target.isChatLink
                     ? AppLocalization.string("End the call to open a chat in another profile.")
-                    : AppLocalization.string("End the call to open this notification in another profile."))
+                    : AppLocalization.string("This notification opens in the other profile when the call ends."))
                 : nil
             if let callRefusal, isVoiceCallInProgress {
                 traceStage = "call in progress"
                 errorMessage = callRefusal
-                return .failed
+                return callOutcome
             }
             traceStage = "profile switch"
             guard await switchProfile(
@@ -22920,7 +22926,7 @@ final class AppState: ObservableObject {
             ) else {
                 // A call that started during the switch refuses it the
                 // same way, and says so; anything else may pass on a retry.
-                return sparesCalls && isVoiceCallInProgress ? .failed : .retry
+                return sparesCalls && isVoiceCallInProgress ? callOutcome : .retry
             }
         }
         guard notificationOpenAttemptIsCurrent(
