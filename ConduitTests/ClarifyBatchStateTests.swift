@@ -1627,6 +1627,67 @@ final class ClarifyBatchStateTests: XCTestCase {
         XCTAssertEqual(clarifyCard(in: appState, requestId: "conduit-push-batch1")?.status, .expired)
     }
 
+    func testFormDoesNotSendAFieldAnotherDeviceAnswered() async throws {
+        let (appState, _) = makeAppState()
+        appState.messages = [
+            ChatMessage(id: "clarify-req-batch", role: .clarify, content: "batch", timestamp: "1", clarify: makeBatchActivity())
+        ]
+        let transport = ClarifyFakeTransport()
+        let socket = ClarifyFakeSocket()
+        try await installConnectedClient(appState, socket: socket, transport: transport)
+        // Another device answers "tests" while the form sends its first field.
+        var open = ["environment", "tests", "notes"]
+        socket.onSend = { [unowned socket] in
+            guard let request = (try? JSONSerialization.jsonObject(with: Data((socket.sentTexts.last ?? "").utf8))) as? [String: Any],
+                  request["method"] as? String == "clarify.respond",
+                  let id = request["id"] as? Int,
+                  let questionID = (request["params"] as? [String: Any])?["question_id"] as? String else { return }
+            open.removeAll { $0 == questionID || $0 == "tests" }
+            let response: [String: Any] = ["jsonrpc": "2.0", "id": id, "result": ["status": "ok", "remaining": open]]
+            socket.deliver(String(decoding: try! JSONSerialization.data(withJSONObject: response), as: UTF8.self))
+        }
+
+        await appState.respondToClarifyForm(
+            requestId: "req-batch",
+            answers: ["environment": "staging", "tests": ClarifyQuestion.multiSelectAnswer(["ui"]), "notes": "Window seat"]
+        )
+
+        let sent = socket.sentTexts
+            .compactMap { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] }
+            .filter { $0["method"] as? String == "clarify.respond" }
+            .compactMap { ($0["params"] as? [String: Any])?["question_id"] as? String }
+        XCTAssertEqual(sent, ["environment", "notes"], "Hermes no longer waited on tests")
+        let settled = try XCTUnwrap(clarifyCard(in: appState, requestId: "req-batch"))
+        XCTAssertEqual(settled.status, .answered)
+        XCTAssertEqual(settled.questions[1].status, .answered)
+        XCTAssertNil(settled.questions[1].answer, "Answered on the other device, not with this form's picks")
+        XCTAssertEqual(settled.questions[2].answer, "Window seat")
+    }
+
+    func testFormStopsOnceHermesHasEveryAnswer() async throws {
+        let (appState, _) = makeAppState()
+        appState.messages = [
+            ChatMessage(id: "clarify-relay", role: .clarify, content: "relay", timestamp: "1", clarify: makeRelayBatchCard())
+        ]
+        var sent: [String] = []
+        appState.relayQuestionResponder = { _, questionID, _ in
+            sent.append(questionID)
+            // The rest were answered on another device meanwhile.
+            return .locked(remaining: [])
+        }
+
+        await appState.respondToClarifyForm(requestId: "conduit-push-batch1", answers: ["environment": "prod", "notes": "Window seat"])
+
+        XCTAssertEqual(sent, ["environment"], "Nothing more goes once Hermes has every answer")
+        let settled = try XCTUnwrap(clarifyCard(in: appState, requestId: "conduit-push-batch1"))
+        XCTAssertEqual(settled.status, .answered, "Answered, not expired")
+        XCTAssertEqual(settled.questions.map(\.status), [.answered, .answered, .answered])
+        XCTAssertEqual(settled.questions[0].answer, "prod")
+        XCTAssertNil(settled.questions[1].answer)
+        XCTAssertNil(settled.questions[2].answer)
+        XCTAssertNil(settled.error)
+    }
+
     func testOnlyAFormsQuestionCanBeLeftBlank() async throws {
         let (appState, _) = makeAppState()
         var choicesOnly = makeRelayBatchCard()

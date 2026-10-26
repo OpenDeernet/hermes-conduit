@@ -3491,6 +3491,7 @@ struct ClarifyCard: View {
                     }
                     .disabled(!canSend)
                     .opacity(canSend ? 1 : 0.45)
+                    .accessibilityHint("Fill in what you know, and leave the rest blank.")
                 }
 
                 if let error = clarify.error, !error.isEmpty {
@@ -3797,6 +3798,8 @@ struct ClarifyQuestionRow: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            // Named by its question for VoiceOver, like a choice field's menu.
+            .accessibilityLabel(question.question)
     }
 
     /// What a form's choice field shows: the picks, or Choose while blank.
