@@ -11,11 +11,16 @@ struct ComposerDictationStopButton: View {
     var body: some View {
         let face = ComposerDictation.slotFace(
             isCapturing: dictation.isCapturing,
-            isStarting: dictation.isStarting
+            isStarting: dictation.isStarting,
+            isTranscribing: dictation.isTranscribing
         )
-        let waits = face == .settling
+        let waits = face == .transcribing
         Button {
-            switch ComposerDictation.slotTap(isCapturing: dictation.isCapturing, isStarting: dictation.isStarting) {
+            switch ComposerDictation.slotTap(
+                isCapturing: dictation.isCapturing,
+                isStarting: dictation.isStarting,
+                isTranscribing: dictation.isTranscribing
+            ) {
             case .stop: dictation.stop()
             case .cancelStart: dictation.cancel()
             case .start, .nothing: break
@@ -27,7 +32,9 @@ struct ComposerDictationStopButton: View {
                     Image(systemName: "stop.fill")
                 case .cancelStart:
                     Image(systemName: "xmark")
-                case .settling:
+                case .finishing:
+                    Image(systemName: "checkmark")
+                case .transcribing:
                     ProgressView()
                         .controlSize(.small)
                 }
@@ -40,12 +47,13 @@ struct ComposerDictationStopButton: View {
             .font(.caption.weight(.semibold))
             .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: face)
             .foregroundStyle(waits ? Color.secondary : Color.white)
-            .frame(minWidth: 86, minHeight: ComposerBar.controlSize)
+            // One width for every face, so the row keeps its layout.
+            .frame(width: 112, height: ComposerBar.controlSize)
             .padding(.horizontal, 4)
             .contentShape(ComposerBar.controlHitShape)
         }
         .buttonStyle(.plain)
-        // Its words are on their way: nothing to stop.
+        // None of its words are in yet: stopping now would lose them.
         .disabled(waits)
         .conduitGlassControl(
             cornerRadius: ComposerBar.controlSize / 2,
@@ -57,11 +65,11 @@ struct ComposerDictationStopButton: View {
             Label {
                 accessibilityTitle(face)
             } icon: {
-                Image(systemName: face == .cancelStart ? "xmark" : "stop.fill")
+                Image(systemName: symbol(face))
             }
         }
         .accessibilityLabel(accessibilityTitle(face))
-        .accessibilityHint(face == .stop
+        .accessibilityHint(face == .stop || face == .finishing
             ? AppLocalization.string("Stops dictating; the words stay in the message")
             : "")
         .accessibilityIdentifier(identifier)
@@ -71,7 +79,17 @@ struct ComposerDictationStopButton: View {
         switch face {
         case .stop: return Text(AppLocalization.string("Stop"))
         case .cancelStart: return Text(AppLocalization.string("Cancel"))
-        case .settling: return Text(AppLocalization.string("Transcribing"))
+        case .finishing: return Text(AppLocalization.string("Done"))
+        case .transcribing: return Text(AppLocalization.string("Transcribing"))
+        }
+    }
+
+    private func symbol(_ face: ComposerDictation.SlotFace) -> String {
+        switch face {
+        case .stop: return "stop.fill"
+        case .cancelStart: return "xmark"
+        case .finishing: return "checkmark"
+        case .transcribing: return "waveform"
         }
     }
 
@@ -79,7 +97,8 @@ struct ComposerDictationStopButton: View {
         switch face {
         case .stop: return Text(AppLocalization.string("Stop dictation"))
         case .cancelStart: return Text(AppLocalization.string("Cancel dictation"))
-        case .settling: return Text(AppLocalization.string("Transcribing"))
+        case .finishing: return Text(AppLocalization.string("Stop dictation"))
+        case .transcribing: return Text(AppLocalization.string("Transcribing"))
         }
     }
 }

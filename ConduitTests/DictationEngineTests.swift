@@ -75,21 +75,31 @@ extension ComposerFullEditorTests {
         XCTAssertFalse(ComposerDictation.holdsSendSlot(isDictating: false, isStarting: false), "over: Send is back")
     }
 
-    func testTheStopInSendsSlotStopsCancelsOrWaits() {
-        XCTAssertEqual(ComposerDictation.slotFace(isCapturing: true, isStarting: false), .stop)
-        XCTAssertEqual(ComposerDictation.slotFace(isCapturing: false, isStarting: true), .cancelStart)
+    func testTheStopInSendsSlotStopsCancelsFinishesOrWaits() {
+        XCTAssertEqual(ComposerDictation.slotFace(isCapturing: true, isStarting: false, isTranscribing: false), .stop)
+        XCTAssertEqual(ComposerDictation.slotFace(isCapturing: false, isStarting: true, isTranscribing: false), .cancelStart)
         XCTAssertEqual(
-            ComposerDictation.slotFace(isCapturing: false, isStarting: false),
-            .settling,
-            "stopped with its words on their way: nothing to tap"
+            ComposerDictation.slotFace(isCapturing: false, isStarting: false, isTranscribing: false),
+            .finishing,
+            "stopped with words in the draft: Done ends it there"
+        )
+        XCTAssertEqual(
+            ComposerDictation.slotFace(isCapturing: false, isStarting: false, isTranscribing: true),
+            .transcribing,
+            "none of its words are in yet: nothing to tap"
         )
     }
 
-    /// The Stop and Return in its place: stop, call off a start, or wait;
-    /// never a new dictation and never a send.
+    /// The Stop and Return in its place: stop, call off, or wait; never a
+    /// new dictation and never a send.
     func testTheStopAndReturnStopCallOffOrWait() {
-        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: true, isStarting: false), .stop)
-        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: false, isStarting: true), .cancelStart)
-        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: false, isStarting: false), .nothing)
+        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: true, isStarting: false, isTranscribing: false), .stop)
+        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: false, isStarting: true, isTranscribing: false), .cancelStart)
+        XCTAssertEqual(
+            ComposerDictation.slotTap(isCapturing: false, isStarting: false, isTranscribing: false),
+            .cancelStart,
+            "a slow settle ends at once, keeping the draft's words"
+        )
+        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: false, isStarting: false, isTranscribing: true), .nothing)
     }
 }

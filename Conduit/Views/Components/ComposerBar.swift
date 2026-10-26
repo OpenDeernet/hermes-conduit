@@ -1516,6 +1516,8 @@ struct ComposerBar: View, Equatable {
     /// Return-shortcut entry point. Invokes the exact same submission path
     /// as the composer action button, but only for typed-message actions
     /// (send/steer/interrupt): Return never acts as the stop-only control.
+    /// While a dictation runs it does what the Stop in Send's place does
+    /// instead, and sends nothing (#1309).
     /// The gate is re-checked here so the existing composer action state —
     /// not the text view — stays authoritative. Reports whether the message
     /// actually went out, so a declined shortcut press falls back to the
@@ -1524,7 +1526,11 @@ struct ComposerBar: View, Equatable {
     private func submitFromReturnKey() -> Bool {
         // Return stands for Send, which is dictation's Stop while it runs.
         if dictationHoldsSendSlot {
-            switch ComposerDictation.slotTap(isCapturing: dictation.isCapturing, isStarting: dictation.isStarting) {
+            switch ComposerDictation.slotTap(
+                isCapturing: dictation.isCapturing,
+                isStarting: dictation.isStarting,
+                isTranscribing: dictation.isTranscribing
+            ) {
             case .stop: dictation.stop()
             case .cancelStart: dictation.cancel()
             case .start, .nothing: break

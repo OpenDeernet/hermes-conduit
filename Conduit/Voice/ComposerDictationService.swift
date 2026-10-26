@@ -397,23 +397,28 @@ enum ComposerDictation {
         case stop
         /// Still coming up: call it off.
         case cancelStart
-        /// Stopped, its last words on their way: wait.
-        case settling
+        /// Stopped, with words in the draft and the last ones settling:
+        /// done ends it there, so a slow host never holds Send back.
+        case finishing
+        /// Stopped, and none of its words have reached the draft yet (a
+        /// Hermes upload): wait, or they're lost.
+        case transcribing
     }
 
-    static func slotFace(isCapturing: Bool, isStarting: Bool) -> SlotFace {
+    static func slotFace(isCapturing: Bool, isStarting: Bool, isTranscribing: Bool) -> SlotFace {
         if isCapturing { return .stop }
         if isStarting { return .cancelStart }
-        return .settling
+        return isTranscribing ? .transcribing : .finishing
     }
 
     /// What a tap on that Stop, or Return in its place, does: it never
-    /// starts a dictation, and waits while the words settle.
-    static func slotTap(isCapturing: Bool, isStarting: Bool) -> Tap {
-        switch slotFace(isCapturing: isCapturing, isStarting: isStarting) {
+    /// starts a dictation. Calling off (cancel) ends it at once, keeping
+    /// whatever words the draft has.
+    static func slotTap(isCapturing: Bool, isStarting: Bool, isTranscribing: Bool) -> Tap {
+        switch slotFace(isCapturing: isCapturing, isStarting: isStarting, isTranscribing: isTranscribing) {
         case .stop: return .stop
-        case .cancelStart: return .cancelStart
-        case .settling: return .nothing
+        case .cancelStart, .finishing: return .cancelStart
+        case .transcribing: return .nothing
         }
     }
 
