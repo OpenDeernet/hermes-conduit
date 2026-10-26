@@ -3778,10 +3778,11 @@ enum MessageNormalizer {
         let repoPath = isHome ? nil : firstNonEmptyString(
             object["repos"]?.arrayValue?.compactMap { $0.objectValue?["path"]?.stringValue }.map(AnyCodable.string) ?? []
         )
+        let previewSessions = normalizeSessions(.array(previews), profile: profile)
         let count = object["session_count"]?.intValue
             ?? object["sessionCount"]?.intValue
             ?? object["session_count"]?.stringValue.flatMap(Int.init)
-            ?? previews.count
+            ?? previewSessions.count
         return ProjectSummary(
             id: id,
             title: title,
@@ -3793,7 +3794,7 @@ enum MessageNormalizer {
             isHome: isHome,
             isAuto: isAuto,
             sessionCount: count,
-            previewSessions: normalizeSessions(.array(previews), profile: profile)
+            previewSessions: previewSessions
         )
     }
 

@@ -284,7 +284,7 @@ consent screens · the tool text each model reads, in Conduit and the notifier
 - Watch GPT-Live and Local Live calls have no phone tools, and the Watch doesn't announce Hermes' phone changes (#994).
 - Classic finds and reads old chats through Hermes' session_search but can't open one in Conduit (#535).
 
-**Checked:** 2026-10-26, #1247 (the Watch broker's token and tool answers keep Conduit running through BackgroundTaskHold); 2026-10-25, Qwen in the siblings, and a Watch token minted after consent was withdrawn, at #1182, carried in #1235; 2026-10-24, at #1223, for send_request's yes; 2026-10-23, seeded from main at 64d53c3; at #1191, Location's rule delete says when no dashboard is open (#972 review), which changes nothing about consent.
+**Checked:** 2026-10-26, #1305 (VoiceChatFinder's search leaves Kanban workers out; see Kanban workers' transcripts); 2026-10-26, #1247 (the Watch broker's token and tool answers keep Conduit running through BackgroundTaskHold); 2026-10-25, Qwen in the siblings, and a Watch token minted after consent was withdrawn, at #1182, carried in #1235; 2026-10-24, at #1223, for send_request's yes; 2026-10-23, seeded from main at 64d53c3; at #1191, Location's rule delete says when no dashboard is open (#972 review), which changes nothing about consent.
 
 ## Acknowledging work handed to Hermes
 
@@ -2215,9 +2215,9 @@ where to follow one.
 previews) · search "In messages" · find chat on a phone call in Gemini,
 Qwen, Grok, GPT-Live and Local Live (VoiceChatFinder) · Classic voice and
 Hermes-run turns, which search with Hermes' own `session_search` · find chat
-on an Apple Watch call (notifier) · CarPlay's chat list and the Home Screen
-launcher widget's conversation picker (they read the same list) · opening a
-chat from a
+on an Apple Watch call (notifier) · CarPlay's chat list, the Home Screen
+launcher widget's conversation picker and the home voice button's Recent menu
+(they read the same list) · opening a chat from a
 link or notification (the message shown) · the Kanban task's Worker Log ·
 Hermes Desktop's sidebar (upstream, leaves `kanban` out too)
 
@@ -2232,9 +2232,11 @@ Hermes Desktop's sidebar (upstream, leaves `kanban` out too)
 **Rulings**
 - Kanban workers aren't chats: lists, search and voice leave them out with `exclude_sources`, as Desktop does, and the board's Worker Log shows them. The session normalizer drops them too, so a list whose source doesn't filter (projects, `session.list`) can't show one. Classic voice needs nothing: Hermes' `session_search` already hides `kanban` (2026-10-26, #1305, tester report via Eric).
 - A worker reached anyway (a link, a cached row) says it belongs to the board and points at its Worker Log instead of "Failed to restore this conversation" (2026-10-26, #1305).
+- A launcher widget still holding a worker (picked or saved before this change) says the conversation is unavailable, since the worker isn't in the chats list any more; it doesn't try the resume that would show the board message (2026-10-26, #1305 review).
 - Rows saved before this change stay in the saved chat list until a full, non-empty read replaces them: a saved `SessionSummary` keeps no raw Hermes source (a worker is `.other`), and storing one for that window isn't worth the code (2026-10-26, #1305 review).
 
 **Open gaps**
+- A project card's count is Hermes' `session_count`, which may include workers in the project's folders; only the fallback (counting previews) leaves them out.
 - A worker's transcript (its messages, not the log) can't be read in Conduit. Hermes would serve it read-only over `GET /api/sessions/{id}/messages`; a read-only view is the maintainer's call.
 
 **Checked:** 2026-10-26, #1305.
