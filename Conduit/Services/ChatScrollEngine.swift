@@ -56,8 +56,17 @@ protocol ChatScrollMeasuredCard: AnyObject {
     /// when it shrinks): from the frame as last laid out, so it still
     /// counts a height taken that no layout has landed yet.
     var pendingGrowth: CGFloat { get }
+    /// Whether the card is about to change by an amount only its layout
+    /// will tell (a failure taking the place of what it shows): above the
+    /// reader it announces a shift whatever `pendingGrowth` says, which
+    /// lands by its frame like any other.
+    var growthUnknown: Bool { get }
     /// The state write that resizes the card.
     func takeMeasuredHeight()
+}
+
+extension ChatScrollMeasuredCard {
+    var growthUnknown: Bool { false }
 }
 
 /// What the engine asks its view to do. Everything else (following, prepend
@@ -264,7 +273,8 @@ final class ChatScrollEngine: ObservableObject {
     /// viewport check acts.
     private var blankViewportCheckGeneration: UInt64 = 0
     /// Cards measured while the reader was scrolling, taking their heights
-    /// once it rests. Weak: a card whose row left the lazy stack is gone.
+    /// once it rests, each once, with its latest measurement. Weak: a card
+    /// whose row left the lazy stack is gone.
     private var measuredCards: [MeasuredCard] = []
     private var restCheckGeneration: UInt64 = 0
     private(set) var cardShifts: [CardShift] = []
@@ -562,7 +572,8 @@ final class ChatScrollEngine: ObservableObject {
     /// A card drawn in a web page (an HTML preview, a diagram, a formula)
     /// mounts at the room it reserves and its page reports its real height
     /// a moment later (#1238); a picture row shows a loading line until its
-    /// picture is decoded (ChatPictureArrival). Taking the height moves
+    /// picture is decoded, and a picture or page that fails gives its place
+    /// to a label or file card (ChatRowArrival). Taking the height moves
     /// everything under the card, and when the card is above the viewport,
     /// the reader with it: UIKit keeps the distance from the top. So the
     /// card asks here first. While the reader scrolls it waits: an offset
@@ -573,6 +584,10 @@ final class ChatScrollEngine: ObservableObject {
     /// reader looks at, and following and a prepend hold already keep the
     /// reader still: those take their heights without an announcement.
     func cardMeasured(_ card: ChatScrollMeasuredCard) {
+        // A picture waiting twice (its row gone and back under one fling)
+        // would show with the first, and the second, before the layout,
+        // would read as a card back at its height and drop the growth.
+        measuredCards.removeAll { $0.card === card }
         guard let surface, !isPaused else {
             card.takeMeasuredHeight()
             return
@@ -611,8 +626,8 @@ final class ChatScrollEngine: ObservableObject {
         if let index { cardShifts.remove(at: index) }
         let cardHeight = earlier?.cardHeight ?? frame.height
         // Keeping its height, or back to its height before the first:
-        // nothing will move.
-        guard abs(height - cardHeight) > 0.5 else { return }
+        // nothing will move. One whose layout alone knows may move anything.
+        guard card.growthUnknown || abs(height - cardHeight) > 0.5 else { return }
         cardShifts.append(CardShift(
             card: card,
             cardHeight: cardHeight,
@@ -665,7 +680,7 @@ final class ChatScrollEngine: ObservableObject {
     /// move would end near the content's end, it waits for the content to
     /// have grown as much (a move into a stale end would be clamped, or
     /// relatch following). One that shrank needs none, since the top bounds
-    /// the move.
+    /// the move, and makes room for a growth tried before it in the pass.
     /// Another pass first (an inset change) leaves a shift waiting; a
     /// reader who moves, a jump to the top or to a message, a landed page
     /// of earlier messages (its hold has the reader's rows), a card whose
@@ -679,19 +694,28 @@ final class ChatScrollEngine: ObservableObject {
         }
         let time = now()
         var landed: CGFloat = 0
-        cardShifts.removeAll { shift in
-            guard let card = shift.card, time - shift.announcedAt <= Self.cardGrowthDeadline else { return true }
-            guard let frame = card.stackFrame else { return false }
-            let grown = frame.height - shift.cardHeight
-            // Short of the content's end as it stands, so the move is never
-            // clamped nor ends near enough to the end to relatch following.
-            let reaches = surface.contentOffsetY + landed + grown
-            let hasLanded = grown > 0.5
-                ? surface.maxOffsetY - reaches > Self.nearBottomTolerance
-                    || surface.contentHeight - shift.contentHeight >= grown - 1
-                : grown < -0.5
-            if hasLanded { landed += grown }
-            return hasLanded
+        // Until none lands: a shrink landing moves the reader up, which can
+        // give a growth passed over before it the room.
+        var landing = true
+        while landing {
+            landing = false
+            cardShifts.removeAll { shift in
+                guard let card = shift.card, time - shift.announcedAt <= Self.cardGrowthDeadline else { return true }
+                guard let frame = card.stackFrame else { return false }
+                let grown = frame.height - shift.cardHeight
+                // Short of the content's end as it stands, so the move is never
+                // clamped nor ends near enough to the end to relatch following.
+                let reaches = surface.contentOffsetY + landed + grown
+                let hasLanded = grown > 0.5
+                    ? surface.maxOffsetY - reaches > Self.nearBottomTolerance
+                        || surface.contentHeight - shift.contentHeight >= grown - 1
+                    : grown < -0.5
+                if hasLanded {
+                    landed += grown
+                    landing = true
+                }
+                return hasLanded
+            }
         }
         guard abs(landed) > 0.5 else { return }
         let target = surface.clampedOffsetY(surface.contentOffsetY + landed)

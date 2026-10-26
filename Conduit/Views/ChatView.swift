@@ -1763,7 +1763,7 @@ private struct UserImageAttachmentPreview: View {
     /// its row shows (#1238).
     @Environment(\.chatRowDisclosure) private var disclosure
     /// The row's frame, and the picture waiting to show in it.
-    @StateObject private var arrival = ChatPictureArrival()
+    @StateObject private var arrival = ChatRowArrival()
 
     /// Cache-only lookup (no decode) so a hit renders on the first frame.
     /// Misses are filled asynchronously — see the `.task` in `body`.
@@ -1872,7 +1872,12 @@ private struct UserImageAttachmentPreview: View {
                 }.value
                 guard !Task.isCancelled else { return }
                 guard let image else {
-                    localPreviewFailedPath = url.path
+                    let path = url.path
+                    // Its label shows already when the task restarts as
+                    // the row comes back.
+                    if localPreviewFailedPath != path {
+                        placeFailure { localPreviewFailedPath = path }
+                    }
                     return
                 }
                 // Shows once the reader's scrolling allows, kept and its
@@ -1898,8 +1903,8 @@ private struct UserImageAttachmentPreview: View {
                     remember(cached, as: cacheKey)
                     return
                 }
+                // One that failed keeps its label while it loads again.
                 gatewayImage = nil
-                gatewayFailedKey = nil
                 // Kept on the phone from an earlier load (#652). Read
                 // first: after a sign-out it shows, but isn't remembered.
                 let keptGeneration = TranscriptImageCache.generation
@@ -1923,7 +1928,9 @@ private struct UserImageAttachmentPreview: View {
                 }
                 guard !Task.isCancelled else { return }
                 guard let dataURL, let image = await Self.keep(dataURL, as: cacheKey, generation: generation) else {
-                    gatewayFailedKey = cacheKey
+                    if gatewayFailedKey != cacheKey {
+                        placeFailure { gatewayFailedKey = cacheKey }
+                    }
                     return
                 }
                 guard !Task.isCancelled else { return }
@@ -1932,8 +1939,15 @@ private struct UserImageAttachmentPreview: View {
         }
     }
 
+    /// A picture that won't load gives its place to the label once the
+    /// reader's scrolling allows (ChatRowArrival), a height only the
+    /// label's layout tells.
+    private func placeFailure(_ mark: @escaping () -> Void) {
+        arrival.arrive(rowHeight: nil, engine: disclosure?.engine, show: mark)
+    }
+
     /// Puts a picture from Hermes in the row once the reader's scrolling
-    /// allows (ChatPictureArrival), remembering it then: remembered first,
+    /// allows (ChatRowArrival), remembering it then: remembered first,
     /// its size would resize the loading line on its own. After a sign-out
     /// it shows, but isn't remembered.
     private func place(_ image: UIImage, as key: String, generation: Int) {

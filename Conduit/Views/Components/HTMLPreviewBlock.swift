@@ -128,6 +128,9 @@ struct HTMLPreviewBlock<Fallback: View>: View {
     @State private var state: LoadState = .loading
     /// The room the card holds and the height it has taken (#1238).
     @StateObject private var cardHeight = ChatCardHeight()
+    /// The block's frame, and the file card waiting to take the card's
+    /// place, or the card the file card's (#1238).
+    @StateObject private var fallbackArrival = ChatRowArrival()
     /// Counts the file's loads; each page reports under its own number.
     @State private var load = 0
     @State private var showsFullScreen = false
@@ -164,13 +167,19 @@ struct HTMLPreviewBlock<Fallback: View>: View {
     var body: some View {
         Group {
             // A settled reply that still shows sources (a very large one
-            // while it streams) shows the file card rather than waiting.
-            if state == .unavailable || (isComplete && !drawsInPlace) {
+            // while it streams) shows the file card rather than waiting, and
+            // so does a surface with no way to read the file, from its first
+            // frame.
+            if state == .unavailable || (isComplete && !drawsInPlace) || (draws && gatewayMediaDataURL == nil) {
                 fallback()
             } else {
                 card
             }
         }
+        .chatRowFrame(fallbackArrival)
+        // A swap still waiting goes with the block; its task reads the file
+        // again when the block is back.
+        .onDisappear { fallbackArrival.rowDisappeared() }
         .task(id: LoadKey(path: path, draws: draws)) {
             await loadDocument()
         }
@@ -257,7 +266,7 @@ struct HTMLPreviewBlock<Fallback: View>: View {
             },
             // WebKit kept ending the page's process: the file card instead
             // of a blank frame.
-            onFailed: { state = .unavailable }
+            onFailed: { fallBack() }
         )
         .opacity(drawn ? 1 : 0)
         .overlay {
@@ -274,7 +283,7 @@ struct HTMLPreviewBlock<Fallback: View>: View {
             // really a page) turns into the file card.
             try? await Task.sleep(for: Self.drawTimeout)
             guard !Task.isCancelled, !cardHeight.hasMeasured(load) else { return }
-            state = .unavailable
+            fallBack()
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: name))
@@ -300,17 +309,32 @@ struct HTMLPreviewBlock<Fallback: View>: View {
             return
         }
         // Read on every appearance, so a file the agent rewrote for a later
-        // reply shows its new version; the card keeps its room meanwhile.
-        state = .loading
+        // reply shows its new version; the card keeps its room meanwhile,
+        // and a block showing its file card keeps that until the file reads.
+        let showsFileCard = state == .unavailable
+        if !showsFileCard { state = .loading }
         load += 1
         cardHeight.pageReplaced()
         let dataURL = await gatewayMediaDataURL(path)
         guard !Task.isCancelled else { return }
         guard let dataURL, let html = HTMLPreviewPage.decodedDocument(fromDataURL: dataURL) else {
-            state = .unavailable
+            if !showsFileCard { fallBack() }
             return
         }
-        state = .loaded(html)
+        guard showsFileCard else {
+            state = .loaded(html)
+            return
+        }
+        // The card takes the file card's place the way the file card took
+        // its own.
+        fallbackArrival.arrive(rowHeight: nil, engine: disclosure?.engine) { state = .loaded(html) }
+    }
+
+    /// The page can't be drawn: the file card takes the card's place once
+    /// the reader's scrolling allows, the way a card takes its height, with
+    /// a height only its layout tells (#1238).
+    private func fallBack() {
+        fallbackArrival.arrive(rowHeight: nil, engine: disclosure?.engine) { state = .unavailable }
     }
 
     private struct LoadKey: Hashable {

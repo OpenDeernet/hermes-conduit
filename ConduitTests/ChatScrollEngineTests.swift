@@ -1345,6 +1345,25 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertTrue(engine.cardShifts.isEmpty)
     }
 
+    func testAGrowthNearTheEndLandsWithAShrinkAnnouncedAfterItInTheSamePass() {
+        let (engine, surface) = makeEngine()
+        surface.userScroll(to: 3100)
+        XCTAssertEqual(engine.mode, .browsing, "100 pt from the end")
+        surface.sets = []
+        let growing = FakeMeasuredCard(delta: 100, minY: 1000)
+        let shrinking = FakeMeasuredCard(delta: -150, minY: 1500)
+        engine.cardMeasured(growing)
+        engine.cardMeasured(shrinking)
+        // One pass lands both. Alone, the growth would end past the
+        // content's new end; the shrink after it makes the room.
+        growing.lands()
+        shrinking.lands()
+        surface.layOut(contentHeight: 3950)
+        XCTAssertEqual(surface.sets.map { $0.y }, [3050], "moved by both, in one write")
+        XCTAssertTrue(engine.cardShifts.isEmpty)
+        XCTAssertEqual(engine.mode, .browsing, "still 100 pt from the end")
+    }
+
     func testCardsMeasuredDuringAFlingWaitForItToRest() {
         let (engine, surface) = browsingReader()
         surface.isDecelerating = true
@@ -1690,14 +1709,14 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertTrue(engine.cardShifts.isEmpty)
     }
 
-    // MARK: - Pictures arriving in their rows (#1238)
+    // MARK: - Pictures and failures arriving in their rows (#1238)
 
     func testAPictureArrivingAboveTheReaderWaitsForTheFlingAndMovesThemWithIt() {
         let (engine, surface) = browsingReader()
         surface.isDecelerating = true
         surface.contentOffsetY = 1900
         engine.surfaceScrolled()
-        let arrival = ChatPictureArrival()
+        let arrival = ChatRowArrival()
         arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 44)
         var shown = 0
         arrival.arrive(rowHeight: 244, engine: engine) { shown += 1 }
@@ -1717,7 +1736,7 @@ final class ChatScrollEngineTests: XCTestCase {
 
     func testAPictureArrivingTwiceBeforeALayoutMovesTheReaderOnce() {
         let (engine, surface) = browsingReader()
-        let arrival = ChatPictureArrival()
+        let arrival = ChatRowArrival()
         arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 44)
         var shown = 0
         arrival.arrive(rowHeight: 244, engine: engine) { shown += 1 }
@@ -1731,12 +1750,38 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertTrue(engine.cardShifts.isEmpty)
     }
 
+    func testAPictureArrivingTwiceDuringAFlingMovesTheReaderOnceItRests() {
+        let (engine, surface) = browsingReader()
+        surface.isDecelerating = true
+        surface.contentOffsetY = 1900
+        engine.surfaceScrolled()
+        let arrival = ChatRowArrival()
+        arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 44)
+        var shown = 0
+        arrival.arrive(rowHeight: 244, engine: engine) { shown += 1 }
+        // Its row left and came back under the same fling, and the picture
+        // arrived again from memory.
+        arrival.rowDisappeared()
+        arrival.arrive(rowHeight: 244, engine: engine) { shown += 1 }
+        XCTAssertEqual(shown, 0)
+
+        surface.isDecelerating = false
+        runScheduled()
+        XCTAssertEqual(shown, 1)
+        XCTAssertEqual(engine.cardShifts.count, 1, "its growth waits for the layout")
+        arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 244)
+        XCTAssertEqual(surface.contentOffsetY, 2100, "moved by the row's growth")
+        surface.layOut(contentHeight: 4200)
+        XCTAssertEqual(surface.contentOffsetY, 2100, "once")
+        XCTAssertTrue(engine.cardShifts.isEmpty)
+    }
+
     func testAPictureWhoseRowLeftTheScreenIsDropped() {
         let (engine, surface) = browsingReader()
         surface.isDecelerating = true
         surface.contentOffsetY = 1900
         engine.surfaceScrolled()
-        let arrival = ChatPictureArrival()
+        let arrival = ChatRowArrival()
         arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 44)
         var shown = 0
         arrival.arrive(rowHeight: 244, engine: engine) { shown += 1 }
@@ -1754,7 +1799,7 @@ final class ChatScrollEngineTests: XCTestCase {
         surface.isDecelerating = true
         surface.contentOffsetY = 1900
         engine.surfaceScrolled()
-        let arrival = ChatPictureArrival()
+        let arrival = ChatRowArrival()
         // Its placeholder took the picture's remembered size.
         arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 244)
         var shown = 0
@@ -1764,18 +1809,80 @@ final class ChatScrollEngineTests: XCTestCase {
     }
 
     func testAPictureOutsideAChatShowsAtOnce() {
-        let arrival = ChatPictureArrival()
+        let arrival = ChatRowArrival()
         arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 44)
         var shown = 0
         arrival.arrive(rowHeight: 244, engine: nil) { shown += 1 }
         XCTAssertEqual(shown, 1)
+        arrival.arrive(rowHeight: nil, engine: nil) { shown += 1 }
+        XCTAssertEqual(shown, 2, "and so does a failure")
+    }
+
+    func testAFailureAboveTheReaderWaitsForTheFlingAndMovesThemByWhatItsLayoutTook() {
+        let (engine, surface) = browsingReader()
+        surface.isDecelerating = true
+        surface.contentOffsetY = 1900
+        engine.surfaceScrolled()
+        let arrival = ChatRowArrival()
+        // A placeholder at the picture's remembered size.
+        arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 244)
+        var shown = 0
+        arrival.arrive(rowHeight: nil, engine: engine) { shown += 1 }
+        XCTAssertEqual(shown, 0, "the placeholder stays under the fling")
+
+        surface.isDecelerating = false
+        runScheduled()
+        XCTAssertEqual(shown, 1)
+        XCTAssertEqual(engine.cardShifts.count, 1, "announced, though only its layout knows by how much")
+        // Its label laid out, 202 shorter.
+        arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 42)
+        XCTAssertEqual(surface.contentOffsetY, 1698, "moved by what the row took")
+        surface.layOut(contentHeight: 3798)
+        XCTAssertEqual(surface.contentOffsetY, 1698, "once")
+        XCTAssertTrue(engine.cardShifts.isEmpty)
+    }
+
+    func testAFailureKeepingTheRowsHeightMovesNobody() {
+        let (engine, surface) = browsingReader()
+        let arrival = ChatRowArrival()
+        arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 44)
+        var shown = 0
+        arrival.arrive(rowHeight: nil, engine: engine) { shown += 1 }
+        XCTAssertEqual(shown, 1, "at rest it shows at once")
+        // Its label took the loading line's height; a reply streams in below.
+        surface.layOut(contentHeight: 4100)
+        XCTAssertEqual(surface.contentOffsetY, 2000)
+        clock += ChatScrollEngine.cardGrowthDeadline + 0.1
+        surface.layOut(contentHeight: 4200)
+        XCTAssertTrue(engine.cardShifts.isEmpty, "the shift lapses")
+        XCTAssertEqual(surface.contentOffsetY, 2000)
+        XCTAssertTrue(surface.sets.isEmpty)
+    }
+
+    func testAFailureOnScreenShowsAtOnceWithNothingAnnounced() {
+        let (engine, _) = browsingReader()
+        let arrival = ChatRowArrival()
+        arrival.stackFrame = CGRect(x: 0, y: 2100, width: 300, height: 244)
+        var shown = 0
+        arrival.arrive(rowHeight: nil, engine: engine) { shown += 1 }
+        XCTAssertEqual(shown, 1)
+        XCTAssertTrue(engine.cardShifts.isEmpty)
+    }
+
+    func testAFailureInARowNotLaidOutYetShowsAtOnce() {
+        let (engine, _) = browsingReader()
+        let arrival = ChatRowArrival()
+        var shown = 0
+        arrival.arrive(rowHeight: nil, engine: engine) { shown += 1 }
+        XCTAssertEqual(shown, 1)
+        XCTAssertTrue(engine.cardShifts.isEmpty)
     }
 
     func testAReplyPictureFitsTheRowsWidthUpToItsCeiling() {
-        XCTAssertEqual(ChatPictureArrival.fittedHeight(of: CGSize(width: 1200, height: 800), inWidth: 300, maxHeight: 360), 200)
-        XCTAssertEqual(ChatPictureArrival.fittedHeight(of: CGSize(width: 100, height: 1000), inWidth: 300, maxHeight: 360), 360)
+        XCTAssertEqual(ChatRowArrival.fittedHeight(of: CGSize(width: 1200, height: 800), inWidth: 300, maxHeight: 360), 200)
+        XCTAssertEqual(ChatRowArrival.fittedHeight(of: CGSize(width: 100, height: 1000), inWidth: 300, maxHeight: 360), 360)
         XCTAssertEqual(
-            ChatPictureArrival.fittedHeight(of: CGSize(width: 1200, height: 800), inWidth: 0, maxHeight: 360), 0,
+            ChatRowArrival.fittedHeight(of: CGSize(width: 1200, height: 800), inWidth: 0, maxHeight: 360), 0,
             "a row without a width yet has no growth to announce"
         )
     }

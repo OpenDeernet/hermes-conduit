@@ -16,9 +16,11 @@
 //  Outside a chat (a job sheet, the saved copy) there is no engine and the
 //  card takes its height at once.
 //
-//  A picture arriving in its row (ChatPictureArrival) goes the same way:
-//  the loading line stays until the reader's scrolling rests, and the row's
-//  growth above the viewport is made good in the pass that lands it.
+//  A picture arriving in its row (ChatRowArrival) goes the same way: the
+//  loading line stays until the reader's scrolling rests, and the row's
+//  growth above the viewport is made good in the pass that lands it. So
+//  does a failure taking the place of what a row or card shows (a picture's
+//  label, a page's file card), whose height only its layout tells.
 //
 
 import SwiftUI
@@ -115,15 +117,18 @@ extension View {
     }
 }
 
-/// A picture row's growth when its picture arrives (#1238). The row shows a
-/// loading line until then, and a reply picture's height follows the row's
-/// width, so the growth is known only once both are: the view keeps the
-/// row's frame here (`chatRowFrame`), and when the picture is decoded hands
-/// over the height the row will take and what shows it. The engine lets it
+/// Something arriving in a row that changes its height (#1238): a picture
+/// once it is decoded, or a failure taking the place of what the row shows
+/// (a picture's label, a page's file card or "Couldn't draw"). The row
+/// shows a loading line until a picture arrives, and a reply picture's
+/// height follows the row's width, so the growth is known only once both
+/// are: the view keeps the row's frame here (`chatRowFrame`), and when the
+/// picture is decoded hands over the height the row will take and what
+/// shows it. A failure's height only its layout tells. The engine lets it
 /// show like a card taking its height (ChatScrollEngine.cardMeasured); a
 /// row already at that height, or one outside a chat, shows it at once.
 @MainActor
-final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
+final class ChatRowArrival: ObservableObject, ChatScrollMeasuredCard {
     /// The row's frame in the transcript stack's space (`chatRowFrame`),
     /// nil before its first layout.
     var stackFrame: CGRect? {
@@ -131,10 +136,11 @@ final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
             if stackFrame?.height != oldValue?.height { engine?.cardFrameChanged(self) }
         }
     }
-    /// The engine the waiting picture went through.
+    /// The engine the waiting arrival went through.
     private weak var engine: ChatScrollEngine?
-    /// The height the row takes with the picture in it, and what shows it.
-    private var pending: (rowHeight: CGFloat, show: () -> Void)?
+    /// The height the row takes with what arrives in it (nil when only its
+    /// layout tells), and what shows it.
+    private var pending: (rowHeight: CGFloat?, show: () -> Void)?
 
     /// A reply picture's height in its row: scaled to the row's width, up
     /// to `maxHeight` (`Image.resizable().scaledToFit().frame(maxHeight:)`).
@@ -144,26 +150,27 @@ final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
         return min(maxHeight, width * size.height / size.width)
     }
 
-    /// The picture is decoded: `show` puts it in the row, which then takes
-    /// `rowHeight`. Whether the row grows is its frame against that, not
-    /// whether the picture's size is remembered: a placeholder that took the
-    /// remembered size keeps its height and shows it at once, and so does a
-    /// row not laid out yet (no height to grow from), while one laid out
-    /// with the loading line before a cold launch's kept sizes had loaded
-    /// waits like any growth.
-    func arrive(rowHeight: CGFloat, engine: ChatScrollEngine?, show: @escaping () -> Void) {
+    /// What arrives is ready: `show` puts it in the row, which then takes
+    /// `rowHeight`, or a height only its layout tells when that is nil (a
+    /// failure's label or file card). Whether the row grows is its frame
+    /// against that, not whether the picture's size is remembered: a
+    /// placeholder that took the remembered size keeps its height and shows
+    /// it at once, and so does a row not laid out yet (no height to grow
+    /// from), while one laid out with the loading line before a cold
+    /// launch's kept sizes had loaded waits like any growth.
+    func arrive(rowHeight: CGFloat?, engine: ChatScrollEngine?, show: @escaping () -> Void) {
         pending = (rowHeight, show)
         self.engine = engine
-        if let engine, abs(pendingGrowth) > 0.5 {
+        if let engine, rowHeight == nil || abs(pendingGrowth) > 0.5 {
             engine.cardMeasured(self)
         } else {
             takeMeasuredHeight()
         }
     }
 
-    /// The row left the screen: a picture still waiting is dropped (the
-    /// row's task loads it again when the row is back), and with it the
-    /// view `show` wrote to, so nothing keeps the decoded picture.
+    /// The row left the screen: whatever still waits is dropped (the row's
+    /// task loads it again when the row is back), and with it the view
+    /// `show` wrote to, so nothing keeps the decoded picture.
     func rowDisappeared() {
         pending = nil
     }
@@ -174,6 +181,11 @@ final class ChatPictureArrival: ObservableObject, ChatScrollMeasuredCard {
         guard let rowHeight = pending?.rowHeight, rowHeight > 0,
               let height = stackFrame?.height, height > 0 else { return 0 }
         return rowHeight - height
+    }
+
+    var growthUnknown: Bool {
+        guard let pending else { return false }
+        return pending.rowHeight == nil
     }
 
     func takeMeasuredHeight() {
@@ -187,7 +199,7 @@ extension View {
     /// Keeps `arrival` told where this row is in the transcript stack's
     /// space and how tall it is, which change with layout, never with a
     /// scroll tick.
-    func chatRowFrame(_ arrival: ChatPictureArrival) -> some View {
+    func chatRowFrame(_ arrival: ChatRowArrival) -> some View {
         onGeometryChange(for: CGRect.self) { proxy in
             proxy.frame(in: CoordinateSpace.named(ChatScrollEngine.coordinateSpaceName))
         } action: { frame in
