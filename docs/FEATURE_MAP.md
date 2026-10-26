@@ -2000,31 +2000,32 @@ Group rooms with agents that belong to other people. Each agent runs on its
 owner's Hermes, with its owner's model and keys and its owner's rules for the
 room, and the hosts reach each other through the rooms mailbox. It's being
 built: the notifier side is on its main, and the app side comes in the
-`linked-rooms` branch's PRs, so none of it is in the app yet.
+`linked-rooms` branch's PRs, so none of it is in the app on main yet.
 
-**Siblings:** the room screen and room info (members from other
-installations, their route status, your agents' choices for the room) · New
-Group Chat with linked people · Settings > People (host setup, Links) · the
-Chats list (rooms hosted by others, and deleting one that ended) · the
-notifier's owner rules for room turns (tools, the framing, the reply scrub,
-past-chat search), with their routes and the `hermes conduit-push rooms`
-commands · the room memory guard · the room planner · a member cut off by its
-host · disbanding a room (the home's own agents' hidden chats for it) and a
-guest's `rooms forget` · the rooms mailbox (rooms.milim.dev) · rooms of only
-your own agents (unchanged, except that disbanding one now deletes its hidden
-chats) · past-chat search in every chat (it no longer finds those rooms) ·
-approvals for your agents in rooms hosted elsewhere · text that describes it:
-the notifier README's "Rooms with other people's agents", "A member cut off
-from a room" and "Disbanding a room ends its hidden chats", the framing and
-block messages models read, Disband's warning, Settings captions
+**Siblings:** the room screen and Group Info in both shells (members from
+other installations, their route status and pictures, your agents' choices for
+the room) · New Group Chat with linked people · Settings > People (host setup,
+Links) · the Chats list (rooms hosted by others, and deleting one that ended)
+· the notifier's owner rules for room turns (tools, the framing, the reply
+scrub, past-chat search), with their routes and the
+`hermes conduit-push rooms` commands · the room memory guard · the room
+planner · a member cut off by its host · disbanding a room (the home's own
+agents' hidden chats for it) and a guest's `rooms forget` · the rooms mailbox
+(rooms.milim.dev) · rooms of only your own agents (unchanged, except that
+disbanding one now deletes its hidden chats) · past-chat search in every chat
+(it no longer finds those rooms) · approvals for your agents in rooms hosted
+elsewhere · text that describes it: the notifier README's "Rooms with other
+people's agents", "A member cut off from a room" and "Disbanding a room ends
+its hidden chats", the framing and block messages models read, Disband's
+warning, Group Info and the choices page's captions, Settings captions
 
 **Code**
 - Owner rules: `notifier/room_rules.py` (room_turn, tool_block, framing, scrub, filter_search), `notifier/room_choices.py` (the per-room choices, NEVER), `notifier/__init__.py` (pre_tool_call, pre_llm_call, transform_llm_output, transform_tool_result), `notifier/dashboard/plugin_api.py` (/rooms/choices, /rooms/defaults, capability room-rules), `notifier/cli.py` (rooms show, rooms set), `notifier/README.md` (Rooms with other people's agents)
 - Memory guard and planner: `notifier/room_memory.py`, `notifier/room_planner.py`
 - Cut-off members and disband cleanup: `notifier/room_cutoff.py` (MemberCutOff, read before Hermes sets a turn up), `notifier/room_cleanup.py` (the disband guard, the load sweep, forget_room), `notifier/dashboard/plugin_api.py` (DELETE /rooms/sessions, capability room-forget; it installs both guards where the dashboard drives rooms), `notifier/cli.py` (rooms forget), `notifier/README.md` (A member cut off from a room, Disbanding a room ends its hidden chats)
 - Mailbox: `notifier/mailbox/src/server.mjs`, `notifier/mailbox/README.md` (protocol v1, self-hosting), `notifier/mailbox/deploy/compose.yaml`
-- App, today's rooms (a member from another installation has target kind peer): `Conduit/Services/GroupChatModels.swift` (GroupMember.target, members(namedBy:)), `Conduit/Views/GroupChatView.swift` (and Disband's warning), `Conduit/Views/V2/V2ConversationScreen.swift` (Disband's warning in V2), `Conduit/Services/HermesClient.swift` (groups.*)
-- App, on the `linked-rooms` branch only, so not in backticks: none yet. Each of the branch's PRs names here the app paths it adds
+- App, today's rooms (a member from another installation has target kind peer): `Conduit/Services/GroupChatModels.swift` (GroupMember.target, members(namedBy:)), `Conduit/Services/AppState.swift` (activeRoomResponder, groupMemberBot), `Conduit/Views/GroupChatView.swift` (and Disband's warning), `Conduit/Views/V2/V2ConversationScreen.swift` (Disband's warning in V2), `Conduit/Services/HermesClient.swift` (groups.*)
+- App, on the `linked-rooms` branch only, so not in backticks: Conduit/Services/RoomChoices.swift (RoomChoices, RoomChoicesClient, canSetRoomChoices), Conduit/Views/GroupRoomInfoView.swift (GroupRoomInfoSheet, RoomAgentChoicesView), ConduitTests/GroupChatModelsTests+LinkedRooms.swift; in the files above, GroupPeerRoute, GroupMemberActivity, responderState, liveMember, rosterBot and GroupRoomDisband (GroupChatModels.swift), roomResponderCache and activeRoomResponderState (AppState.swift), and Group Info in both room menus. Each of the branch's PRs names here the app paths it adds
 - Tests: `notifier/tests/test_room_rules.py`, `notifier/tests/test_room_choices.py`, `notifier/tests/test_room_memory.py`, `notifier/tests/test_room_cutoff.py`, `notifier/tests/test_room_cleanup.py`, `notifier/mailbox/test/server.e2e.test.mjs`
 
 **Rulings**
@@ -2040,19 +2041,23 @@ block messages models read, Disband's warning, Settings captions
 - Disbanding a room deletes the home's own agents' hidden chats for it, with their earlier history and their helpers' chats, in every room, rooms of only your own agents too. Agents on other people's Hermes keep theirs, and their owners delete them later with `hermes conduit-push rooms forget` or the route the Chats list calls, which refuses a room still going on that host (2026-10-26, Eric; notifier #384).
 - Every link goes through the mailbox, on one LAN too. The shared one is rooms.milim.dev, a service of its own beside push.milim.dev (2026-10-22, Eric).
 - An agent runs on its owner's host with its owner's model and keys, so each owner pays for their own (2026-10-22, Eric).
+- Who's live in a room: the gateway's live turns where it reports them (`member_activity`, Hermes c73cbcc4), a running or stopping turn before a queued one, as Hermes Desktop reads them, and a status this build doesn't know is skipped; else the log, as before. A live member on another Hermes whose route says its Hermes refused the room reads "<name> is cut off", and one whose Hermes couldn't be reached reads "<name> can't be reached", in the header and where its reply would land, until its turn runs, whether the turn names it by member id or, having none, by profile. Hermes keeps routes in memory, so one not tried since its room service started reads as responding (2026-10-26, #1289).
+- Disband's warning in a room with a member from another installation says the room ends for everyone, your agents' sessions for it are deleted, and agents on other people's Hermes keep theirs. Rooms of only your own agents keep the old text, which holds since notifier #384 (2026-10-26, #1289).
+- Group Info, from the room menu in both shells, lists each member as your agent or on another Hermes, with its route's trouble. In a room with a member from another installation, each of your agents opens its choices for the room when the plugin reports room-rules, which stays out of usedCapabilities, so an older plugin gets no update notice. The choices page offers Talk only and Look things up, and shows Use my data or Custom, with its tools, only while one is the choice; how an agent takes part and its turns a day stay off it until the room bridge holds agents to them. Each change sends only that choice, one at a time from the tap, so an older answer can't land over a newer change; the page shows what the plugin answers, refuses an answer that isn't ok or names another room, and requests stay with the dashboard they were made for. The note's footer says it holds up to 1,000 characters, where typing stops (2026-10-26, #1289).
+- A member on another Hermes never takes one of your bots' names, pictures or colors, whatever its profile is called there (2026-10-26, #1289).
 
 **Open gaps**
-- The app shows none of it yet: the room screen and room info (with the choices, set until then with `hermes conduit-push rooms set`), New Group Chat with linked people, Settings > People and the Chats list come in the `linked-rooms` branch's PRs, with their Settings captions.
-- How an agent takes part and its turns a day are kept, not enforced, until the room bridge.
+- On main the app shows none of it. The `linked-rooms` branch has the room screen and Group Info with your agents' choices; New Group Chat with linked people, Settings > People and the Chats list come in its later PRs, with their Settings captions. Choices for a room hosted elsewhere are set with `hermes conduit-push rooms set` until the room shows in the app.
+- How an agent takes part and its turns a day are kept, not enforced, until the room bridge, and the choices page leaves them out until then.
 - Use my data has no room-safe data tools yet (free/busy comes first).
 - A memory provider's automatic recall can't be skipped in a room without a Hermes change (written up for Hermes).
-- Disband's warning says every member's session ends. That holds for rooms of your own agents; in a room with other people's agents theirs stay on their hosts, and the warning changes with the room screen in the `linked-rooms` branch.
-- A cut-off member shows only as a failed turn (reason code unknown: Hermes has none for it) until the room screen reads its route status, and deleting an ended room hosted elsewhere from the Chats list comes with the `linked-rooms` branch's Chats list.
+- On main, Disband's warning says every member's session ends, which holds for rooms of your own agents; the `linked-rooms` branch's says that in a room with other people's agents theirs stay on their hosts.
+- On main a cut-off member shows only as a failed turn (reason code unknown: Hermes has none for it); the `linked-rooms` branch's room screen reads its route status. Deleting an ended room hosted elsewhere from the Chats list comes with the branch's Chats list.
 - Approvals for your agents in rooms hosted elsewhere don't reach you.
 - A profile on the Codex app-server runtime isn't refused yet: until joining refuses it, keep it out of rooms with other people's agents (the notifier README says so).
 - Agents that aren't Hermes (an A2A member) are left out.
 
-**Checked:** 2026-10-26, #1287.
+**Checked:** 2026-10-26, #1289.
 
 ## Feature map rules
 

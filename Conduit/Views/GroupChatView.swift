@@ -13,6 +13,7 @@ struct GroupChatView: View {
     /// actions.
     @Environment(\.v2ComposerRests) private var isV2
     @State private var showingDisbandConfirmation = false
+    @State private var showingInfo = false
     @State private var choosingPicture: GroupRoomPictureRequest?
     /// Following the latest event, or browsing history (GroupRoomFollow).
     /// The flag decides scrolling; the published copy draws the button.
@@ -45,6 +46,12 @@ struct GroupChatView: View {
         .toolbar { toolbarContent }
         // V2's screen hosts this view and owns the room menu and picker.
         .modifier(GroupRoomPicturePicker(request: $choosingPicture, isEnabled: !isV2))
+        // On the screen, not the menu: a sheet raised as a menu closes may
+        // never show.
+        .sheet(isPresented: $showingInfo) {
+            GroupRoomInfoSheet()
+                .environmentObject(appState)
+        }
         .confirmationDialog(
             AppLocalization.string("Disband this group chat?"),
             isPresented: $showingDisbandConfirmation,
@@ -55,9 +62,7 @@ struct GroupChatView: View {
             }
             Button(AppLocalization.string("Cancel"), role: .cancel) {}
         } message: {
-            Text(AppLocalization.string(
-                "The room, its history, and every member's session end permanently. This cannot be undone."
-            ))
+            Text(GroupRoomDisband.warning(members: surface?.room.members ?? []))
         }
     }
 
@@ -156,7 +161,7 @@ struct GroupChatView: View {
                         .id("pending-row")
                     }
                     if let responder = respondingMember {
-                        GroupRespondingRow(member: responder)
+                        GroupRespondingRow(member: responder, state: appState.activeRoomResponderState)
                             .id("responding-row")
                     }
                     if rendered.isEmpty && appState.pendingRoomMessage == nil && respondingMember == nil {
@@ -310,6 +315,7 @@ struct GroupChatView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     GroupRoomActionItems(
+                        onShowInfo: { showingInfo = true },
                         onDisband: { showingDisbandConfirmation = true },
                         onChoosePicture: { choosingPicture = $0 }
                     )
@@ -370,7 +376,12 @@ struct GroupChatView: View {
             return AppLocalization.string("Approval needed")
         }
         if let responder = respondingMember {
-            return AppLocalization.string("\(GroupRoomTurns.displayName(of: responder)) is responding…")
+            let name = GroupRoomTurns.displayName(of: responder)
+            switch appState.activeRoomResponderState {
+            case .responding: return AppLocalization.string("\(name) is responding…")
+            case .cutOff: return AppLocalization.string("\(name) is cut off")
+            case .unreachable: return AppLocalization.string("\(name) can't be reached")
+            }
         }
         if let driver = appState.activeRoomDriverStatus, driver.working {
             return AppLocalization.string("\(count) members · working…")
@@ -379,14 +390,19 @@ struct GroupChatView: View {
     }
 }
 
-/// The open room's actions: Stop while its members are working, and
-/// Disband. In the room's own menu (drawer shell) or V2's conversation menu.
+/// The open room's actions: Group Info, its picture, Stop while its
+/// members are working, and Disband. In the room's own menu (drawer shell)
+/// or V2's conversation menu.
 struct GroupRoomActionItems: View {
     @EnvironmentObject private var appState: AppState
+    let onShowInfo: () -> Void
     let onDisband: () -> Void
     let onChoosePicture: (GroupRoomPictureRequest) -> Void
 
     var body: some View {
+        Button(action: onShowInfo) {
+            Label(AppLocalization.string("Group Info"), systemImage: "info.circle")
+        }
         if appState.canSetGroupRoomPictures, let roomID = appState.activeRoomSurface?.room.roomID {
             Button {
                 onChoosePicture(.choose)
@@ -854,6 +870,9 @@ struct GroupSystemEventCaption: View {
 /// reply will land.
 struct GroupRespondingRow: View {
     let member: GroupMember
+    /// A member on another Hermes whose route is cut off or unreachable
+    /// says so where its reply would land.
+    var state: GroupResponderState = .responding
     @Environment(\.groupMemberTints) private var tints
 
     var body: some View {
@@ -867,11 +886,28 @@ struct GroupRespondingRow: View {
                     .foregroundStyle(tint.map { Color(uiColor: $0.readableColor) } ?? .secondary)
                     .lineLimit(1)
                 HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.mini)
-                    Text(AppLocalization.string("Responding…"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    switch state {
+                    case .responding:
+                        ProgressView()
+                            .controlSize(.mini)
+                        Text(AppLocalization.string("Responding…"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    case .cutOff:
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                        Text(AppLocalization.string("Cut off: its Hermes no longer accepts this room"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    case .unreachable:
+                        Image(systemName: "wifi.exclamationmark")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                        Text(AppLocalization.string("Can't be reached. Hermes keeps trying."))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -881,8 +917,16 @@ struct GroupRespondingRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(AppLocalization.string("\(name) is responding…")))
+        .accessibilityLabel(Text(spokenLabel(name)))
         .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private func spokenLabel(_ name: String) -> String {
+        switch state {
+        case .responding: return AppLocalization.string("\(name) is responding…")
+        case .cutOff: return AppLocalization.string("\(name) is cut off")
+        case .unreachable: return AppLocalization.string("\(name) can't be reached")
+        }
     }
 }
 

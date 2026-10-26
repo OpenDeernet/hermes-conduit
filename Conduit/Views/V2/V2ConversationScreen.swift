@@ -59,6 +59,7 @@ struct V2ConversationScreen: View {
     @State private var chatTitlePendingRename: SessionSummary?
     @State private var chatTitlePendingDeletion: SessionSummary?
     @State private var confirmsRoomDisband = false
+    @State private var showsRoomInfo = false
     @State private var choosesRoomPicture: GroupRoomPictureRequest?
     /// The open chat's ids while its Artifacts sheet shows.
     @State private var artifactSessionIDs: ArtifactSheetIDs?
@@ -206,6 +207,7 @@ struct V2ConversationScreen: View {
                 V2ConversationMenu(
                     onRename: { chatTitlePendingRename = $0 },
                     onDelete: { chatTitlePendingDeletion = $0 },
+                    onShowRoomInfo: { showsRoomInfo = true },
                     onDisbandRoom: { confirmsRoomDisband = true },
                     onChooseRoomPicture: { choosesRoomPicture = $0 },
                     onArtifacts: { artifactSessionIDs = ArtifactSheetIDs(ids: appState.activeChatArtifactSessionIDs) }
@@ -214,6 +216,10 @@ struct V2ConversationScreen: View {
         }
         .sheet(item: $artifactSessionIDs) { sheet in
             ChatArtifactsSheet(sessionIDs: sheet.ids)
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showsRoomInfo) {
+            GroupRoomInfoSheet()
                 .environmentObject(appState)
         }
         .sheet(item: $chatTitlePendingRename) { session in
@@ -247,9 +253,7 @@ struct V2ConversationScreen: View {
             }
             Button(AppLocalization.string("Cancel"), role: .cancel) {}
         } message: {
-            Text(AppLocalization.string(
-                "The room, its history, and every member's session end permanently. This cannot be undone."
-            ))
+            Text(GroupRoomDisband.warning(members: appState.activeRoomSurface?.room.members ?? []))
         }
     }
 }
@@ -307,6 +311,7 @@ private struct V2ConversationMenu: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onRename: (SessionSummary) -> Void
     let onDelete: (SessionSummary) -> Void
+    let onShowRoomInfo: () -> Void
     let onDisbandRoom: () -> Void
     let onChooseRoomPicture: (GroupRoomPictureRequest) -> Void
     let onArtifacts: () -> Void
@@ -324,7 +329,11 @@ private struct V2ConversationMenu: View {
     var body: some View {
         Menu {
             if appState.activeRoomSurface != nil {
-                GroupRoomActionItems(onDisband: onDisbandRoom, onChoosePicture: onChooseRoomPicture)
+                GroupRoomActionItems(
+                    onShowInfo: onShowRoomInfo,
+                    onDisband: onDisbandRoom,
+                    onChoosePicture: onChooseRoomPicture
+                )
             } else {
                 Button {
                     Task { await appState.refreshActiveSession() }
