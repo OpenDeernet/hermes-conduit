@@ -347964,7 +347964,7 @@
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld件のプロジェクトを非表示"
+                  "value" : "%lld件のプロジェクトが非表示"
                 }
               }
             }
@@ -348145,7 +348145,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@を非表示"
+            "value" : "%@は非表示"
           }
         },
         "ko" : {
@@ -348227,7 +348227,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "プロジェクト外のチャットを非表示"
+            "value" : "プロジェクト外のチャットは非表示"
           }
         },
         "ko" : {
