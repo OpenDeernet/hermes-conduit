@@ -27911,13 +27911,16 @@ final class AppState: ObservableObject {
     /// Answers one question of a clarification request. Batch questions route
     /// per question (`question_id` + the gateway's authoritative `remaining`
     /// list); a `nil` questionId targets the card's single question — the
-    /// shape every push-relay card and legacy gateway produces.
-    func respondToClarify(requestId: String, questionId: String? = nil, answer: String) async {
-        let trimmedAnswer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedAnswer.isEmpty,
+    /// shape every push-relay card and legacy gateway produces. A nil
+    /// `answer` leaves one of a form's questions blank (`isForm`), which
+    /// Hermes reads as skipped.
+    func respondToClarify(requestId: String, questionId: String? = nil, answer: String?) async {
+        let trimmedAnswer = answer?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedAnswer?.isEmpty != true,
               let index = messages.firstIndex(where: { $0.clarify?.requestId == requestId }),
               var activity = messages[index].clarify,
-              !activity.isExpired else { return }
+              !activity.isExpired,
+              trimmedAnswer != nil || activity.isForm else { return }
 
         let questionIndex: Int?
         if let questionId {
@@ -27936,7 +27939,39 @@ final class AppState: ObservableObject {
         messages[index].clarify = activity
         setRunning(true)
         cacheMessagePresentation()
+        await sendClarifyAnswer(trimmedAnswer ?? "", for: activity.questions[questionIndex], requestId: requestId)
+    }
 
+    /// Sends a form's fields together (`ClarifyActivity.isForm`): every
+    /// question still open, with its answer in `answers` by qid, or left
+    /// blank when it has none there, which Hermes reads as skipped.
+    func respondToClarifyForm(requestId: String, answers: [String: String]) async {
+        guard let index = messages.firstIndex(where: { $0.clarify?.requestId == requestId }),
+              var activity = messages[index].clarify,
+              !activity.isExpired, activity.isForm else { return }
+        var sending: [(question: ClarifyQuestion, answer: String)] = []
+        for questionIndex in activity.questions.indices where activity.questions[questionIndex].isAnswerable {
+            activity.questions[questionIndex].status = .submitting
+            activity.questions[questionIndex].error = nil
+            let answer = answers[activity.questions[questionIndex].id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            sending.append((activity.questions[questionIndex], answer))
+        }
+        guard !sending.isEmpty else { return }
+        messages[index].clarify = activity
+        setRunning(true)
+        cacheMessagePresentation()
+        // One at a time, in order: the last lock resolves the request.
+        for (question, answer) in sending {
+            // Expired meanwhile: every open question went with it. A card
+            // that left the screen (another chat opened) still sends.
+            if messages.first(where: { $0.clarify?.requestId == requestId })?.clarify?.isExpired == true { return }
+            await sendClarifyAnswer(answer, for: question, requestId: requestId)
+        }
+    }
+
+    /// Sends one question's answer, already marked submitting; an empty
+    /// `answer` leaves it blank.
+    private func sendClarifyAnswer(_ answer: String, for question: ClarifyQuestion, requestId: String) async {
         // Plugin-minted clarify ids are answered through the relay's decision
         // loop (the gateway's own clarify id never reached this device); the
         // gateway-side middleware polls the relay and resolves the tool call.
@@ -27946,14 +27981,13 @@ final class AppState: ObservableObject {
         // Batch relay decisions answer per question; the legacy scalar relay
         // card keeps the whole-decision response shape.
         if requestId.hasPrefix(PendingDecisionPayload.relayRequestPrefix) {
-            let target = activity.questions[questionIndex]
-            if target.isSyntheticID {
-                await respondToRelayClarify(requestId: requestId, answer: trimmedAnswer)
+            if question.isSyntheticID {
+                await respondToRelayClarify(requestId: requestId, answer: answer)
             } else {
                 await respondToRelayClarifyQuestion(
                     requestId: requestId,
-                    questionId: target.id,
-                    answer: trimmedAnswer
+                    questionId: question.id,
+                    answer: answer
                 )
             }
             return
@@ -27961,12 +27995,11 @@ final class AppState: ObservableObject {
         guard let client else {
             markClarifyQuestionError(
                 requestId: requestId,
-                questionId: activity.questions[questionIndex].id,
+                questionId: question.id,
                 message: AppLocalization.string("Gateway connection is unavailable.")
             )
             return
         }
-        let question = activity.questions[questionIndex]
         // Ownership snapshot for the gateway-owned respond below — same fence
         // as `respondToApproval`: a completion (success or failure) from a
         // replaced client must not touch whatever decision state is current,
@@ -27977,12 +28010,13 @@ final class AppState: ObservableObject {
         // The wire answer for a multi-select question must be the array form
         // Hermes' batch parser accepts; typed custom text arrives as a bare
         // string and is wrapped here so every multi-select path is uniform.
+        // A blank stays empty: Hermes reads it as skipped.
         let wireAnswer: String
-        if question.multiSelect,
-           (try? JSONSerialization.jsonObject(with: Data(trimmedAnswer.utf8))) as? [String] == nil {
-            wireAnswer = ClarifyQuestion.multiSelectAnswer([trimmedAnswer])
+        if question.multiSelect, !answer.isEmpty,
+           (try? JSONSerialization.jsonObject(with: Data(answer.utf8))) as? [String] == nil {
+            wireAnswer = ClarifyQuestion.multiSelectAnswer([answer])
         } else {
-            wireAnswer = trimmedAnswer
+            wireAnswer = answer
         }
         do {
             let outcome = try await client.respondToClarification(
