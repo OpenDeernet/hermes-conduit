@@ -2215,8 +2215,9 @@ where to follow one.
 previews) · search "In messages" · find chat on a phone call in Gemini,
 Qwen, Grok, GPT-Live and Local Live (VoiceChatFinder) · Classic voice and
 Hermes-run turns, which search with Hermes' own `session_search` · find chat
-on an Apple Watch call (notifier) · CarPlay's chat list (it reads the same
-list) · opening a chat from a
+on an Apple Watch call (notifier) · CarPlay's chat list and the Home Screen
+launcher widget's conversation picker (they read the same list) · opening a
+chat from a
 link or notification (the message shown) · the Kanban task's Worker Log ·
 Hermes Desktop's sidebar (upstream, leaves `kanban` out too)
 
@@ -2231,6 +2232,7 @@ Hermes Desktop's sidebar (upstream, leaves `kanban` out too)
 **Rulings**
 - Kanban workers aren't chats: lists, search and voice leave them out with `exclude_sources`, as Desktop does, and the board's Worker Log shows them. The session normalizer drops them too, so a list whose source doesn't filter (projects, `session.list`) can't show one. Classic voice needs nothing: Hermes' `session_search` already hides `kanban` (2026-10-26, #1305, tester report via Eric).
 - A worker reached anyway (a link, a cached row) says it belongs to the board and points at its Worker Log instead of "Failed to restore this conversation" (2026-10-26, #1305).
+- Rows saved before this change stay in the saved chat list until a full, non-empty read replaces them: a saved `SessionSummary` keeps no raw Hermes source (a worker is `.other`), and storing one for that window isn't worth the code (2026-10-26, #1305 review).
 
 **Open gaps**
 - A worker's transcript (its messages, not the log) can't be read in Conduit. Hermes would serve it read-only over `GET /api/sessions/{id}/messages`; a read-only view is the maintainer's call.
