@@ -591,7 +591,7 @@ struct InputPromptActivity: Equatable {
             // the origin's own host, so it can never name another site.
             activity.origin = text("origin")
             guard !activity.origin.isEmpty else { return nil }
-            activity.site = URL(string: activity.origin)?.host ?? (text("site").isEmpty ? activity.origin : text("site"))
+            activity.site = URL(string: activity.origin)?.host ?? activity.origin
         case .vaultCode:
             activity.site = text("site")
         }

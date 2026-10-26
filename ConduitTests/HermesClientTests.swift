@@ -2356,6 +2356,12 @@ final class HermesClientTests: XCTestCase {
             params: ["session_id": .string("s1"), "origin": .string("https://evil.example"), "site": .string("bank.example")]
         ))
         XCTAssertEqual(activity.site, "evil.example")
+
+        let bare = try XCTUnwrap(InputPromptActivity.from(
+            requestId: "srq-2", method: "vault.save_login",
+            params: ["session_id": .string("s1"), "origin": .string("evil.example"), "site": .string("bank.example")]
+        ))
+        XCTAssertEqual(bare.site, "evil.example", "An origin with no host is its own title")
     }
 
     func testLiveLoginRequestWithoutAnOriginIsRefused() async throws {
