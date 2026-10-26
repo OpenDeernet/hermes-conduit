@@ -470,6 +470,7 @@ struct ConduitApp: App {
                     interval: Self.callEndRecheckInterval,
                     isReady: { appState.callWaitCanEnd }
                 ) else { return }
+                appState.clearCallRefusal()
                 // A newer tap took over meanwhile, or the day it was for ended.
                 guard notifications.takePendingPulseQuiet(target) else { return }
                 let quiet = await appState.quietPulseForToday(target, switching: true, wait: .seconds(20))
