@@ -25,7 +25,8 @@ extension SidebarLayoutTests {
     }
 
     func testV2SplitHiddenListKeepsOneColumn() {
-        // #1164: the list hidden, a wide window keeps the phone's column.
+        // #1164: the list hidden, a wide window keeps one column (the chat's
+        // readable column scales on its own, #1320).
         for width: CGFloat in [806, 1032, 1376] {
             XCTAssertTrue(V2SplitLayout.isSplit(width: width, showsList: true), "\(width) pt splits with the list shown.")
             XCTAssertFalse(V2SplitLayout.isSplit(width: width, showsList: false), "\(width) pt keeps one column with the list hidden.")
@@ -64,10 +65,11 @@ extension SidebarLayoutTests {
 
     func testChatColumnWidensWithTheWindowUpToItsCap() {
         // A phone, and an iPad beside the list, keep the 760 pt column.
-        for width: CGFloat in [375, 760, 1001, 1055] {
+        for width: CGFloat in [375, 760, 1001, 1056] {
             XCTAssertEqual(ReadableWidth.chat(available: width), ReadableWidth.chat, "\(width) pt keeps 760 pt.")
         }
         // A wider window widens it with the window.
+        XCTAssertEqual(ReadableWidth.chat(available: 1057), 761)
         XCTAssertEqual(ReadableWidth.chat(available: 1376), 990)
         XCTAssertGreaterThan(ReadableWidth.chat(available: 1300), ReadableWidth.chat(available: 1200))
         // A maximized window stops at the cap.
