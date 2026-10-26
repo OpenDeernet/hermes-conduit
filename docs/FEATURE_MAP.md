@@ -2336,6 +2336,34 @@ Hermes Desktop's sidebar (upstream, leaves `kanban` out too)
 
 **Checked:** 2026-10-26, #1305 (with the Share extension's picker).
 
+## Readable width on wide windows
+
+How wide a screen's content runs on an iPad, a Mac or a landscape phone,
+where a phone layout would otherwise run the whole window.
+
+**Siblings:** chat surfaces (chats, project chats, Bot Chat and group rooms
+share the chat screen, so its column) · the chat beside the list and with the
+list hidden · Settings' pages · a Chats or Bots list shown alone · the call
+screens (Classic, live calls, live voice consent)
+
+**Code**
+- Widths and the modifier: `Conduit/Views/Components/ReadableContentWidth.swift` (ReadableWidth.chat(available:), chatMax, chatShare)
+- Chat column: `Conduit/Views/V2/V2ConversationScreen.swift` (readableContentWidth(scaling:))
+- List shown alone: `Conduit/Views/V2/V2Shell.swift` (ReadableWidth.list)
+- Settings: `Conduit/Views/AuxiliaryViews.swift` (ReadableWidth.settings)
+- Calls: `Conduit/Views/VoiceConversationSheet.swift`, `Conduit/Views/LiveVoiceCallSheet.swift`, `Conduit/Views/LiveVoiceConsentViews.swift` (ReadableWidth.call)
+- Tests: `ConduitTests/V2SplitLayoutTests.swift` (testChatColumnWidensWithTheWindowUpToItsCap)
+
+**Rulings**
+- Widths follow the window, not the device (2026-10-19, #949).
+- A chat's column is 760 pt until the chat's width passes about 1055 pt, then takes 72% of it, up to 1040 pt: an iPad beside the list keeps 760 pt, a maximized Mac or iPad window gets a wider column, with the list shown or hidden (2026-10-26, #1322, Eric: the column was too narrow on a maximized window). This replaces the 2026-10-23 ruling (#1169) that kept 760 pt with the list hidden.
+- Settings (720 pt), a list shown alone (720 pt) and calls (640 pt) keep fixed widths: rows, cards and captions don't read better wider (2026-10-26, #1322).
+
+**Open gaps**
+- None known.
+
+**Checked:** 2026-10-26, #1322.
+
 ## Feature map rules
 
 How a change brings its connected features along, and how this map stays
