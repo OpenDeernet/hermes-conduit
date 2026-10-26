@@ -384,6 +384,29 @@ enum ComposerDictation {
         return canDictate ? .start : .nothing
     }
 
+    /// While a dictation runs, from the tap that starts it until its last
+    /// words are in, Send's slot holds a Stop instead (#1309): the words
+    /// are looked over before anything goes.
+    static func holdsSendSlot(isDictating: Bool, isStarting: Bool) -> Bool {
+        isDictating || isStarting
+    }
+
+    /// What that Stop shows.
+    enum SlotFace: Equatable {
+        /// Listening: stop, keeping the words.
+        case stop
+        /// Still coming up: call it off.
+        case cancelStart
+        /// Stopped, its last words on their way: wait.
+        case settling
+    }
+
+    static func slotFace(isCapturing: Bool, isStarting: Bool) -> SlotFace {
+        if isCapturing { return .stop }
+        if isStarting { return .cancelStart }
+        return .settling
+    }
+
     /// Whether a change the full editor reported counts as typing: any
     /// change but the draft dictation itself last wrote, programmatic
     /// replacements included (dictation would write over those too).

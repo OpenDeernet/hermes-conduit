@@ -1093,7 +1093,7 @@ needed, it already says the setting applies to hardware keyboards only) ·
 the two default footnotes, Mac on and iPhone/iPad off (not needed, each
 states the default for its device) · the hardware-keyboards caption (not
 needed, shown only off a Mac and already says the on-screen Return key is
-unchanged)
+unchanged) · a running dictation (done, PRNUM: Return stops it)
 
 **Code**
 - Policy: `Conduit/Views/Components/ComposerReturnKey.swift` (ComposerReturnKey)
@@ -1103,11 +1103,14 @@ unchanged)
 **Rulings**
 - The caption describes the option, not current behaviour, because the
   option starts off on iPhone and iPad (2026-10-24, #1208, review of #1190).
+- While dictating, Return stops the dictation, as the Stop in Send's place
+  does; it sends once the words are in (2026-10-26, PRNUM, see Send while
+  dictating).
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-24, at #1208, carried in #1229.
+**Checked:** 2026-10-26, at PRNUM.
 
 ## A chat's last reply
 
@@ -1562,6 +1565,37 @@ Classic voice utterances
 - Dictation stopping at the limit says nothing; the words are in the draft.
 
 **Checked:** 2026-10-24, at #1222.
+
+## Send while dictating
+
+What the composer offers while a dictation runs: a wide Stop in Send's
+place until the words are in the draft, so they're read over before they
+go. Talking and sending in one go is Voice message's or Voice's job.
+
+**Siblings:** chat composer (chats, project chats, Bot Chat; done) · group
+rooms (done) · the full editor, both composers' (done, it shows the same
+Stop) · the hardware Return key with Return sends on (done, it stops the
+dictation) · the big voice button set to Dictation (not needed, its second
+tap already stops, and the composer shows the Stop meanwhile) · Voice
+message's hold to record, let go to send (not changed, it's the one-tap
+path) · docs/VOICE_SETTINGS.md "Dictate into the composer" (done) · the
+notifier (not needed, dictation is app-side)
+
+**Code**
+- Policy: `Conduit/Voice/ComposerDictationService.swift` (ComposerDictation.holdsSendSlot, slotFace)
+- The Stop: `Conduit/Views/Components/ComposerDictationStopButton.swift`
+- Chat composer: `Conduit/Views/Components/ComposerBar.swift` (trailingControl, dictationHoldsSendSlot, submitFromReturnKey, the full editor's buttons)
+- Group rooms: `Conduit/Views/Components/GroupRoomComposer.swift` (sendSlot, dictationHoldsSendSlot)
+- Tests: `ConduitTests/DictationEngineTests.swift`, `ConduitTests/AppStateVoiceCapabilityTests.swift`
+
+**Rulings**
+- Send isn't offered while dictating, from the tap that starts it until its last words are in (a Hermes upload included). A wide Stop holds its place and the small mic steps aside; Send comes back with the words in the draft. Send doesn't stop and send in one tap (Eric, 2026-10-26, #1309, PRNUM).
+- The Stop takes the whole slot, so a running reply's Stop, Steer or Queue comes back after the dictation too.
+
+**Open gaps**
+- None known.
+
+**Checked:** 2026-10-26, at PRNUM.
 
 ## Chats top bar and search
 

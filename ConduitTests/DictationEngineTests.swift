@@ -66,4 +66,22 @@ extension ComposerFullEditorTests {
             .start
         )
     }
+
+    /// #1309: from the tap that starts it until its last words are in, a
+    /// dictation keeps Send's slot.
+    func testADictationHoldsSendsSlotFromStartUntilItsWordsAreIn() {
+        XCTAssertTrue(ComposerDictation.holdsSendSlot(isDictating: false, isStarting: true), "coming up")
+        XCTAssertTrue(ComposerDictation.holdsSendSlot(isDictating: true, isStarting: false), "listening or settling")
+        XCTAssertFalse(ComposerDictation.holdsSendSlot(isDictating: false, isStarting: false), "over: Send is back")
+    }
+
+    func testTheStopInSendsSlotStopsCancelsOrWaits() {
+        XCTAssertEqual(ComposerDictation.slotFace(isCapturing: true, isStarting: false), .stop)
+        XCTAssertEqual(ComposerDictation.slotFace(isCapturing: false, isStarting: true), .cancelStart)
+        XCTAssertEqual(
+            ComposerDictation.slotFace(isCapturing: false, isStarting: false),
+            .settling,
+            "stopped with its words on their way: nothing to tap"
+        )
+    }
 }

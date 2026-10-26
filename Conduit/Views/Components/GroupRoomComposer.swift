@@ -73,6 +73,12 @@ struct GroupRoomComposer: View {
         dictation.isCapturing || dictation.isStarting || dictation.isTranscribing
     }
 
+    /// Send's place is dictation's Stop until its words are in, as in a
+    /// chat (#1309), and the small mic steps aside meanwhile.
+    private var dictationHoldsSendSlot: Bool {
+        ComposerDictation.holdsSendSlot(isDictating: dictation.isDictating, isStarting: dictation.isStarting)
+    }
+
     /// Resting, it is one slim bar: attach beside the field. Anything in
     /// progress opens the controls row under the field.
     private var rests: Bool {
@@ -226,8 +232,10 @@ struct GroupRoomComposer: View {
                 attachments: {
                     if !attachments.isEmpty { attachmentStrip }
                 },
-                dictateButton: { dictateButton },
-                actionButton: { sendButton }
+                dictateButton: {
+                    if !dictationHoldsSendSlot { dictateButton }
+                },
+                actionButton: { sendSlot }
             )
             .preferredColorScheme(appState.themePreference.colorScheme)
             .environmentObject(appState)
@@ -325,8 +333,10 @@ struct GroupRoomComposer: View {
         HStack(spacing: 8) {
             attachButton
             Spacer(minLength: 0)
-            dictateButton
-            sendButton
+            if !dictationHoldsSendSlot {
+                dictateButton
+            }
+            sendSlot
         }
         .padding(.horizontal, 10)
         .padding(.top, 6)
@@ -443,6 +453,15 @@ struct GroupRoomComposer: View {
         if dictation.isStarting { return Text(AppLocalization.string("Cancel dictation")) }
         if dictation.isTranscribing { return Text(AppLocalization.string("Transcribing")) }
         return Text(AppLocalization.string("Dictate"))
+    }
+
+    @ViewBuilder
+    private var sendSlot: some View {
+        if dictationHoldsSendSlot {
+            ComposerDictationStopButton(dictation: dictation, identifier: "room.composer.dictation.stop")
+        } else {
+            sendButton
+        }
     }
 
     private var sendButton: some View {

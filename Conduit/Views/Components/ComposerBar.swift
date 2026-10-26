@@ -732,7 +732,7 @@ struct ComposerBar: View, Equatable {
                 // May lag one render behind fast typing; the safe
                 // failure mode is newline insertion, and
                 // submitFromReturnKey() re-checks the live gate.
-                canSubmitFromReturn: ComposerReturnKey.canSubmit(action: action),
+                canSubmitFromReturn: ComposerReturnKey.canSubmit(action: action) || dictationHoldsSendSlot,
                 onSubmitFromReturn: { submitFromReturnKey() },
                 onUserEdit: {
                     // Typed here: no later change matching dictation's last
@@ -811,8 +811,16 @@ struct ComposerBar: View, Equatable {
                         attachmentStrip
                     }
                 },
-                dictateButton: { dictateButton },
-                actionButton: { composerActionButton }
+                dictateButton: {
+                    if !dictationHoldsSendSlot { dictateButton }
+                },
+                actionButton: {
+                    if dictationHoldsSendSlot {
+                        ComposerDictationStopButton(dictation: dictation)
+                    } else {
+                        composerActionButton
+                    }
+                }
             )
             .preferredColorScheme(appState.themePreference.colorScheme)
         }
@@ -942,7 +950,9 @@ struct ComposerBar: View, Equatable {
                 .accessibilityLabel(AppLocalization.string("Delegate agents, \(Int(appState.activeAgents)) active"))
             }
 
-            dictateButton
+            if !dictationHoldsSendSlot {
+                dictateButton
+            }
 
             trailingSlot
         }
@@ -1254,6 +1264,8 @@ struct ComposerBar: View, Equatable {
     enum TrailingControl: Equatable {
         case voice
         case action
+        /// A dictation is running: a wide Stop until its words are in (#1309).
+        case dictation
     }
 
     /// Voice and send share one trailing slot, like Messages (#194): with
@@ -1261,16 +1273,23 @@ struct ComposerBar: View, Equatable {
     /// profile), and any sendable draft or live turn swaps it for the
     /// action button. The slot itself never disappears, so the row keeps
     /// its layout as the first character is typed. Dictation has its own
-    /// button beside it (#335), so Send shows up as soon as words land.
-    static func trailingControl(action: ComposerAction, showsVoiceButton: Bool) -> TrailingControl {
-        action == .unavailable && showsVoiceButton ? .voice : .action
+    /// button beside it (#335). While it dictates, the slot is a wide Stop
+    /// in its place, and Send shows up once the words are in (#1309).
+    static func trailingControl(
+        action: ComposerAction,
+        showsVoiceButton: Bool,
+        holdsDictation: Bool = false
+    ) -> TrailingControl {
+        if holdsDictation { return .dictation }
+        return action == .unavailable && showsVoiceButton ? .voice : .action
     }
 
     @ViewBuilder
     private var trailingSlot: some View {
         let control = Self.trailingControl(
             action: action,
-            showsVoiceButton: appState.showsComposerVoiceButton
+            showsVoiceButton: appState.showsComposerVoiceButton,
+            holdsDictation: dictationHoldsSendSlot
         )
         if #available(iOS 26.0, *) {
             trailingControlButton(control)
@@ -1285,7 +1304,14 @@ struct ComposerBar: View, Equatable {
         switch control {
         case .voice: voiceButton
         case .action: composerActionButton
+        case .dictation: ComposerDictationStopButton(dictation: dictation)
         }
+    }
+
+    /// Send's slot is dictation's Stop until the words are in (#1309), and
+    /// the small mic beside it steps aside meanwhile.
+    private var dictationHoldsSendSlot: Bool {
+        ComposerDictation.holdsSendSlot(isDictating: dictation.isDictating, isStarting: dictation.isStarting)
     }
 
     /// With other ways to send, a menu whose tap is the action and whose
@@ -1494,6 +1520,11 @@ struct ComposerBar: View, Equatable {
     /// text view's default newline behavior instead of being swallowed.
     @discardableResult
     private func submitFromReturnKey() -> Bool {
+        // Return stands for Send, which is dictation's Stop while it runs.
+        if dictationHoldsSendSlot {
+            if dictation.isCapturing { dictation.stop() }
+            return true
+        }
         guard ComposerReturnKey.canSubmit(action: action) else { return false }
         submit()
         return true
@@ -1509,9 +1540,9 @@ struct ComposerBar: View, Equatable {
             return
         }
 
-        // Send is beside the dictate button, so it can be tapped mid-dictation:
-        // the words so far go out, and late results must not refill the
-        // emptied field.
+        // Send waits out a dictation (#1309), but a predicted reply or a
+        // resend can still go mid-dictation: the words so far go out, and
+        // late results must not refill the emptied field.
         // The send haptic stands for both.
         // A Hermes dictation still transcribing keeps going instead: none
         // of its words were sent, and they land in the emptied field.
