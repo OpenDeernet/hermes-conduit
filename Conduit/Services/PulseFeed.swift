@@ -191,9 +191,9 @@ struct PulseLayout: Equatable {
         /// `openCards` then) until it's opened again, or with every card it
         /// brought handled, unless `opened` on this visit. Not once a card in
         /// it is open that wasn't then, or has come again since: one back
-        /// from Not now (it comes back as new), or put back with Undo. Nor
-        /// while `focused`, the card a push or a Pulse mark opened, is it or
-        /// one of its cards.
+        /// from Not now (the host makes it new again), or put back with Undo.
+        /// Nor while `focused`, the card a Pulse mark or Bring it up opened
+        /// (a push opens the screen at its top), is it or one of its cards.
         func isFolded(folded: [Int: Double]?, opened: Bool, focused: Int?) -> Bool {
             if let focused, focused == id || items.contains(where: { $0.id == focused }) { return false }
             if let folded, openCards.allSatisfy({ card, at in folded[card].map { abs($0 - at) < 0.001 } ?? false }) {
@@ -214,7 +214,7 @@ struct PulseLayout: Equatable {
     init() {}
 
     /// `keeping`: cards that stay where they are though cleared (the one a
-    /// push or a Pulse mark opened).
+    /// Pulse mark or Bring it up opened).
     init(cards: [PulseCard], keeping: Set<Int> = []) {
         var grouped: [String: [PulseCard]] = [:]
         for card in cards where !card.brief.isEmpty && card.kind != "brief" {

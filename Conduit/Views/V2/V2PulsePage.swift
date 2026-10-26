@@ -490,7 +490,7 @@ struct V2PulsePage: View {
     /// one row that opens it again: once the user folds it, or once
     /// everything in it is handled (`PulseLayout.Brief.isFolded`).
     @ViewBuilder private func briefRows(_ brief: PulseLayout.Brief) -> some View {
-        // Open when a push pointed at it or one of its cards, even before focus() could expand it.
+        // Open when a Pulse mark pointed at it or one of its cards, even before focus() could expand it.
         if brief.isFolded(folded: appState.pulseBriefFold(brief.id),
                           opened: expandedBriefs.contains(brief.id), focused: focusedCard) {
             foldedBriefRow(brief)
@@ -611,7 +611,7 @@ struct V2PulsePage: View {
         .padding(.top, 0)
         .padding(.bottom, last ? 12 : 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // The card a push opened, marked as a standalone card's stroke would.
+        // The card a Pulse mark opened, marked as a standalone card's stroke would.
         .overlay(alignment: .leading) {
             if focusedCard == card.id {
                 Capsule().fill(Color.conduitAccent).frame(width: 3).padding(.vertical, 10).padding(.leading, 4)
@@ -630,9 +630,9 @@ struct V2PulsePage: View {
 
     /// Opens the brief, or folds it, as the user left it: a fold is kept
     /// for that brief (AppState.pulseFoldedBriefs) until a card in it comes
-    /// back open. Folding the brief a push pointed into lets the push's
-    /// card go, so it folds at once; an older brief all handled then goes
-    /// back to Done and cleared, where it was before the push.
+    /// back open. Folding the brief a Pulse mark pointed into lets the
+    /// mark's card go, so it folds at once; an older brief all handled then
+    /// goes back to Done and cleared, where it was before the mark.
     private func fold(_ brief: PulseLayout.Brief, _ folded: Bool) {
         Haptics.selection()
         withAnimation(.snappy) {
