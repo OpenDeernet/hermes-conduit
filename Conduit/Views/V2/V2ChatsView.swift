@@ -1111,8 +1111,9 @@ struct V2ChatsView: View, Equatable {
             !HiddenChatProjects.hides(
                 projectID: appState.knownProjectID(for: session),
                 pinned: appState.isSessionPinned(session),
+                listedWait: listsWaits && hasStatus(.needsApproval, session),
                 hidden: hidden
-            ) || (listsWaits && hasStatus(.needsApproval, session))
+            )
         }
     }
 
