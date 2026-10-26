@@ -1093,7 +1093,8 @@ needed, it already says the setting applies to hardware keyboards only) ·
 the two default footnotes, Mac on and iPhone/iPad off (not needed, each
 states the default for its device) · the hardware-keyboards caption (not
 needed, shown only off a Mac and already says the on-screen Return key is
-unchanged) · a running dictation (done, #1315: Return stops it)
+unchanged) · a running dictation (done, #1315: Return stops it; the
+Keyboard caption is unchanged, as it describes the option)
 
 **Code**
 - Policy: `Conduit/Views/Components/ComposerReturnKey.swift` (ComposerReturnKey)
@@ -1579,7 +1580,9 @@ Stop) · the hardware Return key with Return sends on (done, it stops the
 dictation) · the big voice button set to Dictation (not needed, its second
 tap already stops, and the composer shows the Stop meanwhile) · Voice
 message's hold to record, let go to send (not changed, it's the one-tap
-path) · docs/VOICE_SETTINGS.md "Dictate into the composer" (done) · the
+path) · docs/VOICE_SETTINGS.md "Dictate into the composer" (done) · strings (not
+needed, Stop, Cancel, Transcribing and the dictation labels are already
+translated) · Watch and CarPlay (not needed, no composer dictation) · the
 notifier (not needed, dictation is app-side)
 
 **Code**

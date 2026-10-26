@@ -5,6 +5,7 @@ import SwiftUI
 /// back once they're in. Both composers and the full editor show it.
 struct ComposerDictationStopButton: View {
     @ObservedObject var dictation: ComposerDictationService
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var identifier = "composer.dictation.stop"
 
     var body: some View {
@@ -14,12 +15,7 @@ struct ComposerDictationStopButton: View {
         )
         let waits = face == .settling
         Button {
-            switch ComposerDictation.tap(
-                isCapturing: dictation.isCapturing,
-                isStarting: dictation.isStarting,
-                canDictate: false,
-                isTranscribing: dictation.isTranscribing
-            ) {
+            switch ComposerDictation.slotTap(isCapturing: dictation.isCapturing, isStarting: dictation.isStarting) {
             case .stop: dictation.stop()
             case .cancelStart: dictation.cancel()
             case .start, .nothing: break
@@ -36,8 +32,13 @@ struct ComposerDictationStopButton: View {
                         .controlSize(.small)
                 }
                 title(face)
+                    // Longer translations shrink rather than wrap or
+                    // widen the row.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
             .font(.caption.weight(.semibold))
+            .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: face)
             .foregroundStyle(waits ? Color.secondary : Color.white)
             .frame(minWidth: 86, minHeight: ComposerBar.controlSize)
             .padding(.horizontal, 4)

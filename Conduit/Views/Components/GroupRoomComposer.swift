@@ -237,7 +237,7 @@ struct GroupRoomComposer: View {
                 dictateButton: {
                     if !dictationHoldsSendSlot { dictateButton }
                 },
-                actionButton: { sendSlot }
+                actionButton: { sendSlot(identifier: "room.composer.fullEditor.dictation.stop") }
             )
             .preferredColorScheme(appState.themePreference.colorScheme)
             .environmentObject(appState)
@@ -338,7 +338,7 @@ struct GroupRoomComposer: View {
             if !dictationHoldsSendSlot {
                 dictateButton
             }
-            sendSlot
+            sendSlot()
         }
         .padding(.horizontal, 10)
         .padding(.top, 6)
@@ -458,9 +458,9 @@ struct GroupRoomComposer: View {
     }
 
     @ViewBuilder
-    private var sendSlot: some View {
+    private func sendSlot(identifier: String = "room.composer.dictation.stop") -> some View {
         if dictationHoldsSendSlot {
-            ComposerDictationStopButton(dictation: dictation, identifier: "room.composer.dictation.stop")
+            ComposerDictationStopButton(dictation: dictation, identifier: identifier)
         } else {
             sendButton
         }

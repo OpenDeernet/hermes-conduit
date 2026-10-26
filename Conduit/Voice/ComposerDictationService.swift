@@ -407,6 +407,16 @@ enum ComposerDictation {
         return .settling
     }
 
+    /// What a tap on that Stop, or Return in its place, does: it never
+    /// starts a dictation, and waits while the words settle.
+    static func slotTap(isCapturing: Bool, isStarting: Bool) -> Tap {
+        switch slotFace(isCapturing: isCapturing, isStarting: isStarting) {
+        case .stop: return .stop
+        case .cancelStart: return .cancelStart
+        case .settling: return .nothing
+        }
+    }
+
     /// Whether a change the full editor reported counts as typing: any
     /// change but the draft dictation itself last wrote, programmatic
     /// replacements included (dictation would write over those too).

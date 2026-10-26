@@ -84,4 +84,12 @@ extension ComposerFullEditorTests {
             "stopped with its words on their way: nothing to tap"
         )
     }
+
+    /// The Stop and Return in its place: stop, call off a start, or wait;
+    /// never a new dictation and never a send.
+    func testTheStopAndReturnStopCallOffOrWait() {
+        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: true, isStarting: false), .stop)
+        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: false, isStarting: true), .cancelStart)
+        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: false, isStarting: false), .nothing)
+    }
 }

@@ -695,7 +695,7 @@ struct ComposerBar: View, Equatable {
         .opacity(appState.turnState == .unsupportedGateway ? 0.7 : 1)
         .animation(ConduitMotion.transition, value: action)
         // Send and the mic give way to dictation's Stop, and come back.
-        .animation(ConduitMotion.transition, value: dictationHoldsSendSlot)
+        .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: dictationHoldsSendSlot)
         .preferredColorScheme(appState.themePreference.colorScheme)
         .sheet(item: $repairContext) { context in
             ConnectionRepairSetupSheet(context: context)
@@ -818,7 +818,7 @@ struct ComposerBar: View, Equatable {
                 },
                 actionButton: {
                     if dictationHoldsSendSlot {
-                        ComposerDictationStopButton(dictation: dictation)
+                        ComposerDictationStopButton(dictation: dictation, identifier: "composer.fullEditor.dictation.stop")
                     } else {
                         composerActionButton
                     }
@@ -1524,10 +1524,10 @@ struct ComposerBar: View, Equatable {
     private func submitFromReturnKey() -> Bool {
         // Return stands for Send, which is dictation's Stop while it runs.
         if dictationHoldsSendSlot {
-            if dictation.isCapturing {
-                dictation.stop()
-            } else if dictation.isStarting {
-                dictation.cancel()
+            switch ComposerDictation.slotTap(isCapturing: dictation.isCapturing, isStarting: dictation.isStarting) {
+            case .stop: dictation.stop()
+            case .cancelStart: dictation.cancel()
+            case .start, .nothing: break
             }
             return true
         }
