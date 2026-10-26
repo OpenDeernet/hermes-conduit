@@ -2210,23 +2210,26 @@ only the board may run it, so it can supervise the worker. Conduit leaves
 these sessions out wherever it offers chats, and the task's Worker Log is
 where to follow one.
 
-**Siblings:** each profile's chats list and its archived list · All
-profiles · search "In messages" · a call's find chat on the phone (every
-voice mode) · find chat on an Apple Watch call (notifier) · CarPlay's
-chat list (it reads the same list) · opening a chat from a
+**Siblings:** each profile's chats list and its archived list (and their
+`session.list` fallback) · All profiles · project chats (lanes and
+previews) · search "In messages" · find chat on a phone call in Gemini,
+Qwen, Grok, GPT-Live and Local Live (VoiceChatFinder) · Classic voice and
+Hermes-run turns, which search with Hermes' own `session_search` · find chat
+on an Apple Watch call (notifier) · CarPlay's chat list (it reads the same
+list) · opening a chat from a
 link or notification (the message shown) · the Kanban task's Worker Log ·
 Hermes Desktop's sidebar (upstream, leaves `kanban` out too)
 
 **Code**
 - Sources: `Conduit/Models/Models.swift` (SessionSource.hermesKanbanSource, chatListExcludedSources)
-- Lists: `Conduit/Services/AppState.swift` (profileSessionsPath, archivedSessionsPath), `Conduit/Models/AllProfilesChats.swift` (sessionsPath)
+- Lists: `Conduit/Services/AppState.swift` (profileSessionsPath, archivedSessionsPath), `Conduit/Models/AllProfilesChats.swift` (sessionsPath), `Conduit/Services/HermesClient.swift` (MessageNormalizer.normalizeSessions drops `kanban` rows from every list it builds: the `session.list` fallback, project lanes and previews)
 - Search: `Conduit/Services/SessionContentSearch.swift` (path), `Conduit/Voice/VoiceChatFinder.swift` (path), `notifier/dashboard/plugin_api.py` (run_watch_find_chat, CHAT_SEARCH_EXCLUDED_SOURCES)
 - Opening one anyway: `Conduit/Services/AppState.swift` (the 4132 case where a resume fails)
 - Worker Log: `Conduit/Views/Kanban/KanbanWorkerLogScreen.swift`
-- Tests: `ConduitTests/SessionContentSearchTests.swift`, `ConduitTests/VoiceChatFinderTests.swift`, `notifier/tests/test_watch_chats.py`
+- Tests: `ConduitTests/SessionContentSearchTests.swift`, `ConduitTests/VoiceChatFinderTests.swift`, `ConduitTests/MessageNormalizerTests.swift`, `ConduitTests/SidebarLayoutTests+AllProfiles.swift`, `ConduitTests/AppStateChatResumeTests.swift` (testOpeningAKanbanWorkerPointsAtTheBoard), `notifier/tests/test_watch_chats.py`
 
 **Rulings**
-- Kanban workers aren't chats: lists, search and voice leave them out with `exclude_sources`, as Desktop does, and the board's Worker Log shows them (2026-10-26, #1305, tester report via Eric).
+- Kanban workers aren't chats: lists, search and voice leave them out with `exclude_sources`, as Desktop does, and the board's Worker Log shows them. The session normalizer drops them too, so a list whose source doesn't filter (projects, `session.list`) can't show one. Classic voice needs nothing: Hermes' `session_search` already hides `kanban` (2026-10-26, #1305, tester report via Eric).
 - A worker reached anyway (a link, a cached row) says it belongs to the board and points at its Worker Log instead of "Failed to restore this conversation" (2026-10-26, #1305).
 
 **Open gaps**

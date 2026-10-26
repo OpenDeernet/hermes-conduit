@@ -1464,6 +1464,28 @@ final class AppStateChatResumeTests: XCTestCase {
         XCTAssertEqual(harness.store.snapshot(for: newerKey), .latest)
     }
 
+    func testOpeningAKanbanWorkerPointsAtTheBoard() async {
+        let harness = makeHarness(
+            lifecycleOperations: ChatResumeLifecycleOperations(
+                openSession: { _, _, _ in
+                    throw RpcError(code: 4132, message: "Session worker is a Kanban worker transcript.")
+                },
+                refreshContext: { _, _ in }
+            )
+        )
+        harness.appState.client = HermesClient(
+            connection: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"), profile: "default")
+        harness.appState.isConnected = true
+        harness.appState.sessions = [session("worker")]
+
+        _ = await harness.appState.openSession("worker")
+
+        XCTAssertEqual(
+            harness.appState.errorMessage,
+            "This chat is a Kanban task's worker, so only the board can run it. Open the task on the Kanban board and check its Worker Log."
+        )
+    }
+
     func testNewChatThatFailsKeepsTheOpenChatsTitle() async {
         let harness = makeHarness(
             lifecycleOperations: ChatResumeLifecycleOperations(

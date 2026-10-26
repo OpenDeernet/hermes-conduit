@@ -3845,7 +3845,13 @@ enum MessageNormalizer {
             records = []
         }
 
-        return records.enumerated().map { index, item in
+        // Kanban workers' transcripts aren't chats (SessionSource.hermesKanbanSource):
+        // every list built here leaves them out, whatever the server filtered
+        // (the `session.list` fallback, project lanes and previews included).
+        let chats = records.filter {
+            $0.objectValue?["source"]?.stringValue?.lowercased() != SessionSource.hermesKanbanSource
+        }
+        return chats.enumerated().map { index, item in
             let obj = item.objectValue ?? [:]
             let runtimeSessionId = obj["session_id"]?.stringValue
             let id = runtimeSessionId ?? obj["id"]?.stringValue ?? String(index)
