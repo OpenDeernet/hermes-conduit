@@ -30,8 +30,9 @@ final class ComposerDictationService: ObservableObject {
     @Published private(set) var settleCanEnd = false
 
     /// How long a settle runs before Send's Stop may cut it short: longer
-    /// than an Apple engine's usual final result (#1315 review).
-    nonisolated static let settleGrace: Duration = .seconds(2)
+    /// than either Apple engine's whole settle (1.5 and 3 seconds), so only
+    /// a slower one (Hermes) ever offers Done (#1315 review).
+    nonisolated static let settleGrace: Duration = .milliseconds(3_500)
 
     /// The whole transcript of this dictation so far, each time it changes.
     /// Cleared when the dictation ends: the view that set it is captured.

@@ -1595,7 +1595,7 @@ notifier (not needed, dictation is app-side)
 **Rulings**
 - Send isn't offered while dictating, from the tap that starts it until its last words are in (a Hermes upload included). A wide Stop holds its place and the small mic steps aside; Send comes back with the words in the draft. Send doesn't stop and send in one tap (Eric, 2026-10-26, #1309, #1315).
 - The Stop takes the whole slot, so a running reply's Stop, Steer or Queue comes back after the dictation too (2026-10-26, #1315).
-- Once stopped, the Stop shows Transcribing and waits through an engine's usual settle (2 seconds, longer than an Apple engine's), so a tap can't cut off its final words. Past that it reads Done and ends the dictation there, keeping the draft's words, so a slow host never holds Send back. A Hermes dictation none of whose words are in yet waits throughout (2026-10-26, #1315 review).
+- Once stopped, the Stop shows Transcribing and waits through an engine's usual settle (3.5 seconds, longer than either Apple engine's whole settle, so only Hermes offers Done), so a tap can't cut off its final words. Past that it reads Done and ends the dictation there, keeping the draft's words, so a slow host never holds Send back. A Hermes dictation none of whose words are in yet waits throughout (2026-10-26, #1315 review).
 
 **Open gaps**
 - A Hermes upload none of whose words reached the draft can't be cut short: Transcribing waits until the words come or the watchdog ends it with its message.

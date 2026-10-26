@@ -95,9 +95,10 @@ extension ComposerFullEditorTests {
         XCTAssertEqual(ComposerDictation.slotTap(.transcribing), .nothing)
     }
 
-    /// An Apple engine's settle ends on its own before Done could cut it
-    /// short; only a slower one (Hermes) offers Done.
-    func testSettleGraceOutlastsTheAppleSettle() {
-        XCTAssertGreaterThan(ComposerDictationService.settleGrace, .milliseconds(1_500))
+    /// Both Apple engines' settles (Speech 1.5 s, SpeechAnalyzer 3 s) end
+    /// on their own before Done could cut them short; only a slower one
+    /// (Hermes) offers Done.
+    func testSettleGraceOutlastsTheAppleSettles() {
+        XCTAssertGreaterThan(ComposerDictationService.settleGrace, .seconds(3))
     }
 }
