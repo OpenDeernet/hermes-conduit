@@ -136,9 +136,9 @@ Hermes asks with a server request (`sudo`, `secret`, `vault.unlock_prompt`,
 **Siblings:** chat card (chats, project chats, Bot Chat) · reopening the
 chat (a resume's `open_requests`) and Hermes withdrawing it
 (`request.cancel`) · the jump button · Classic voice's screen and the call
-screen · voice modes saying Hermes waits · CarPlay · Watch calls · a call
-from Hermes · Hermes Desktop's dialogs (upstream, the reference) ·
-notification · group rooms
+screen · the minimised call bar · voice modes saying Hermes waits ·
+a voice job's card · CarPlay · Watch calls · a call from Hermes · Hermes
+Desktop's dialogs (upstream, the reference) · notification · group rooms
 
 **Code**
 - Requests: `Conduit/Services/HermesClient.swift` (handleServerRequest, respondToInputPrompt), `Conduit/Services/StreamEventParser.swift` (request.cancel), `Conduit/Models/Models.swift` (InputPromptActivity: from, loginAnswer, codeAnswer)
@@ -151,14 +151,15 @@ notification · group rooms
 **Rulings**
 - What the user types lives only in the card's view state and goes once onto the socket: never on the message, in a cache, a log or a notification. The card is live-only; reopening the chat brings it back from `open_requests` (2026-10-26, #259, #1301).
 - Never asked or answered by voice: a voice mode says Hermes waits and where, and Classic voice and the call screen show the card, but no listening window opens for it, so the value is never spoken or heard by a model (2026-10-26, #1301).
-- A website login names the exact origin it is saved for, and goes as JSON `{identifier, password}`, the identifier trimmed and the password as typed; a code drops the spaces and dashes a site groups it with. As in Hermes Desktop: the code is shown as typed, Don't save and Skip answer empty (2026-10-26, #1299, #1301).
+- A website login names the exact origin it is saved for, and goes as JSON `{identifier, password}`, the identifier trimmed and the password as typed (spaces alone are no password, as on the other cards); a code drops the spaces and dashes a site groups it with. As in Hermes Desktop: the code is shown as typed, Don't save and Skip answer empty (2026-10-26, #1299, #1301).
 - No password or username autofill type on the login card: iOS would offer to save the site's login under Conduit's own domain. The code field offers a code from a text message or email (2026-10-26, #1301).
 
 **Open gaps**
 - Notification: none for any of these. Hermes gives plugins no hook on server requests, and `browser_vault` can't tell before it runs whether it will ask (a saved authenticator key fills codes itself).
 - Group rooms show no card for these.
 - Classic voice says nothing when one arrives, so on CarPlay, which shows no card, the conversation sits on thinking until it is answered on the phone. Its spoken notices open a listening window for the answer, which these must not have; a notice without one is still to build.
-- Watch calls: a job waiting on one says to open it in Conduit (waitingNotice); the Watch has no card. A call from Hermes is never about one: the plugin calls only for approvals and questions.
+- A voice job waiting on one shows no card on the call screen or Classic voice's screen: the job keeps only that it needs input, so the call says to open it in Conduit (waitingNotice). The same goes for Watch calls, which have no card at all.
+- The minimised call bar shows no card, as for approvals and questions; opening the call shows it. A call from Hermes is never about one: the plugin calls only for approvals and questions.
 
 **Checked:** 2026-10-26, #1301 (website logins and codes, #1299).
 

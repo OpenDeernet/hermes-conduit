@@ -2311,6 +2311,35 @@ final class HermesClientTests: XCTestCase {
     func testWebsiteLoginAnswerNeedsBothParts() {
         XCTAssertNil(InputPromptActivity.loginAnswer(identifier: "  ", password: "secret"))
         XCTAssertNil(InputPromptActivity.loginAnswer(identifier: "me", password: ""))
+        XCTAssertNil(InputPromptActivity.loginAnswer(identifier: "me", password: "  \t "),
+                     "A password of spaces alone is not an answer")
+    }
+
+    func testResumeDeclinesALoginRequestWithoutAnOrigin() async throws {
+        let (client, socket) = try await connectedClientForServerRequests()
+        let sent = Gate()
+        socket.onSend = { sent.signal() }
+        let openTask = Task<SessionResumeResult, Error> { try await client.openSession("runtime-1") }
+        try await sent.wait("the session.resume request to be sent")
+        let id = try XCTUnwrap(try sentFrame(socket)["id"] as? Int)
+        try await deliverFrame([
+            "jsonrpc": "2.0", "id": id,
+            "result": [
+                "session_id": "runtime-1", "running": true, "messages": [Any](), "info": [String: Any](),
+                "open_requests": [
+                    ["id": "srq-777777777777", "method": "vault.save_login",
+                     "params": ["session_id": "runtime-1", "site": "example.com"]]
+                ]
+            ]
+        ], to: socket)
+        let result = try await awaitResult(of: openTask, "the session.resume response")
+        XCTAssertTrue(result.snapshot.pendingInputPrompts.isEmpty)
+        await waitForSends(2, on: socket)
+        let reply = try sentFrame(socket)
+        XCTAssertEqual(reply["id"] as? String, "srq-777777777777")
+        XCTAssertEqual((reply["error"] as? [String: Any])?["code"] as? Int, -32602,
+                       "A replayed request no card can show fails fast, like the live frame")
+        client.disconnect()
     }
 
     func testWebsiteLoginFallsBackToTheOriginsHost() throws {

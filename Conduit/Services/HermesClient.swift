@@ -2357,6 +2357,19 @@ final class HermesClient: ObservableObject {
                   let id = request["id"]?.stringValue, !id.isEmpty else { continue }
             declineServerRequest(id: .string(id), method: method)
         }
+        // An input request no card can show (no session, or a login with
+        // no origin) is refused as the live frame is, not left to wait.
+        for entry in object["open_requests"]?.arrayValue ?? [] {
+            guard let request = entry.objectValue,
+                  let method = request["method"]?.stringValue,
+                  InputPromptActivity.Kind(rawValue: method) != nil,
+                  let id = request["id"]?.stringValue, !id.isEmpty,
+                  InputPromptActivity.from(
+                      requestId: id, method: method, params: request["params"]?.objectValue ?? [:]
+                  ) == nil else { continue }
+            openServerRequestIDs.remove(id)
+            writeServerRequestReply(id: .string(id), error: (Self.invalidParamsCode, "\(method) request without the fields its card needs"))
+        }
         for entry in object["open_requests"]?.arrayValue ?? [] {
             guard let request = entry.objectValue,
                   request["method"]?.stringValue == "approval",

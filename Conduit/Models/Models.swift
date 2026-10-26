@@ -562,7 +562,8 @@ struct InputPromptActivity: Equatable {
     var error: String?
 
     /// Parses a server request (live frame or `open_requests` entry).
-    /// Returns nil for any other method or a request without a session.
+    /// Returns nil for any other method, a request without a session, or
+    /// a login request without the origin it is saved for.
     static func from(requestId: String, method: String, params: [String: AnyCodable]) -> InputPromptActivity? {
         guard let kind = Kind(rawValue: method), !requestId.isEmpty else { return nil }
         let sessionId = params["session_id"]?.stringValue?
@@ -625,10 +626,12 @@ struct InputPromptActivity: Equatable {
 
     /// The `vault.save_login` answer: the JSON Hermes hands to its vault
     /// store. Nil when either part is missing, which is not an answer
-    /// (Hermes reads that as declined).
+    /// (Hermes reads that as declined). A password of spaces alone is
+    /// missing too, as on the other cards; one containing spaces goes as
+    /// typed.
     static func loginAnswer(identifier: String, password: String) -> String? {
         let identifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !identifier.isEmpty, !password.isEmpty,
+        guard !identifier.isEmpty, !password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let data = try? JSONSerialization.data(
                   withJSONObject: ["identifier": identifier, "password": password],
                   options: [.sortedKeys]
