@@ -83,9 +83,7 @@ struct V2ConversationScreen: View {
 
     var body: some View {
         ZStack {
-            // A Bot Chat glows in its bot's color, as its working line does;
-            // a group room keeps the profile in use.
-            V2Backdrop(glowProfile: appState.activeRoomSurface == nil ? appState.conversationIdentityProfile : nil)
+            V2Backdrop()
             conversation
                 .overlay(alignment: .bottomTrailing) {
                     if appState.activeRoomSurface == nil {

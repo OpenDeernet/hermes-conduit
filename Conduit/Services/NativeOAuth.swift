@@ -361,6 +361,7 @@ final class NativeOAuthAPIClient {
     private static func errorDetail(_ data: Data) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return json["detail"] as? String ?? json["error"] as? String ?? json["message"] as? String
+            ?? DashboardTicketBridgeError.structuredDetail(json["detail"])
     }
 }
 
@@ -589,7 +590,7 @@ final class NativeOAuthLoopbackServer: @unchecked Sendable {
     func start(timeout: TimeInterval = 5 * 60) async throws -> UInt16 {
         try await withTaskCancellationHandler(operation: {
             try await withCheckedThrowingContinuation { continuation in
-                queue.async { [self] in
+                queue.async {
                     if let result = self.terminalResult {
                         switch result {
                         case .failure(let error): continuation.resume(throwing: error)

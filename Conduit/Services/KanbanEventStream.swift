@@ -547,7 +547,8 @@ final class KanbanEventStreamCoordinator {
 
     private func backoff(_ myRun: Int) async {
         let delay = KanbanLiveUpdatePolicy.reconnectDelayNanoseconds(consecutiveFailures: consecutiveFailures)
-        recordBackoff(delay)
+        recordedBackoffs.append(delay)
+        if recordedBackoffs.count > 50 { recordedBackoffs.removeFirst(recordedBackoffs.count - 50) }
         consecutiveFailures += 1
         do {
             try await sleeper(delay)

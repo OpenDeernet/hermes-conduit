@@ -12,7 +12,7 @@
 import Foundation
 
 /// Where a Restart Gateway request stands, shown in the chat's Gateway sheet
-/// and in Settings > Connection.
+/// and in Settings > Gateway.
 enum GatewayRestartState: Equatable {
     case idle
     /// The restart request is on its way to the dashboard.

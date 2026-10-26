@@ -146,9 +146,8 @@ extension AppState {
 
     /// Answers one question of the clarify a voice call's job waits on:
     /// through its card when the chat is on screen, else straight to
-    /// Hermes; nil `answer` leaves a form's question blank. The card as it
-    /// stands after; nil once Hermes stopped waiting.
-    func respondToClarifyByVoice(_ clarify: ClarifyActivity, questionID: String?, answer: String?) async throws -> ClarifyActivity? {
+    /// Hermes. The card as it stands after; nil once Hermes stopped waiting.
+    func respondToClarifyByVoice(_ clarify: ClarifyActivity, questionID: String?, answer: String) async throws -> ClarifyActivity? {
         if messages.contains(where: { $0.clarify?.requestId == clarify.requestId }) {
             await respondToClarify(requestId: clarify.requestId, questionId: questionID, answer: answer)
             guard let after = messages.first(where: { $0.clarify?.requestId == clarify.requestId })?.clarify,
@@ -163,10 +162,8 @@ extension AppState {
         guard let index = questionID.flatMap({ id in clarify.questions.firstIndex { $0.id == id } })
                 ?? clarify.questions.firstIndex(where: { $0.status == .pending || $0.status == .error }) else { return nil }
         let question = clarify.questions[index]
-        // As the card sends it: a multi-select answer is always a list, and
-        // a blank is empty, which Hermes reads as skipped.
-        let answer = answer ?? ""
-        let wire = question.multiSelect && !answer.isEmpty && (try? JSONSerialization.jsonObject(with: Data(answer.utf8))) as? [String] == nil
+        // As the card sends it: a multi-select answer is always a list.
+        let wire = question.multiSelect && (try? JSONSerialization.jsonObject(with: Data(answer.utf8))) as? [String] == nil
             ? ClarifyQuestion.multiSelectAnswer([answer])
             : answer
         let outcome = try await client.respondToClarification(
@@ -243,31 +240,16 @@ extension AppState {
         }
     }
 
-    /// The open chat's approval, question and input cards still waiting on
-    /// the user (or on their answer reaching Hermes), for the Classic voice
-    /// screen and the call screen that cover the chat. An input card (a
-    /// password, login or code) is only shown there, never asked for by
-    /// voice: what the user types must not be spoken or heard.
+    /// The open chat's approval and question cards still waiting on the
+    /// user (or on their answer reaching Hermes), for the Classic voice
+    /// screen that covers the chat.
     var openChatWaitingCards: [ChatMessage] {
         guard turnState.isRunning else { return [] }
         let approvals = openChatWaitingApprovals
         let questions = openChatWaitingQuestions
-        let inputs = openChatWaitingInputs
         // In the chat's order: Hermes asks one at a time.
         return messages.filter { message in
             approvals.contains { $0.id == message.id } || questions.contains { $0.id == message.id }
-                || inputs.contains { $0.id == message.id }
-        }
-    }
-
-    /// The open chat's input cards still waiting on the user (or on their
-    /// answer reaching Hermes).
-    var openChatWaitingInputs: [ChatMessage] {
-        guard turnState.isRunning, let sessionId = activeSessionId, !sessionId.isEmpty else { return [] }
-        let open = chatOwnSessionIDs(for: sessionId)
-        return messages.filter { message in
-            guard let prompt = message.inputPrompt else { return false }
-            return (prompt.isAnswerable || prompt.status == .submitting) && open.contains(prompt.sessionId)
         }
     }
 

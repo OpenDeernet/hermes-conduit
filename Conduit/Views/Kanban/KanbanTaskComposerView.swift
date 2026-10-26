@@ -17,7 +17,7 @@ import SwiftUI
 ///   Conduit's chat YOLO setting.
 struct KanbanTaskComposerView: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
-    @Environment(KanbanStore.self) private var store
+    @EnvironmentObject private var store: KanbanStore
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
 
@@ -93,7 +93,7 @@ struct KanbanTaskComposerView: View {
             }
             .sheet(isPresented: $showModelSheet) {
                 KanbanModelOverrideSheet(value: modelOverrideBinding)
-                    .environment(store)
+                    .environmentObject(store)
                     .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $showSkillsSheet) {
@@ -106,7 +106,7 @@ struct KanbanTaskComposerView: View {
                     selectedParentID: parentBinding,
                     excludedTaskID: nil
                 )
-                .environment(store)
+                .environmentObject(store)
                 .presentationDetents([.medium, .large])
             }
         }
@@ -439,7 +439,7 @@ struct KanbanTaskComposerView: View {
 /// inventory is unavailable. Entirely detached from any live session model.
 struct KanbanModelOverrideSheet: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
-    @Environment(KanbanStore.self) private var store
+    @EnvironmentObject private var store: KanbanStore
     @Environment(\.dismiss) private var dismiss
     @Binding var value: TaskModelOverride
 
@@ -759,7 +759,7 @@ struct KanbanSkillsPickerSheet: View {
 /// Desktop's New Task dialog (one parent, even though the API accepts lists).
 struct KanbanParentPickerSheet: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
-    @Environment(KanbanStore.self) private var store
+    @EnvironmentObject private var store: KanbanStore
     @Environment(\.dismiss) private var dismiss
     @Binding var selectedParentID: String?
     /// Edit flows pass the current task here so nothing can depend on itself.

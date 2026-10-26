@@ -7,7 +7,7 @@ import SwiftUI
 struct CapabilitiesView: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     @EnvironmentObject var appState: AppState
-    @State private var store = CapabilitiesStore()
+    @StateObject private var store = CapabilitiesStore()
     @AppStorage("capabilities.tab") private var tabRaw = CapabilitiesTab.skills.rawValue
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool

@@ -85,7 +85,6 @@ struct LocationSettingsPage: View {
     @ObservedObject var engine: LocationSyncEngine
     @ObservedObject var appLanguage = AppLanguageStore.shared
     @ObservedObject private var notifications = PushNotificationService.shared
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum PendingLayer: Identifiable {
         case talking, background
@@ -142,11 +141,6 @@ struct LocationSettingsPage: View {
                 actionSection
             }
         }
-        // A layer turns on or off after the consent sheet or the host's
-        // answer, so the rows it reveals animate on the value, page-wide so
-        // the sections below move with them.
-        .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: settings.talking)
-        .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: settings.background)
         .navigationTitle("Location")
         .task {
             // Once per appearance, not on every body re-evaluation.
