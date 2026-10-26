@@ -587,10 +587,11 @@ struct InputPromptActivity: Equatable {
             activity.displayName = text("display_name").isEmpty ? text("backend") : text("display_name")
         case .vaultSaveLogin:
             // A login is bound to the origin it is saved for; without one
-            // the card could not say which site gets it.
+            // the card could not say which site gets it. The title names
+            // the origin's own host, so it can never name another site.
             activity.origin = text("origin")
             guard !activity.origin.isEmpty else { return nil }
-            activity.site = text("site").isEmpty ? Self.host(of: activity.origin) : text("site")
+            activity.site = URL(string: activity.origin)?.host ?? (text("site").isEmpty ? activity.origin : text("site"))
         case .vaultCode:
             activity.site = text("site")
         }
@@ -647,10 +648,6 @@ struct InputPromptActivity: Equatable {
     /// dashes a site groups it with ("123 456"), as Hermes types it.
     static func codeAnswer(_ typed: String) -> String {
         typed.filter { !$0.isWhitespace && $0 != "-" }
-    }
-
-    private static func host(of origin: String) -> String {
-        URL(string: origin)?.host ?? origin
     }
 
     var isAnswerable: Bool { status == .pending || status == .error }

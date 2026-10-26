@@ -4438,11 +4438,12 @@ struct InputPromptCard: View {
         case .vaultCode:
             // Shown as typed, like Hermes Desktop: a short code is not worth
             // masking and a typo must be visible. .oneTimeCode offers the
-            // code a text message or email just brought.
+            // code a text message or email just brought; letters come first
+            // because an email's code can have them.
             TextField(placeholder(for: prompt.kind), text: $value)
                 .accessibilityHint(AppLocalization.string("Enter code has Hermes type it into the page. The model never sees it."))
                 .textContentType(.oneTimeCode)
-                .keyboardType(.numbersAndPunctuation)
+                .keyboardType(.asciiCapable)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .focused($fieldFocused)

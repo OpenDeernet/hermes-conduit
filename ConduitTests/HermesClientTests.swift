@@ -2350,6 +2350,33 @@ final class HermesClientTests: XCTestCase {
         XCTAssertEqual(activity.site, "shop.example.com")
     }
 
+    func testWebsiteLoginTitleNamesTheOriginsHostNotAnotherSite() throws {
+        let activity = try XCTUnwrap(InputPromptActivity.from(
+            requestId: "srq-1", method: "vault.save_login",
+            params: ["session_id": .string("s1"), "origin": .string("https://evil.example"), "site": .string("bank.example")]
+        ))
+        XCTAssertEqual(activity.site, "evil.example")
+    }
+
+    func testLiveLoginRequestWithoutAnOriginIsRefused() async throws {
+        let (client, socket) = try await connectedClientForServerRequests()
+        var events: [StreamEvent] = []
+        client.onEvent = { events.append($0) }
+        let sent = Gate()
+        socket.onSend = { sent.signal() }
+        try await deliverFrame([
+            "jsonrpc": "2.0", "id": "srq-0b0b0b0b0b0b", "method": "vault.save_login",
+            "params": ["session_id": "runtime-1", "site": "example.com"]
+        ], to: socket)
+        try await sent.wait("the refusal to be sent")
+
+        let reply = try sentFrame(socket)
+        XCTAssertEqual(reply["id"] as? String, "srq-0b0b0b0b0b0b")
+        XCTAssertEqual((reply["error"] as? [String: Any])?["code"] as? Int, -32602)
+        XCTAssertTrue(events.isEmpty, "No card for a login that names no origin")
+        client.disconnect()
+    }
+
     func testVerificationCodeRequestPresentsCardAndAnswersWithTheCode() async throws {
         let (client, socket) = try await connectedClientForServerRequests()
         var events: [StreamEvent] = []
