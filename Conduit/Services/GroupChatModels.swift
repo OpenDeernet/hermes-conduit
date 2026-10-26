@@ -203,9 +203,13 @@ struct GroupDriverStatus: Equatable {
 
     /// What a live member's row and the header say about it: a member on
     /// another Hermes reads as cut off or unreachable while its route says
-    /// so, unless its turn is running.
-    func responderState(for member: GroupMember) -> GroupResponderState {
-        if memberActivity?.contains(where: { $0.isWorking && Self.names($0.memberID, member) }) == true {
+    /// so, unless its turn is running. A turn names its member as
+    /// `GroupRoomTurns.liveMember` reads it, among the room's `members`.
+    func responderState(for member: GroupMember, in members: [GroupMember]) -> GroupResponderState {
+        let seated = members.contains(member) ? members : members + [member]
+        if memberActivity?.contains(where: {
+            $0.isWorking && GroupRoomTurns.member(withID: $0.memberID, in: seated) == member
+        }) == true {
             return .responding
         }
         switch routeStatus(for: member) {
@@ -215,7 +219,7 @@ struct GroupDriverStatus: Equatable {
         }
     }
 
-    /// The gateway names peer routes, and a peer's tasks, by member id.
+    /// The gateway names peer routes by member id.
     private static func names(_ id: String, _ member: GroupMember) -> Bool {
         id.caseInsensitiveCompare(member.identityKey) == .orderedSame
     }
@@ -257,6 +261,7 @@ struct GroupMemberActivity: Equatable {
 
     /// The member's turn has the room (Hermes Desktop ranks it over queued).
     var isWorking: Bool { status == "running" || status == "stopping" }
+    var isQueued: Bool { status == "queued" }
 }
 
 /// How a live member stands, for its row and the header.
@@ -1193,9 +1198,10 @@ enum GroupRoomTurns {
 
     /// The member the gateway's live turns put first, as Hermes Desktop
     /// reads them: a running (or stopping) turn's, else the first queued
-    /// one's. An id the room doesn't seat is skipped.
+    /// one's. An id the room doesn't seat, and a status this build doesn't
+    /// know, are skipped.
     static func liveMember(_ activity: [GroupMemberActivity], members: [GroupMember]) -> GroupMember? {
-        let ranked = activity.filter(\.isWorking) + activity.filter { !$0.isWorking }
+        let ranked = activity.filter(\.isWorking) + activity.filter(\.isQueued)
         for task in ranked {
             if let member = member(withID: task.memberID, in: members) { return member }
         }

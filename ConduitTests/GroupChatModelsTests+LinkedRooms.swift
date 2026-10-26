@@ -54,8 +54,12 @@ extension GroupChatModelsTests {
         )
     }
 
-    private func linkedRoomChoices(_ choices: [String: Any], saved: Bool? = nil) -> [String: Any] {
-        var answer: [String: Any] = ["ok": true, "room_id": "conduit-1", "choices": choices]
+    private func linkedRoomChoices(
+        _ choices: [String: Any],
+        saved: Bool? = nil,
+        room: String = "conduit-1"
+    ) -> [String: Any] {
+        var answer: [String: Any] = ["ok": true, "room_id": room, "choices": choices]
         if let saved { answer["saved"] = saved }
         return answer
     }
@@ -122,6 +126,18 @@ extension GroupChatModelsTests {
         XCTAssertNil(GroupRoomTurns.liveMember([], members: members))
     }
 
+    func testLiveMemberSkipsAStatusThisBuildDoesntKnow() {
+        let members = [linkedRoomMember("furina"), linkedRoomMember("laifu", peer: true)]
+        XCTAssertEqual(GroupRoomTurns.liveMember([
+            GroupMemberActivity(memberID: "furina", status: "finishing"),
+            GroupMemberActivity(memberID: "laifu", status: "queued"),
+        ], members: members)?.memberID, "laifu")
+        XCTAssertNil(GroupRoomTurns.liveMember([
+            GroupMemberActivity(memberID: "furina", status: "finishing"),
+            GroupMemberActivity(memberID: "laifu", status: ""),
+        ], members: members))
+    }
+
     func testLiveMemberSkipsIdsOutsideTheRoom() {
         let members = [linkedRoomMember("furina"), linkedRoomMember("laifu", peer: true)]
         XCTAssertEqual(GroupRoomTurns.liveMember([
@@ -138,23 +154,43 @@ extension GroupChatModelsTests {
 
     func testACutOffPeerReadsCutOffUntilItsTurnRuns() {
         let laifu = linkedRoomMember("laifu", peer: true)
+        let room = [linkedRoomMember("furina"), laifu]
         var status = linkedRoomDriver(
             routes: [GroupPeerRoute(memberID: "laifu", status: .cutOff)],
             activity: [GroupMemberActivity(memberID: "laifu", status: "queued")]
         )
         XCTAssertEqual(status.routeStatus(for: laifu), .cutOff)
-        XCTAssertEqual(status.responderState(for: laifu), .cutOff)
+        XCTAssertEqual(status.responderState(for: laifu, in: room), .cutOff)
         status.memberActivity = [GroupMemberActivity(memberID: "laifu", status: "running")]
-        XCTAssertEqual(status.responderState(for: laifu), .responding)
+        XCTAssertEqual(status.responderState(for: laifu, in: room), .responding)
         // A gateway that doesn't report live turns: the route alone says.
         status.memberActivity = nil
-        XCTAssertEqual(status.responderState(for: laifu), .cutOff)
+        XCTAssertEqual(status.responderState(for: laifu, in: room), .cutOff)
+    }
+
+    func testATurnNamedByItsProfileIsThatMembersRunningTurn() {
+        // A task with no member id of its own is named by its profile, and
+        // reads as the member liveMember puts first.
+        let laifu = linkedRoomMember("m-laifu", profile: "laifu", peer: true)
+        let room = [linkedRoomMember("furina"), laifu]
+        let status = linkedRoomDriver(
+            routes: [GroupPeerRoute(memberID: "m-laifu", status: .cutOff)],
+            activity: [GroupMemberActivity(memberID: "laifu", status: "running")]
+        )
+        XCTAssertEqual(GroupRoomTurns.liveMember(status.memberActivity ?? [], members: room), laifu)
+        XCTAssertEqual(status.responderState(for: laifu, in: room), .responding)
+        // Without the room's list, it still reads its own turn.
+        XCTAssertEqual(status.responderState(for: laifu, in: []), .responding)
+        // A member whose id is that name has the turn instead.
+        let named = linkedRoomMember("laifu")
+        XCTAssertEqual(GroupRoomTurns.liveMember(status.memberActivity ?? [], members: room + [named]), named)
+        XCTAssertEqual(status.responderState(for: laifu, in: room + [named]), .cutOff)
     }
 
     func testAnUnreachablePeerReadsUnreachable() {
         let laifu = linkedRoomMember("laifu", peer: true)
         let status = linkedRoomDriver(routes: [GroupPeerRoute(memberID: "laifu", status: .unreachable)])
-        XCTAssertEqual(status.responderState(for: laifu), .unreachable)
+        XCTAssertEqual(status.responderState(for: laifu, in: [laifu]), .unreachable)
         // Ready, a state this build doesn't know, or another member's route:
         // nothing in the way.
         for route in [
@@ -162,7 +198,7 @@ extension GroupChatModelsTests {
             GroupPeerRoute(memberID: "laifu", status: .other("rebuilding")),
             GroupPeerRoute(memberID: "kazuha", status: .unreachable),
         ] {
-            XCTAssertEqual(linkedRoomDriver(routes: [route]).responderState(for: laifu), .responding)
+            XCTAssertEqual(linkedRoomDriver(routes: [route]).responderState(for: laifu, in: [laifu]), .responding)
         }
     }
 
@@ -172,7 +208,7 @@ extension GroupChatModelsTests {
         let furina = linkedRoomMember("furina")
         let status = linkedRoomDriver(routes: [GroupPeerRoute(memberID: "furina", status: .cutOff)])
         XCTAssertNil(status.routeStatus(for: furina))
-        XCTAssertEqual(status.responderState(for: furina), .responding)
+        XCTAssertEqual(status.responderState(for: furina, in: [furina]), .responding)
     }
 
     // MARK: - Disband and pictures
@@ -211,12 +247,13 @@ extension GroupChatModelsTests {
     @MainActor
     func testRoomChoicesClientSendsOneChoiceToTheAgentsProfile() async throws {
         var asked: [(path: String, method: String, body: [String: Any]?)] = []
+        var room = "conduit-1"
         let client = RoomChoicesClient { path, method, body in
             asked.append((path, method, body))
             return self.linkedRoomChoices([
                 "tools": "look", "custom_tools": [String](), "share": "nothing", "search_chats": false,
                 "takes_part": "joins", "daily_limit": 40, "note": "",
-            ])
+            ], room: room)
         }
         let kept = try await client.set(["share": "nothing"], roomID: "conduit-1", profile: "furina")
         XCTAssertEqual(asked.count, 1)
@@ -232,6 +269,7 @@ extension GroupChatModelsTests {
         ))
 
         // The default profile asks the bare path; the room id is escaped.
+        room = "conduit-a b"
         _ = try await client.choices(roomID: "conduit-a b", profile: "default")
         XCTAssertEqual(asked.last?.path, "/api/plugins/conduit_push/rooms/choices?room_id=conduit-a%20b")
         XCTAssertEqual(asked.last?.method, "GET")
@@ -255,8 +293,36 @@ extension GroupChatModelsTests {
             tools: "talk", customTools: [], share: "ask", searchChats: false, note: "", saved: false
         ))
         // An answer without what the page shows is refused.
-        XCTAssertThrowsError(try RoomChoicesClient.parse(["ok": true]))
-        XCTAssertThrowsError(try RoomChoicesClient.parse(linkedRoomChoices(["tools": "talk", "share": "ask"])))
+        XCTAssertThrowsError(try RoomChoicesClient.parse(["ok": true], roomID: "conduit-1"))
+        XCTAssertThrowsError(try RoomChoicesClient.parse(
+            linkedRoomChoices(["tools": "talk", "share": "ask"]), roomID: "conduit-1"
+        ))
+    }
+
+    @MainActor
+    func testRoomChoicesRefuseAnAnswerThatIsntOkOrIsAnotherRooms() async throws {
+        let choices: [String: Any] = ["tools": "talk", "share": "ask", "search_chats": false]
+        XCTAssertNoThrow(try RoomChoicesClient.parse(linkedRoomChoices(choices), roomID: "conduit-1"))
+        var refused = linkedRoomChoices(choices)
+        refused["ok"] = false
+        XCTAssertThrowsError(try RoomChoicesClient.parse(refused, roomID: "conduit-1"))
+        refused.removeValue(forKey: "ok")
+        XCTAssertThrowsError(try RoomChoicesClient.parse(refused, roomID: "conduit-1"))
+        // An answer that names no room is the one asked about.
+        var unnamed = linkedRoomChoices(choices)
+        unnamed.removeValue(forKey: "room_id")
+        XCTAssertNoThrow(try RoomChoicesClient.parse(unnamed, roomID: "conduit-2"))
+
+        // Another room's answer, to a read or a change, is never shown.
+        let elsewhere = RoomChoicesClient { _, _, _ in self.linkedRoomChoices(choices, room: "conduit-2") }
+        do {
+            _ = try await elsewhere.choices(roomID: "conduit-1", profile: "furina")
+            XCTFail("A read showed another room's choices")
+        } catch HermesError.invalidResponse {}
+        do {
+            _ = try await elsewhere.set(["share": "ask"], roomID: "conduit-1", profile: "furina")
+            XCTFail("A change showed another room's choices")
+        } catch HermesError.invalidResponse {}
     }
 
     @MainActor
@@ -264,7 +330,7 @@ extension GroupChatModelsTests {
         let choices = try RoomChoicesClient.parse(linkedRoomChoices([
             "tools": "custom", "custom_tools": ["web_search", "write_file"], "share": "helps",
             "search_chats": true, "note": "No spoilers",
-        ]))
+        ]), roomID: "conduit-1")
         XCTAssertEqual(choices.customTools, ["web_search", "write_file"])
         XCTAssertEqual(choices.note, "No spoilers")
         let detail = RoomAgentChoicesView.toolsDetail(choices)
@@ -280,6 +346,8 @@ extension GroupChatModelsTests {
     @MainActor
     func testANoteIsClippedToThePluginsLimitInCodePoints() {
         let limit = RoomChoicesClient.noteLimit
+        // The note's footer says so in words.
+        XCTAssertEqual(limit, 1000)
         let fits = String(repeating: "a", count: limit)
         XCTAssertEqual(RoomChoicesClient.clippedNote(fits), fits)
         XCTAssertEqual(RoomChoicesClient.clippedNote(fits + "b"), fits)

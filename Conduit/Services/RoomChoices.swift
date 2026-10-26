@@ -50,14 +50,14 @@ struct RoomChoicesClient {
     func choices(roomID: String, profile: String) async throws -> RoomChoices {
         guard let room = DashboardPath.encodedQueryComponent(roomID) else { throw HermesError.invalidResponse }
         let path = DashboardPath.withProfile("\(Self.path)?room_id=\(room)", profile: profile)
-        return try Self.parse(try await request(path, "GET", nil))
+        return try Self.parse(try await request(path, "GET", nil), roomID: roomID)
     }
 
     /// Changes only the choices `changes` names; the plugin keeps the rest
     /// and answers with all of them.
     func set(_ changes: [String: Any], roomID: String, profile: String) async throws -> RoomChoices {
         let path = DashboardPath.withProfile(Self.path, profile: profile)
-        return try Self.parse(try await request(path, "PUT", ["room_id": roomID, "choices": changes]))
+        return try Self.parse(try await request(path, "PUT", ["room_id": roomID, "choices": changes]), roomID: roomID)
     }
 
     /// The note cut to the plugin's limit, which counts code points, after
@@ -75,9 +75,11 @@ struct RoomChoicesClient {
     }
 
     /// A `PUT`'s answer has no `saved`: once a choice is set, the room has
-    /// its own.
-    static func parse(_ response: [String: Any]) throws -> RoomChoices {
-        guard let choices = response["choices"] as? [String: Any],
+    /// its own. An answer that isn't `ok`, or names another room, is refused.
+    static func parse(_ response: [String: Any], roomID: String) throws -> RoomChoices {
+        guard response["ok"] as? Bool == true,
+              response["room_id"] == nil || response["room_id"] as? String == roomID,
+              let choices = response["choices"] as? [String: Any],
               let tools = choices["tools"] as? String,
               let share = choices["share"] as? String,
               let searchChats = choices["search_chats"] as? Bool

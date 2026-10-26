@@ -10586,7 +10586,7 @@ final class AppState: ObservableObject {
     /// Hermes reads as cut off or unreachable while its route says so.
     var activeRoomResponderState: GroupResponderState {
         guard let member = activeRoomResponder, let driver = activeRoomDriverStatus else { return .responding }
-        return driver.responderState(for: member)
+        return driver.responderState(for: member, in: activeRoomSurface?.room.members ?? [])
     }
 
     @Published private(set) var activeRoomSendInFlight = false

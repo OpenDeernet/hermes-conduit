@@ -251,7 +251,11 @@ struct RoomAgentChoicesView: View {
         } header: {
             Text(AppLocalization.string("Note for this room"))
         } footer: {
-            Text(AppLocalization.string("\(name) reads this on each of its turns here. It isn't posted to the room."))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(AppLocalization.string("\(name) reads this on each of its turns here. It isn't posted to the room."))
+                // RoomChoicesClient.noteLimit: past it, typing stops.
+                Text(AppLocalization.string("A note holds up to 1,000 characters."))
+            }
         }
     }
 
@@ -285,12 +289,16 @@ struct RoomAgentChoicesView: View {
     }
 
     /// Shows the change, sends only it, then shows what the plugin kept.
+    /// The save is under way from here, not from when its task starts, so a
+    /// second change can't send a save whose answer lands after the newer
+    /// one's.
     private func change(_ choice: String, to value: Any, apply: (inout RoomChoices) -> Void) {
         guard loadedKey == key, !saving, var changed = choices else { return }
         apply(&changed)
         guard changed != choices else { return }
         Haptics.selection()
         choices = changed
+        saving = true
         Task { await save([choice: value]) }
     }
 
@@ -318,11 +326,10 @@ struct RoomAgentChoicesView: View {
     }
 
     private func save(_ change: [String: Any]) async {
+        defer { saving = false }
         let key = key
         guard loadedKey == key else { return }
-        saving = true
         error = nil
-        defer { saving = false }
         do {
             let kept = try await appState.roomChoicesClient.set(change, roomID: roomID, profile: profile)
             guard key == self.key, loadedKey == key else { return }
