@@ -35,6 +35,19 @@ extension SidebarLayoutTests {
         XCTAssertTrue(V2ChatListPreference.defaultValue, "The list shows beside the chat unless the user hides it.")
     }
 
+    func testV2SplitListLeavesVoiceToTheChatBesideIt() {
+        let project = ProjectSummary(id: "p1", title: "Trips", isHome: false, sessionCount: 0, previewSessions: [])
+        // A chat beside the list has its own voice button by the composer.
+        XCTAssertTrue(V2SplitLayout.hasChatVoiceBeside(split: true, path: [.conversation], inRoom: false))
+        XCTAssertTrue(V2SplitLayout.hasChatVoiceBeside(split: true, path: [.project(project), .conversation], inRoom: false))
+        // No chat shown, a group room (no voice button), or one column
+        // (the bar is down under a chat): the list keeps its voice.
+        XCTAssertFalse(V2SplitLayout.hasChatVoiceBeside(split: true, path: [], inRoom: false))
+        XCTAssertFalse(V2SplitLayout.hasChatVoiceBeside(split: true, path: [.project(project)], inRoom: false))
+        XCTAssertFalse(V2SplitLayout.hasChatVoiceBeside(split: true, path: [.conversation], inRoom: true))
+        XCTAssertFalse(V2SplitLayout.hasChatVoiceBeside(split: false, path: [.conversation], inRoom: false))
+    }
+
     func testV2SplitListStackLeavesOutTheConversation() {
         let project = ProjectSummary(id: "p1", title: "Trips", isHome: false, sessionCount: 0, previewSessions: [])
         XCTAssertEqual(V2SplitLayout.listRoutes([.conversation]), [])

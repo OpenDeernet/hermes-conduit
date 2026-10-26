@@ -108,6 +108,9 @@ struct V2ShellContext: Equatable {
         var canSplit = false
         /// Split, with a chat open beside this tab's list.
         var hasChatBeside = false
+        /// That chat shows its own voice button (a group room has none),
+        /// so the list column leaves voice to it.
+        var hasChatVoiceBeside = false
     }
 
     var pickProfile: (String) -> Void = { _ in }
@@ -148,6 +151,11 @@ struct V2ShellContext: Equatable {
     var hasChatBeside: Bool {
         get { values.hasChatBeside }
         set { values.hasChatBeside = newValue }
+    }
+
+    var hasChatVoiceBeside: Bool {
+        get { values.hasChatVoiceBeside }
+        set { values.hasChatVoiceBeside = newValue }
     }
 
     static func == (lhs: V2ShellContext, rhs: V2ShellContext) -> Bool {
@@ -535,11 +543,13 @@ struct V2Shell: View {
 
     /// The gold button beside the tabs: voice, or New chat when the user
     /// swapped them (Settings > Appearance). A minimised call still comes
-    /// back through it either way.
-    @ViewBuilder private var voiceButton: some View {
+    /// back through it either way. Voice steps aside for a chat open beside
+    /// the list, whose own voice button (and its way back to a minimised
+    /// call) sits by the composer: two gold buttons read as a duplicate.
+    @ViewBuilder private func voiceButton(chatVoiceBeside: Bool) -> some View {
         if mainButtonNewChat, appState.minimisedLiveVoice == nil {
             V2NewChatButton(context: voiceContext)
-        } else {
+        } else if !chatVoiceBeside {
             V2VoiceButton(context: voiceContext)
         }
     }
@@ -560,11 +570,13 @@ struct V2Shell: View {
                     let isSelected = selectedTab == tab
                     let rootCovered = isRootCovered(tab, split: split)
                     let chatBeside = split && path(of: tab).contains(.conversation)
+                    let chatVoiceBeside = V2SplitLayout.hasChatVoiceBeside(split: split, path: path(of: tab), inRoom: appState.activeRoomSurface != nil)
                     tabRoot(tab, split: split, canSplit: canSplit)
                         .transformEnvironment(\.v2Shell) {
                             $0.isTabActive = isSelected
                             $0.isRootCovered = rootCovered
                             $0.hasChatBeside = chatBeside
+                            $0.hasChatVoiceBeside = chatVoiceBeside
                         }
                         // The opened tab shows at once and the one left
                         // hides at once. A fade read as slow, and a slide
@@ -588,7 +600,7 @@ struct V2Shell: View {
                 if split || !conversationVisible {
                     HStack(spacing: 10) {
                         V2CapsuleTabBar(selection: $selectedTab)
-                        voiceButton
+                        voiceButton(chatVoiceBeside: V2SplitLayout.hasChatVoiceBeside(split: split, path: path(of: selectedTab), inRoom: appState.activeRoomSurface != nil))
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 6)
@@ -888,6 +900,13 @@ enum V2SplitLayout {
     /// column, the chat pushed over the list as on a phone.
     static func isSplit(width: CGFloat, showsList: Bool) -> Bool {
         showsList && isSplit(width: width)
+    }
+
+    /// Split, with a chat open beside the list that shows its own voice
+    /// button by the composer (a group room has none): the list column's
+    /// voice buttons step aside for it.
+    static func hasChatVoiceBeside(split: Bool, path: [V2Route], inRoom: Bool) -> Bool {
+        split && path.contains(.conversation) && !inRoom
     }
 
     /// The list column's stack: the tab's path without the conversation,
