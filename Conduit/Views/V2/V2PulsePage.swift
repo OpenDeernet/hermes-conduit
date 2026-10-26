@@ -6,10 +6,11 @@
 //  brought up, as cards. A morning brief comes first with the cards it
 //  brought, then what's new and what's still open, then Done and cleared,
 //  folded. Each card links back to the chat it came from and takes a thumbs
-//  up or down; a follow-up's thumbs down asks why, and each answer changes
+//  up or down; a follow-up's thumbs down asks why, and a report card's too
+//  once the plugin learns (asksPulseDownReason), and each answer changes
 //  what Pulse does on the host (PulseFeed.swift). Swiping a card away is
 //  Not now: off the list, nothing learned, with Undo. What Pulse learned is
-//  listed, with each kind's loudness, and every lesson can be undone.
+//  listed, with the loudest each kind gets, and every lesson can be undone.
 //  Pulse's own chat, where its hidden turns run, isn't shown: the cards are
 //  the way to answer it.
 //
@@ -169,7 +170,7 @@ struct V2PulsePage: View {
             }
             Button(AppLocalization.string("Just thumbs down")) { rate(card, up: false, reason: nil) }
         } message: { _ in
-            Text("Pulse changes what it does with your answer. You can undo it under What Pulse learned.")
+            Text("A reason changes what Pulse does right away, and you can undo it under What Pulse learned. Just thumbs down only teaches Pulse.")
         }
         .confirmationDialog(
             AppLocalization.string("Not now, until when?"),
@@ -203,6 +204,7 @@ struct V2PulsePage: View {
         .onAppear { isShown = true }
         .onDisappear {
             isShown = false
+            reasonCard = nil
             restCard = nil
             newCards = nil
             focusedCard = nil
@@ -431,11 +433,17 @@ struct V2PulsePage: View {
             .accessibilityElement(children: .combine)
             Spacer(minLength: 8)
             if page.quietNow == .until, canQuiet {
-                Button(AppLocalization.string("End quiet time")) { quiet(false) }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(quieting)
-                    .accessibilityIdentifier("pulse.quiet-end")
+                Button {
+                    quiet(false)
+                } label: {
+                    Text(verbatim: AppLocalization.string("End quiet time"))
+                        .font(.footnote.weight(.semibold))
+                        .frame(minHeight: 44)  // a full 44 pt to tap
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(quieting)
+                .accessibilityIdentifier("pulse.quiet-end")
             }
         }
         .padding(14)
@@ -962,8 +970,7 @@ struct V2PulsePage: View {
         let chosen = card.rating == (up ? "up" : "down")
         return Button {
             Haptics.selection()
-            // A report item has no ladder for a reason to move: its thumbs down is enough.
-            if up || card.isNoticed { rate(card, up: up, reason: nil) } else { reasonCard = card }
+            if up || !appState.asksPulseDownReason(card) { rate(card, up: up, reason: nil) } else { reasonCard = card }
         } label: {
             Image(systemName: up ? (chosen ? "hand.thumbsup.fill" : "hand.thumbsup")
                                  : (chosen ? "hand.thumbsdown.fill" : "hand.thumbsdown"))
@@ -1173,6 +1180,8 @@ struct PulseLearnedSheet: View {
     @State private var working = false
 
     private var client: PulseClient { appState.pulseClient }
+    /// A plugin that learns from thumbs, Do it and Done (0.81.1): thumbs no longer move the levels.
+    private var learns: Bool { appState.notifierPlugin.reports(PulseClient.learnsCapability) }
 
     var body: some View {
         NavigationStack {
@@ -1180,7 +1189,7 @@ struct PulseLearnedSheet: View {
                 if let learned {
                     Section {
                         ForEach(learned.levels.keys.sorted(), id: \.self) { kind in
-                            Picker(PulseCardKind.title(kind), selection: Binding(
+                            Picker(PulseCardKind.name(kind), selection: Binding(
                                 get: { learned.levels[kind] ?? .push },
                                 set: { level in setLevel(level, for: kind) }
                             )) {
@@ -1193,11 +1202,11 @@ struct PulseLearnedSheet: View {
                     } header: {
                         Text("How Pulse tells you")
                     } footer: {
-                        Text("Thumbs move these too: two down make it quieter, two up louder.")
+                        Text(verbatim: PulseLearned.levelsFooter(learns: learns))
                     }
                     Section {
                         if learned.lessons.isEmpty {
-                            Text("Nothing yet. Rate Pulse's cards and what it learns shows up here.")
+                            Text(verbatim: PulseLearned.noLessons(learns: learns))
                                 .foregroundStyle(.secondary)
                         }
                         ForEach(learned.lessons) { lesson in

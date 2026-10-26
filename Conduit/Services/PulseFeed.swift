@@ -7,8 +7,10 @@
 //  plugin keeps all of it (pulse_learning.py) and serves it on
 //  /api/plugins/conduit_push/pulse/feed, /rate and /learned. A rating
 //  changes what Pulse does on the host: each kind sits on a loudness ladder
-//  (push, Pulse screen, morning brief, off) that thumbs move, and a thumbs
-//  down's reason adds a lesson the user can undo.
+//  (push, Pulse screen, morning brief, off), and a thumbs down's reason adds
+//  a lesson the user can undo. Before 0.81.1 thumbs moved a kind along the
+//  ladder; from then (`pulse_learns`) thumbs, Do it and Done teach Pulse
+//  what to bring up and how loudly, and a kind's level is the loudest it gets.
 //
 
 import Foundation
@@ -276,6 +278,15 @@ enum PulseCardKind {
         default: return AppLocalization.string("Noticed")
         }
     }
+
+    /// What a lesson is about: a card kind's heading, else a report item's
+    /// topic, which a report card's reasons teach about (0.81.1).
+    static func name(_ kind: String) -> String {
+        switch kind {
+        case "followup", "report", "brief", "noticed": return title(kind)
+        default: return topic(kind)
+        }
+    }
 }
 
 /// Something a rating taught Pulse, which the user can undo.
@@ -306,13 +317,15 @@ struct PulseLesson: Equatable, Identifiable {
         switch what {
         case "level":
             let level = PulseLevel(rawValue: value)?.title ?? value
-            return AppLocalization.string("\(PulseCardKind.title(kind)): \(level)")
+            return AppLocalization.string("\(PulseCardKind.name(kind)): \(level)")
         case "rule":
             return AppLocalization.string("No updates about “\(value)”")
         case "sooner":
-            return AppLocalization.string("Check on promises sooner")
+            return kind == "followup" ? AppLocalization.string("Check on promises sooner")
+                : AppLocalization.string("\(PulseCardKind.name(kind)): Bring up sooner")
         case "seen":
-            return AppLocalization.string("Skip news you already saw in the chat")
+            return kind == "followup" ? AppLocalization.string("Skip news you already saw in the chat")
+                : AppLocalization.string("\(PulseCardKind.name(kind)): Skip what you already know")
         default:
             return what
         }
@@ -390,6 +403,24 @@ struct PulseLearned: Equatable {
         guard let lessons = json["lessons"] as? [Any] else { return nil }
         self.lessons = lessons.compactMap(PulseLesson.init(json:))
         levels = PulseFeedPage.levels(json["levels"])
+    }
+
+    /// Under each kind's level in What Pulse learned: what moves it. With a
+    /// plugin that learns (`pulse_learns`) the level is the loudest Pulse
+    /// gets, and thumbs teach it within that instead of moving the level.
+    static func levelsFooter(learns: Bool) -> String {
+        learns
+            ? AppLocalization.string("The loudest Pulse gets for each. Within that, your thumbs, Do it and Done teach it what to bring up and how loudly.")
+            : AppLocalization.string("Thumbs move these too: two down make it quieter, two up louder.")
+    }
+
+    /// What Pulse learned with no lessons yet. With a plugin that learns, a
+    /// plain thumbs teaches Pulse without adding a lesson: only a thumbs
+    /// down's reason does.
+    static func noLessons(learns: Bool) -> String {
+        learns
+            ? AppLocalization.string("Nothing yet. When you give a reason with a thumbs down, what it changes shows up here.")
+            : AppLocalization.string("Nothing yet. Rate Pulse's cards and what it learns shows up here.")
     }
 }
 
@@ -571,6 +602,13 @@ extension AppState {
         !card.why.isEmpty && (card.kind == "followup" || notifierPlugin.reports(PulseClient.cardWhyCapability))
     }
 
+    /// A thumbs down on this card asks why: a follow-up's, or a report
+    /// card's once the plugin acts on its reasons (0.81.1). Before, a report
+    /// card's reason changed nothing, so its thumbs down was enough.
+    func asksPulseDownReason(_ card: PulseCard) -> Bool {
+        card.kind == "followup" || card.isNoticed && notifierPlugin.reports(PulseClient.learnsCapability)
+    }
+
     /// Opens the chat a card came from.
     /// It opens at the message the card came from, as an artifact's Show
     /// in chat does, whatever the chat would otherwise land on.
@@ -687,6 +725,9 @@ extension PulseClient {
     /// Quiet times: quiet days and a vacation in Settings > Pulse, and Quiet
     /// for today on the Pulse screen and on a Pulse notification (0.80.2).
     static let quietCapability = "pulse_quiet"
+    /// Pulse learns from thumbs, Do it and Done what to bring up and how
+    /// loudly, and a kind's level is the loudest it gets (0.81.1).
+    static let learnsCapability = "pulse_learns"
 }
 
 /// What Not now puts a card off until, as the plugin names it.
