@@ -491,7 +491,7 @@ struct V2PulsePage: View {
     /// everything in it is handled (`PulseLayout.Brief.isFolded`).
     @ViewBuilder private func briefRows(_ brief: PulseLayout.Brief) -> some View {
         // Open when a push pointed at it or one of its cards, even before focus() could expand it.
-        if brief.isFolded(foldedThrough: appState.pulseBriefFoldedThrough(brief.id),
+        if brief.isFolded(folded: appState.pulseBriefFold(brief.id),
                           opened: expandedBriefs.contains(brief.id), focused: focusedCard) {
             foldedBriefRow(brief)
                 .id(brief.card.id)
@@ -522,6 +522,7 @@ struct V2PulsePage: View {
                 Text("Morning brief")
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
+                    .accessibilityFocused($voiceOverCard, equals: brief.card.id)
                 Spacer(minLength: 0)
                 if let stamp = briefStamp(brief) {
                     Text(verbatim: stamp)
@@ -629,8 +630,9 @@ struct V2PulsePage: View {
 
     /// Opens the brief, or folds it, as the user left it: a fold is kept
     /// for that brief (AppState.pulseFoldedBriefs) until a card in it comes
-    /// back newer. Folding the brief a push pointed into lets the push's
-    /// card go, so it folds at once.
+    /// back open. Folding the brief a push pointed into lets the push's
+    /// card go, so it folds at once; an older brief all handled then goes
+    /// back to Done and cleared, where it was before the push.
     private func fold(_ brief: PulseLayout.Brief, _ folded: Bool) {
         Haptics.selection()
         withAnimation(.snappy) {
@@ -643,7 +645,7 @@ struct V2PulsePage: View {
             } else {
                 expandedBriefs.insert(brief.id)
             }
-            appState.foldPulseBrief(brief.id, through: folded ? brief.newest : nil)
+            appState.foldPulseBrief(brief.id, open: folded ? brief.openCards : nil)
         }
     }
 
@@ -678,7 +680,10 @@ struct V2PulsePage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(.isHeader)
         .accessibilityHint(Text(AppLocalization.string("Shows what the brief brought")))
+        .accessibilityFocused($voiceOverCard, equals: brief.card.id)
+        .accessibilityIdentifier("pulse.brief.open")
     }
 
     // MARK: Done and cleared

@@ -749,8 +749,8 @@ final class PulseFeedTests: XCTestCase {
     /// A brief folds to one row once the user folds it, a summary alone and
     /// one with cards left too, and stays folded until it's opened again;
     /// one all handled folds by itself unless opened on this visit. A push
-    /// or a Pulse mark pointing into it opens it, and so does a card that
-    /// came back into it from Not now after the fold.
+    /// or a Pulse mark pointing into it opens it, and so does a card in it
+    /// that comes back open after the fold, from Not now or with Undo.
     func testABriefFoldsOnceTheUserFoldsItOrOnceItIsAllHandled() throws {
         let page = try XCTUnwrap(PulseFeedPage(json: json("""
         {"cards": [
@@ -764,14 +764,15 @@ final class PulseFeedTests: XCTestCase {
         let layout = PulseLayout(cards: page.cards)
         let summary = try XCTUnwrap(layout.briefs.first { $0.id == 9 })
         let open = try XCTUnwrap(layout.briefs.first { $0.id == 8 })
-        XCTAssertEqual(open.newest, Date(timeIntervalSince1970: 200))
-        XCTAssertFalse(summary.isFolded(foldedThrough: nil, opened: false, focused: nil), "open until it's folded")
-        XCTAssertTrue(summary.isFolded(foldedThrough: summary.newest, opened: false, focused: nil))
-        XCTAssertFalse(open.isFolded(foldedThrough: nil, opened: false, focused: nil), "a card in it is left")
-        XCTAssertTrue(open.isFolded(foldedThrough: open.newest, opened: false, focused: nil))
-        XCTAssertFalse(open.isFolded(foldedThrough: open.newest, opened: false, focused: 7),
+        XCTAssertEqual(open.openCards, [7: 120], "Gym is done")
+        XCTAssertEqual(summary.openCards, [:])
+        XCTAssertFalse(summary.isFolded(folded: nil, opened: false, focused: nil), "open until it's folded")
+        XCTAssertTrue(summary.isFolded(folded: summary.openCards, opened: false, focused: nil))
+        XCTAssertFalse(open.isFolded(folded: nil, opened: false, focused: nil), "a card in it is left")
+        XCTAssertTrue(open.isFolded(folded: open.openCards, opened: false, focused: nil))
+        XCTAssertFalse(open.isFolded(folded: open.openCards, opened: false, focused: 7),
                        "a push pointed at one of its cards")
-        XCTAssertFalse(summary.isFolded(foldedThrough: summary.newest, opened: false, focused: 9),
+        XCTAssertFalse(summary.isFolded(folded: summary.openCards, opened: false, focused: 9),
                        "or at the brief itself")
 
         // Gym, put off until later, comes back as new after the fold: the brief opens to show it.
@@ -784,14 +785,21 @@ final class PulseFeedTests: XCTestCase {
         ]}
         """)))
         let returned = try XCTUnwrap(PulseLayout(cards: back.cards).briefs.first { $0.id == 8 })
-        XCTAssertFalse(returned.isFolded(foldedThrough: open.newest, opened: false, focused: nil))
-        XCTAssertTrue(returned.isFolded(foldedThrough: returned.newest, opened: false, focused: nil), "folded again")
+        XCTAssertFalse(returned.isFolded(folded: open.openCards, opened: false, focused: nil))
+        XCTAssertTrue(returned.isFolded(folded: returned.openCards, opened: false, focused: nil), "folded again")
+
+        // Gym put back with Undo after the fold: as it came, but open again, so the brief opens too.
+        var undone = page
+        if let index = undone.cards.firstIndex(where: { $0.id == 6 }) { undone.cards[index].doneAt = nil }
+        let putBack = try XCTUnwrap(PulseLayout(cards: undone.cards).briefs.first { $0.id == 8 })
+        XCTAssertFalse(putBack.isFolded(folded: open.openCards, opened: false, focused: nil))
 
         var handled = page
         if let index = handled.cards.firstIndex(where: { $0.id == 7 }) { handled.cards[index].doneAt = Date() }
         let done = try XCTUnwrap(PulseLayout(cards: handled.cards).clearedBriefs.first { $0.id == 8 })
-        XCTAssertTrue(done.isFolded(foldedThrough: nil, opened: false, focused: nil), "all handled")
-        XCTAssertFalse(done.isFolded(foldedThrough: nil, opened: true, focused: nil), "opened again on this visit")
+        XCTAssertTrue(done.isFolded(folded: open.openCards, opened: false, focused: nil), "Deck done after the fold")
+        XCTAssertTrue(done.isFolded(folded: nil, opened: false, focused: nil), "all handled")
+        XCTAssertFalse(done.isFolded(folded: nil, opened: true, focused: nil), "opened again on this visit")
     }
 
     /// A folded brief stays folded across a relaunch, on its own dashboard
@@ -809,23 +817,25 @@ final class PulseFeedTests: XCTestCase {
                                                                dashboards: [active, other]),
                      clearSessionPresentationCache: {})
         }
-        let morning = Date(timeIntervalSince1970: 1_800_000_000)
-        launch(other).foldPulseBrief(3, through: morning)
+        let morning: [Int: Double] = [5: 1_800_000_000]
+        launch(other).foldPulseBrief(3, open: morning)
         let appState = launch(active)
-        appState.foldPulseBrief(8, through: morning)
-        XCTAssertEqual(launch(active).pulseBriefFoldedThrough(8), morning, "kept across a relaunch")
-        XCTAssertNil(launch(other).pulseBriefFoldedThrough(8), "another dashboard's card 8 is another brief")
-        appState.foldPulseBrief(8, through: nil)
-        XCTAssertNil(launch(active).pulseBriefFoldedThrough(8), "opened again")
+        appState.foldPulseBrief(8, open: morning)
+        XCTAssertEqual(launch(active).pulseBriefFold(8), morning, "kept across a relaunch")
+        XCTAssertNil(launch(other).pulseBriefFold(8), "another dashboard's card 8 is another brief")
+        appState.foldPulseBrief(9, open: [:])
+        XCTAssertEqual(launch(active).pulseBriefFold(9), [:], "folded with nothing open")
+        appState.foldPulseBrief(8, open: nil)
+        XCTAssertNil(launch(active).pulseBriefFold(8), "opened again")
 
         let kept = AppState.pulseFoldedBriefsKept
-        for brief in 1...(kept + 5) { appState.foldPulseBrief(brief, through: morning) }
-        XCTAssertNil(appState.pulseBriefFoldedThrough(5), "only the newest are kept")
-        XCTAssertEqual(appState.pulseBriefFoldedThrough(kept + 5), morning)
-        XCTAssertEqual(launch(other).pulseBriefFoldedThrough(3), morning)
+        for brief in 1...(kept + 5) { appState.foldPulseBrief(brief, open: morning) }
+        XCTAssertNil(appState.pulseBriefFold(5), "only the newest are kept")
+        XCTAssertEqual(appState.pulseBriefFold(kept + 5), morning)
+        XCTAssertEqual(launch(other).pulseBriefFold(3), morning)
 
         appState.removeDashboard(other.id)
-        let stored = defaults.dictionary(forKey: AppState.pulseFoldedBriefsKey) as? [String: [String: Double]]
+        let stored = defaults.dictionary(forKey: AppState.pulseFoldedBriefsKey) as? [String: [String: [String: Double]]]
         XCTAssertEqual(stored?.keys.sorted(), [active.id.uuidString])
     }
 

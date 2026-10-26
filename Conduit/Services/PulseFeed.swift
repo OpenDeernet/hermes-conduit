@@ -180,19 +180,23 @@ struct PulseLayout: Equatable {
         /// Every card it brought is done or swiped away.
         var isHandled: Bool { left == 0 }
 
-        /// The newest of it and the cards it brought, which a fold notes.
-        var newest: Date { ([card] + items).compactMap(\.createdAt).max() ?? .distantPast }
+        /// Its cards still open, by id, each with when it came, which a
+        /// fold notes.
+        var openCards: [Int: Double] {
+            let open = items.filter { !$0.isCleared }.map { ($0.id, ($0.createdAt ?? .distantPast).timeIntervalSince1970) }
+            return Dictionary(open, uniquingKeysWith: { first, _ in first })
+        }
 
-        /// Shown as one row: folded from its header (`foldedThrough`, its
-        /// `newest` then) until it's opened again, or with every card it
-        /// brought handled, unless `opened` on this visit. Not while a card
-        /// in it is open and newer than the fold, one back from Not now
-        /// (it comes back as new), nor while `focused`, the card a push or a
-        /// Pulse mark opened, is it or one of its cards.
-        func isFolded(foldedThrough: Date?, opened: Bool, focused: Int?) -> Bool {
+        /// Shown as one row: folded from its header (`folded`, its
+        /// `openCards` then) until it's opened again, or with every card it
+        /// brought handled, unless `opened` on this visit. Not once a card in
+        /// it is open that wasn't then, or has come again since: one back
+        /// from Not now (it comes back as new), or put back with Undo. Nor
+        /// while `focused`, the card a push or a Pulse mark opened, is it or
+        /// one of its cards.
+        func isFolded(folded: [Int: Double]?, opened: Bool, focused: Int?) -> Bool {
             if let focused, focused == id || items.contains(where: { $0.id == focused }) { return false }
-            if let foldedThrough,
-               !items.contains(where: { !$0.isCleared && ($0.createdAt ?? .distantPast) > foldedThrough }) {
+            if let folded, openCards.allSatisfy({ card, at in folded[card].map { abs($0 - at) < 0.001 } ?? false }) {
                 return true
             }
             return !isSummary && isHandled && !opened

@@ -2246,29 +2246,34 @@ final class AppState: ObservableObject {
     }
 
     /// Morning briefs folded on the Pulse screen, per dashboard: each
-    /// brief's card id with the newest of its cards when it was folded
-    /// (PulseLayout.Brief.isFolded), kept across launches, so a brief read
-    /// and folded stays out of the way until it's opened again. The newest
-    /// `pulseFoldedBriefsKept` briefs of each.
-    private(set) lazy var pulseFoldedBriefs: [String: [String: Double]] =
-        defaults.dictionary(forKey: Self.pulseFoldedBriefsKey) as? [String: [String: Double]] ?? [:]
+    /// brief's card id with the cards in it still open when it was folded,
+    /// each with when it came (PulseLayout.Brief.isFolded), kept across
+    /// launches, so a brief read and folded stays out of the way until it's
+    /// opened again or a card in it comes back open. The
+    /// `pulseFoldedBriefsKept` briefs of each with the highest ids, which
+    /// are the newest: the host numbers cards in the order it makes them.
+    private(set) lazy var pulseFoldedBriefs: [String: [String: [String: Double]]] =
+        defaults.dictionary(forKey: Self.pulseFoldedBriefsKey) as? [String: [String: [String: Double]]] ?? [:]
     static let pulseFoldedBriefsKey = "conduit.pulse.foldedBriefs"
     static let pulseFoldedBriefsKept = 30
 
-    func pulseBriefFoldedThrough(_ brief: Int) -> Date? {
+    /// The cards `brief` had open when it was folded, by id, each with when
+    /// it came; nil while it isn't folded.
+    func pulseBriefFold(_ brief: Int) -> [Int: Double]? {
         guard let key = activeDashboardID?.uuidString,
-              let through = pulseFoldedBriefs[key]?[String(brief)] else { return nil }
-        return Date(timeIntervalSince1970: through)
+              let open = pulseFoldedBriefs[key]?[String(brief)] else { return nil }
+        let cards = open.compactMap { card, at in Int(card).map { ($0, at) } }
+        return Dictionary(cards, uniquingKeysWith: { first, _ in first })
     }
 
-    /// Folds `brief` as of `newest`, the newest of its cards then, or opens
-    /// it again (nil).
-    func foldPulseBrief(_ brief: Int, through newest: Date?) {
+    /// Folds `brief` with `open`, the cards in it still open then
+    /// (PulseLayout.Brief.openCards), or opens it again (nil).
+    func foldPulseBrief(_ brief: Int, open: [Int: Double]?) {
         guard let key = activeDashboardID?.uuidString else { return }
         var briefs = pulseFoldedBriefs[key] ?? [:]
-        let through = newest?.timeIntervalSince1970
-        guard briefs[String(brief)] != through else { return }
-        briefs[String(brief)] = through
+        let noted = open.map { cards in Dictionary(uniqueKeysWithValues: cards.map { (String($0.key), $0.value) }) }
+        guard briefs[String(brief)] != noted else { return }
+        briefs[String(brief)] = noted
         let kept = Set(briefs.keys.compactMap { Int($0) }.sorted().suffix(Self.pulseFoldedBriefsKept))
         briefs = briefs.filter { id, _ in Int(id).map { kept.contains($0) } ?? false }
         var all = pulseFoldedBriefs
@@ -2283,7 +2288,7 @@ final class AppState: ObservableObject {
         storePulseFoldedBriefs(all)
     }
 
-    private func storePulseFoldedBriefs(_ all: [String: [String: Double]]) {
+    private func storePulseFoldedBriefs(_ all: [String: [String: [String: Double]]]) {
         objectWillChange.send()
         pulseFoldedBriefs = all
         defaults.set(all, forKey: Self.pulseFoldedBriefsKey)
