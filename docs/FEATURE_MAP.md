@@ -136,8 +136,9 @@ Hermes asks with a server request (`sudo`, `secret`, `vault.unlock_prompt`,
 **Siblings:** chat card (chats, project chats, Bot Chat) · reopening the
 chat (a resume's `open_requests`) and Hermes withdrawing it
 (`request.cancel`) · the jump button · Classic voice's screen and the call
-screen · voice modes saying Hermes waits · Hermes Desktop's dialogs
-(upstream, the reference) · notification · group rooms
+screen · voice modes saying Hermes waits · CarPlay · Watch calls · a call
+from Hermes · Hermes Desktop's dialogs (upstream, the reference) ·
+notification · group rooms
 
 **Code**
 - Requests: `Conduit/Services/HermesClient.swift` (handleServerRequest, respondToInputPrompt), `Conduit/Services/StreamEventParser.swift` (request.cancel), `Conduit/Models/Models.swift` (InputPromptActivity: from, loginAnswer, codeAnswer)
@@ -156,6 +157,8 @@ screen · voice modes saying Hermes waits · Hermes Desktop's dialogs
 **Open gaps**
 - Notification: none for any of these. Hermes gives plugins no hook on server requests, and `browser_vault` can't tell before it runs whether it will ask (a saved authenticator key fills codes itself).
 - Group rooms show no card for these.
+- Classic voice says nothing when one arrives, so on CarPlay, which shows no card, the conversation sits on thinking until it is answered on the phone. Its spoken notices open a listening window for the answer, which these must not have; a notice without one is still to build.
+- Watch calls: a job waiting on one says to open it in Conduit (waitingNotice); the Watch has no card. A call from Hermes is never about one: the plugin calls only for approvals and questions.
 
 **Checked:** 2026-10-26, #1301 (website logins and codes, #1299).
 

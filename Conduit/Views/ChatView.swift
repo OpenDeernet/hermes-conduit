@@ -4425,7 +4425,7 @@ struct InputPromptCard: View {
                 .onSubmit { fieldFocused = true }
                 .inputPromptField()
                 .disabled(!prompt.isAnswerable)
-            SecureField(AppLocalization.string("Password"), text: $value)
+            SecureField(placeholder(for: prompt.kind), text: $value)
                 .accessibilityHint(AppLocalization.string("Save & sign in gives Hermes this login for the site. The model never sees the password."))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -4438,7 +4438,7 @@ struct InputPromptCard: View {
             // Shown as typed, like Hermes Desktop: a short code is not worth
             // masking and a typo must be visible. .oneTimeCode offers the
             // code a text message or email just brought.
-            TextField(AppLocalization.string("Code"), text: $value)
+            TextField(placeholder(for: prompt.kind), text: $value)
                 .accessibilityHint(AppLocalization.string("Enter code has Hermes type it into the page. The model never sees it."))
                 .textContentType(.oneTimeCode)
                 .keyboardType(.numbersAndPunctuation)
@@ -4538,7 +4538,8 @@ struct InputPromptCard: View {
         case .secret: return AppLocalization.string("Secret value")
         case .vaultUnlock: return AppLocalization.string("Master password")
         case .vaultSaveLogin: return AppLocalization.string("Password")
-        case .vaultCode: return AppLocalization.string("Code")
+        // Not "Code": some languages read that key as program code.
+        case .vaultCode: return AppLocalization.string("Verification code")
         }
     }
 

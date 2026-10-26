@@ -20,8 +20,9 @@ enum MessageRole: String, Codable, Equatable {
     case tool
     case clarify
     case approval
-    /// A masked single-value prompt from a Hermes server→client request:
-    /// sudo password, skill/setup secret, or password-manager unlock.
+    /// A private-input prompt from a Hermes server→client request: sudo
+    /// password, skill/setup secret, password-manager unlock, a website's
+    /// login or its one-time code.
     case inputPrompt
 }
 
