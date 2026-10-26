@@ -450,9 +450,7 @@ enum DashboardTicketBridgeError: LocalizedError {
     /// browser fetch errors become what happened and what to do.
     static func describe(status: Int, detail: String) -> String {
         let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isMeaningful = !trimmed.isEmpty
-            && !genericDetails.contains(trimmed.lowercased())
-            && trimmed != AppLocalization.string("Dashboard request failed (\(String(status))).")
+        let isMeaningful = meaningfulDetail(detail, status: status) != nil
         switch status {
         case 0:
             let lowered = trimmed.lowercased()
@@ -493,6 +491,17 @@ enum DashboardTicketBridgeError: LocalizedError {
             if isMeaningful { return trimmed }
             return AppLocalization.string("Hermes didn't accept this request. Updating Hermes and Conduit usually fixes this.")
         }
+    }
+
+    /// The server's own explanation, trimmed, when it says something: nil
+    /// for a bare status phrase, a browser fetch error, or the "request
+    /// failed" text a response with no words of its own gets.
+    static func meaningfulDetail(_ detail: String, status: Int) -> String? {
+        let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !genericDetails.contains(trimmed.lowercased()),
+              trimmed != AppLocalization.string("Dashboard request failed (\(String(status))).") else { return nil }
+        return trimmed
     }
 
     /// Whether a dashboard request's failure means its sign-in is gone.
