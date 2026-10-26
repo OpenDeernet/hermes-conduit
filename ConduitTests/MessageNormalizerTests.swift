@@ -1382,6 +1382,30 @@ final class MessageNormalizerTests: XCTestCase {
         XCTAssertNil(relaunched.pendingPulseQuiet)
     }
 
+    /// Closed between keeping a tap that starts waiting and dropping the
+    /// retry it replaces, Conduit finds both kept: only the tap, the newer,
+    /// waits again, so the two don't both take the screen when the call ends.
+    func testARelaunchKeepsOnlyTheNewerOfAWaitingTapAndRetry() {
+        let kept = makeScratchDefaults("WaitingTapAndPulseQuiet")
+        let date = Date()
+        let first = PushNotificationService(retryDelay: .zero, keptTaps: kept, date: { date })
+        first.pulseQuietAwaitsCall(PulseQuietTarget(dashboardID: UUID().uuidString, gatewayID: "gw-2"))
+        let keptQuiet = kept.data(forKey: PushNotificationService.waitingPulseQuietKey)
+        XCTAssertNotNil(keptQuiet)
+        first.receiveNotificationPayload([
+            "conduit": ["session_id": "runtime-1", "type": "response.ready"] as [String: Any]
+        ])
+        guard let tap = first.pendingTarget else { return XCTFail("Expected the newer tap") }
+        XCTAssertTrue(first.beginNotificationRoute(tap))
+        first.notificationRouteAwaitsCall(tap)
+        kept.set(keptQuiet, forKey: PushNotificationService.waitingPulseQuietKey)
+
+        let relaunched = PushNotificationService(retryDelay: .zero, keptTaps: kept, date: { date })
+        XCTAssertEqual(relaunched.pendingTarget, tap)
+        XCTAssertNil(relaunched.pendingPulseQuiet, "the older retry stays dropped")
+        XCTAssertNil(kept.data(forKey: PushNotificationService.waitingPulseQuietKey))
+    }
+
     func testSessionNormalizationDoesNotInventOwnershipWithoutFallback() {
         let sessions = MessageNormalizer.normalizeSessions(
             .object([

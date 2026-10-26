@@ -2194,12 +2194,16 @@ final class PushNotificationService: ObservableObject {
 
     /// A retry that was waiting for a call when Conduit closed waits again,
     /// as a waiting tap does (`restoreWaitingTap`): not one older than
-    /// `waitingTapLifetime`, nor one pressed on an earlier day.
+    /// `waitingTapLifetime`, nor one pressed on an earlier day, nor one kept
+    /// beside a tap that waits again. That tap is the newer of the two:
+    /// Conduit closed between keeping it and dropping this
+    /// (`notificationRouteAwaitsCall`), and only one may take the screen.
     private func restoreWaitingPulseQuiet() {
         guard let keptTaps, pendingPulseQuiet == nil,
               let data = keptTaps.data(forKey: Self.waitingPulseQuietKey) else { return }
         let relaunchedAt = date()
-        guard let quiet = try? JSONDecoder().decode(WaitingPulseQuiet.self, from: data),
+        guard pendingTarget == nil,
+              let quiet = try? JSONDecoder().decode(WaitingPulseQuiet.self, from: data),
               (0..<Self.waitingTapLifetime).contains(relaunchedAt.timeIntervalSince(quiet.waitingSince)),
               Calendar.current.isDate(quiet.waitingSince, inSameDayAs: relaunchedAt) else {
             forgetWaitingPulseQuiet()

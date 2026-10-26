@@ -1298,6 +1298,7 @@ struct PulseLearnedSheet: View {
                                 Button(AppLocalization.string("Undo")) { undo(lesson) }
                                     .buttonStyle(.borderless)
                                     .disabled(working)
+                                    .accessibilityLabel(Text(AppLocalization.string("Undo: \(lesson.text)")))
                             }
                         }
                     } header: {
@@ -1330,7 +1331,13 @@ struct PulseLearnedSheet: View {
             } message: {
                 Text("Pulse forgets what your thumbs, Do it and Done taught it so far and learns again from what you do next. The levels you set and the lessons from your reasons stay, and Undo takes it back.")
             }
-            .task(id: appState.activeDashboardID) { await load() }
+            .task(id: appState.activeDashboardID) {
+                // Another dashboard's: nothing of the last one stays to be reset or undone.
+                learned = nil
+                errorMessage = nil
+                confirmsStartOver = false
+                await load()
+            }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
@@ -1352,6 +1359,7 @@ struct PulseLearnedSheet: View {
                         Button(AppLocalization.string("Reset")) { reset(preference) }
                             .buttonStyle(.borderless)
                             .disabled(working)
+                            .accessibilityLabel(Text(AppLocalization.string("Reset what Pulse learned: \(preference.subject)")))
                             .accessibilityHint(Text(AppLocalization.string("Pulse forgets what it learned about this")))
                     }
                 }
@@ -1484,6 +1492,7 @@ struct PulseLeftOutSheet: View {
             }
             .task(id: appState.activeDashboardID) {
                 entries = nil
+                errorMessage = nil
                 await load()
             }
         }
@@ -1552,6 +1561,7 @@ struct PulseLeftOutSheet: View {
                     .controlSize(.small)
                     .tint(.conduitAccent)
                     .disabled(bringing != nil)
+                    .accessibilityLabel(Text(AppLocalization.string("Bring it up: \(entry.text)")))
                     .accessibilityHint(Text(AppLocalization.string("Makes it a card on the Pulse screen")))
                 }
             }
