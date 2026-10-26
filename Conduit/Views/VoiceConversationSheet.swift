@@ -896,6 +896,8 @@ struct VoiceApprovalPanel: View {
                 Group {
                     if message.clarify != nil {
                         ClarifyCard(message: message)
+                    } else if message.inputPrompt != nil {
+                        InputPromptCard(message: message)
                     } else {
                         ApprovalCard(message: message)
                     }

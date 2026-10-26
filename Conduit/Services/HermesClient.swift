@@ -420,7 +420,7 @@ enum StreamEvent {
     /// (`timeout`, `interrupted`, `shutdown`, `session_closed`).
     case clarifyExpire(sessionId: String, requestId: String, reason: String? = nil)
     case approval(sessionId: String, activity: ApprovalActivity)
-    /// A `sudo` / `secret` / `vault.unlock_prompt` server request.
+    /// A `sudo` / `secret` / `vault.*` input server request.
     case inputPrompt(sessionId: String, activity: InputPromptActivity)
     /// `request.cancel` for one of those: the gateway withdrew it, with its
     /// `reason` (`timeout`, `interrupted`, `shutdown`, `session_closed`).
@@ -505,7 +505,7 @@ struct SessionRuntimeSnapshot {
     /// Raw authoritative approval still blocking the session. AppState adds
     /// the enclosing runtime session id when normalizing the card.
     let pendingApprovalPayload: [String: AnyCodable]?
-    /// Unanswered sudo / secret / vault-unlock requests re-announced by
+    /// Unanswered sudo / secret / vault requests re-announced by
     /// `session.resume` (`open_requests`), oldest first. Upstream never puts
     /// `open_requests` in `session.info`, so a live snapshot parses none.
     let pendingInputPrompts: [InputPromptActivity]
@@ -1654,11 +1654,12 @@ final class HermesClient: ObservableObject {
     /// - `clarify` becomes the existing clarify card keyed by the server
     ///   request id; `respondToClarification` answers it with a response
     ///   frame (single question) or `clarify.lock` (batch questions).
-    /// - `sudo`, `secret` and `vault.unlock_prompt` become a masked input
-    ///   card; `respondToInputPrompt` answers `{value}` ('' = skip).
-    /// - Everything else (`vault.save_login`, `vault.code`, desktop-only
-    ///   bridges) has no UI here and is declined at once with -32601, so the
-    ///   tool fails fast instead of waiting out its deadline.
+    /// - `sudo`, `secret`, `vault.unlock_prompt`, `vault.save_login` and
+    ///   `vault.code` become an input card; `respondToInputPrompt` answers
+    ///   `{value}` ('' = skip).
+    /// - Everything else (desktop-only bridges) has no UI here and is
+    ///   declined, so the tool fails fast instead of waiting out its
+    ///   deadline.
     private func handleServerRequest(id: JsonRpcID, method: String, params: [String: AnyCodable]) {
         guard case .string(let requestID) = id, !requestID.isEmpty else { return }
         let sessionId = params["session_id"]?.stringValue ?? ""
@@ -2858,7 +2859,7 @@ final class HermesClient: ObservableObject {
         )
     }
 
-    /// Answers a sudo / secret / vault-unlock server request. `value` is
+    /// Answers a sudo / secret / vault server request. `value` is
     /// sent once and never retained; an empty string tells Hermes the user
     /// skipped (the tool then proceeds without the value).
     func respondToInputPrompt(requestId: String, value: String) async throws {

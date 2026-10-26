@@ -2117,7 +2117,7 @@ final class HermesClientTests: XCTestCase {
             "result": [
                 "session_id": "runtime-1", "running": true, "messages": [Any](), "info": [String: Any](),
                 "open_requests": [
-                    ["id": "srq-dec1dec1dec1", "method": "vault.code", "params": ["session_id": "runtime-1"]]
+                    ["id": "srq-dec1dec1dec1", "method": "theme.pick", "params": ["session_id": "runtime-1"]]
                 ]
             ]
         ], to: socket)
@@ -2194,8 +2194,8 @@ final class HermesClientTests: XCTestCase {
         let sent = Gate()
         socket.onSend = { sent.signal() }
         try await deliverFrame([
-            "jsonrpc": "2.0", "id": "srq-cccccccccccc", "method": "vault.code",
-            "params": ["session_id": "runtime-1", "site": "example.com"]
+            "jsonrpc": "2.0", "id": "srq-cccccccccccc", "method": "theme.pick",
+            "params": ["session_id": "runtime-1"]
         ], to: socket)
         try await sent.wait("the decline to be sent")
 
@@ -2280,11 +2280,105 @@ final class HermesClientTests: XCTestCase {
         client.disconnect()
     }
 
+    func testWebsiteLoginRequestPresentsCardAndAnswersWithLoginJSON() async throws {
+        let (client, socket) = try await connectedClientForServerRequests()
+        var events: [StreamEvent] = []
+        client.onEvent = { events.append($0) }
+        try await deliverFrame([
+            "jsonrpc": "2.0", "id": "srq-5a5a5a5a5a5a", "method": "vault.save_login",
+            "params": ["session_id": "runtime-1", "origin": "https://accounts.example.com", "site": "accounts.example.com"]
+        ], to: socket)
+        guard case .inputPrompt(let sessionId, let activity)? = events.first else {
+            return XCTFail("Expected an input prompt event, got \(events)")
+        }
+        XCTAssertEqual(sessionId, "runtime-1")
+        XCTAssertEqual(activity.kind, .vaultSaveLogin)
+        XCTAssertEqual(activity.origin, "https://accounts.example.com")
+        XCTAssertEqual(activity.site, "accounts.example.com")
+        XCTAssertTrue(socket.sentTexts.isEmpty, "The request stays open until the user answers")
+
+        let login = try XCTUnwrap(InputPromptActivity.loginAnswer(identifier: " me@example.com ", password: " p\"w "))
+        try await client.respondToInputPrompt(requestId: "srq-5a5a5a5a5a5a", value: login)
+        let reply = try sentFrame(socket)
+        XCTAssertEqual(reply["id"] as? String, "srq-5a5a5a5a5a5a")
+        let value = try XCTUnwrap((reply["result"] as? [String: Any])?["value"] as? String)
+        let decoded = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(value.utf8)) as? [String: String])
+        XCTAssertEqual(decoded, ["identifier": "me@example.com", "password": " p\"w "],
+                       "The identifier is trimmed; the password goes as typed")
+        client.disconnect()
+    }
+
+    func testWebsiteLoginAnswerNeedsBothParts() {
+        XCTAssertNil(InputPromptActivity.loginAnswer(identifier: "  ", password: "secret"))
+        XCTAssertNil(InputPromptActivity.loginAnswer(identifier: "me", password: ""))
+    }
+
+    func testWebsiteLoginFallsBackToTheOriginsHost() throws {
+        let activity = try XCTUnwrap(InputPromptActivity.from(
+            requestId: "srq-1", method: "vault.save_login",
+            params: ["session_id": .string("s1"), "origin": .string("https://shop.example.com")]
+        ))
+        XCTAssertEqual(activity.site, "shop.example.com")
+    }
+
+    func testVerificationCodeRequestPresentsCardAndAnswersWithTheCode() async throws {
+        let (client, socket) = try await connectedClientForServerRequests()
+        var events: [StreamEvent] = []
+        client.onEvent = { events.append($0) }
+        try await deliverFrame([
+            "jsonrpc": "2.0", "id": "srq-c0dec0dec0de", "method": "vault.code",
+            "params": ["session_id": "runtime-1", "site": "example.com", "hint": ""]
+        ], to: socket)
+        guard case .inputPrompt(_, let activity)? = events.first else {
+            return XCTFail("Expected an input prompt event, got \(events)")
+        }
+        XCTAssertEqual(activity.kind, .vaultCode)
+        XCTAssertEqual(activity.site, "example.com")
+        XCTAssertTrue(socket.sentTexts.isEmpty, "The request stays open until the user answers")
+
+        try await client.respondToInputPrompt(
+            requestId: "srq-c0dec0dec0de",
+            value: InputPromptActivity.codeAnswer(" 123 456-7 ")
+        )
+        let result = try XCTUnwrap(try sentFrame(socket)["result"] as? [String: Any])
+        XCTAssertEqual(result["value"] as? String, "1234567", "Spaces and dashes a site groups a code with are dropped")
+        client.disconnect()
+    }
+
+    func testResumeRestoresWebsiteLoginAndCodePrompts() async throws {
+        let (client, socket) = try await connectedClientForServerRequests()
+        let sent = Gate()
+        socket.onSend = { sent.signal() }
+        let openTask = Task<SessionResumeResult, Error> { try await client.openSession("runtime-1") }
+        try await sent.wait("the session.resume request to be sent")
+        let id = try XCTUnwrap(try sentFrame(socket)["id"] as? Int)
+        try await deliverFrame([
+            "jsonrpc": "2.0", "id": id,
+            "result": [
+                "session_id": "runtime-1", "running": true, "messages": [Any](), "info": [String: Any](),
+                "open_requests": [
+                    ["id": "srq-555555555555", "method": "vault.save_login",
+                     "params": ["session_id": "runtime-1", "origin": "https://example.com", "site": "example.com"]],
+                    ["id": "srq-666666666666", "method": "vault.code",
+                     "params": ["session_id": "runtime-1", "site": "example.com"]]
+                ]
+            ]
+        ], to: socket)
+        let result = try await awaitResult(of: openTask, "the session.resume response")
+        XCTAssertEqual(result.snapshot.pendingInputPrompts.map(\.kind), [.vaultSaveLogin, .vaultCode])
+        for _ in 0..<50 { await Task.yield() }
+        XCTAssertEqual(socket.sentTexts.count, 1, "Presented prompts are never declined")
+        client.disconnect()
+    }
+
     func testInputPromptRequiresSessionAndKnownMethod() {
         XCTAssertNil(InputPromptActivity.from(requestId: "srq-1", method: "sudo", params: [:]))
         XCTAssertNil(InputPromptActivity.from(
-            requestId: "srq-1", method: "vault.code", params: ["session_id": .string("s1")]
+            requestId: "srq-1", method: "theme.pick", params: ["session_id": .string("s1")]
         ))
+        XCTAssertNil(InputPromptActivity.from(
+            requestId: "srq-1", method: "vault.save_login", params: ["session_id": .string("s1")]
+        ), "A login card must name the origin it is saved for")
         XCTAssertNil(InputPromptActivity.from(
             requestId: "", method: "sudo", params: ["session_id": .string("s1")]
         ))

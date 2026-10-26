@@ -124,6 +124,41 @@ several details only the user can give (notifier 0.82).
 
 **Checked:** 2026-10-26, #1294 (clarify forms: a field for each question and one Send, blanks skipped on every transport, "skip" by voice; notifier #391); 2026-10-26, #1247 (the Watch broker's grant answers keep Conduit running through BackgroundTaskHold); 2026-10-25, Qwen in the siblings, the table and the Watch row, at #1182, carried in #1235; 2026-10-24, at #1221, for a Watch call's answer or voice approval whose reply lands while the call reconnects (said as a text update, not dropped); at #1207 (notifier 0.70.1), for the Watch's "approved" when nothing ran; at #1194 (after #1188, the approval card's shield); at #1191: message.interim ends a Local Live reply's approval wait and a voice job's needs-input state, as other output does (#912 review); the chat card's #951/#952 follow-ups; the call-screen confirmation's refusal veto (#1042).
 
+## Passwords, logins and codes Hermes asks for
+
+A value only the user may give, typed on a card and sent straight to the
+tool that asked, never into the chat or to the model: a sudo password, a
+secret, a password manager's master password, a website's login (Hermes is
+on its sign-in page and has none saved) or a website's one-time code.
+Hermes asks with a server request (`sudo`, `secret`, `vault.unlock_prompt`,
+`vault.save_login`, `vault.code`), answered `{value}`; an empty value skips.
+
+**Siblings:** chat card (chats, project chats, Bot Chat) · reopening the
+chat (a resume's `open_requests`) and Hermes withdrawing it
+(`request.cancel`) · the jump button · Classic voice's screen and the call
+screen · voice modes saying Hermes waits · Hermes Desktop's dialogs
+(upstream, the reference) · notification · group rooms
+
+**Code**
+- Requests: `Conduit/Services/HermesClient.swift` (handleServerRequest, respondToInputPrompt), `Conduit/Services/StreamEventParser.swift` (request.cancel), `Conduit/Models/Models.swift` (InputPromptActivity: from, loginAnswer, codeAnswer)
+- Card: `Conduit/Views/ChatView.swift` (InputPromptCard), `Conduit/Services/AppState.swift` (applyInputPromptActivity, expireInputPrompt, respondToInputPrompt)
+- Jump button: `Conduit/Services/ChatResumeCoordinator.swift` (pendingClarifyMessageID, PendingDecisionKind), `Conduit/Views/ChatView.swift` (ChatJumpControls)
+- Voice screens: `Conduit/Services/AppState+SpokenApprovals.swift` (openChatWaitingCards, openChatWaitingInputs), `Conduit/Views/VoiceConversationSheet.swift` (VoiceApprovalPanel), `Conduit/Views/LiveVoiceCallJobs.swift` (LiveVoiceWaitingPanel)
+- Voice lines: `Conduit/Voice/LocalLive/LocalLiveTurnRunner.swift` (needsInputLine), `Conduit/Voice/VoiceBackgroundJobs.swift` (waitingNotice)
+- Tests: `ConduitTests/HermesClientTests.swift`, `ConduitTests/ClarifyBatchStateTests.swift`, `ConduitTests/ChatResumeCoordinatorTests.swift`
+
+**Rulings**
+- What the user types lives only in the card's view state and goes once onto the socket: never on the message, in a cache, a log or a notification. The card is live-only; reopening the chat brings it back from `open_requests` (2026-10-26, #259, #PRNUM).
+- Never asked or answered by voice: a voice mode says Hermes waits and where, and Classic voice and the call screen show the card, but no listening window opens for it, so the value is never spoken or heard by a model (2026-10-26, #PRNUM).
+- A website login names the exact origin it is saved for, and goes as JSON `{identifier, password}`, the identifier trimmed and the password as typed; a code drops the spaces and dashes a site groups it with. As in Hermes Desktop: the code is shown as typed, Don't save and Skip answer empty (2026-10-26, #1299, #PRNUM).
+- No password or username autofill type on the login card: iOS would offer to save the site's login under Conduit's own domain. The code field offers a code from a text message or email (2026-10-26, #PRNUM).
+
+**Open gaps**
+- Notification: none for any of these. Hermes gives plugins no hook on server requests, and `browser_vault` can't tell before it runs whether it will ask (a saved authenticator key fills codes itself).
+- Group rooms show no card for these.
+
+**Checked:** 2026-10-26, #PRNUM (website logins and codes, #1299).
+
 ## Voice follow-ups
 
 What the user adds or changes by voice while Hermes is already working on
