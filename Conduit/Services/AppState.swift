@@ -2249,9 +2249,10 @@ final class AppState: ObservableObject {
     /// brief's card id with the cards in it still open when it was folded,
     /// each with when it came (PulseLayout.Brief.isFolded), kept across
     /// launches, so a brief read and folded stays out of the way until it's
-    /// opened again or a card in it comes back open. The
-    /// `pulseFoldedBriefsKept` briefs of each with the highest ids, which
-    /// are the newest: the host numbers cards in the order it makes them.
+    /// opened again or a card in it comes back open. `pulseFoldedBriefsKept`
+    /// briefs of each: the one just folded, and the others with the highest
+    /// ids, which are the newest: the host numbers cards in the order it
+    /// makes them.
     private(set) lazy var pulseFoldedBriefs: [String: [String: [String: Double]]] =
         defaults.dictionary(forKey: Self.pulseFoldedBriefsKey) as? [String: [String: [String: Double]]] ?? [:]
     static let pulseFoldedBriefsKey = "conduit.pulse.foldedBriefs"
@@ -2274,11 +2275,21 @@ final class AppState: ObservableObject {
         let noted = open.map { cards in Dictionary(uniqueKeysWithValues: cards.map { (String($0.key), $0.value) }) }
         guard briefs[String(brief)] != noted else { return }
         briefs[String(brief)] = noted
-        let kept = Set(briefs.keys.compactMap { Int($0) }.sorted().suffix(Self.pulseFoldedBriefsKept))
+        // An older brief folded now stays folded: the oldest other fold goes.
+        let others = briefs.keys.compactMap { Int($0) }.filter { $0 != brief }.sorted()
+        let kept = Set(others.suffix(Self.pulseFoldedBriefsKept - 1)).union([brief])
         briefs = briefs.filter { id, _ in Int(id).map { kept.contains($0) } ?? false }
         var all = pulseFoldedBriefs
         all[key] = briefs.isEmpty ? nil : briefs
         storePulseFoldedBriefs(all)
+    }
+
+    /// `card`, in `brief`, put back open with Undo or Put back: the fold no
+    /// longer counts it as open when it was folded, so a folded brief opens
+    /// to show it, and folds again once it's handled.
+    func unfoldPulseCard(_ card: Int, in brief: Int) {
+        guard var open = pulseBriefFold(brief), open.removeValue(forKey: card) != nil else { return }
+        foldPulseBrief(brief, open: open)
     }
 
     /// A removed dashboard's folded briefs go with it.

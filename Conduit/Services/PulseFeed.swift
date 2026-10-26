@@ -239,6 +239,11 @@ struct PulseLayout: Equatable {
         }
     }
 
+    /// The brief that brought `card`, with cards left or all handled.
+    func brief(bringing card: Int) -> Brief? {
+        (briefs + clearedBriefs).first { brief in brief.items.contains { $0.id == card } }
+    }
+
     /// A brief that brought nothing counts as one.
     var clearedCount: Int { cleared.count + clearedBriefs.reduce(0) { $0 + max(1, $1.items.count) } }
 

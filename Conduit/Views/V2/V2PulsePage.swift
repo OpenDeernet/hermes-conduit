@@ -1156,6 +1156,7 @@ struct V2PulsePage: View {
                         page?.cards[index].restUntil = dismissed ? answer.restUntil : nil
                     }
                     if focusedCard == card.id, dismissed { focusedCard = nil; voiceOverCard = nil }
+                    if !dismissed { unfold(card) }
                 }
                 if dismissed { showUndo(.dismissed, card: card.id, back: answer.restUntil) }
                 errorMessage = nil
@@ -1164,6 +1165,13 @@ struct V2PulsePage: View {
                 showError(PulseRefusal.message(for: error))
             }
         }
+    }
+
+    /// A card put back open with Undo or Put back: the brief that brought
+    /// it, folded since, opens to show it (AppState.unfoldPulseCard).
+    private func unfold(_ card: PulseCard) {
+        guard let cards = page?.cards, let brief = PulseLayout(cards: cards).brief(bringing: card.id) else { return }
+        appState.unfoldPulseCard(card.id, in: brief.id)
     }
 
     /// Done (or Undo) on a follow-up card: the promise closes or comes
@@ -1185,6 +1193,7 @@ struct V2PulsePage: View {
                 }
                 // Handled like Not now: it folds with the rest (Undo brings it back).
                 if done, focusedCard == card.id { focusedCard = nil; voiceOverCard = nil }
+                if !done { unfold(card) }
                 if done {
                     untoldCards.remove(card.id)
                     showUndo(.done, card: card.id)
