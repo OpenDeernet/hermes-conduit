@@ -167,8 +167,9 @@ class WorkflowContractTests(unittest.TestCase):
     def test_the_feature_map_check_knows_the_pr_and_its_base(self):
         """On a PR, an entry it edits names it on its Checked line: the step
         passes the PR's number and the base's map (HEAD^1 of the merge commit),
-        and for a PR into pulse, main's map where the PR meets main, so the
-        entries a merge of main brings in keep main's Checked lines."""
+        and for a PR into pulse or linked-rooms, main's maps where the PR and
+        its base meet main, so the entries a merge of main brings in keep
+        main's Checked lines."""
         step = _step_text(self._job_text("plan"), "Feature map paths exist")
         self.assertIn("PR_NUMBER: ${{ github.event.pull_request.number }}", step)
         self.assertIn("git show HEAD^1:docs/FEATURE_MAP.md", step)
@@ -280,9 +281,10 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_smoke_job_builds_incrementally_and_main_saves_the_full_build(self):
         """The smoke job restores the newest main build's DerivedData before
-        building, and saves its own only on pushes to main (always the full
-        app there), after a successful build, with the same path list (a
-        different list is a different cache)."""
+        building, and saves its own only on pushes (to main, and in pulse's
+        and linked-rooms' copies to that branch; always the full app there),
+        after a successful build, with the same path list (a different list
+        is a different cache)."""
         text = self._job_text("smoke")
         _assert_cache_round_trip(self, text, "steps.cache-key.outputs.kind == 'full'", "smoke")
         self.assertIn("&& github.event_name == 'push'\n", text)

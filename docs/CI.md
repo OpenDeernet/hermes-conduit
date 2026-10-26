@@ -16,7 +16,7 @@ per account, waiting for a runner had become the main cost.
 
 | Workflow | When | What runs | Gates a merge? |
 |---|---|---|---|
-| `.github/workflows/ci.yml` | every PR and every push to `main` | the Linux validation and CI-tooling self-test, and **one macOS job** (`Smoke`) that builds once and runs the curated unit smoke classes and the curated UI smoke classes on that build and simulator | yes, through the single `CI Gate` check |
+| `.github/workflows/ci.yml` | every PR and every push to `main`, `pulse` or `linked-rooms` (each of those branches runs its own copy) | the Linux validation and CI-tooling self-test, and **one macOS job** (`Smoke`) that builds once and runs the curated unit smoke classes and the curated UI smoke classes on that build and simulator | yes, through the single `CI Gate` check |
 | `.github/workflows/nightly.yml` | nightly on `main`, and on demand (Actions > Nightly > Run workflow) | **every unit class** except the timing families in `unit_shards` balanced jobs, the timing/performance/dormancy families repeated 3 times, and the **complete UI suite** in `nightly_ui_shards` jobs, all with no retry | no; a failed scheduled run emails the owner |
 | `.github/workflows/contributor-label.yml` | a push or PR comment by the author of a PR labeled `waiting on contributor`, and that label being added | swaps the label for `waiting on Eric` (and back); it only edits labels and checks nothing out | no |
 
@@ -85,7 +85,10 @@ What gets compiled (2026-10-15, when builds had grown to 9-17 minutes):
   DerivedData to the Actions cache after the tests, keyed by project kind,
   Xcode build and runner image (`dd-v1-<kind>-<xcode>-<image>-<sha>`): the
   smoke job of every push to `main` saves the full app, and nightly unit
-  shard 1 saves the app-only (slim) build when it runs on `main`. The smoke
+  shard 1 saves the app-only (slim) build when it runs on `main`. A push to
+  `pulse` or `linked-rooms` saves its full app as well, which only PRs into
+  that branch can restore (GitHub gives a PR its base branch's entries and
+  main's). The smoke
   job and the nightly unit shards restore the newest matching entry before
   building (from the same runner
   image if there is one, otherwise from any image with the same Xcode build,
@@ -230,7 +233,7 @@ nightly-only families) and `ui` (one job per UI shard).
 
 | Job | Runner | Purpose |
 |---|---|---|
-| `plan` | ubuntu | Inventory/planner validation (`plan-tests.py validate`), localization coverage, the recommended plugin version, the feature map's paths and entry shape and, on a PR, that each entry it adds or edits names the PR on its Checked line (`check-feature-map.py`, given the base's map from `HEAD^1` and, on a PR into `pulse` that merges main, main's maps where the PR and its base meet main, so the entries a merge of main brings in keep main's Checked lines (if GitHub can't say whether the PR merges main or give those maps, it warns and checks without them, so those entries fail as the PR's edits until a re-run); its notifier/ paths are looked up on the plugin's main, so a file removed there turns every PR red until the map follows, and a GitHub outage during that lookup only warns), cheap CI-tooling tests, the **smoke selection** (`plan-tests.py smoke`: `unit-csv`, `ui-csv`), the **nightly partition** check (`plan-tests.py hosted`), and the smoke build's project (`ui-spec`). |
+| `plan` | ubuntu | Inventory/planner validation (`plan-tests.py validate`), localization coverage, the recommended plugin version, the feature map's paths and entry shape and, on a PR, that each entry it adds or edits names the PR on its Checked line (`check-feature-map.py`, given the base's map from `HEAD^1` and, on a PR into `pulse` or `linked-rooms` that merges main, main's maps where the PR and its base meet main, so the entries a merge of main brings in keep main's Checked lines (if GitHub can't say whether the PR merges main or give those maps, it warns and checks without them, so those entries fail as the PR's edits until a re-run); its notifier/ paths are looked up on the plugin's main, so a file removed there turns every PR red until the map follows, and a GitHub outage during that lookup only warns), cheap CI-tooling tests, the **smoke selection** (`plan-tests.py smoke`: `unit-csv`, `ui-csv`), the **nightly partition** check (`plan-tests.py hosted`), and the smoke build's project (`ui-spec`). |
 | `self-test` | ubuntu | CI-tooling regression suites (planner tests, destination lookup, gate/contract tests, the bash wrapper tests the plan job skips) in one job, concurrent with `smoke`. |
 | `smoke` (`Smoke`) | macos-26 | The only macOS job: restores main's build cache, builds the app and every test target once while the simulator boots (the compile gate), then runs the curated unit classes (one invocation, no retry) and the curated UI classes (one invocation, one targeted retry) on that build. Saves the full build cache on pushes to `main`. |
 | `ci-gate` | ubuntu | The single stable branch-protection verdict (`CI Gate`), aggregating `plan`, `smoke` and `self-test` via `scripts/ci-gate.py`. |
