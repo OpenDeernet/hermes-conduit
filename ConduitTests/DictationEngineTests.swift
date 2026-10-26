@@ -86,9 +86,10 @@ extension ComposerFullEditorTests {
         XCTAssertEqual(face(transcribing: true, canEnd: true), .transcribing, "none of its words are in yet: nothing to tap")
     }
 
-    /// The Stop and Return in its place: stop, call off, or wait; never a
-    /// new dictation and never a send.
-    func testTheStopAndReturnStopCallOffOrWait() {
+    /// The Stop's tap policy: stop, call off, or wait; never a new
+    /// dictation and never a send. Return and the big voice button call the
+    /// same `tapSlot()`.
+    func testTheStopsTapStopsCallsOffOrWaits() {
         XCTAssertEqual(ComposerDictation.slotTap(.stop), .stop)
         XCTAssertEqual(ComposerDictation.slotTap(.cancelStart), .cancelStart)
         XCTAssertEqual(ComposerDictation.slotTap(.finishing), .cancelStart, "a slow settle ends at once, keeping the draft's words")
