@@ -581,6 +581,46 @@ final class BotModeTests: XCTestCase {
         XCTAssertNil(harness.appState.errorMessage)
     }
 
+    func testCreateWithoutStoredIDOpensTheTitledRowTheLookupFinds() async {
+        var lookups = 0
+        var resumedIDs: [String] = []
+        let harness = makeBotHarness(lifecycleOperations: ChatResumeLifecycleOperations(
+            openSessionWithProfile: { _, id, _, _ in
+                resumedIDs.append(id)
+                guard id == "stored-new" else {
+                    throw RpcError(code: 4007, message: "session not found")
+                }
+                return SessionResumeResult(
+                    sessionId: "runtime-new",
+                    storedSessionId: "stored-new",
+                    messages: [],
+                    snapshot: SessionRuntimeSnapshot(object: ["running": .bool(false)])
+                )
+            },
+            refreshContext: { _, _ in },
+            findBotChat: { _, _ in
+                lookups += 1
+                return lookups == 1
+                    ? []
+                    : [BotChatLookupRow(id: "stored-new", title: "Bot Chat")]
+            },
+            createBotChat: { _, _ in ("runtime-new", nil) },
+            titleBotChat: { _, _, _, _ in }
+        ))
+        harness.appState.client = HermesClient(
+            connection: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"),
+            profile: "default"
+        )
+
+        let opened = await harness.appState.openBotChat(for: makeBot(name: "atlas"))
+
+        XCTAssertTrue(opened)
+        XCTAssertEqual(lookups, 2, "a create with no stored id finds its titled row by name")
+        XCTAssertEqual(resumedIDs, ["stored-new"], "the runtime id is never resumed")
+        XCTAssertEqual(harness.appState.activeSessionId, "runtime-new")
+        XCTAssertNil(harness.appState.errorMessage)
+    }
+
     func testCreationTitleCollisionAdoptsWinnerInsteadOfForking() async {
         var createCalls = 0
         var lookups = 0
