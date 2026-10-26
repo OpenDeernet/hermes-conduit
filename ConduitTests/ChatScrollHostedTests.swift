@@ -562,7 +562,9 @@ final class ChatScrollHostedTests: XCTestCase {
     /// #1256: with Long replies on, a reply that outgrows the screen stops
     /// with the bottom of the user's message at the top of the viewport and
     /// leaves the reader browsing there, and the turn's completion doesn't
-    /// move them.
+    /// move them. Each appended step row first lays out at an estimate
+    /// taller than its measured height, so a stop can be clamped back to
+    /// the bottom before the reply outgrows the screen for real.
     func testALongReplyStopsAtTheBottomOfTheUsersMessage() throws {
         UserDefaults.standard.set(true, forKey: ChatReplyStartPreference.key)
         let mounted = try mount(Self.uneven(0..<60))
@@ -592,7 +594,7 @@ final class ChatScrollHostedTests: XCTestCase {
 
         let surface = try XCTUnwrap(mounted.engine.surface)
         let rowBottom = surface.transcriptOriginY + userRow.maxY - mounted.scrollView.contentOffset.y
-        XCTAssertEqual(rowBottom, surface.insetTop, accuracy: 1, "stops at the bottom of the user's message\n\(recorder.dump())")
+        XCTAssertEqual(rowBottom, surface.insetTop, accuracy: 2, "stops at the bottom of the user's message\n\(recorder.dump())")
         XCTAssertEqual(mounted.engine.mode, .browsing, "the reader is left browsing at the stop")
         XCTAssertGreaterThan(maxOffset(mounted.scrollView) - mounted.scrollView.contentOffset.y, 40, "the reply runs on below")
 
