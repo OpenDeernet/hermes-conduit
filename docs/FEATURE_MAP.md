@@ -148,16 +148,16 @@ screen · voice modes saying Hermes waits · Hermes Desktop's dialogs
 - Tests: `ConduitTests/HermesClientTests.swift`, `ConduitTests/ClarifyBatchStateTests.swift`, `ConduitTests/ChatResumeCoordinatorTests.swift`
 
 **Rulings**
-- What the user types lives only in the card's view state and goes once onto the socket: never on the message, in a cache, a log or a notification. The card is live-only; reopening the chat brings it back from `open_requests` (2026-10-26, #259, #PRNUM).
-- Never asked or answered by voice: a voice mode says Hermes waits and where, and Classic voice and the call screen show the card, but no listening window opens for it, so the value is never spoken or heard by a model (2026-10-26, #PRNUM).
-- A website login names the exact origin it is saved for, and goes as JSON `{identifier, password}`, the identifier trimmed and the password as typed; a code drops the spaces and dashes a site groups it with. As in Hermes Desktop: the code is shown as typed, Don't save and Skip answer empty (2026-10-26, #1299, #PRNUM).
-- No password or username autofill type on the login card: iOS would offer to save the site's login under Conduit's own domain. The code field offers a code from a text message or email (2026-10-26, #PRNUM).
+- What the user types lives only in the card's view state and goes once onto the socket: never on the message, in a cache, a log or a notification. The card is live-only; reopening the chat brings it back from `open_requests` (2026-10-26, #259, #1301).
+- Never asked or answered by voice: a voice mode says Hermes waits and where, and Classic voice and the call screen show the card, but no listening window opens for it, so the value is never spoken or heard by a model (2026-10-26, #1301).
+- A website login names the exact origin it is saved for, and goes as JSON `{identifier, password}`, the identifier trimmed and the password as typed; a code drops the spaces and dashes a site groups it with. As in Hermes Desktop: the code is shown as typed, Don't save and Skip answer empty (2026-10-26, #1299, #1301).
+- No password or username autofill type on the login card: iOS would offer to save the site's login under Conduit's own domain. The code field offers a code from a text message or email (2026-10-26, #1301).
 
 **Open gaps**
 - Notification: none for any of these. Hermes gives plugins no hook on server requests, and `browser_vault` can't tell before it runs whether it will ask (a saved authenticator key fills codes itself).
 - Group rooms show no card for these.
 
-**Checked:** 2026-10-26, #PRNUM (website logins and codes, #1299).
+**Checked:** 2026-10-26, #1301 (website logins and codes, #1299).
 
 ## Voice follow-ups
 
