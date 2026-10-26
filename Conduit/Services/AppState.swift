@@ -16116,6 +16116,10 @@ final class AppState: ObservableObject {
                 // bounded current-Hermes page with one enormous row (which
                 // must not claim the backend lacks pagination).
                 errorMessage = UserFacingError.message(for: error)
+            case let rpcError as RpcError where rpcError.code == 4132:
+                // A Kanban worker's transcript: Hermes lets only the board
+                // run it. Lists leave these out; a link can still reach one.
+                errorMessage = AppLocalization.string("This chat is a Kanban task's worker, so only the board can run it. Open the task on the Kanban board and check its Worker Log.")
             default:
                 errorMessage = AppLocalization.string("Failed to restore this conversation: \(UserFacingError.message(for: error))")
             }
@@ -29363,20 +29367,20 @@ final class AppState: ObservableObject {
 
     private func profileSessionsPath(_ profile: String, offset: Int = 0) -> String {
         DashboardPath.withExplicitProfile(
-            "/api/profiles/sessions?limit=200&offset=\(offset)&min_messages=1&archived=exclude&order=recent&exclude_sources=cron",
+            "/api/profiles/sessions?limit=200&offset=\(offset)&min_messages=1&archived=exclude&order=recent&exclude_sources=\(SessionSource.chatListExcludedSources)",
             profile: profile
         )
     }
 
     private func archivedSessionsPath(_ profile: String, offset: Int = 0) -> String {
         DashboardPath.withExplicitProfile(
-            "/api/profiles/sessions?limit=200&offset=\(offset)&min_messages=1&archived=only&order=recent&exclude_sources=cron",
+            "/api/profiles/sessions?limit=200&offset=\(offset)&min_messages=1&archived=only&order=recent&exclude_sources=\(SessionSource.chatListExcludedSources)",
             profile: profile
         )
     }
 
-    /// Fetch cron sessions separately. The main profileSessionsPath uses
-    /// exclude_sources=cron, so cron sessions never appear in the normal
+    /// Fetch cron sessions separately. The main profileSessionsPath excludes
+    /// cron (and Kanban workers), so cron sessions never appear in the normal
     /// dashboard query. This dedicated path uses source=cron to populate
     /// the cron tab in the sidebar.
     private func dashboardCronSessions(

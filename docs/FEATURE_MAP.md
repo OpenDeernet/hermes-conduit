@@ -2202,6 +2202,38 @@ block messages models read, Disband's warning, Settings captions
 
 **Checked:** 2026-10-26, #1284, with notifier #384.
 
+## Kanban workers' transcripts
+
+A Kanban task's worker runs in a Hermes session of its own (source
+`kanban`). Hermes refuses to reopen one as a chat (`session.resume` 4132):
+only the board may run it, so it can supervise the worker. Conduit leaves
+these sessions out wherever it offers chats, and the task's Worker Log is
+where to follow one.
+
+**Siblings:** each profile's chats list and its archived list · All
+profiles · search "In messages" · a call's find chat on the phone (every
+voice mode) · find chat on an Apple Watch call (notifier) · CarPlay's
+chat list (it reads the same list) · opening a chat from a
+link or notification (the message shown) · the Kanban task's Worker Log ·
+Hermes Desktop's sidebar (upstream, leaves `kanban` out too)
+
+**Code**
+- Sources: `Conduit/Models/Models.swift` (SessionSource.hermesKanbanSource, chatListExcludedSources)
+- Lists: `Conduit/Services/AppState.swift` (profileSessionsPath, archivedSessionsPath), `Conduit/Models/AllProfilesChats.swift` (sessionsPath)
+- Search: `Conduit/Services/SessionContentSearch.swift` (path), `Conduit/Voice/VoiceChatFinder.swift` (path), `notifier/dashboard/plugin_api.py` (run_watch_find_chat, CHAT_SEARCH_EXCLUDED_SOURCES)
+- Opening one anyway: `Conduit/Services/AppState.swift` (the 4132 case where a resume fails)
+- Worker Log: `Conduit/Views/Kanban/KanbanWorkerLogScreen.swift`
+- Tests: `ConduitTests/SessionContentSearchTests.swift`, `ConduitTests/VoiceChatFinderTests.swift`, `notifier/tests/test_watch_chats.py`
+
+**Rulings**
+- Kanban workers aren't chats: lists, search and voice leave them out with `exclude_sources`, as Desktop does, and the board's Worker Log shows them (2026-10-26, #PRNUM, tester report via Eric).
+- A worker reached anyway (a link, a cached row) says it belongs to the board and points at its Worker Log instead of "Failed to restore this conversation" (2026-10-26, #PRNUM).
+
+**Open gaps**
+- A worker's transcript (its messages, not the log) can't be read in Conduit. Hermes would serve it read-only over `GET /api/sessions/{id}/messages`; a read-only view is the maintainer's call.
+
+**Checked:** 2026-10-26, #PRNUM.
+
 ## Feature map rules
 
 How a change brings its connected features along, and how this map stays
