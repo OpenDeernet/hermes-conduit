@@ -467,7 +467,7 @@ struct ConduitApp: App {
                 guard let target = notifications.pendingPulseQuiet else { return }
                 guard await PushNotificationService.waitForCallToEnd(
                     interval: Self.callEndRecheckInterval,
-                    isReady: { !appState.isVoiceCallInProgress && appState.isSceneActive }
+                    isReady: { appState.callWaitCanEnd }
                 ) else { return }
                 // A newer tap took over meanwhile, or the day it was for ended.
                 guard notifications.takePendingPulseQuiet(target) else { return }
