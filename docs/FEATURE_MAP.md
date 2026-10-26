@@ -138,10 +138,13 @@ chat (a resume's `open_requests`) and Hermes withdrawing it
 (`request.cancel`) · the jump button · Classic voice's screen and the call
 screen · the minimised call bar · voice modes saying Hermes waits ·
 a voice job's card · CarPlay · Watch calls · a call from Hermes · Hermes
-Desktop's dialogs (upstream, the reference) · notification · group rooms
+Desktop's dialogs (upstream, the reference) · notification · group rooms ·
+Text (not needed: no README, docs, Settings or model-facing text describes
+these prompts)
 
 **Code**
 - Requests: `Conduit/Services/HermesClient.swift` (handleServerRequest, respondToInputPrompt), `Conduit/Services/StreamEventParser.swift` (request.cancel), `Conduit/Models/Models.swift` (InputPromptActivity: from, loginAnswer, codeAnswer)
+- Reopening: `Conduit/Models/Models.swift` (InputPromptActivity.pending(inOpenRequests:)), `Conduit/Services/HermesClient.swift` (resumeSessionObject, which refuses a replayed request no card can show)
 - Card: `Conduit/Views/ChatView.swift` (InputPromptCard), `Conduit/Services/AppState.swift` (applyInputPromptActivity, expireInputPrompt, respondToInputPrompt)
 - Jump button: `Conduit/Services/ChatResumeCoordinator.swift` (pendingClarifyMessageID, PendingDecisionKind), `Conduit/Views/ChatView.swift` (ChatJumpControls)
 - Voice screens: `Conduit/Services/AppState+SpokenApprovals.swift` (openChatWaitingCards, openChatWaitingInputs), `Conduit/Views/VoiceConversationSheet.swift` (VoiceApprovalPanel), `Conduit/Views/LiveVoiceCallJobs.swift` (LiveVoiceWaitingPanel)
@@ -150,8 +153,8 @@ Desktop's dialogs (upstream, the reference) · notification · group rooms
 
 **Rulings**
 - What the user types lives only in the card's view state and goes once onto the socket: never on the message, in a cache, a log or a notification. The card is live-only; reopening the chat brings it back from `open_requests`. A card shown before a profile switch never sends: it expires (2026-10-26, #259, #1301).
-- Never asked or answered by voice: a voice mode says Hermes waits and where, and Classic voice and the call screen show the card, but no listening window opens for it, so the value is never spoken or heard by a model (2026-10-26, #1301).
-- A website login names the exact origin it is saved for, and goes as JSON `{identifier, password}`, the identifier trimmed and the password as typed (spaces alone are no password, as on the other cards); a code drops the spaces and dashes a site groups it with. As in Hermes Desktop: the code is shown as typed, Don't save and Skip answer empty (2026-10-26, #1299, #1301).
+- Never asked or answered by voice: a voice mode says Hermes waits and where, and Classic voice and the call screen show the card, but no listening window opens for it and nothing asks for the value aloud. A live call's open microphone and Classic's barge-in still hear the room, so a user who reads a code out loud is heard like any other speech (2026-10-26, #1301).
+- A website login names the exact origin it is saved for, and goes as JSON `{identifier, password}`, the identifier trimmed and the password as typed (spaces alone are no password, as on the other cards); a code drops the spaces and dashes a site groups it with. As in Hermes Desktop: the code is shown as typed, Don't save and Skip answer empty, and the code request's `hint` is not shown (Hermes always sends it empty) (2026-10-26, #1299, #1301).
 - No password or username autofill type on the login card: iOS would offer to save the site's login under Conduit's own domain. The code field offers a code from a text message or email (2026-10-26, #1301).
 
 **Open gaps**

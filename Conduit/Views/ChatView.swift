@@ -971,7 +971,7 @@ private final class ChatScrollEventRouter {
     }
 }
 
-/// The jump-to-latest and go-to-your-question button. It observes the
+/// The jump-to-latest and go-to-what-Hermes-waits-on button. It observes the
 /// engine's chrome on its own, so leaving the latest message, or the button
 /// appearing and going, re-renders this button and not the transcript.
 private struct ChatJumpControls: View {

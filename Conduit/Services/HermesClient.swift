@@ -1687,8 +1687,7 @@ final class HermesClient: ObservableObject {
             onEvent?(.clarify(sessionId: sessionId, activity: activity))
         case _ where InputPromptActivity.Kind(rawValue: method) != nil:
             guard let activity = InputPromptActivity.from(requestId: requestID, method: method, params: params) else {
-                let missing = method == InputPromptActivity.Kind.vaultSaveLogin.rawValue ? "a session or origin" : "a session"
-                writeServerRequestReply(id: id, error: (Self.invalidParamsCode, "\(method) request without \(missing)"))
+                writeServerRequestReply(id: id, error: (Self.invalidParamsCode, "\(method) request without the fields its card needs"))
                 return
             }
             openServerRequestIDs.insert(requestID)
@@ -2359,6 +2358,7 @@ final class HermesClient: ObservableObject {
         }
         // An input request no card can show (no session, or a login with
         // no origin) is refused as the live frame is, not left to wait.
+        var refusedInputIDs: Set<String> = []
         for entry in object["open_requests"]?.arrayValue ?? [] {
             guard let request = entry.objectValue,
                   let method = request["method"]?.stringValue,
@@ -2368,6 +2368,7 @@ final class HermesClient: ObservableObject {
                       requestId: id, method: method, params: request["params"]?.objectValue ?? [:]
                   ) == nil else { continue }
             openServerRequestIDs.remove(id)
+            refusedInputIDs.insert(id)
             writeServerRequestReply(id: .string(id), error: (Self.invalidParamsCode, "\(method) request without the fields its card needs"))
         }
         for entry in object["open_requests"]?.arrayValue ?? [] {
@@ -2383,7 +2384,7 @@ final class HermesClient: ObservableObject {
             guard let request = entry.objectValue,
                   let method = request["method"]?.stringValue,
                   method == "clarify" || InputPromptActivity.Kind(rawValue: method) != nil,
-                  let id = request["id"]?.stringValue,
+                  let id = request["id"]?.stringValue, !refusedInputIDs.contains(id),
                   let session = request["params"]?.objectValue?["session_id"]?.stringValue else { continue }
             clarifySessions[id] = session
         }
