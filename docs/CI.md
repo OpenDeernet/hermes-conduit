@@ -77,10 +77,10 @@ What gets compiled (2026-10-15, when builds had grown to 9-17 minutes):
   `ConduitShareExtension/`, `Shared/`, `Conduit/Voice/GPTLive/GPTLiveProtocol.swift` or either project
   spec). `Conduit/Localizable.xcstrings` is left
   out on purpose: the app target compiles the same catalog in the slim build,
-  and nearly every PR edits it. Every push to `main` builds the full app too,
-  as do the nightly timing and UI jobs and TestFlight archives. The plan job
-  makes that choice (`ui-spec`). The nightly unit shards always build
-  `project-tests.yml`.
+  and nearly every PR edits it. Every push to `main`, `pulse` or `linked-rooms`
+  builds the full app too, as do the nightly timing and UI jobs and TestFlight
+  archives. The plan job makes that choice (`ui-spec`). The nightly unit
+  shards always build `project-tests.yml`.
 - **Incremental builds from main's last build.** Builds on `main` save their
   DerivedData to the Actions cache after the tests, keyed by project kind,
   Xcode build and runner image (`dd-v1-<kind>-<xcode>-<image>-<sha>`): the
@@ -184,7 +184,7 @@ gets its own run, because branch protection does not require PRs to be up to
 date with main, and the main run is what catches two PRs that are green alone
 but break together (within the smoke set; the nightly run catches the rest).
 Whoever merged the breaking PR fixes main forward. Any run on main that
-overlaps another run adds one macOS job, so up to five PR or main runs can run
+overlaps another run adds one macOS job, so up to five PR or push runs can run
 side by side before anything queues. "Require branches to be up to date
 before merging" is a repository setting (Settings > Branches > main) that this
 workflow assumes is off; if it is turned back on, PRs must update again. Grow

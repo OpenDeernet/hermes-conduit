@@ -5,7 +5,7 @@ again (e.g. passing observation files positionally when the script requires
 --observations).
 
 CI v5 shape (docs/CI.md): GitHub-hosted CI is the merge gate, and it is light.
-A PR or push to main runs the cheap Linux validation and ONE macOS `smoke` job
+A PR or a push runs the cheap Linux validation and ONE macOS `smoke` job
 that compiles the app (without its Watch app and extensions unless the plan
 job's ui-spec says otherwise, incrementally from main's last build) and every
 test target once, then runs the curated unit smoke classes and the curated UI
@@ -133,7 +133,9 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_ci_runs_for_main_and_linked_rooms(self):
         """linked-rooms' copy runs on that branch's pushes and the PRs into
-        it as on main's, as pulse's copy does for pulse (docs/CI.md)."""
+        it as on main's, as pulse's copy does for pulse (docs/CI.md). Only
+        this branch has the test: main's copy runs for main alone and never
+        gets it, so neither does pulse."""
         text = self._workflow_text()
         triggers = text[text.index("\non:\n"):text.index("\nconcurrency:")]
         self.assertIn("\n  push:\n    branches: [main, linked-rooms]\n  pull_request:\n", triggers)
@@ -142,7 +144,7 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_one_macos_job_per_run(self):
         """Runner queueing (5 concurrent macOS jobs per account) was CI v4's
-        bottleneck: a PR or main run gets exactly one macOS job."""
+        bottleneck: a PR or push run gets exactly one macOS job."""
         jobs = _job_keys(WORKFLOW)
         self.assertEqual(jobs, ["plan", "self-test", "smoke", "ci-gate"], jobs)
         self.assertEqual(self._workflow_text().count("runs-on: macos-"), 1)

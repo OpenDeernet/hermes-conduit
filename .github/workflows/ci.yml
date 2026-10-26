@@ -32,9 +32,8 @@ name: CI
 #
 # One macOS job per run: GitHub allows 5 concurrent macOS jobs per account,
 # and runner queueing, not test time, was what made the three-job CI v4 shape
-# slow. A PR's superseded runs are cancelled. A newer push to main never
-# cancels an older one's run, so back-to-back merges overlap and each adds one
-# macOS job.
+# slow. A PR's superseded runs are cancelled. A newer push never cancels an
+# older one's run, so back-to-back merges overlap and each adds one macOS job.
 
 on:
   push:
@@ -43,10 +42,10 @@ on:
     # linked-rooms: the Linked Rooms app side, kept off main until it all works.
     branches: [main, linked-rooms]
 
-# A PR's newer push supersedes its older run. A push to main is grouped by its
-# own commit instead, so every merge gets a full run: branch protection does
-# not require PRs to be up to date with main, so this run is what catches two
-# PRs that pass alone but break together.
+# A PR's newer push supersedes its older run. A push is grouped by its own
+# commit instead, so every merge gets a full run: branch protection does not
+# require PRs to be up to date with main, so this run is what catches two PRs
+# that pass alone but break together.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
@@ -170,8 +169,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ci-artifacts
-          # HEAD^1 is the base (a PR's merge commit) or the previous main
-          # commit (a push; main takes squash merges, one commit each): the
+          # HEAD^1 is the base (a PR's merge commit) or the branch's previous
+          # commit (a push; main takes squash merges, one commit each, and a
+          # merge of main into another branch brings main's changes too): the
           # unit classes this change touches join the curated ones, so a
           # PR's new or edited tests run before merge.
           python3 scripts/plan-tests.py smoke --repo-root . \
@@ -202,8 +202,8 @@ jobs:
         # The smoke job builds project-tests.yml (the app without its Watch
         # app and extensions, which no test runs) unless the change could
         # break those targets: their own folders, the shared code they
-        # compile, the project spec, or any push to main. Then it builds the
-        # whole app as shipped.
+        # compile, the project spec, or any push. Then it builds the whole
+        # app as shipped.
         id: spec
         env:
           EVENT: ${{ github.event_name }}
@@ -252,7 +252,7 @@ jobs:
           python3 scripts/ci-self-test.py
 
   smoke:
-    # The only macOS job of a PR or main run: one build, one booted simulator,
+    # The only macOS job of a PR or push run: one build, one booted simulator,
     # then the unit smoke classes and the UI smoke classes on them.
     name: Smoke
     needs: plan
