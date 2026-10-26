@@ -1352,11 +1352,13 @@ final class MessageNormalizerTests: XCTestCase {
         XCTAssertNil(kept.data(forKey: PushNotificationService.waitingPulseQuietKey), "going through lets it go")
 
         relaunched.pulseQuietAwaitsCall(quiet)
+        let waiting = relaunched.pulseQuietAttempt
         relaunched.receiveNotificationPayload([
             "conduit": ["session_id": "runtime-2", "type": "response.ready"] as [String: Any]
         ])
         XCTAssertNil(relaunched.pendingPulseQuiet)
         XCTAssertNil(kept.data(forKey: PushNotificationService.waitingPulseQuietKey), "a newer tap replaces it")
+        XCTAssertGreaterThan(relaunched.pulseQuietAttempt, waiting, "and ends the wait it left running")
 
         relaunched.pulseQuietAwaitsCall(quiet)
         date = date.addingTimeInterval(PushNotificationService.waitingTapLifetime)

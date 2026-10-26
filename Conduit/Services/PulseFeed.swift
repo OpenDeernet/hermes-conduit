@@ -848,9 +848,10 @@ extension AppState {
             || card.isFound && card.hasReminder && notifierPlugin.reports(PulseClient.foundActionsCapability)
     }
 
-    /// Why? on this card: its reason, or what Pulse learned played in it.
+    /// Why? on this card: its reason, or what Pulse learned played in it,
+    /// which goes with the rest of what learning shows (0.84.0).
     func explainsPulseCard(_ card: PulseCard) -> Bool {
-        explainsPulseCardReason(card) || card.learned != nil
+        explainsPulseCardReason(card) || (pulseExplainsLearning && card.learned != nil)
     }
 
     /// A follow-up's reason, or any other card's once the plugin gives each

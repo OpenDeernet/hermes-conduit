@@ -441,11 +441,14 @@ final class PulseFeedTests: XCTestCase {
         // Another chat's title isn't the card's to give.
         XCTAssertEqual(elsewhere.learned?.subject, AppLocalization.string("Things from a chat"))
         XCTAssertNil(odd.learned)
-        // A plugin from before has no What Pulse left out and no Reset.
+        // A plugin from before has no What Pulse left out and no Reset, and
+        // its Why? says nothing about learning even if a card carries it.
         state.setNotifierPluginStateForTesting(.reported(version: "0.82.0", capabilities: [
             PulseClient.feedCapability, PulseClient.cardWhyCapability, PulseClient.learnsCapability
         ]))
         XCTAssertFalse(state.pulseExplainsLearning)
+        XCTAssertFalse(state.explainsPulseCard(held))
+        XCTAssertTrue(state.explainsPulseCard(promised))  // its own reason, which 0.80.1 on gives
     }
 
     func testAReportCardsThumbsDownAsksWhyOnceThePluginActsOnIt() throws {

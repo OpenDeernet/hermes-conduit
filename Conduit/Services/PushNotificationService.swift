@@ -167,7 +167,6 @@ enum PendingDecisionPayload: Equatable, Codable {
 /// and is no chat link), and when its wait began.
 private struct WaitingTap: Codable {
     let profile: String?
-    let profileName: String?
     let sessionId: String
     let durableSessionID: String?
     let dashboardID: UUID?
@@ -2406,6 +2405,11 @@ final class PushNotificationService: ObservableObject {
         pendingRouteOpenStarted = false
         pendingRouteRetryFiredAt = nil
         pendingRouteAwaitsCall = false
+        if pendingPulseQuiet != nil {
+            // A retry this tap replaces: its task is waiting for the call,
+            // and nothing else would stop it.
+            pulseQuietAttempt += 1
+        }
         pendingPulseQuiet = nil
         pendingPulseQuietSince = nil
         forgetWaitingPulseQuiet()
@@ -2525,7 +2529,6 @@ final class PushNotificationService: ObservableObject {
         guard let keptTaps else { return }
         let tap = WaitingTap(
             profile: target.profile,
-            profileName: target.profileName,
             sessionId: target.sessionId,
             durableSessionID: target.durableSessionID,
             dashboardID: target.dashboardID,
@@ -2554,7 +2557,6 @@ final class PushNotificationService: ObservableObject {
         }
         let target = ConduitNotificationTarget(
             profile: tap.profile,
-            profileName: tap.profileName,
             sessionId: tap.sessionId,
             durableSessionID: tap.durableSessionID,
             dashboardID: tap.dashboardID,

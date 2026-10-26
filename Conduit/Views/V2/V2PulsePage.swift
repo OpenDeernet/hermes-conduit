@@ -828,7 +828,7 @@ struct V2PulsePage: View {
                 if appState.explainsPulseCardReason(card) {
                     Text(verbatim: card.why)
                 }
-                if let learned = card.learned {
+                if appState.pulseExplainsLearning, let learned = card.learned {
                     PulseLearnedLine(preference: learned)
                 }
             }
@@ -1369,34 +1369,42 @@ struct PulseLearnedSheet: View {
     }
 
     private func load() async {
+        let dashboard = appState.activeDashboardID
+        let client = self.client
         do {
-            learned = try await client.learned()
+            let loaded = try await client.learned()
+            guard appState.activeDashboardID == dashboard else { return }
+            learned = loaded
             errorMessage = nil
         } catch {
+            guard appState.activeDashboardID == dashboard else { return }
             errorMessage = PulseRefusal.message(for: error)
         }
     }
 
     private func setLevel(_ level: PulseLevel, for kind: String) {
-        run { try await client.setLevel(level, for: kind) }
+        run { client in try await client.setLevel(level, for: kind) }
     }
 
     private func undo(_ lesson: PulseLesson) {
-        run { try await client.undo(lesson: lesson.id) }
+        run { client in try await client.undo(lesson: lesson.id) }
     }
 
     /// Forgets one thing learning holds, or everything for nil.
     private func reset(_ preference: PulsePreference?) {
-        run { try await client.reset(preference) }
+        run { client in try await client.reset(preference) }
     }
 
-    private func run(_ step: @escaping @MainActor () async throws -> PulseLearned) {
+    /// The step runs against the dashboard that was active when it was
+    /// asked for, not whichever is active once the task starts.
+    private func run(_ step: @escaping @MainActor (PulseClient) async throws -> PulseLearned) {
         working = true
         let dashboard = appState.activeDashboardID
+        let client = self.client
         Task {
             defer { working = false }
             do {
-                let result = try await step()
+                let result = try await step(client)
                 guard appState.activeDashboardID == dashboard else { return }
                 learned = result
                 errorMessage = nil
@@ -1568,6 +1576,7 @@ struct PulseLeftOutSheet: View {
     private func bringUp(_ entry: PulseLeftOut) {
         bringing = entry.id
         let dashboard = appState.activeDashboardID
+        let client = self.client
         Task {
             defer { bringing = nil }
             do {
