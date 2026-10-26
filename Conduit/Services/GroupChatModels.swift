@@ -77,6 +77,10 @@ struct GroupMember: Equatable {
     /// old tags keep styling as mentions (presentation gap-fill only).
     var previousNames: [String] = []
 
+    /// A member on another installation (target kind `peer`): its turns run
+    /// on someone else's Hermes, over the room's link.
+    var isPeer: Bool { target?["kind"]?.stringValue == "peer" }
+
     /// Stable display identity: the member id when present, else the
     /// profile, else the handle. Display names are NEVER identity — two
     /// members may share one, and a rename must not re-route history.
@@ -175,6 +179,13 @@ struct GroupDriverStatus: Equatable {
     let blocked: Bool
     let counts: [String: Int]
     let pendingActions: [[String: AnyCodable]]
+    /// How the home last found each peer member's route. Hermes keeps these
+    /// in memory, so a member not tried since the room service started has
+    /// none.
+    var peerRoutes: [GroupPeerRoute] = []
+    /// The room's live member turns in admission order, from gateways that
+    /// report them; nil leaves who's live to the log.
+    var memberActivity: [GroupMemberActivity]? = nil
 
     /// The approvals members are waiting on, in the gateway's order. A row
     /// missing any part of its identity is skipped: `groups.approve` must
@@ -182,6 +193,77 @@ struct GroupDriverStatus: Equatable {
     var pendingApprovals: [GroupPendingApproval] {
         pendingActions.compactMap(GroupPendingApproval.init(action:))
     }
+
+    /// The route to a member on another Hermes, as the home last found it;
+    /// nil for your own agents and for a route not tried yet.
+    func routeStatus(for member: GroupMember) -> GroupPeerRoute.Status? {
+        guard member.isPeer else { return nil }
+        return peerRoutes.last(where: { Self.names($0.memberID, member) })?.status
+    }
+
+    /// What a live member's row and the header say about it: a member on
+    /// another Hermes reads as cut off or unreachable while its route says
+    /// so, unless its turn is running.
+    func responderState(for member: GroupMember) -> GroupResponderState {
+        if memberActivity?.contains(where: { $0.isWorking && Self.names($0.memberID, member) }) == true {
+            return .responding
+        }
+        switch routeStatus(for: member) {
+        case .cutOff: return .cutOff
+        case .unreachable: return .unreachable
+        case .ready, .other, nil: return .responding
+        }
+    }
+
+    /// The gateway names peer routes, and a peer's tasks, by member id.
+    private static func names(_ id: String, _ member: GroupMember) -> Bool {
+        id.caseInsensitiveCompare(member.identityKey) == .orderedSame
+    }
+}
+
+/// One `peer_routes` row of `groups.state`'s driver status
+/// (tui_gateway/hosted_room_service.py `_route_statuses`).
+struct GroupPeerRoute: Equatable {
+    enum Status: Equatable {
+        case ready
+        /// `needs_reauthorization`: the member's Hermes refused the room's
+        /// grant, revoked or run out, until the link is saved again.
+        case cutOff
+        /// `unavailable`: its Hermes couldn't be reached, or didn't admit
+        /// the turn; Hermes tries again.
+        case unreachable
+        case other(String)
+
+        init(wire: String) {
+            switch wire {
+            case "ready": self = .ready
+            case "needs_reauthorization": self = .cutOff
+            case "unavailable": self = .unreachable
+            default: self = .other(wire)
+            }
+        }
+    }
+
+    let memberID: String
+    let status: Status
+}
+
+/// One `member_activity` row: a member's live task, `queued`, `running` or
+/// `stopping`, named by its member id (or its profile when the task has
+/// none).
+struct GroupMemberActivity: Equatable {
+    let memberID: String
+    let status: String
+
+    /// The member's turn has the room (Hermes Desktop ranks it over queued).
+    var isWorking: Bool { status == "running" || status == "stopping" }
+}
+
+/// How a live member stands, for its row and the header.
+enum GroupResponderState: Equatable {
+    case responding
+    case cutOff
+    case unreachable
 }
 
 /// One `kind: "approval"` row of `pending_actions`: a member's tool call the
@@ -327,13 +409,32 @@ enum GroupDecoders {
             if let number = HermesClient.exactIntValue(count) { counts[key] = number }
         }
         let pending = (object["pending_actions"]?.arrayValue ?? []).compactMap { $0.objectValue }
+        let routes = (object["peer_routes"]?.arrayValue ?? []).compactMap { row -> GroupPeerRoute? in
+            guard let route = row.objectValue, let memberID = nonEmptyMemberID(route) else { return nil }
+            return GroupPeerRoute(memberID: memberID, status: .init(wire: route["status"]?.stringValue ?? ""))
+        }
+        var activity: [GroupMemberActivity]?
+        if let rows = object["member_activity"]?.arrayValue {
+            activity = rows.compactMap { row -> GroupMemberActivity? in
+                guard let task = row.objectValue, let memberID = nonEmptyMemberID(task) else { return nil }
+                return GroupMemberActivity(memberID: memberID, status: task["status"]?.stringValue ?? "")
+            }
+        }
         return GroupDriverStatus(
             running: object["running"]?.boolValue ?? false,
             working: object["working"]?.boolValue ?? false,
             blocked: object["blocked"]?.boolValue ?? false,
             counts: counts,
-            pendingActions: pending
+            pendingActions: pending,
+            peerRoutes: routes,
+            memberActivity: activity
         )
+    }
+
+    private static func nonEmptyMemberID(_ row: [String: AnyCodable]) -> String? {
+        guard let id = row["member_id"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !id.isEmpty else { return nil }
+        return id
     }
 
     static func logPage(_ result: AnyCodable?) -> GroupLogPage? {
@@ -1074,6 +1175,49 @@ enum GroupRoomTurns {
         let id = id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return members.first(where: { routingID(of: $0) == id })
             ?? members.first(where: { $0.profile?.caseInsensitiveCompare(id) == .orderedSame })
+    }
+
+    /// The roster bot a room member is: by profile, else (a Desktop group's
+    /// member, which has none) by name. A member on another Hermes is
+    /// never one of yours, whatever its profile is called there.
+    static func rosterBot(for member: GroupMember?, name: String, in roster: [BotProfile]) -> BotProfile? {
+        if member?.isPeer == true { return nil }
+        if let profile = member?.profile?.trimmingCharacters(in: .whitespacesAndNewlines), !profile.isEmpty,
+           let bot = roster.first(where: { $0.name == profile }) {
+            return bot
+        }
+        let label = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !label.isEmpty else { return nil }
+        return roster.first { $0.displayLabel == label || $0.name == label }
+    }
+
+    /// The member the gateway's live turns put first, as Hermes Desktop
+    /// reads them: a running (or stopping) turn's, else the first queued
+    /// one's. An id the room doesn't seat is skipped.
+    static func liveMember(_ activity: [GroupMemberActivity], members: [GroupMember]) -> GroupMember? {
+        let ranked = activity.filter(\.isWorking) + activity.filter { !$0.isWorking }
+        for task in ranked {
+            if let member = member(withID: task.memberID, in: members) { return member }
+        }
+        return nil
+    }
+}
+
+/// What Disband's confirmation says. In a room with a member from another
+/// installation the room ends for everyone, the plugin deletes your agents'
+/// hidden sessions for it, and agents on other people's Hermes keep theirs
+/// (notifier 0.81, Eric 2026-10-26). A room of only your own agents ends
+/// whole.
+enum GroupRoomDisband {
+    static func warning(members: [GroupMember]) -> String {
+        if members.contains(where: \.isPeer) {
+            return AppLocalization.string(
+                "The room ends for everyone, and your agents' sessions for it are deleted. Agents on other people's Hermes keep theirs. This cannot be undone."
+            )
+        }
+        return AppLocalization.string(
+            "The room, its history, and every member's session end permanently. This cannot be undone."
+        )
     }
 }
 

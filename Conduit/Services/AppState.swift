@@ -10564,11 +10564,15 @@ final class AppState: ObservableObject {
     private var roomResponderCache: (key: String, member: GroupMember?)?
 
     /// The member whose turn the open room is running. A driver that reports
-    /// idle or blocked names nobody; with no driver status yet (first load,
-    /// or a gateway without one) the log alone decides.
+    /// idle or blocked names nobody. A gateway that reports its live turns
+    /// names the member from them, as Hermes Desktop does; otherwise (no
+    /// driver status yet, or a gateway without live turns) the log decides.
     var activeRoomResponder: GroupMember? {
         if let driver = activeRoomDriverStatus, !driver.working || driver.blocked { return nil }
         let room = activeRoomSurface?.room
+        if let activity = activeRoomDriverStatus?.memberActivity {
+            return GroupRoomTurns.liveMember(activity, members: room?.members ?? [])
+        }
         let key = "\(activeRoomReplay.roomID)|\(activeRoomReplay.cursor)|\(room?.revision ?? -1)"
         if let cached = roomResponderCache, cached.key == key { return cached.member }
         let member = GroupRoomTurns.pendingResponder(
@@ -10577,6 +10581,14 @@ final class AppState: ObservableObject {
         roomResponderCache = (key, member)
         return member
     }
+
+    /// Whether the open room's live member can answer: a member on another
+    /// Hermes reads as cut off or unreachable while its route says so.
+    var activeRoomResponderState: GroupResponderState {
+        guard let member = activeRoomResponder, let driver = activeRoomDriverStatus else { return .responding }
+        return driver.responderState(for: member)
+    }
+
     @Published private(set) var activeRoomSendInFlight = false
     /// A send whose outcome is unknown keeps its retry key (via the outbox):
     /// the retry reuses the SAME client event id, and the gateway's
@@ -10796,17 +10808,9 @@ final class AppState: ObservableObject {
         roomRecipientRequest = nil
     }
 
-    /// The roster bot a room member is: by profile, else (a Desktop group's
-    /// member, which has none) by name.
+    /// The roster bot a room member is (GroupRoomTurns.rosterBot).
     func groupMemberBot(_ member: GroupMember?, name: String) -> BotProfile? {
-        let roster = botRoster
-        if let profile = member?.profile?.trimmingCharacters(in: .whitespacesAndNewlines), !profile.isEmpty,
-           let bot = roster.first(where: { $0.name == profile }) {
-            return bot
-        }
-        let label = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !label.isEmpty else { return nil }
-        return roster.first { $0.displayLabel == label || $0.name == label }
+        GroupRoomTurns.rosterBot(for: member, name: name, in: botRoster)
     }
 
     /// Each member's color by `identityKey`: its bot's color, else the hue
@@ -11232,12 +11236,15 @@ final class AppState: ObservableObject {
                 // The driver took the message on: show it working now rather
                 // than waiting for the next poll's status, which corrects it.
                 let previous = activeRoomDriverStatus
+                // Its routes hold until then; who answers first is the
+                // log's to say, since the live turns predate the message.
                 activeRoomDriverStatus = GroupDriverStatus(
                     running: true,
                     working: true,
                     blocked: previous?.blocked ?? false,
                     counts: previous?.counts ?? [:],
-                    pendingActions: previous?.pendingActions ?? []
+                    pendingActions: previous?.pendingActions ?? [],
+                    peerRoutes: previous?.peerRoutes ?? []
                 )
             }
             // A delivered message retires the failure banner of its earlier

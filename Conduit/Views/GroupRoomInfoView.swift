@@ -1,0 +1,351 @@
+import OSLog
+import SwiftUI
+
+private let roomChoicesLogger = Logger(subsystem: "com.milim.relay", category: "RoomChoices")
+
+/// Group Info, from the room menu in both shells: who's in the open room,
+/// which agents are yours, and what the room last found on the way to the
+/// others. In a room with a member from another installation, each of your
+/// agents opens its choices for the room, when the host's plugin keeps them
+/// (designs/cross-owner-agents, C1).
+@MainActor
+struct GroupRoomInfoSheet: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    /// The room the sheet opened on: another room closes it.
+    @State private var roomID: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let room = appState.activeRoomSurface?.room {
+                    memberSection(room)
+                }
+            }
+            .navigationTitle(appState.activeRoomSurface?.room.name ?? AppLocalization.string("Group Info"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(AppLocalization.string("Done")) { dismiss() }
+                }
+            }
+        }
+        .onAppear { roomID = appState.activeRoomSurface?.room.roomID }
+        .onChange(of: appState.activeRoomSurface?.room.roomID) { _, id in
+            if id != roomID { dismiss() }
+        }
+    }
+
+    @ViewBuilder
+    private func memberSection(_ room: GroupRoom) -> some View {
+        // Named as the bots are now, as in the room.
+        let members = GroupRoomTurns.members(room.members, namedBy: appState.botRoster)
+        // Choices matter only beside other people's agents.
+        let offersChoices = appState.canSetRoomChoices && members.contains(where: \.isPeer)
+        Section {
+            ForEach(members, id: \.identityKey) { member in
+                if offersChoices, !member.isPeer, let profile = member.profile, !profile.isEmpty {
+                    NavigationLink {
+                        RoomAgentChoicesView(
+                            roomID: room.roomID,
+                            profile: profile,
+                            name: GroupRoomTurns.displayName(of: member)
+                        )
+                    } label: {
+                        GroupRoomMemberRow(member: member, route: nil)
+                    }
+                } else {
+                    GroupRoomMemberRow(
+                        member: member,
+                        route: appState.activeRoomDriverStatus?.routeStatus(for: member)
+                    )
+                }
+            }
+        } header: {
+            Text(AppLocalization.string("Members"))
+        } footer: {
+            if offersChoices {
+                Text(AppLocalization.string("Tap one of your agents to choose what it may do and share here."))
+            }
+        }
+    }
+}
+
+/// One member in Group Info: its picture and name, whose it is, and the
+/// trouble the room last found on the way to it.
+private struct GroupRoomMemberRow: View {
+    let member: GroupMember
+    let route: GroupPeerRoute.Status?
+
+    private var trouble: (text: String, symbol: String)? {
+        switch route {
+        case .cutOff:
+            return (AppLocalization.string("Cut off: its Hermes no longer accepts this room"), "exclamationmark.triangle")
+        case .unreachable:
+            return (AppLocalization.string("Can't be reached. Hermes keeps trying."), "wifi.exclamationmark")
+        case .ready, .other, nil:
+            return nil
+        }
+    }
+
+    var body: some View {
+        let name = GroupRoomTurns.displayName(of: member)
+        HStack(spacing: 12) {
+            GroupMemberAvatar(member: member, name: name, size: 36)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .lineLimit(1)
+                Text(member.isPeer ? AppLocalization.string("On another Hermes") : AppLocalization.string("Your agent"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if let trouble {
+                    Label(trouble.text, systemImage: trouble.symbol)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// What the plugin holds one of your agents to in a room with other
+/// people's agents: what it can do, what it may share, past-chat search,
+/// and a note it reads on each of its turns there. How it takes part and
+/// its turns a day wait for the room bridge, which holds agents to them.
+/// Each change sends only that choice, and the page shows what the plugin
+/// answers, for the dashboard it asked.
+@MainActor
+struct RoomAgentChoicesView: View {
+    @EnvironmentObject private var appState: AppState
+    let roomID: String
+    let profile: String
+    let name: String
+
+    /// What the plugin answered for `loadedKey`; nil until then.
+    @State private var choices: RoomChoices?
+    @State private var loadedKey: String?
+    @State private var saving = false
+    @State private var error: String?
+    @State private var noteDraft = ""
+
+    private var key: String {
+        "\(appState.activeDashboardID?.uuidString ?? "")|\(roomID)|\(profile)"
+    }
+
+    var body: some View {
+        Form {
+            if let choices, loadedKey == key {
+                if !choices.saved {
+                    Section {
+                        Text(AppLocalization.string("These are \(name)'s defaults. A change here applies to this room only."))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                toolsSection(choices)
+                shareSection(choices)
+                Section {
+                    Toggle(AppLocalization.string("Search my past chats"), isOn: Binding(
+                        get: { self.choices?.searchChats ?? false },
+                        set: { on in change("search_chats", to: on) { $0.searchChats = on } }
+                    ))
+                    .tint(.conduitAccent)
+                } footer: {
+                    Text(AppLocalization.string("It can search your other chats to answer here, other people's messages in them included."))
+                }
+                noteSection(choices)
+            } else if error == nil {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+            }
+            if let error {
+                Section {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                    if loadedKey != key {
+                        Button(AppLocalization.string("Try again")) {
+                            Task { await load(key) }
+                        }
+                    }
+                }
+            }
+        }
+        // One change at a time.
+        .disabled(saving)
+        .navigationTitle(name)
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: key) { await load(key) }
+    }
+
+    private func toolsSection(_ choices: RoomChoices) -> some View {
+        Section {
+            Picker(AppLocalization.string("What it can do"), selection: Binding(
+                get: { self.choices?.tools ?? "talk" },
+                set: { tools in change("tools", to: tools) { $0.tools = tools } }
+            )) {
+                Text(AppLocalization.string("Talk only")).tag("talk")
+                Text(AppLocalization.string("Look things up")).tag("look")
+                // Set with the CLI: shown while it's the choice, not offered.
+                if choices.tools == "data" {
+                    Text(AppLocalization.string("Use my data")).tag("data")
+                }
+                if choices.tools == "custom" {
+                    Text(AppLocalization.string("Custom")).tag("custom")
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } header: {
+            Text(AppLocalization.string("What it can do"))
+        } footer: {
+            Text(Self.toolsDetail(choices))
+        }
+    }
+
+    private func shareSection(_ choices: RoomChoices) -> some View {
+        Section {
+            Picker(AppLocalization.string("What it may share"), selection: Binding(
+                get: { self.choices?.share ?? "ask" },
+                set: { share in change("share", to: share) { $0.share = share } }
+            )) {
+                Text(AppLocalization.string("What helps")).tag("helps")
+                Text(AppLocalization.string("Ask me first")).tag("ask")
+                Text(AppLocalization.string("Nothing personal")).tag("nothing")
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } header: {
+            Text(AppLocalization.string("What it may share"))
+        } footer: {
+            Text(Self.shareDetail(choices.share))
+        }
+    }
+
+    private func noteSection(_ choices: RoomChoices) -> some View {
+        Section {
+            TextField(
+                AppLocalization.string("Anything it should keep in mind here"),
+                text: $noteDraft,
+                axis: .vertical
+            )
+            .lineLimit(3...8)
+            .onChange(of: noteDraft) { _, text in
+                let clipped = RoomChoicesClient.clippedNote(text)
+                if clipped != text { noteDraft = clipped }
+            }
+            if noteDraft != choices.note {
+                HStack {
+                    Button(AppLocalization.string("Cancel")) { noteDraft = choices.note }
+                        .buttonStyle(.borderless)
+                    Spacer()
+                    Button(AppLocalization.string("Save")) {
+                        let note = noteDraft
+                        change("note", to: note) { $0.note = note }
+                    }
+                    .buttonStyle(.borderless)
+                    .fontWeight(.semibold)
+                }
+            }
+        } header: {
+            Text(AppLocalization.string("Note for this room"))
+        } footer: {
+            Text(AppLocalization.string("\(name) reads this on each of its turns here. It isn't posted to the room."))
+        }
+    }
+
+    static func toolsDetail(_ choices: RoomChoices) -> String {
+        switch choices.tools {
+        case "talk":
+            return AppLocalization.string("It answers from what it knows, without tools.")
+        case "look", "data":
+            return AppLocalization.string("It can search the web and X, read web pages and look at images.")
+        case "custom" where choices.customTools.isEmpty:
+            return AppLocalization.string("No tools are picked for it on your Hermes.")
+        case "custom":
+            let tools = choices.customTools.joined(separator: ", ")
+            return AppLocalization.string("Only the tools picked on your Hermes: \(tools)")
+        default:
+            return ""
+        }
+    }
+
+    static func shareDetail(_ share: String) -> String {
+        switch share {
+        case "helps":
+            return AppLocalization.string("What helps the room, but nothing sensitive: no health, money, passwords, or what others told you in private.")
+        case "ask":
+            return AppLocalization.string("Before it shares anything personal, it says it'll check with you.")
+        case "nothing":
+            return AppLocalization.string("It shares nothing personal about you, even when asked.")
+        default:
+            return ""
+        }
+    }
+
+    /// Shows the change, sends only it, then shows what the plugin kept.
+    private func change(_ choice: String, to value: Any, apply: (inout RoomChoices) -> Void) {
+        guard loadedKey == key, !saving, var changed = choices else { return }
+        apply(&changed)
+        guard changed != choices else { return }
+        Haptics.selection()
+        choices = changed
+        Task { await save([choice: value]) }
+    }
+
+    private func load(_ key: String) async {
+        if loadedKey != key {
+            choices = nil
+            loadedKey = nil
+            error = nil
+        }
+        do {
+            let read = try await appState.roomChoicesClient.choices(roomID: roomID, profile: profile)
+            // Moved on meanwhile.
+            guard key == self.key else { return }
+            choices = read
+            noteDraft = read.note
+            loadedKey = key
+        } catch is CancellationError {
+            return
+        } catch let readError {
+            roomChoicesLogger.notice("Room choices not read: \(LogRedaction.message(readError), privacy: .public)")
+            if key == self.key {
+                error = AppLocalization.string("Could not read this setting from the host: \(UserFacingError.message(for: readError))")
+            }
+        }
+    }
+
+    private func save(_ change: [String: Any]) async {
+        let key = key
+        guard loadedKey == key else { return }
+        saving = true
+        error = nil
+        defer { saving = false }
+        do {
+            let kept = try await appState.roomChoicesClient.set(change, roomID: roomID, profile: profile)
+            guard key == self.key, loadedKey == key else { return }
+            choices = kept
+            if change["note"] != nil { noteDraft = kept.note }
+        } catch let saveError {
+            guard key == self.key, loadedKey == key else { return }
+            let cancelled = saveError is CancellationError
+            if !cancelled {
+                Haptics.error()
+                roomChoicesLogger.notice("Room choices not saved: \(LogRedaction.message(saveError), privacy: .public)")
+            }
+            // Read back what the plugin kept rather than guess at it. A note
+            // being written stays, saved or not.
+            let draft = noteDraft
+            saving = false
+            choices = nil
+            loadedKey = nil
+            await load(key)
+            if loadedKey == key { noteDraft = draft }
+            if !cancelled, key == self.key {
+                error = AppLocalization.string("Could not change this setting: \(UserFacingError.message(for: saveError))")
+            }
+        }
+    }
+}
