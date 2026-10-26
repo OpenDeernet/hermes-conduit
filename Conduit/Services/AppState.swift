@@ -4739,6 +4739,9 @@ final class AppState: ObservableObject {
     /// that its requested session no longer exists. Callers use this to
     /// retire a saved automatic-return target instead of retrying it forever.
     private var reconciliationSessionWasNotFound = false
+    /// Set when the resume RPC refused a Kanban worker's transcript (4132):
+    /// Hermes never reopens one as a chat, so a retry would only repeat it.
+    private var reconciliationWasKanbanWorker = false
     /// Catalog rows `session.resume` answered 4007 for during an automatic
     /// resume, per dashboard and profile, for this app run. The catalog can
     /// keep listing a conversation the gateway no longer resumes; without
@@ -15538,6 +15541,7 @@ final class AppState: ObservableObject {
         durablePersistedRowIDs = []
         reconciliationWasIdentityRejected = false
         reconciliationSessionWasNotFound = false
+        reconciliationWasKanbanWorker = false
         refreshActiveChatScrollSessionIdentity(isReconciling: true)
         turnState = .synchronizing
         // The resume RPC can overlap a user-initiated config.set. Capture the
@@ -16119,6 +16123,7 @@ final class AppState: ObservableObject {
             case let rpcError as RpcError where rpcError.code == 4132:
                 // A Kanban worker's transcript: Hermes lets only the board
                 // run it. Lists leave these out; a link can still reach one.
+                reconciliationWasKanbanWorker = true
                 errorMessage = AppLocalization.string("This chat is a Kanban task's worker, so only the board can run it. Open the task on the Kanban board and check its Worker Log.")
             default:
                 errorMessage = AppLocalization.string("Failed to restore this conversation: \(UserFacingError.message(for: error))")
@@ -22783,7 +22788,8 @@ final class AppState: ObservableObject {
             // This open still owns the viewport, so the reconcile failure is
             // genuine (identity rejection and friends set their own message).
             // Read before any await: the flags describe the reconcile above.
-            return (.failed, reconciliationWasIdentityRejected || reconciliationSessionWasNotFound)
+            return (.failed, reconciliationWasIdentityRejected || reconciliationSessionWasNotFound
+                || reconciliationWasKanbanWorker)
         }
         if opensUnreadReply { chatReplyStartLandingRequest &+= 1 }
         return (.opened, false)
