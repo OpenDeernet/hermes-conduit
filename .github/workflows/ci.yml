@@ -38,9 +38,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, linked-rooms]
   pull_request:
-    branches: [main]
+    # linked-rooms: the Linked Rooms app side, kept off main until it all works.
+    branches: [main, linked-rooms]
 
 # A PR's newer push supersedes its older run. A push to main is grouped by its
 # own commit instead, so every merge gets a full run: branch protection does
