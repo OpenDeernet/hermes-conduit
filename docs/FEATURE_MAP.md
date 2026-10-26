@@ -368,10 +368,11 @@ for New chat, on a phone and on a split iPad or Mac window.
 Main button) · voice in the Chats top bar and a project page's toolbar when
 swapped · the chat's own voice button (Starting a call) · a minimised call's
 way back · the iPad split layout, with the list shown or hidden (#1164) ·
-Bots and Bot Chat · group rooms · the Main button caption
+Tasks and Settings on a wide window · Bots and Bot Chat · group rooms · the
+Main button caption
 
 **Code**
-- Round button and bar: `Conduit/Views/V2/V2Shell.swift` (voiceButton, tabs, V2SplitLayout.hasChatVoiceBeside, V2MainButtonPreference)
+- Round button and bar: `Conduit/Views/V2/V2Shell.swift` (voiceButton, tabs, V2SplitLayout.hasChatVoiceBeside, V2SplitLayout.tabBarUnderList, V2MainButtonPreference)
 - Swapped voice: `Conduit/Views/V2/V2ChatsView.swift` (trailingControls), `Conduit/Views/V2/V2ProjectPage.swift` (toolbar)
 - Caption: `Conduit/Views/AuxiliaryViews.swift` (Main button)
 - Tests: `ConduitTests/V2SplitLayoutTests.swift`
@@ -379,6 +380,7 @@ Bots and Bot Chat · group rooms · the Main button caption
 **Rulings**
 - Swapped, the round button starts a new chat and voice moves to the top bar; a minimised call turns it back into voice (2026-10-17, #707).
 - Split, a chat beside the list that shows its own voice button takes voice: the round voice button, and the swapped top bar and project page voice, step aside while it shows; New chat stays. A group room has none, so the list keeps its voice beside one (Eric, 2026-10-26, #1319).
+- On a wide window the bar sits under the list column only where there is one (Chats and Bots, split). Tasks, Settings and a list shown alone center it under the screen, at the list column's width (Eric, 2026-10-26, #1319; replaces #1169's bar kept at the leading edge).
 
 **Open gaps**
 - None known.

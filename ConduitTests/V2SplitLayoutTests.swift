@@ -48,6 +48,15 @@ extension SidebarLayoutTests {
         XCTAssertFalse(V2SplitLayout.hasChatVoiceBeside(split: false, path: [.conversation], inRoom: false))
     }
 
+    func testV2TabBarSitsUnderTheListColumnOnly() {
+        XCTAssertTrue(V2SplitLayout.tabBarUnderList(split: true, tab: .chats))
+        XCTAssertTrue(V2SplitLayout.tabBarUnderList(split: true, tab: .bots))
+        // No list column: Tasks and Settings, or the list hidden (one column).
+        XCTAssertFalse(V2SplitLayout.tabBarUnderList(split: true, tab: .tasks))
+        XCTAssertFalse(V2SplitLayout.tabBarUnderList(split: true, tab: .settings))
+        XCTAssertFalse(V2SplitLayout.tabBarUnderList(split: false, tab: .chats))
+    }
+
     func testV2SplitListStackLeavesOutTheConversation() {
         let project = ProjectSummary(id: "p1", title: "Trips", isHome: false, sessionCount: 0, previewSessions: [])
         XCTAssertEqual(V2SplitLayout.listRoutes([.conversation]), [])

@@ -559,8 +559,10 @@ struct V2Shell: View {
     /// for a separate circle: a search-role tab sat inside the bar as a
     /// second Voice item under the button.
     /// Split (a wide iPad window), the bar stays up under the list column,
-    /// beside the open chat, on every tab, and keeps that place when the
-    /// list shows alone (the user hid it beside the chat).
+    /// beside the open chat. A wide window's screens with no list column
+    /// (Tasks, Settings, a list the user hid beside the chat) center their
+    /// content, and the bar centers under it rather than sitting alone in
+    /// the corner.
     private func tabs(split: Bool, canSplit: Bool) -> some View {
         ZStack {
             ForEach(V2Tab.destinations) { tab in
@@ -605,7 +607,7 @@ struct V2Shell: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 6)
                     .frame(width: canSplit ? V2SplitLayout.listWidth : nil)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: V2SplitLayout.tabBarUnderList(split: split, tab: selectedTab) ? .leading : .center)
                     .onGeometryChange(for: CGFloat.self) { proxy in
                         proxy.size.height
                     } action: { height in
@@ -907,6 +909,13 @@ enum V2SplitLayout {
     /// voice buttons step aside for it.
     static func hasChatVoiceBeside(split: Bool, path: [V2Route], inRoom: Bool) -> Bool {
         split && path.contains(.conversation) && !inRoom
+    }
+
+    /// The bar sits under the list column only where there is one: Chats
+    /// and Bots, split. Elsewhere on a wide window it centers under the
+    /// screen's readable column.
+    static func tabBarUnderList(split: Bool, tab: V2Tab) -> Bool {
+        split && (tab == .chats || tab == .bots)
     }
 
     /// The list column's stack: the tab's path without the conversation,
