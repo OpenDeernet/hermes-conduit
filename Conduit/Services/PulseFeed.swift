@@ -179,6 +179,24 @@ struct PulseLayout: Equatable {
         var left: Int { items.filter { !$0.isCleared }.count }
         /// Every card it brought is done or swiped away.
         var isHandled: Bool { left == 0 }
+
+        /// The newest of it and the cards it brought, which a fold notes.
+        var newest: Date { ([card] + items).compactMap(\.createdAt).max() ?? .distantPast }
+
+        /// Shown as one row: folded from its header (`foldedThrough`, its
+        /// `newest` then) until it's opened again, or with every card it
+        /// brought handled, unless `opened` on this visit. Not while a card
+        /// in it is open and newer than the fold, one back from Not now
+        /// (it comes back as new), nor while `focused`, the card a push or a
+        /// Pulse mark opened, is it or one of its cards.
+        func isFolded(foldedThrough: Date?, opened: Bool, focused: Int?) -> Bool {
+            if let focused, focused == id || items.contains(where: { $0.id == focused }) { return false }
+            if let foldedThrough,
+               !items.contains(where: { !$0.isCleared && ($0.createdAt ?? .distantPast) > foldedThrough }) {
+                return true
+            }
+            return !isSummary && isHandled && !opened
+        }
     }
 
     /// Briefs still holding something open, newest first, then the newest

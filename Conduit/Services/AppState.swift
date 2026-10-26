@@ -2244,6 +2244,50 @@ final class AppState: ObservableObject {
         pulseRememberedHomes = homes
         defaults.set(homes, forKey: Self.pulseHomesKey)
     }
+
+    /// Morning briefs folded on the Pulse screen, per dashboard: each
+    /// brief's card id with the newest of its cards when it was folded
+    /// (PulseLayout.Brief.isFolded), kept across launches, so a brief read
+    /// and folded stays out of the way until it's opened again. The newest
+    /// `pulseFoldedBriefsKept` briefs of each.
+    private(set) lazy var pulseFoldedBriefs: [String: [String: Double]] =
+        defaults.dictionary(forKey: Self.pulseFoldedBriefsKey) as? [String: [String: Double]] ?? [:]
+    static let pulseFoldedBriefsKey = "conduit.pulse.foldedBriefs"
+    static let pulseFoldedBriefsKept = 30
+
+    func pulseBriefFoldedThrough(_ brief: Int) -> Date? {
+        guard let key = activeDashboardID?.uuidString,
+              let through = pulseFoldedBriefs[key]?[String(brief)] else { return nil }
+        return Date(timeIntervalSince1970: through)
+    }
+
+    /// Folds `brief` as of `newest`, the newest of its cards then, or opens
+    /// it again (nil).
+    func foldPulseBrief(_ brief: Int, through newest: Date?) {
+        guard let key = activeDashboardID?.uuidString else { return }
+        var briefs = pulseFoldedBriefs[key] ?? [:]
+        let through = newest?.timeIntervalSince1970
+        guard briefs[String(brief)] != through else { return }
+        briefs[String(brief)] = through
+        let kept = Set(briefs.keys.compactMap { Int($0) }.sorted().suffix(Self.pulseFoldedBriefsKept))
+        briefs = briefs.filter { id, _ in Int(id).map { kept.contains($0) } ?? false }
+        var all = pulseFoldedBriefs
+        all[key] = briefs.isEmpty ? nil : briefs
+        storePulseFoldedBriefs(all)
+    }
+
+    /// A removed dashboard's folded briefs go with it.
+    private func forgetPulseFoldedBriefs(of dashboardID: UUID) {
+        var all = pulseFoldedBriefs
+        guard all.removeValue(forKey: dashboardID.uuidString) != nil else { return }
+        storePulseFoldedBriefs(all)
+    }
+
+    private func storePulseFoldedBriefs(_ all: [String: [String: Double]]) {
+        objectWillChange.send()
+        pulseFoldedBriefs = all
+        defaults.set(all, forKey: Self.pulseFoldedBriefsKey)
+    }
     @Published private(set) var composerPrefillText = ""
     @Published private(set) var composerPrefillToken = UUID()
     /// The draft the prefill is for, until ComposerBar puts it in. A new
@@ -12090,6 +12134,7 @@ final class AppState: ObservableObject {
             persistModelVisibilities(visibilities)
         }
         forgetPulseHome(of: id)
+        forgetPulseFoldedBriefs(of: id)
     }
 
     // MARK: Relay gateways each dashboard's host reported
