@@ -508,23 +508,28 @@ extension NotificationDashboardOwnershipTests {
         XCTAssertEqual(appState.knownRelayGatewayIDs, ["gw-1"])
     }
 
-    func testPulseQuietForTodayRetryDuringACallStaysAndSaysWhy() async {
+    func testPulseQuietForTodayRetryDuringACallWaitsForItToEnd() async {
         let savedA = SavedDashboard(id: dashboardA, label: "VPS", normalizedURL: "https://vps.tailnet.ts.net")
         let savedB = SavedDashboard(id: dashboardB, label: "Mac", normalizedURL: "https://mac.tailnet.ts.net")
         let appState = makeAppState(registry: SavedDashboardRegistry(activeDashboardID: dashboardA, dashboards: [savedA, savedB]))
         appState.recordRelayGatewayID("gw-1", for: dashboardA, profile: "default")
         appState.recordRelayGatewayID("gw-2", for: dashboardB, profile: "default")
         appState.showVoiceSheet = true
+        let target = PulseQuietTarget(dashboardID: dashboardB.uuidString, gatewayID: "gw-2")
+        let notifications = PushNotificationService.shared
+        defer { notifications.clearPendingPulseQuiet(target) }
+        let attempt = notifications.pulseQuietAttempt
 
         // Another saved dashboard's push, retried with Conduit open: a call keeps
-        // Conduit where it is, and it says to end the call first.
-        let quieted = await appState.quietPulseForToday(PulseQuietTarget(dashboardID: dashboardB.uuidString, gatewayID: "gw-2"),
-                                                        switching: true, wait: .zero)
+        // Conduit where it is, and the retry waits for the call to end, saying so.
+        let quieted = await appState.quietPulseForToday(target, switching: true, wait: .zero)
 
         XCTAssertFalse(quieted)
         XCTAssertEqual(appState.activeDashboardID, dashboardA)
-        XCTAssertEqual(appState.errorMessage, AppLocalization.string("End the call to quiet Pulse in another workspace."))
+        XCTAssertEqual(appState.errorMessage, AppLocalization.string("Pulse goes quiet in the other workspace when the call ends."))
         XCTAssertTrue(appState.isVoiceCallInProgress)
+        XCTAssertEqual(notifications.pendingPulseQuiet, target)
+        XCTAssertEqual(notifications.pulseQuietAttempt, attempt + 1)
     }
 
     func testRelayGatewayIDsAreKeptPerDashboardAndForgottenWithIt() {

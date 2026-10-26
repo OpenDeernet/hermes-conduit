@@ -465,6 +465,26 @@ struct ConduitApp: App {
                     notifications.notificationRouteAwaitsCall(target)
                 }
             }
+            // Quiet for today's retry waiting for a call, as a notification
+            // waits above: it goes through once two checks in a row find no
+            // call and Conduit on screen.
+            .task(id: notifications.pulseQuietAttempt) {
+                guard let target = notifications.pendingPulseQuiet else { return }
+                var readyBefore = false
+                while true {
+                    let ready = !appState.isVoiceCallInProgress && appState.isSceneActive
+                    if ready, readyBefore { break }
+                    readyBefore = ready
+                    do { try await Task.sleep(for: Self.callEndRecheckInterval) } catch { return }
+                }
+                // A newer tap took over meanwhile.
+                guard notifications.pendingPulseQuiet == target else { return }
+                notifications.clearPendingPulseQuiet(target)
+                let quiet = await appState.quietPulseForToday(target, switching: true, wait: .seconds(20))
+                if quiet || appState.pulseQuietOwnership(target) == .route {
+                    appState.openPulse(card: nil)
+                }
+            }
             .task(id: voiceIntentRouteKey) {
                 // Siri's call shows its screen while it waits for Hermes.
                 appState.presentWaitingCallIfNeeded()

@@ -360166,88 +360166,6 @@
         }
       }
     },
-    "End the call to quiet Pulse in another workspace." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beende den Anruf, um Pulse in einem anderen Arbeitsbereich ruhen zu lassen."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Finaliza la llamada para silenciar Pulse en otro espacio de trabajo."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Terminez l’appel pour mettre Pulse en silence dans un autre espace de travail."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Akhiri panggilan untuk menenangkan Pulse di ruang kerja lain."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Termina la chiamata per mettere in silenzio Pulse in un altro spazio di lavoro."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "別のワークスペースのPulseを静かにするには、通話を終了してください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "다른 작업 공간의 Pulse를 조용히 하려면 통화를 종료하세요."
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zakończ połączenie, aby wyciszyć Pulse w innym obszarze roboczym."
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Encerre a chamada para silenciar o Pulse em outro espaço de trabalho."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Завершите звонок, чтобы включить тишину Pulse в другой рабочей области."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Başka bir çalışma alanında Pulse'ı sessize almak için aramayı bitirin."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请先结束通话，再让其他工作区中的 Pulse 保持安静。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "請先結束通話，再讓其他工作區中的 Pulse 保持安靜。"
-          }
-        }
-      }
-    },
     "A reason changes what Pulse does right away, and you can undo it under What Pulse learned. Just thumbs down only teaches Pulse." : {
       "localizations" : {
         "de" : {
@@ -360490,6 +360408,88 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通話結束後，這則通知會在另一個設定檔中開啟。"
+          }
+        }
+      }
+    },
+    "Pulse goes quiet in the other workspace when the call ends." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse ruht im anderen Arbeitsbereich, sobald der Anruf endet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse se silenciará en el otro espacio de trabajo cuando termine la llamada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse sera mis en silence dans l’autre espace de travail à la fin de l’appel."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse akan tenang di ruang kerja lain saat panggilan berakhir."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse sarà messo in silenzio nell’altro spazio di lavoro al termine della chiamata."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話が終了すると、別のワークスペースのPulseが静かになります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "통화가 끝나면 다른 작업 공간의 Pulse가 조용해집니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse zostanie wyciszony w innym obszarze roboczym po zakończeniu połączenia."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Pulse será silenciado no outro espaço de trabalho quando a chamada terminar."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тишина Pulse в другой рабочей области включится, когда звонок завершится."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse, arama bittiğinde diğer çalışma alanında sessize alınacak."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通话结束后，另一个工作区中的 Pulse 会保持安静。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話結束後，另一個工作區中的 Pulse 會保持安靜。"
           }
         }
       }

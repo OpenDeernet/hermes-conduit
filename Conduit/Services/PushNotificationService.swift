@@ -471,6 +471,13 @@ final class PushNotificationService: ObservableObject {
     /// waits, however long the call lasts, and opens once it has ended,
     /// unless a newer tap replaces it.
     @Published private(set) var pendingRouteAwaitsCall = false
+    /// Quiet for today's retry, tapped during a call when its push is from
+    /// another saved dashboard: the switch would end the call, so it waits
+    /// for the call to end, as a tapped notification does. A newer tap
+    /// replaces it, and it replaces a tap that waits.
+    @Published private(set) var pendingPulseQuiet: PulseQuietTarget?
+    /// Starts the retry's wait over each time a call stops it.
+    @Published private(set) var pulseQuietAttempt = 0
     @Published var preferences = ConduitNotificationPreferences() {
         // The Notification Service Extension decides whether a decrypted
         // push shows its real text; it reads this from the App Group.
@@ -2108,6 +2115,19 @@ final class PushNotificationService: ObservableObject {
         return PulseQuietTarget(dashboardID: verified.record.dashboardID, gatewayID: verified.record.gatewayID)
     }
 
+    /// Quiet for today's retry stopped for a call its switch would have
+    /// ended: it goes through once the call ends (ConduitApp).
+    func pulseQuietAwaitsCall(_ target: PulseQuietTarget) {
+        if pendingRouteAwaitsCall, let pendingTarget { clearPendingTarget(pendingTarget) }
+        pendingPulseQuiet = target
+        pulseQuietAttempt += 1
+    }
+
+    func clearPendingPulseQuiet(_ target: PulseQuietTarget) {
+        guard pendingPulseQuiet == target else { return }
+        pendingPulseQuiet = nil
+    }
+
     // MARK: Ringing calls (#449 step 2)
 
     /// What a VoIP push rings for (HermesNativeCalls).
@@ -2303,6 +2323,7 @@ final class PushNotificationService: ObservableObject {
         pendingRouteOpenStarted = false
         pendingRouteRetryFiredAt = nil
         pendingRouteAwaitsCall = false
+        pendingPulseQuiet = nil
         navigationAttempt += 1
     }
 
