@@ -1103,9 +1103,10 @@ unchanged) · a running dictation (done, #1315: Return stops it)
 **Rulings**
 - The caption describes the option, not current behaviour, because the
   option starts off on iPhone and iPad (2026-10-24, #1208, review of #1190).
-- While dictating, Return stops the dictation, as the Stop in Send's place
-  does; it sends once the words are in (2026-10-26, #1315, see Send while
-  dictating).
+- While dictating, Return does what the Stop in Send's place does: stops
+  the dictation, or calls off one still coming up, and sends nothing. The
+  next Return, once the words are in and Send is back, sends (2026-10-26,
+  #1315, see Send while dictating).
 
 **Open gaps**
 - None known.

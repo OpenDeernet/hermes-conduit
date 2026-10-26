@@ -1522,7 +1522,11 @@ struct ComposerBar: View, Equatable {
     private func submitFromReturnKey() -> Bool {
         // Return stands for Send, which is dictation's Stop while it runs.
         if dictationHoldsSendSlot {
-            if dictation.isCapturing { dictation.stop() }
+            if dictation.isCapturing {
+                dictation.stop()
+            } else if dictation.isStarting {
+                dictation.cancel()
+            }
             return true
         }
         guard ComposerReturnKey.canSubmit(action: action) else { return false }
