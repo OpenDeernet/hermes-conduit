@@ -277,6 +277,9 @@ final class ComposerDictationService: ObservableObject {
             if !text.isEmpty {
                 producedText = true
                 onTranscript?(text)
+                // Its words are in the draft now: from here it settles like
+                // any engine's, and typing or Done can end it (#1315).
+                isTranscribing = false
             }
             // A final result after the stop ends it; one while still
             // listening (a recognizer error) does too.
@@ -312,9 +315,7 @@ final class ComposerDictationService: ObservableObject {
         ComposerDictation.slotFace(
             isCapturing: isCapturing,
             isStarting: isStarting,
-            // Words that reached the draft after the stop (a Hermes partial)
-            // can be kept: past the grace, Done may end it there.
-            isTranscribing: isTranscribing && !producedText,
+            isTranscribing: isTranscribing,
             settleCanEnd: settleCanEnd
         )
     }
