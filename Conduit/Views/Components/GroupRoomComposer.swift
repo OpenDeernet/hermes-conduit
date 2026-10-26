@@ -151,6 +151,8 @@ struct GroupRoomComposer: View {
         }
         .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: rests)
         .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: mentionCandidates.isEmpty)
+        // Send and the mic give way to dictation's Stop, and come back.
+        .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: dictationHoldsSendSlot)
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 10)

@@ -694,6 +694,8 @@ struct ComposerBar: View, Equatable {
         }
         .opacity(appState.turnState == .unsupportedGateway ? 0.7 : 1)
         .animation(ConduitMotion.transition, value: action)
+        // Send and the mic give way to dictation's Stop, and come back.
+        .animation(ConduitMotion.transition, value: dictationHoldsSendSlot)
         .preferredColorScheme(appState.themePreference.colorScheme)
         .sheet(item: $repairContext) { context in
             ConnectionRepairSetupSheet(context: context)
