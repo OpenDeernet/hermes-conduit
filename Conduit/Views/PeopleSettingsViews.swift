@@ -89,6 +89,8 @@ struct PeopleSettingsPage: View {
 
     @State private var loaded: Loaded?
     @State private var loadError: String?
+    /// A read that failed once the page showed the Links, which stay up.
+    @State private var refreshError: String?
     @State private var actionError: String?
     /// The Link or invite a request is changing: one at a time.
     @State private var changingID: String?
@@ -176,6 +178,14 @@ struct PeopleSettingsPage: View {
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity)
+            }
+            if let refreshError {
+                Label(refreshError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                Button(AppLocalization.string("Try again")) { Task { await load(key) } }
+                    .buttonStyle(.settings)
+                    .disabled(changingID != nil)
             }
             if let actionError {
                 Label(actionError, systemImage: "exclamationmark.triangle.fill")
@@ -274,26 +284,39 @@ struct PeopleSettingsPage: View {
                     .buttonStyle(.borderless)
                     .font(.subheadline)
                     .disabled(changingID != nil)
+                    .accessibilityValue(Text(verbatim: [invite.name, until].formatted(.list(type: .and, width: .narrow).locale(AppLocalization.formattingLocale))))
             }
         }
     }
 
-    /// Reads the Links and this Hermes' words. A read that fails once the
-    /// page shows them leaves them up and says so.
-    private func load(_ key: String) async {
-        if loaded?.key != key { loaded = nil }
+    /// Reads the Links and this Hermes' words, or only the Links when
+    /// `keepingIdentity`, as the words don't change once it has them. A read
+    /// that fails once the page shows them leaves them up and says so, until
+    /// one works again.
+    private func load(_ key: String, keepingIdentity: Bool = false) async {
+        if loaded?.key != key {
+            loaded = nil
+            refreshError = nil
+            actionError = nil
+        }
         loadError = nil
         let client = appState.roomLinksClient
         do {
             let list = try await client.list()
-            let identity = try await client.identity()
+            let identity: RoomIdentity
+            if keepingIdentity, loaded?.key == key, let known = loaded?.identity {
+                identity = known
+            } else {
+                identity = try await client.identity()
+            }
             guard key == self.key else { return }
             loaded = Loaded(key: key, list: list, identity: identity)
+            refreshError = nil
         } catch {
             guard !(error is CancellationError), !Task.isCancelled, key == self.key else { return }
             peopleLogger.notice("Links not read: \(LogRedaction.message(error), privacy: .public)")
             let text = AppLocalization.string("Could not read your Links: \(RoomLinksClient.message(for: error))")
-            if loaded?.key == key { actionError = text } else { loadError = text }
+            if loaded?.key == key { refreshError = text } else { loadError = text }
         }
     }
 
@@ -306,7 +329,7 @@ struct PeopleSettingsPage: View {
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled, key == self.key else { return }
             if changingID != nil { continue }
-            await load(key)
+            await load(key, keepingIdentity: true)
             if waitingIDs.isEmpty { return }
         }
     }
@@ -383,6 +406,8 @@ struct RoomSetupSection: View {
     @State private var loadError: String?
     /// How the last Set up and its restart went.
     @State private var outcome: Outcome?
+    /// A read that failed once the section showed what the host needs.
+    @State private var refreshError: String?
     /// Hermes' words while chats run on the gateway, which restarting it
     /// now would stop.
     @State private var busyRestart: String?
@@ -411,6 +436,14 @@ struct RoomSetupSection: View {
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity)
+            }
+            if let refreshError {
+                Label(refreshError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                Button(AppLocalization.string("Try again")) { Task { await load(key) } }
+                    .buttonStyle(.settings)
+                    .disabled(working)
             }
             if let outcome {
                 Text(verbatim: outcome.text)
@@ -567,6 +600,7 @@ struct RoomSetupSection: View {
             loadedKey = nil
             editing = false
             outcome = nil
+            refreshError = nil
         }
         loadError = nil
         do {
@@ -577,7 +611,7 @@ struct RoomSetupSection: View {
             guard !(error is CancellationError), !Task.isCancelled, key == self.key else { return }
             peopleLogger.notice("Room setup not read: \(LogRedaction.message(error), privacy: .public)")
             let text = AppLocalization.string("Could not read this setting from the host: \(RoomLinksClient.message(for: error))")
-            if loadedKey == key { outcome = Outcome(text: text, trouble: true) } else { loadError = text }
+            if loadedKey == key { refreshError = text } else { loadError = text }
         }
     }
 
@@ -585,6 +619,7 @@ struct RoomSetupSection: View {
         let first = loadedKey != key
         state = read
         loadedKey = key
+        refreshError = nil
         if first || !editing { picked = Set(read.ceiling) }
     }
 
