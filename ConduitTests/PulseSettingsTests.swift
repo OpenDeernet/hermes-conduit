@@ -4,8 +4,8 @@
 //
 //  Settings > Pulse (beta) reads the notifier plugin's Pulse routes:
 //  the state payload as the plugin's pulse_control.state() writes it, a
-//  backfill estimate, memory items, the refusal codes its 409s carry and
-//  the report times the page edits.
+//  backfill estimate, memory items, the refusal codes its 409s carry, the
+//  report times the page edits and the note to Pulse.
 //
 
 import XCTest
@@ -15,6 +15,16 @@ import XCTest
 final class PulseSettingsTests: XCTestCase {
     private func json(_ text: String) throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+    }
+
+    func testStateReadsTheNoteToPulse() throws {
+        let state = try XCTUnwrap(PulseState(json: json("""
+        {"enabled": true, "note": "Never bring up the gym.\\nAlways tell me when a build finishes."}
+        """)))
+        XCTAssertEqual(state.note, "Never bring up the gym.\nAlways tell me when a build finishes.")
+        XCTAssertEqual(PulseNote.limit, 1_500)
+        // An older plugin's state has no note.
+        XCTAssertEqual(try XCTUnwrap(PulseState(json: json(#"{"enabled": true}"#))).note, "")
     }
 
     func testStateDecodesTheNudgeLevelAndBudgets() throws {

@@ -144,6 +144,9 @@ struct PulseState: Equatable {
     var model: PulseModel?
     /// How much Pulse nudges (0.63.0): one of PulseNudge.levels.
     var nudge = PulseNudge.defaultLevel
+    /// The note to Pulse: what the user wants from it, in their own words
+    /// (0.78.2). "" when there is none.
+    var note = ""
     /// Follow-ups on promises and to-dos are on.
     var followups = false
     var followupDailyTokens = 0
@@ -198,6 +201,7 @@ struct PulseState: Equatable {
             backfillDays = days
         }
         if let level = json["nudge"] as? String, PulseNudge.levels.contains(level) { nudge = level }
+        note = json["note"] as? String ?? ""
         followups = PulseJSON.bool(json["followups"]) ?? false
         followupDailyTokens = PulseJSON.int(json["followup_daily_tokens"]) ?? 0
         followupTokensToday = PulseJSON.int(json["followup_tokens_today"]) ?? 0
@@ -214,6 +218,13 @@ struct PulseState: Equatable {
     /// The profile choice is offered when there's more than this profile to
     /// report on, or the user already narrowed it to this one.
     var offersProfileChoice: Bool { !otherProfiles.isEmpty || reportProfiles == "this" }
+}
+
+/// The note to Pulse (0.78.2): the plugin's reports, morning brief and
+/// follow-up checks read it before their own rules.
+enum PulseNote {
+    /// The plugin's bound on its length (pulse_control.NOTE_LIMIT), in code points.
+    static let limit = 1_500
 }
 
 /// A model Pulse runs on: its reports, brief and follow-ups in the Pulse chat,
@@ -467,8 +478,8 @@ struct PulseClient {
     }
 
     /// Any of enabled, memory, daily_report, report_profiles, report_times,
-    /// time_zone, model, nudge, memory_daily_tokens and
-    /// followup_daily_tokens; answers with the new state.
+    /// brief_time, time_zone, model, nudge, memory_daily_tokens,
+    /// followup_daily_tokens and note; answers with the new state.
     func update(_ changes: [String: Any]) async throws -> PulseState {
         let response = try await request(Self.path, "PUT", changes)
         return try Self.state(from: response)
