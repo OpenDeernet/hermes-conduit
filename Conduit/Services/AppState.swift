@@ -15200,7 +15200,9 @@ final class AppState: ObservableObject {
         requiredViewportTransitionGeneration: UInt64?,
         historySourceUnavailable: Bool
     ) async -> Bool {
+        // A Kanban worker is refused under any of its ids.
         guard reconciliationSessionWasNotFound,
+              !reconciliationWasKanbanWorker,
               let storedID = row.storedSessionId,
               !storedID.isEmpty,
               storedID != row.id,
