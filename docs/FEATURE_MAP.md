@@ -1222,7 +1222,7 @@ devices)
 - A chat restored on launch (Continue where you left off) keeps its saved place, unread or not.
 - A group room that opens empty scrolls its first events to the end: that batch is usually the room's history arriving, which should open at its newest row, so only events after a row already seen land at a member message's start.
 
-**Checked:** 2026-10-26, #1290 (the check for another device's message goes by row id; Code); 2026-10-25, at #1270.
+**Checked:** 2026-10-26, #1313 (ChatScrollHostedTests in Tests); 2026-10-26, #1290 (the check for another device's message goes by row id; Code); 2026-10-25, at #1270.
 
 ## Reconnecting to Hermes
 
