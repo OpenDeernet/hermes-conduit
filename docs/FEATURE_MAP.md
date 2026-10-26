@@ -1761,9 +1761,9 @@ Recent menu) · the Archived sheet · README.md
 
 **Rulings**
 - Recent is the default for a new install; a phone signed in before the change keeps Off, set once at launch from its saved dashboards or connection (a launch that can't read the dashboard registry, on a locked phone, leaves it to a later one), and a choice already made stays (2026-10-26, #1317, Eric). That default is the device's own (`deviceDefaultKey`), never the synced choice, so it can't overwrite a choice made on another device; a synced choice wins over it.
-- Filter ▸ Projects is a multi-select with every project ticked to start, Home's chats standing in for the ones in no project ("Not in a project" without a Home). It narrows every filter, is kept per profile, and All doesn't clear it; the gold chip names it ("2 projects hidden") and its × shows every project again (2026-10-26, #1317, Eric picked a menu over a switch on each project).
+- Filter ▸ Projects is a multi-select with every project ticked to start, Home's chats standing in for the ones in no project ("Not in a project" without a Home). It narrows every filter, is kept per profile, and All doesn't clear it; the gold chip names it and its × shows every project again (2026-10-26, #1317, Eric picked a menu over a switch on each project). The chip counts projects ("2 projects hidden") and names Home on its own ("Home hidden", or "Chats outside projects hidden" without a Home), since Home's chats are in no project (2026-10-26, #1325).
 - A pinned chat stays listed whatever is hidden, and a search looks through every chat, a hidden project's too, as it does with the setting at Off (#708).
-- A hidden project's chat that waits for approval leaves the list like its other chats, but the filter's amber dot and its spoken count still count it, so the wait is never silent (2026-10-26, #1322).
+- A hidden project's chat that waits for approval leaves the list like its other chats, but the filter's amber dot and its spoken count still count it, and Needs approval lists it (its count too), so the dot always leads to the chat (2026-10-26, #1322; Needs approval in #1325).
 - When hidden projects are what empty the list, under any filter, the empty list says so and points to Filter > Projects instead of the filter's own wording (2026-10-26, #1322).
 - Filter ▸ Projects is offered once the profile has a project besides Home; with Home alone it would only hide every chat. On the Projects page, which lists every project, the bar's chip and filled icon leave hidden projects out (2026-10-26, #1322).
 - Filter ▸ Projects isn't offered in All profiles, where projects belong to one profile; the Settings switch still applies there to the projects of the profile in use, as before (2026-10-26, #1322).
@@ -1773,7 +1773,7 @@ Recent menu) · the Archived sheet · README.md
 - Until the profile's projects load, nothing is hidden: every chat would read as one in no project.
 - A row's project comes from the chats the project tree previews, so a project chat beyond its preview counts as in no project: it shows with the setting at Off, and hides with "Not in a project".
 
-**Checked:** 2026-10-26, #1322.
+**Checked:** 2026-10-26, #1325.
 
 ## Plan card
 
