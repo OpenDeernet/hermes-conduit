@@ -2005,25 +2005,27 @@ built: the notifier side is on its main, and the app side comes in the
 **Siblings:** the room screen and Group Info in both shells (members from
 other installations, their route status and pictures, your agents' choices for
 the room) · New Group Chat with linked people · Settings > People (host setup,
-Links) · the Chats list (rooms hosted by others, and deleting one that ended)
-· the notifier's owner rules for room turns (tools, the framing, the reply
-scrub, past-chat search), with their routes and the
+Links, Link with someone, Scan and Paste) · an invite (`conduit://link/`)
+opened from another app, a chat or the Camera · the sign-in Scan Code sheet,
+which Scan reuses · the Chats list (rooms hosted by others, and deleting one
+that ended) · the notifier's owner rules for room turns (tools, the framing,
+the reply scrub, past-chat search), with their routes and the
 `hermes conduit-push rooms` commands · the room memory guard · the room
 planner and the room driver's wakeups · a member cut off by its host ·
 disbanding a room (the home's own agents' hidden chats for it) and a guest's
 `rooms forget` · the rooms mailbox (rooms.milim.dev) · Links between
 installations (invites, the four words, unlinking), with their routes and the
-`hermes conduit-push links` commands · getting a Hermes ready for rooms
-(its API server and the tools rooms may use), with its route and
+`hermes conduit-push links` commands · getting a Hermes ready for rooms (its
+API server and the tools rooms may use), with its route and
 `hermes conduit-push rooms setup` · rooms of only your own agents (unchanged,
-except that disbanding one now deletes its hidden chats) · past-chat search
-in every chat (it no longer finds those rooms) · approvals for your agents in
+except that disbanding one now deletes its hidden chats) · past-chat search in
+every chat (it no longer finds those rooms) · approvals for your agents in
 rooms hosted elsewhere · text that describes it: the notifier README's "Rooms
 with other people's agents", "A member cut off from a room", "Disbanding a
 room ends its hidden chats", "Linking with someone", "Setting this Hermes up
 for rooms" and "Group rooms between turns", the framing and block messages
 models read, Disband's warning, Group Info and the choices page's captions,
-Settings captions
+Settings captions, the invite's share message
 
 **Code**
 - Owner rules: `notifier/room_rules.py` (room_turn, tool_block, framing, scrub, filter_search), `notifier/room_choices.py` (the per-room choices, NEVER), `notifier/__init__.py` (pre_tool_call, pre_llm_call, transform_llm_output, transform_tool_result), `notifier/dashboard/plugin_api.py` (/rooms/choices, /rooms/defaults, capability room-rules), `notifier/cli.py` (rooms show, rooms set), `notifier/README.md` (Rooms with other people's agents)
@@ -2034,7 +2036,7 @@ Settings captions
 - Host setup: `notifier/room_setup.py` (what a profile needs, the setup and its gateway restart), `notifier/dashboard/plugin_api.py` (/rooms/setup, capability room-setup), `notifier/cli.py` (rooms setup), `notifier/README.md` (Setting this Hermes up for rooms)
 - App, today's rooms (a member from another installation has target kind peer): `Conduit/Services/GroupChatModels.swift` (GroupMember.target, members(namedBy:)), `Conduit/Services/AppState.swift` (activeRoomResponder, groupMemberBot), `Conduit/Views/GroupChatView.swift` (and Disband's warning), `Conduit/Views/V2/V2ConversationScreen.swift` (Disband's warning in V2), `Conduit/Services/HermesClient.swift` (groups.*)
 - App, on the `linked-rooms` branch only, so not in backticks: Conduit/Services/RoomChoices.swift (RoomChoices, RoomChoicesClient, canSetRoomChoices), Conduit/Views/GroupRoomInfoView.swift (GroupRoomInfoSheet, RoomAgentChoicesView), ConduitTests/GroupChatModelsTests+LinkedRooms.swift; in the files above, GroupPeerRoute, GroupMemberActivity, responderState, liveMember, rosterBot and GroupRoomDisband (GroupChatModels.swift), roomResponderCache and activeRoomResponderState (AppState.swift), and Group Info in both room menus. Each of the branch's PRs names here the app paths it adds
-- Settings > People, on the branch only too: Conduit/Views/PeopleSettingsViews.swift (PeopleSettingsPage, RoomSetupSection, PeopleSettingsText), Conduit/Services/RoomLinks.swift (RoomLinksClient, canLinkRooms), Conduit/Services/RoomSetup.swift (RoomSetupClient, canSetUpRooms), ConduitTests/GroupChatModelsTests+People.swift; in files on main, the People row under Hermes in both shells (`Conduit/Views/AuxiliaryViews.swift`) and DashboardTicketBridgeError.meaningfulDetail (`Conduit/Services/DashboardTicketBridge.swift`)
+- Settings > People, on the branch only too: Conduit/Views/PeopleSettingsViews.swift (PeopleSettingsPage, RoomSetupSection, PeopleSettingsText; Link with someone, Scan, Paste), Conduit/Views/RoomLinkSheets.swift (RoomLinkInviteSheet, RoomLinkOpenedSheet, RoomLinkQRCode, RoomLinkSheetText), Conduit/Services/RoomLinks.swift (RoomLinksClient, RoomLinkURL, canLinkRooms, routeRoomLink), Conduit/Services/RoomSetup.swift (RoomSetupClient, canSetUpRooms), ConduitTests/GroupChatModelsTests+People.swift; in files on main, the People row under Hermes in both shells (`Conduit/Views/AuxiliaryViews.swift`), DashboardTicketBridgeError.meaningfulDetail (`Conduit/Services/DashboardTicketBridge.swift`), pendingRoomLink (`Conduit/Services/AppState.swift`), an invite's way in through openURL and onOpenURL (`Conduit/ConduitApp.swift`) to its sheet (`Conduit/Views/RootView.swift`), the scheme's notes (`Conduit/Services/ConduitAppLink.swift`), and CodeScanPurpose, the scanner's words for an invite (`Conduit/Views/Login/DashboardCodeScanner.swift`)
 - Tests: `notifier/tests/test_room_rules.py`, `notifier/tests/test_room_choices.py`, `notifier/tests/test_room_memory.py`, `notifier/tests/test_room_cutoff.py`, `notifier/tests/test_room_cleanup.py`, `notifier/tests/test_room_identity.py`, `notifier/tests/test_room_envelope.py`, `notifier/tests/test_room_mailbox.py`, `notifier/tests/test_room_links.py`, `notifier/tests/test_room_wakeups.py`, `notifier/tests/test_room_setup.py`, `notifier/mailbox/test/server.e2e.test.mjs`
 
 **Rulings**
@@ -2059,9 +2061,14 @@ Settings captions
 - Settings > People is one page, from a People row under Hermes in both shells, shown while the plugin reports room-links. Its host setup needs room-setup, and with an older plugin the page says to update it. Neither joins usedCapabilities, so an older plugin gets no update notice. The Links part takes no profile; host setup is for the profile in use, which it names. Requests stay with the dashboard they were made for, and an unlink or a cancel, which waits on the mailbox, gets 55 s, past the plugin's 50. A refusal shows the plugin's words, a 502, 503 or 504 with words of its own too, since those are the mailbox's answers, not a dashboard that couldn't reach Hermes (2026-10-26, #1323).
 - Host setup lists what Set up will do, from what the plugin says it would change, or what blocks it, with only Check again then. The tools rooms may use are a switch for each toolset the plugin offers, starting from what it saved, and a setup that leaves them as they were keeps that ceiling as it is. Changing a ceiling the setup saved, from Change or from Set up, asks first with the CLI's words: the agent then stops answering in rooms already started with other people's agents. While the API server is already on, the page says other apps using it get only these tools too. A gateway busy with chats asks before restarting (Restart now or Later), and a restart that starts is followed every 2 s for up to 30 s, until the API server runs or says why it doesn't (2026-10-26, #1323).
 - Each Link shows its name, its status (Linked; waiting for the other Hermes to confirm; or never confirmed, so ask for a new invite; none for a status this build doesn't know) and their four words, with Unlink, which asks first and says it unlinks both sides. While one waits, the page reads the list every 5 s for up to 3 minutes. An invite waiting shows the name it shows you by and until when, with Cancel invite. Your Hermes' words show once its first invite or accept made its keys, and a Hermes without Python's cryptography package says it can't make Links. While there's a Link or an invite and nothing on the host reads the mailbox, the page says what the other side sends waits there, for up to 7 days (2026-10-26, #1323).
+- Only the plugin reads an invite. The app takes `conduit://link/` and a base64url payload, 2,048 characters in all at most, as the plugin does, whatever the case of the scheme and host, and sends it in the plugin's spelling. It never logs one and leaves it out of descriptions, since its token links whoever holds it with the inviter (2026-10-26, #1326).
+- Link with someone, at the top of Settings > People, asks for the name the other person sees, kept on this device for the next invite or accept, then makes the invite and shows its QR code, Send the invite (the share sheet, with the link), your Hermes' four words to compare, and until when it works, for one person. While it shows, it reads the Links every 3 s for up to 3 minutes and says when they've linked. Making and accepting an invite wait on the mailbox, so they get 55 s; reading one keeps the bridge's own time (2026-10-26, #1326).
+- An invite opened from another app (the share link, or the Camera reading its QR code), tapped in a chat, scanned with Scan or pasted opens one sheet over the app, and nothing else reads it: no chat or Settings link, no sign-in code. One the app can't read opens nothing. The sheet shows who it's from, their Hermes' four words to check with them, the mailbox's host, until when it works and, with more than one dashboard saved, which Hermes links; then Link with <name> (the catalog's Link is a web link), with the name they'll see you by. It stops there when the invite is your own, ran out, or is from someone already linked, whose Link it names, in that order. Until Conduit has connected and the plugin says what it serves, it waits, and a plugin without room-links says to update it (2026-10-26, #1326).
+- After Link with <name>, the sheet shows the Link waiting and reads the list every 3 s for up to 90 s, until it's linked. One still waiting then says their Hermes confirms once it reads its mailbox, and one gone from the list says to ask for a new invite. An accept the mailbox couldn't take yet keeps its Link waiting: the sheet shows the plugin's words and follows that Link. An invite from someone whose Link still waits opens on that Link (2026-10-26, #1326).
+- Scan reuses the sign-in Scan Code sheet, with an invite's words and without the prompt that asks Hermes for a sign-in code, and the invite opens once the scanner has closed. Paste is the system's paste control, so iOS asks nothing before it reads the clipboard, and it takes the first invite in what was copied (2026-10-26, #1326).
 
 **Open gaps**
-- On main the app shows none of it. The `linked-rooms` branch has the room screen, Group Info with your agents' choices, and Settings > People with host setup and the Links; linking with someone from the app, New Group Chat with linked people and the Chats list come in its later PRs, with their Settings captions. Until then, invites are made and opened with `hermes conduit-push links`. Choices for a room hosted elsewhere are set with `hermes conduit-push rooms set` until the room shows in the app.
+- On main the app shows none of it, and invites are made and opened with `hermes conduit-push links`. The `linked-rooms` branch has the room screen, Group Info with your agents' choices, and Settings > People with host setup, the Links and linking with someone; New Group Chat with linked people and the Chats list come in its later PRs, with their Settings captions. Choices for a room hosted elsewhere are set with `hermes conduit-push rooms set` until the room shows in the app.
 - How an agent takes part and its turns a day are kept, not enforced, until the room bridge, and the choices page leaves them out until then.
 - Use my data has no room-safe data tools yet (free/busy comes first).
 - A memory provider's automatic recall can't be skipped in a room without a Hermes change (written up for Hermes).
@@ -2072,8 +2079,9 @@ Settings captions
 - Agents that aren't Hermes (an A2A member) are left out.
 - An acceptor's Hermes that stays off for more than 7 days while its confirm waits at the mailbox leaves the inviter's side linked until its owner unlinks it (the notifier README says so).
 - Changing the tools rooms may use says the agent stops answering in rooms already started, but not in which; the room bridge's PRs add that.
+- An invite opened from another app while a sheet is already up (classic Settings, say) can't show over it, as a sign-in code link can't: open it again once the sheet is closed.
 
-**Checked:** 2026-10-26, #1323 (Settings > People, and main's lines from #1321, with notifier #387, #390, #396, #397 and #398); #1289 (the room screen and Group Info).
+**Checked:** 2026-10-26, #1326 (linking with someone, and opening an invite); #1323 (Settings > People, and main's lines from #1321, with notifier #387, #390, #396, #397 and #398); #1289 (the room screen and Group Info).
 
 ## Feature map rules
 

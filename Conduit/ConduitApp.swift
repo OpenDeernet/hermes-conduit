@@ -312,6 +312,8 @@ struct ConduitApp: App {
                 if appState.routeWidgetLaunchURL(url) { return .handled }
                 // A sign-in code Hermes sent in a chat asks before it signs in.
                 if appState.routeConnectLink(url) { return .handled }
+                // So does a Link invite, before linking.
+                if appState.routeRoomLink(url) { return .handled }
                 guard let link = ConduitAppLink(url: url) else {
                     // The scheme is registered, so the system would hand a
                     // conduit link Conduit can't read straight back to it.
@@ -333,6 +335,9 @@ struct ConduitApp: App {
                 // A sign-in code tapped in another app (a Telegram chat with
                 // Hermes): Conduit asks before it signs in.
                 if appState.routeConnectLink(url) { return }
+                // A Link invite someone sent, or its QR code read by the
+                // Camera: Conduit asks before linking.
+                if appState.routeRoomLink(url) { return }
                 guard let link = ConduitAppLink(externalURL: url) else { return }
                 pendingExternalLink = link
             }

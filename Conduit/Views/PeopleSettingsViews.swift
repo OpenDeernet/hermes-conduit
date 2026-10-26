@@ -4,7 +4,9 @@
 //
 //  Settings > People (designs/cross-owner-agents, C2): getting this Hermes
 //  ready for rooms with other people's agents (RoomSetup.swift), the people
-//  it's linked with, and the invites still waiting (RoomLinks.swift).
+//  it's linked with, and the invites still waiting (RoomLinks.swift). Link
+//  with someone makes an invite, and Scan and Paste open one someone sent
+//  (RoomLinkSheets.swift).
 //
 
 import OSLog
@@ -97,6 +99,13 @@ struct PeopleSettingsPage: View {
     /// can start once the page shows that one.
     @State private var changingID: String?
     @State private var unlinking: RoomLink?
+    @State private var linking = false
+    @State private var scanning = false
+    /// What the scanner read, opened once its sheet has closed: one sheet
+    /// can't show over another.
+    @State private var scanned: RoomLinkURL?
+    @State private var opened: RoomLinkURL?
+    @State private var pasteError: String?
 
     /// Links are the installation's, so the dashboard is the whole key.
     private var key: String { appState.activeDashboardID?.uuidString ?? "" }
@@ -136,6 +145,28 @@ struct PeopleSettingsPage: View {
         } message: { link in
             Text(AppLocalization.string("This unlinks \(link.name)'s Hermes from yours, on both sides. Linking again takes a new invite."))
         }
+        .sheet(isPresented: $linking, onDismiss: { Task { await load(key) } }) {
+            RoomLinkInviteSheet()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $scanning, onDismiss: { openScanned() }) {
+            DashboardCodeScannerSheet(purpose: .linkInvite) { text in
+                guard let invite = RoomLinkURL(text) else { return false }
+                scanned = invite
+                scanning = false
+                return true
+            }
+        }
+        .sheet(item: $opened, onDismiss: { Task { await load(key) } }) { invite in
+            RoomLinkOpenedSheet(invite: invite)
+                .environmentObject(appState)
+        }
+    }
+
+    private func openScanned() {
+        guard let scanned else { return }
+        self.scanned = nil
+        opened = scanned
     }
 
     private var unlinkTitle: String {
@@ -153,6 +184,7 @@ struct PeopleSettingsPage: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             if let shown {
+                linkActions(shown.identity)
                 yourWords(shown.identity)
                 // Nothing waits in the mailbox without a Link or an invite.
                 if !shown.list.mailboxReading, !shown.list.links.isEmpty || !shown.list.invites.isEmpty {
@@ -195,6 +227,59 @@ struct PeopleSettingsPage: View {
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
+        }
+    }
+
+    /// Link with someone, and an invite someone sent: scanned from their
+    /// phone or pasted. A Hermes that can't make Links offers none.
+    @ViewBuilder
+    private func linkActions(_ identity: RoomIdentity) -> some View {
+        Button {
+            Haptics.selection()
+            pasteError = nil
+            linking = true
+        } label: {
+            Label(AppLocalization.string("Link with someone"), systemImage: "link.badge.plus")
+        }
+        .buttonStyle(.settingsPrimary)
+        .disabled(!identity.crypto)
+        HStack(spacing: 10) {
+            Text(AppLocalization.string("Have an invite?"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            Button {
+                Haptics.selection()
+                pasteError = nil
+                scanning = true
+            } label: {
+                Label(AppLocalization.string("Scan"), systemImage: "qrcode.viewfinder")
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .tint(.conduitAccent)
+            // The system paste control: it reads the clipboard only when
+            // tapped, so iOS asks nothing first.
+            PasteButton(payloadType: String.self) { strings in
+                let found = strings.compactMap(RoomLinkURL.find(in:)).first
+                Task { @MainActor in
+                    if let found {
+                        pasteError = nil
+                        opened = found
+                    } else {
+                        pasteError = AppLocalization.string("The clipboard has no Link invite.")
+                    }
+                }
+            }
+            .buttonBorderShape(.capsule)
+            .labelStyle(.titleAndIcon)
+            .tint(.conduitAccent)
+        }
+        .disabled(!identity.crypto)
+        if let pasteError {
+            Text(verbatim: pasteError)
+                .font(.footnote)
+                .foregroundStyle(.orange)
         }
     }
 
@@ -301,6 +386,7 @@ struct PeopleSettingsPage: View {
             loaded = nil
             refreshError = nil
             actionError = nil
+            pasteError = nil
             changingID = nil
             unlinking = nil
         }
