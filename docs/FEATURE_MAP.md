@@ -380,10 +380,11 @@ Main button caption
 **Rulings**
 - Swapped, the round button starts a new chat and voice moves to the top bar; a minimised call turns it back into voice (2026-10-17, #707).
 - Split, a chat beside the list that shows its own voice button takes voice: the round voice button, and the swapped top bar and project page voice, step aside while it shows; New chat stays. A group room has none, so the list keeps its voice beside one (Eric, 2026-10-26, #1319).
+- The round button's touch-and-hold Recent menu goes with it while a chat is beside the list; the chat's own button offers a call or dictation, not Recent, so closing the chat brings the menu back (2026-10-26, #1319).
 - On a wide window the bar sits under the list column only where there is one (Chats and Bots, split). Tasks, Settings and a list shown alone center it under the screen, at the list column's width (Eric, 2026-10-26, #1319; replaces #1169's bar kept at the leading edge).
 
 **Open gaps**
-- None known.
+- Recent isn't reachable beside a chat on a split window (see Rulings).
 
 **Checked:** 2026-10-26, at #1319.
 
@@ -1694,7 +1695,7 @@ row) · iPad and Mac (same view) · searching messages ("In messages")
 **Open gaps**
 - A launch whose layout differs from the last one seen still starts from the old layout, so the row can show for a frame or arrive a frame late: the iPad was rotated or profiles were added while Conduit was closed, or another iPad window in the other layout wrote the shared key last. Closing it needs the bar's choice before the first frame, which `ViewThatFits` doesn't expose.
 
-**Checked:** 2026-10-24, at #1206; the match row at #1208, carried in #1229.
+**Checked:** 2026-10-26, at #1319 (trailingControls' swapped voice steps aside beside a chat, see Voice beside the tabs); 2026-10-24, at #1206; the match row at #1208, carried in #1229.
 
 ## Plan card
 
