@@ -2175,20 +2175,26 @@ private struct RemoteMarkdownImage: View {
 
     /// A picture still in memory shows on the row's first frame, so a row
     /// scrolled back into view doesn't grow from its loading line (#1238).
+    /// A row laid out with its loading line (another row of the same
+    /// picture showed it since) takes it through the task, which asks the
+    /// scroll engine.
     private var shownGatewayImage: UIImage? {
         let key = gatewayCacheKey
         if let gatewayImage, gatewayImageKey == key { return gatewayImage }
-        return key.flatMap(TranscriptPictureMemory.image(for:))
+        guard let kept = key.flatMap(TranscriptPictureMemory.image(for:)),
+              arrival.holds(rowHeight(showing: kept.size)) else { return nil }
+        return kept
     }
 
     private var shownRemoteOutcome: BoundedRemoteImage.Outcome? {
         if let remoteOutcome, remoteOutcomeURL == url { return remoteOutcome }
-        // A picture decoded already shows on the row's first frame when the
-        // row takes its height anyway (its size is remembered). One that
+        // A picture decoded already shows on the row's first frame, or where
+        // the row has its height already (its size was remembered). One that
         // would grow the row waits for the task, which asks the scroll
         // engine (#1238).
-        guard !isGatewayMedia, reservedSize != nil, let remoteURL = URL(string: url),
-              let cached = BoundedRemoteImage.cachedImage(remoteURL, maxPixelSize: Self.remoteMaxPixelSize) else { return nil }
+        guard !isGatewayMedia, let remoteURL = URL(string: url),
+              let cached = BoundedRemoteImage.cachedImage(remoteURL, maxPixelSize: Self.remoteMaxPixelSize),
+              arrival.holds(rowHeight(showing: cached.size)) else { return nil }
         return .image(cached)
     }
 
@@ -2246,6 +2252,8 @@ private struct RemoteMarkdownImage: View {
             // task loads it again when the row is back.
             arrival.rowDisappeared()
         }
+        // Handed another picture: whatever still waits was the last one's.
+        .onChange(of: loadIdentity) { arrival.rowDisappeared() }
         .task(id: loadIdentity) {
             guard isGatewayMedia else {
                 // An outcome for another address goes; this one's stays
@@ -2277,9 +2285,10 @@ private struct RemoteMarkdownImage: View {
             }
             guard gatewayFileKind == nil else { return }
             let cacheKey = gatewayCacheKey
+            // Still in memory: in the row since its first frame, or, shown
+            // since by another row of it, arriving like a load.
             if let cacheKey, let kept = TranscriptPictureMemory.image(for: cacheKey) {
-                gatewayImage = kept
-                gatewayImageKey = cacheKey
+                placeGatewayImage(kept, for: cacheKey, generation: TranscriptImageCache.generation)
                 return
             }
             // One that failed keeps its label while it loads again.
@@ -2437,7 +2446,9 @@ private struct RemoteMarkdownImage: View {
     }
 
     /// At the picture's own size when that's known, so the row doesn't
-    /// change height when it arrives.
+    /// change height when it arrives: known as the row was first laid out,
+    /// since a size remembered after (another row of the same picture, or
+    /// a cold launch's kept sizes loading) would resize the line on its own.
     @ViewBuilder
     private var loadingLabel: some View {
         let label = HStack(spacing: 8) {
@@ -2446,7 +2457,7 @@ private struct RemoteMarkdownImage: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
-        if let size = reservedSize {
+        if let size = reservedSize, arrival.holds(rowHeight(showing: size)) {
             Color.primary.opacity(0.05)
                 .aspectRatio(size, contentMode: .fit)
                 .frame(maxHeight: Self.maxHeight)

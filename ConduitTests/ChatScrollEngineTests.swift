@@ -1333,6 +1333,43 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertTrue(engine.cardShifts.isEmpty)
     }
 
+    func testAGrowthAboveAReaderNearTheEndLandsWhileRowsBelowShrink() {
+        let (engine, surface) = makeEngine()
+        surface.userScroll(to: 3100)
+        XCTAssertEqual(engine.mode, .browsing, "100 pt from the end")
+        surface.sets = []
+        let card = FakeMeasuredCard(delta: 227, minY: 1000)
+        engine.cardMeasured(card)
+        // Its frame reports first: the move doesn't fit the old end.
+        card.lands()
+        engine.cardFrameChanged(card)
+        XCTAssertTrue(surface.sets.isEmpty)
+        // The same pass folds a finished turn's steps below the reader: the
+        // content grew by less than the card did.
+        surface.layOut(contentHeight: 4147)
+        XCTAssertEqual(surface.sets.first?.y, 3327, "moved by the card's growth")
+        XCTAssertTrue(engine.cardShifts.isEmpty)
+        XCTAssertEqual(engine.mode, .following, "left 20 pt from the end, they follow again")
+        XCTAssertEqual(surface.contentOffsetY, 3347)
+    }
+
+    func testAGrowthWhoseFrameReportsAfterAContentSizeThatShrankBelowStillLands() {
+        let (engine, surface) = makeEngine()
+        surface.userScroll(to: 3100)
+        surface.sets = []
+        let card = FakeMeasuredCard(delta: 227, minY: 1000)
+        engine.cardMeasured(card)
+        // The pass reports the content size first, grown by less than the
+        // card because rows below folded, then the card's frame.
+        surface.layOut(contentHeight: 4147)
+        XCTAssertTrue(surface.sets.isEmpty)
+        card.lands()
+        engine.cardFrameChanged(card)
+        XCTAssertEqual(surface.sets.map { $0.y }, [3327], "the end is the pass's, so the move lands")
+        XCTAssertTrue(engine.cardShifts.isEmpty)
+        XCTAssertEqual(engine.mode, .following, "20 pt from the end")
+    }
+
     func testACardShrinkingAboveTheReaderWhileAReplyStreamsBelowMovesThemUp() {
         let (engine, surface) = browsingReader()
         let card = FakeMeasuredCard(delta: -100, minY: 1000)
@@ -1354,13 +1391,18 @@ final class ChatScrollEngineTests: XCTestCase {
         let shrinking = FakeMeasuredCard(delta: -150, minY: 1500)
         engine.cardMeasured(growing)
         engine.cardMeasured(shrinking)
-        // One pass lands both. Alone, the growth would end past the
-        // content's new end; the shrink after it makes the room.
+        // One pass lands both, their frames reported before the content
+        // size. Alone, the growth would end past the content's old end;
+        // the shrink after it makes the room.
         growing.lands()
+        engine.cardFrameChanged(growing)
+        XCTAssertTrue(surface.sets.isEmpty, "the growth waits for the room")
         shrinking.lands()
-        surface.layOut(contentHeight: 3950)
+        engine.cardFrameChanged(shrinking)
         XCTAssertEqual(surface.sets.map { $0.y }, [3050], "moved by both, in one write")
         XCTAssertTrue(engine.cardShifts.isEmpty)
+        surface.layOut(contentHeight: 3950)
+        XCTAssertEqual(surface.contentOffsetY, 3050)
         XCTAssertEqual(engine.mode, .browsing, "still 100 pt from the end")
     }
 
@@ -1662,16 +1704,22 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertEqual(card.heightsTaken, 0)
     }
 
-    func testAPausedEngineLetsACardTakeItsHeightAtOnce() {
+    func testACardMeasuredInTheBackgroundKeepsItsRoomUntilTheAppIsBack() {
         let (engine, surface) = browsingReader()
         engine.setPaused(true)
         let card = FakeMeasuredCard(delta: 227, minY: 1000)
         engine.cardMeasured(card)
+        runScheduled()
+        XCTAssertEqual(card.heightsTaken, 0, "the background leaves the offset alone, so the card waits")
+
+        engine.setPaused(false)
+        XCTAssertEqual(card.heightsTaken, 0, "it takes its height at the rest check")
+        runScheduled()
         XCTAssertEqual(card.heightsTaken, 1)
         card.lands()
-        engine.setPaused(false)
         surface.layOut(contentHeight: 4227)
-        XCTAssertEqual(surface.contentOffsetY, 2000, "the background leaves the offset alone")
+        XCTAssertEqual(surface.contentOffsetY, 2227, "moved by the growth above them")
+        XCTAssertTrue(engine.cardShifts.isEmpty)
     }
 
     func testACardAboveTheReaderWhileEarlierMessagesLoadStillMovesThem() {
@@ -1806,6 +1854,24 @@ final class ChatScrollEngineTests: XCTestCase {
         arrival.arrive(rowHeight: 244, engine: engine) { shown += 1 }
         XCTAssertEqual(shown, 1, "nothing will move")
         XCTAssertTrue(engine.cardShifts.isEmpty)
+    }
+
+    func testARowLaidOutWithItsLoadingLineTakesAPictureFromMemoryOnlyThroughItsArrival() {
+        let (engine, surface) = browsingReader()
+        let arrival = ChatRowArrival()
+        XCTAssertTrue(arrival.holds(244), "on the row's first frame, what memory holds shows at once")
+        // Laid out with its loading line before another row of the same
+        // picture showed it.
+        arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 44)
+        XCTAssertFalse(arrival.holds(244), "the row keeps its loading line")
+        XCTAssertTrue(arrival.holds(44.3), "what keeps the row's height may show")
+        var shown = 0
+        arrival.arrive(rowHeight: 244, engine: engine) { shown += 1 }
+        XCTAssertEqual(shown, 1)
+        XCTAssertEqual(engine.cardShifts.count, 1, "announced above the reader like a load")
+        arrival.stackFrame = CGRect(x: 0, y: 1000, width: 300, height: 244)
+        XCTAssertEqual(surface.contentOffsetY, 2200, "moved by the row's growth")
+        XCTAssertTrue(arrival.holds(244))
     }
 
     func testAPictureOutsideAChatShowsAtOnce() {

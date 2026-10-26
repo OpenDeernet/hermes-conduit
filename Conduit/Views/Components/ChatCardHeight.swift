@@ -20,7 +20,10 @@
 //  loading line stays until the reader's scrolling rests, and the row's
 //  growth above the viewport is made good in the pass that lands it. So
 //  does a failure taking the place of what a row or card shows (a picture's
-//  label, a page's file card), whose height only its layout tells.
+//  label, a page's file card), whose height only its layout tells. What
+//  memory already holds for a row (its picture, the picture's size) shows
+//  without asking only on the row's first frame, or where the row has that
+//  height already.
 //
 
 import SwiftUI
@@ -173,6 +176,17 @@ final class ChatRowArrival: ObservableObject, ChatScrollMeasuredCard {
     /// `show` wrote to, so nothing keeps the decoded picture.
     func rowDisappeared() {
         pending = nil
+    }
+
+    /// Whether the row, as last laid out, has `rowHeight` already, or
+    /// hasn't been laid out yet. What memory holds for the row (its
+    /// picture, or the picture's size) shows only then: another row of the
+    /// same picture, or a cold launch's kept sizes loading, can put it
+    /// there after this row was laid out with its loading line, and the
+    /// row would grow unannounced. It comes through `arrive` instead.
+    func holds(_ rowHeight: CGFloat) -> Bool {
+        guard let height = stackFrame?.height else { return true }
+        return abs(rowHeight - height) <= 0.5
     }
 
     // MARK: - ChatScrollMeasuredCard
