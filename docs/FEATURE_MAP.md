@@ -2356,13 +2356,13 @@ screens (Classic, live calls, live voice consent)
 
 **Rulings**
 - Widths follow the window, not the device (2026-10-19, #949).
-- A chat's column is 760 pt until the chat's width passes about 1055 pt, then takes 72% of it, up to 1040 pt: an iPad beside the list keeps 760 pt, a maximized Mac or iPad window gets a wider column, with the list shown or hidden (2026-10-26, #1322, Eric: the column was too narrow on a maximized window). This replaces the 2026-10-23 ruling (#1169) that kept 760 pt with the list hidden.
-- Settings (720 pt), a list shown alone (720 pt) and calls (640 pt) keep fixed widths: rows, cards and captions don't read better wider (2026-10-26, #1322).
+- A chat's column is 760 pt until the chat's width passes about 1055 pt, then takes 72% of it, up to 1040 pt: an iPad beside the list keeps 760 pt, a maximized Mac or iPad window gets a wider column, with the list shown or hidden (2026-10-26, #1320, Eric: the column was too narrow on a maximized window). This replaces the 2026-10-23 ruling (#1169) that kept 760 pt with the list hidden.
+- Settings (720 pt), a list shown alone (720 pt) and calls (640 pt) keep fixed widths: rows, cards and captions don't read better wider (2026-10-26, #1320).
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-26, #1322.
+**Checked:** 2026-10-26, #1320.
 
 ## Feature map rules
 
