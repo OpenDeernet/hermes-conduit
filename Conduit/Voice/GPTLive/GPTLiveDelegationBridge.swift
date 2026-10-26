@@ -438,8 +438,9 @@ final class GPTLiveDelegationBridge {
         }
         if supervisor.liveThread != nil, !VoiceThreadRouting.wantsBackgroundJob(routingWords) {
             // Attached to a chat: the call's request still running there
-            // takes this as a follow-up.
-            if let target = supervisor.threadFollowUpTarget() {
+            // takes this as a follow-up. "New job:" is new work, the chat's
+            // next turn, in a call that took its first job's chat (#1250).
+            if !startsNewJob, let target = supervisor.threadFollowUpTarget() {
                 let outcome = await supervisor.followUp(jobID: target, words: Self.followUpWords(userWords: spoken, delegated: ownWords), kind: nil)
                 guard callGeneration == call, !isEnding else { return [] }
                 noteTaker(outcome, jobID: target, delegationID: id)
@@ -472,7 +473,7 @@ final class GPTLiveDelegationBridge {
 
     /// The only background job still running, if just one is.
     private var onlyRunningJob: VoiceBackgroundJob? {
-        let running = supervisor.jobs.filter { !$0.isThreadTurn && $0.status.isActive }
+        let running = supervisor.jobs.filter { !$0.isThreadTurn && !$0.isDetachedThreadTurn && $0.status.isActive }
         return running.count == 1 ? running[0] : nil
     }
 
@@ -508,7 +509,10 @@ final class GPTLiveDelegationBridge {
         // A call that ends while Hermes creates the job must not leave this
         // delegation in the next call's table.
         // The delegation is free text: "for Fam, …" names another profile.
-        let reply = await supervisor.startJob(instructions: task, profile: nil) { [weak self] jobID in
+        // Work the user didn't ask to keep apart: an unattached call's first
+        // such job makes the chat its later requests go to (#1250).
+        let joinsCall = !VoiceThreadRouting.wantsBackgroundJob(routingWords) && !supervisor.namesOtherProfile(task)
+        let reply = await supervisor.startJob(instructions: task, profile: nil, joinsCall: joinsCall) { [weak self] jobID in
             createdJobID = jobID
             guard let self, !self.isEnding, self.callGeneration == call else { return }
             self.openDelegations[jobID] = id
@@ -532,17 +536,27 @@ final class GPTLiveDelegationBridge {
         lastTaker = (id, jobID)
         guard openDelegations[jobID] == id else { return [] }
         var outgoing: [Outgoing] = []
-        if let job = supervisor.jobs.first(where: { $0.id == jobID }), job.status.isActive {
+        if let job = supervisor.jobs.first(where: { $0.id == jobID }), job.status.isActive, job.isThreadTurn {
+            // Said while the call's chat was being made: it joined that chat
+            // as its next turn (#1250).
+            outgoing.append(.delegationReply(
+                delegationID: id,
+                text: confirmed ? Self.sentToChat : "Hermes is working on this in the chat. Its reply will follow on this delegation; don't guess it.",
+                channel: confirmed ? .speakable : .commentary
+            ))
+        } else if let job = supervisor.jobs.first(where: { $0.id == jobID }), job.status.isActive {
+            // The first request of a call on its own made the call's chat (#1250).
+            let place = job.isCallChat ? " in the call's chat" : ""
             let corrections = "If the user corrects or changes it while it runs, delegate their words starting with \"Job \(job.number):\"."
             outgoing.append(confirmed
                 ? .delegationReply(
                     delegationID: id,
-                    text: "\(Self.sentPrefix) as background job \(job.number) (\"\(job.title)\"): tell the user in a few words that it's on its way. Its result follows on this delegation; don't guess it. \(corrections)]",
+                    text: "\(Self.sentPrefix)\(place) as background job \(job.number) (\"\(job.title)\"): tell the user in a few words that it's on its way. Its result follows on this delegation; don't guess it. \(corrections)]",
                     channel: .speakable
                 )
                 : .delegationReply(
                     delegationID: id,
-                    text: "Hermes is working on this as background job \(job.number) (\"\(job.title)\"). Its result will follow on this delegation; don't guess it. \(corrections)",
+                    text: "Hermes is working on this\(place) as background job \(job.number) (\"\(job.title)\"). Its result will follow on this delegation; don't guess it. \(corrections)",
                     channel: .commentary
                 ))
         }
@@ -767,6 +781,7 @@ final class GPTLiveDelegationBridge {
         lastTaker = nil
         lastUntaken = nil
         releaseCallsBack = false
+        returnRepliesOnTheirWay()
         isEnding = false
     }
 
@@ -781,7 +796,17 @@ final class GPTLiveDelegationBridge {
         lastTaker = nil
         lastUntaken = nil
         releaseCallsBack = false
+        returnRepliesOnTheirWay()
         isEnding = true
+    }
+
+    /// Answers still on their way belong to a conversation that's gone:
+    /// their outcomes become pending again, and a delegation id the next
+    /// conversation reuses can't settle the old job's (#1007).
+    private func returnRepliesOnTheirWay() {
+        let onTheirWay = deliveredReplies
+        deliveredReplies = [:]
+        for jobID in onTheirWay.values { supervisor.returnUndeliveredNotice(jobID: jobID) }
     }
 
     // MARK: Asking first (#451)
@@ -1364,7 +1389,7 @@ final class GPTLiveDelegationBridge {
             case .speak(let spoken): text = Self.relay(spoken)
             case .submit(let prompt, _): text = prompt
             }
-            queuedNotices.insert(item.jobID)
+            queuedNotices[item.jobID, default: 0] += 1
             outgoing.append(.sessionContext(text: text, channel: .speakable, whenIdle: true, jobID: item.jobID))
         }
         // The chat of a call from Hermes waits on the user anew: said now.
@@ -1381,18 +1406,27 @@ final class GPTLiveDelegationBridge {
 
     /// Jobs whose notice was handed out but not yet sent, so it can be
     /// handed back if the conversation closes first. Matched by job, never
-    /// by text: two jobs can produce the same notice.
-    private var queuedNotices: Set<UUID> = []
+    /// by text: two jobs can produce the same notice. Counted, since one
+    /// job can have two out at once (a question, then its outcome), and
+    /// each holds the job on the job list until it's released (#1210).
+    private var queuedNotices: [UUID: Int] = [:]
+
+    /// Releases one handed-out notice for the job; false when it had none.
+    private func releaseQueuedNotice(_ jobID: UUID) -> Bool {
+        guard let count = queuedNotices[jobID] else { return false }
+        queuedNotices[jobID] = count > 1 ? count - 1 : nil
+        return true
+    }
 
     /// A queued notice went out: its job is spoken for.
     func contextDelivered(jobID: UUID?) {
-        guard let jobID, queuedNotices.remove(jobID) != nil else { return }
+        guard let jobID, releaseQueuedNotice(jobID) else { return }
         supervisor.noticeSent(jobID: jobID)
     }
 
     /// These notices will never be sent: their jobs become pending again.
     func returnUnsent(jobIDs: [UUID?]) {
-        for case let jobID? in jobIDs where queuedNotices.remove(jobID) != nil {
+        for case let jobID? in jobIDs where releaseQueuedNotice(jobID) {
             supervisor.returnUndeliveredNotice(jobID: jobID)
         }
     }
@@ -1415,6 +1449,11 @@ final class GPTLiveDelegationBridge {
 
     /// Settled delegations whose answer is on its way, by delegation.
     private var deliveredReplies: [String: UUID] = [:]
+
+    /// Whether this delegation's answer is a job's result.
+    func carriesJobResult(delegationID: String) -> Bool {
+        deliveredReplies[delegationID] != nil
+    }
 
     /// How a "call me" went, for the model as quiet context (#449).
     private static func callRequestNote(_ text: String) -> Outgoing {
@@ -1469,7 +1508,7 @@ final class GPTLiveDelegationBridge {
     /// The jobs' state as quiet context, so the model can answer "how's it
     /// going" itself. Not UI copy.
     func statusContext() -> String {
-        let visible = supervisor.jobs.filter { !$0.isThreadTurn && ($0.status.isActive || !$0.outcomeDelivered) }
+        let visible = supervisor.listedJobs
         guard !visible.isEmpty else { return "[Background jobs: none running.]" }
         let lines = visible.map { "Job \($0.number) (\($0.title)): \(GeminiLiveToolBridge.statusName($0.status))" }
         return "[Background jobs on Hermes: " + lines.joined(separator: "; ") + ".]"

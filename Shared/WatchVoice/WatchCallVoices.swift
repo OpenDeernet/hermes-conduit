@@ -18,6 +18,7 @@ struct WatchCallVoices: Codable, Equatable {
     /// The Watch's voices (WatchVoiceEngine.callVoice).
     enum Voice: String, CaseIterable {
         case geminiLive
+        case qwenLive
         case gptLive
         case grokLive
         /// The user's own speech server through the host (plugin 0.48).
@@ -75,6 +76,21 @@ struct WatchPhoneContext: Codable, Equatable {
     /// a preset's name or a custom "#RRGGBB"), which the Watch app draws in.
     /// Nil from an older iPhone app.
     var accent: String? = nil
+    /// Whether the active dashboard's notifications are end-to-end
+    /// encrypted (NotificationsEncryption raw value), as its dashboard row
+    /// on the iPhone shows. Nil when they aren't, or from an older iPhone
+    /// app; a value the Watch doesn't know reads as nil.
+    var notificationsEncryption: String? = nil
+
+    /// What the Watch's Settings show for the notifications it mirrors.
+    enum NotificationsEncryption: String {
+        case encrypted
+        case quantumSafe
+    }
+
+    var encryption: NotificationsEncryption? {
+        notificationsEncryption.flatMap(NotificationsEncryption.init(rawValue:))
+    }
 
     static let key = "phoneContext"
 

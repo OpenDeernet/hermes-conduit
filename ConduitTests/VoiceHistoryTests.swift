@@ -200,6 +200,12 @@ extension HermesVoiceGatewayTimeoutTests {
         let one = "e" + String(repeating: "\u{0301}", count: 20_000)
         XCTAssertLessThanOrEqual(VoiceTranscriptRecorder.clipped(one).unicodeScalars.count, VoiceTranscriptRecorder.maxTurnCharacters)
         XCTAssertEqual(VoiceTranscriptRecorder.clipped("Short"), "Short")
+        // A long fence left open gets a closer as long, still within the
+        // limit; a ``` line inside it doesn't close it.
+        let fence = String(repeating: "`", count: 30)
+        let nested = VoiceTranscriptRecorder.clipped(fence + "md\n```\n" + String(repeating: "z\n", count: 9_000))
+        XCTAssertLessThanOrEqual(nested.unicodeScalars.count, VoiceTranscriptRecorder.maxTurnCharacters)
+        XCTAssertTrue(nested.hasSuffix("\n" + fence))
 
         // Spoken lines are as they were.
         recorder.note("Short line")
@@ -577,9 +583,7 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(AppState.missingLinkedBotMessage(for: .idle), AppLocalization.string("Could not load bots."))
 
         // Offline, the link asks for a connection instead.
-        let suite = "VoiceBotLinkOffline.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("VoiceBotLinkOffline")
         let appState = AppState(defaults: defaults, loadSavedConnection: false)
         XCTAssertFalse(appState.isConnected)
         appState.openAppLink(.bot(profile: "fam"))
@@ -650,9 +654,7 @@ extension HermesVoiceGatewayTimeoutTests {
 
 extension HermesVoiceGatewayTimeoutTests {
     func testOutboxKeepsCallsAHostCantSaveYetAndSavesThemOnceItCan() async throws {
-        let suite = "VoiceOutboxBlockedHost.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("VoiceOutboxBlockedHost")
         defaults.set("default", forKey: "conduit.activeProfile")
         let appState = AppState(defaults: defaults, loadSavedConnection: false)
         appState.connection = HermesConnection(baseUrl: "https://example.com", ticket: "test-ticket")
@@ -688,9 +690,7 @@ extension HermesVoiceGatewayTimeoutTests {
 
 extension HermesVoiceGatewayTimeoutTests {
     func testRefusedLocalLiveCallIsKeptAndTheCallsBehindItStillSave() async throws {
-        let suite = "VoiceOutboxRefusedCall.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("VoiceOutboxRefusedCall")
         defaults.set("default", forKey: "conduit.activeProfile")
         let appState = AppState(defaults: defaults, loadSavedConnection: false)
         appState.connection = HermesConnection(baseUrl: "https://example.com", ticket: "test-ticket")
@@ -731,9 +731,7 @@ extension HermesVoiceGatewayTimeoutTests {
     }
 
     func testSaveNowSaysWhyNothingSavedWhenHermesFails() async throws {
-        let suite = "VoiceOutboxSaveNowFailure.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("VoiceOutboxSaveNowFailure")
         defaults.set("default", forKey: "conduit.activeProfile")
         let appState = AppState(defaults: defaults, loadSavedConnection: false)
         appState.connection = HermesConnection(baseUrl: "https://example.com", ticket: "test-ticket")
@@ -872,9 +870,7 @@ extension HermesVoiceGatewayTimeoutTests {
                 lineageRootId: nil
             )
         }
-        let suite = "VoiceChatOwnIDs.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("VoiceChatOwnIDs")
         defaults.set("default", forKey: "conduit.activeProfile")
         let index = ConversationIdentityIndex()
         let appState = AppState(defaults: defaults, loadSavedConnection: false, conversationIdentityIndex: index)
@@ -984,9 +980,7 @@ extension HermesVoiceGatewayTimeoutTests {
 
 extension HermesVoiceGatewayTimeoutTests {
     func testCallSavedFromTheOutboxStillGetsItsChatMarker() async throws {
-        let suite = "VoiceOutboxChatLink.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("VoiceOutboxChatLink")
         defaults.set("default", forKey: "conduit.activeProfile")
         let appState = AppState(defaults: defaults, loadSavedConnection: false)
         appState.connection = HermesConnection(baseUrl: "https://example.com", ticket: "test-ticket")
@@ -1187,9 +1181,7 @@ extension HermesVoiceGatewayTimeoutTests {
         let request = try XCTUnwrap(recorder.outboxRequest)
         XCTAssertEqual(request.sessionID, "row-1")
 
-        let suite = "VoiceOutboxBotChatRow.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("VoiceOutboxBotChatRow")
         defaults.set("default", forKey: "conduit.activeProfile")
         let appState = AppState(defaults: defaults, loadSavedConnection: false)
         appState.connection = HermesConnection(baseUrl: "https://example.com", ticket: "test-ticket")

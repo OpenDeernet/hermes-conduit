@@ -160,11 +160,12 @@ extension AppState {
             return
         }
         async let gemini = watchCallVoiceCheck(.geminiLive)
+        async let qwen = watchCallVoiceCheck(.qwenLive)
         async let gpt = watchCallVoiceCheck(.gptLive)
         async let grok = watchCallVoiceCheck(.grokLive)
         async let localLive = watchCallVoiceCheck(.localLive)
         let checks: [(WatchCallVoices.Voice, Bool?)] = [
-            (.geminiLive, await gemini), (.gptLive, await gpt), (.grokLive, await grok), (.localLive, await localLive),
+            (.geminiLive, await gemini), (.qwenLive, await qwen), (.gptLive, await gpt), (.grokLive, await grok), (.localLive, await localLive),
         ]
         // Another server or profile by now: these say nothing about it.
         guard scope == hermesCallsKey(profile: activeProfile) else { return }
@@ -208,6 +209,7 @@ extension AppState {
     private func watchCallVoiceCheck(_ voice: WatchCallVoices.Voice) async -> Bool? {
         switch voice {
         case .geminiLive: return (try? await geminiLiveTokenClient.availability())?.isAvailable
+        case .qwenLive: return (try? await qwenLiveTokenClient.availability())?.isAvailable
         // The Watch's GPT-Live is the subscription's, whatever the phone uses.
         case .gptLive: return (try? await gptLiveClient.availability(billing: .subscription))?.isAvailable
         case .grokLive: return (try? await grokLiveClient.availability())?.isAvailable
@@ -218,8 +220,9 @@ extension AppState {
 
     /// The Watch app says what to set up when its voice can't start, and
     /// that calls then ring only the iPhone.
-    /// Also how a call ringing on the Watch names the main profile, and the
-    /// accent the Watch app draws in.
+    /// Also how a call ringing on the Watch names the main profile, the
+    /// accent the Watch app draws in, and whether the active dashboard's
+    /// notifications are end-to-end encrypted (the Watch's Settings).
     func shareWatchCallVoices() {
         let notifications = PushNotificationService.shared
         WatchVoiceLink.shared.share(WatchPhoneContext(
@@ -231,8 +234,15 @@ extension AppState {
             callsRing: supportsHermesCalls && notifications.voipToken != nil,
             mainProfileNames: mainProfileNamesByDashboard,
             activeDashboardID: activeDashboardID?.uuidString,
-            accent: UserDefaults.standard.string(forKey: ConduitAccent.storageKey) ?? ConduitAccent.defaultValue.rawValue
+            accent: UserDefaults.standard.string(forKey: ConduitAccent.storageKey) ?? ConduitAccent.defaultValue.rawValue,
+            notificationsEncryption: Self.watchNotificationsEncryption(activeDashboardID.flatMap(notificationsEncryption(of:)))
         ))
+    }
+
+    /// The Watch's word for a dashboard's notifications encryption: nil
+    /// when not encrypted, as on the iPhone's dashboard row.
+    nonisolated static func watchNotificationsEncryption(_ quantumSafe: Bool?) -> String? {
+        quantumSafe.map { ($0 ? WatchPhoneContext.NotificationsEncryption.quantumSafe : .encrypted).rawValue }
     }
 
     /// The Watch voices' readiness the Watch app is told: this profile's
@@ -274,6 +284,7 @@ extension AppState {
     nonisolated static func watchVoiceCapabilities(_ voice: WatchCallVoices.Voice) -> [String] {
         switch voice {
         case .geminiLive: return ["gemini-live"]
+        case .qwenLive: return ["qwen-live"]
         case .gptLive: return ["gpt-live", "watch-audio"]
         case .grokLive: return ["grok-live", "watch-audio"]
         case .localLive: return ["local-live", "watch-audio", "watch-local-live"]
@@ -524,14 +535,6 @@ extension AppState {
         }
     }
 
-    /// What the live call from Hermes waits on, read from its chat's card
-    /// with the choices and what Hermes wrote before asking; nil while the
-    /// card isn't there, when the push's reason stands in.
-    func liveHermesCallWaiting() -> HermesCallWaiting? {
-        guard let call = liveHermesCall else { return nil }
-        return hermesCallWaiting(call)
-    }
-
     /// `liveHermesCall`'s instructions for the live model, with what its
     /// chat's card says. Read by the session builders, so a reconnect gets
     /// the card as it stands then.
@@ -654,7 +657,7 @@ extension AppState {
         // choice the words point at sends what its tap sends.
         let asked = HermesCallWaiting.Question(id: question.id, text: question.question,
                                                choices: question.choices.map { .init(label: $0.label, value: $0.value) },
-                                               multiSelect: question.multiSelect)
+                                               multiSelect: question.multiSelect, mayLeaveBlank: clarify.isForm)
         let value = HermesCallWaiting.answerValue(for: answer, question: asked)
         await respondToClarify(requestId: clarify.requestId, questionId: clarify.questions.count == 1 ? nil : question.id, answer: value)
         // The chat may have reloaded meanwhile: the same question, by its
@@ -780,7 +783,7 @@ extension AppState {
 
     /// What the call trace says of voice: which surfaces are up and running.
     var hermesCallVoiceTraceSummary: String {
-        let liveSheet = showGeminiLiveSheet || showGPTLiveSheet || showGrokLiveSheet || showLocalLiveSheet
+        let liveSheet = showQwenLiveSheet || showGeminiLiveSheet || showGPTLiveSheet || showGrokLiveSheet || showLocalLiveSheet
         return "voice sheet: \(showVoiceSheet), live sheet: \(liveSheet), live call: \(isLiveVoiceCallActive), "
             + "classic session: \(voiceConversationController.hasLiveVoiceSession), app on screen: \(isSceneActive)"
     }
@@ -825,6 +828,20 @@ extension AppState {
     }
 
     /// The CallKit call's mute button.
+    /// Whether the microphone of the voice a call from Hermes opened is
+    /// off, by whichever control turned it off (its own Mute, the
+    /// minimised bar, CallKit's): Classic's paused microphone counts. Nil
+    /// while no voice runs.
+    var nativeCallVoiceMuted: Bool? {
+        if isQwenLiveActive { return qwenLiveController.isMicrophoneMuted }
+        if isGeminiLiveActive { return geminiLiveController.isMicrophoneMuted }
+        if isGPTLiveActive { return gptLiveController.isMicrophoneMuted }
+        if isGrokLiveActive { return grokLiveController.isMicrophoneMuted }
+        if isLocalLiveActive { return localLiveController.isMicrophoneMuted }
+        if voiceConversationController.hasLiveVoiceSession { return voiceConversationController.isMicrophonePaused }
+        return nil
+    }
+
     func setVoiceMutedForNativeCall(_ muted: Bool) {
         isNativeHermesCallMuted = muted
         // A classic voice still waiting to start its first listen (#558)
@@ -832,7 +849,9 @@ extension AppState {
         // session is prepared yet; `openVoiceConversation` reads the mute
         // for a voice that opens after it.
         if muted { voiceSheetShouldAutoListen = false }
-        if isGeminiLiveActive {
+        if isQwenLiveActive {
+            qwenLiveController.setMicrophoneMuted(muted)
+        } else if isGeminiLiveActive {
             geminiLiveController.setMicrophoneMuted(muted)
         } else if isGPTLiveActive {
             gptLiveController.setMicrophoneMuted(muted)

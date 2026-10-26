@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import Observation
 
 enum CapabilitiesStoreError: LocalizedError, Equatable {
     case notConnected
@@ -46,45 +47,46 @@ struct PluginInstallOutcome: Equatable {
 }
 
 @MainActor
-final class CapabilitiesStore: ObservableObject {
+@Observable
+final class CapabilitiesStore {
     // Skills
-    @Published private(set) var officialSkills: [OfficialSkill] = []
-    @Published private(set) var skillInstalls: [String: CapabilityInstallState] = [:]
+    private(set) var officialSkills: [OfficialSkill] = []
+    private(set) var skillInstalls: [String: CapabilityInstallState] = [:]
 
     // Tools
     /// Tool name -> calls over the last year; nil until read.
-    @Published private(set) var toolCalls: [String: Int]?
+    private(set) var toolCalls: [String: Int]?
 
     // Connectors
-    @Published private(set) var servers: [ConnectorServer] = []
-    @Published private(set) var connectorCatalog: [ConnectorCatalogEntry] = []
-    @Published private(set) var connectorsLoaded = false
-    @Published private(set) var connectorsError: String?
-    @Published private(set) var probes: [String: ConnectorProbe] = [:]
-    @Published private(set) var probing: Set<String> = []
-    @Published private(set) var connectorInstalls: [String: CapabilityInstallState] = [:]
+    private(set) var servers: [ConnectorServer] = []
+    private(set) var connectorCatalog: [ConnectorCatalogEntry] = []
+    private(set) var connectorsLoaded = false
+    private(set) var connectorsError: String?
+    private(set) var probes: [String: ConnectorProbe] = [:]
+    private(set) var probing: Set<String> = []
+    private(set) var connectorInstalls: [String: CapabilityInstallState] = [:]
 
     // Plugins
-    @Published private(set) var plugins: [AgentPluginRow] = []
-    @Published private(set) var pluginCatalog: [PluginCatalogEntry] = []
-    @Published private(set) var pluginsLoaded = false
-    @Published private(set) var pluginsError: String?
-    @Published private(set) var pluginBusy: Set<String> = []
+    private(set) var plugins: [AgentPluginRow] = []
+    private(set) var pluginCatalog: [PluginCatalogEntry] = []
+    private(set) var pluginsLoaded = false
+    private(set) var pluginsError: String?
+    private(set) var pluginBusy: Set<String> = []
     /// A plugin change Hermes applies only after a gateway restart.
-    @Published var pluginsNeedRestart = false
+    var pluginsNeedRestart = false
 
-    private weak var requester: (any DashboardJSONRequester)?
+    @ObservationIgnored private weak var requester: (any DashboardJSONRequester)?
     private(set) var profile = "default"
     /// Bumped on every profile or dashboard switch: work started before it
     /// commits nothing.
-    private var generation = 0
+    @ObservationIgnored private var generation = 0
     /// Bumped by every load of a list and every change made to it here: a
     /// load commits only if nothing newer touched its list meanwhile, so a
     /// refresh that answers late can't bring back an older list or undo a
     /// switch just flipped.
-    private var skillsEpoch = 0
-    private var connectorsEpoch = 0
-    private var pluginsEpoch = 0
+    @ObservationIgnored private var skillsEpoch = 0
+    @ObservationIgnored private var connectorsEpoch = 0
+    @ObservationIgnored private var pluginsEpoch = 0
 
     /// A connector's probe stays fresh this long, as on Desktop.
     static let probeLifetime: TimeInterval = 300
@@ -113,6 +115,13 @@ final class CapabilitiesStore: ObservableObject {
         pluginsNeedRestart = false
     }
 
+    /// Whether requests go to `owner`'s bridge and profile. False after a
+    /// switch until the Capabilities screen points the store at them, so a
+    /// detail page never reads the previous dashboard or profile.
+    func serves(_ owner: CapabilitySnapshotOwner) -> Bool {
+        requester.map { ObjectIdentifier($0) } == owner.bridge && profile == owner.profile
+    }
+
     private static func same(_ lhs: (any DashboardJSONRequester)?, _ rhs: (any DashboardJSONRequester)?) -> Bool {
         switch (lhs, rhs) {
         case (nil, nil): return true
@@ -130,13 +139,28 @@ final class CapabilitiesStore: ObservableObject {
         timeout: Int = 12_000
     ) async throws -> [String: Any] {
         guard let requester else { throw CapabilitiesStoreError.notConnected }
-        return try await requester.requestJSON(
-            path: path,
-            method: method,
-            body: body,
-            timeoutMilliseconds: timeout,
-            maxResponseBytes: DataURLLimits.maxJSONResponseBytes
-        )
+        let send = {
+            try await requester.requestJSON(
+                path: path,
+                method: method,
+                body: body,
+                timeoutMilliseconds: timeout,
+                maxResponseBytes: DataURLLimits.maxJSONResponseBytes
+            )
+        }
+        // A backend, connector or install change makes Hermes rewrite the
+        // profile config: in turn with every other config save.
+        guard Self.writesProfileConfig(method: method, path: path) else { return try await send() }
+        return try await ProfileConfigWriteQueue.runThrowing { try await send() }
+    }
+
+    /// Writes Hermes keeps in the profile config. Keys (`/api/env`),
+    /// connector tests, sign-ins and reads don't wait for config saves.
+    static func writesProfileConfig(method: String, path: String) -> Bool {
+        guard method != "GET" else { return false }
+        let route = path.split(separator: "?").first.map(String.init) ?? path
+        if route.hasSuffix("/test") || route.hasSuffix("/auth") { return false }
+        return !route.hasPrefix("/api/env") && !route.hasPrefix("/api/mcp/oauth/")
     }
 
     private func scoped(_ path: String) -> String {
@@ -430,10 +454,6 @@ final class CapabilitiesStore: ObservableObject {
 
     func clearConnectorInstallFailure(_ name: String) {
         if case .failed = connectorInstalls[name] { connectorInstalls[name] = nil }
-    }
-
-    func clearSkillInstallFailure(_ identifier: String) {
-        if case .failed = skillInstalls[identifier] { skillInstalls[identifier] = nil }
     }
 
     /// Starts a server's OAuth sign-in; the person finishes it in the

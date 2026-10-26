@@ -4,8 +4,8 @@
 //
 //  Foreground wake phrase (#174). A detected phrase only enqueues a
 //  PendingVoiceIntent for its profile; openVoiceConversation then picks the
-//  profile's voice engine (Gemini Live, GPT Live, Grok Live or classic)
-//  exactly as it does for Siri.
+//  profile's voice engine (Gemini Live, Qwen Live, GPT Live, Grok Live,
+//  Local Live or classic) exactly as it does for Siri.
 //
 
 import AVFAudio
@@ -26,6 +26,20 @@ extension AppState {
                 && known.contains($0.key.profileID)
                 && WakePhraseMatcher.isUsable($0.phrase)
         }
+    }
+
+    /// Every phrase wake listens for, in the listener's order, with
+    /// `profile`'s replaced by `phrases`: Settings checks the language cap
+    /// against what the listener will get, other profiles' phrases included.
+    func wakeListenedPhrases(replacing phrases: [String], forProfile profile: String) -> [String] {
+        guard let gatewayID = wakeGatewayID else { return phrases.filter(WakePhraseMatcher.isUsable) }
+        let key = WakeProfileKey(gatewayID: gatewayID, profileID: profile)
+        let edited = phrases.filter(WakePhraseMatcher.isUsable).map {
+            WakePhraseBinding(key: key, phrase: $0, startsFreshConversation: false)
+        }
+        return (activeWakeBindings.filter { $0.key != key } + edited)
+            .sorted { $0.id < $1.id }
+            .map(\.phrase)
     }
 
     var wakeLifecycleSnapshot: WakeLifecycleSnapshot {
@@ -55,7 +69,7 @@ extension AppState {
 
     private var isVoiceIdleForWake: Bool {
         !showVoiceSheet
-            && !showGeminiLiveSheet
+            && !showQwenLiveSheet && !showGeminiLiveSheet
             && !showGPTLiveSheet
             && !showGrokLiveSheet
             && !showLocalLiveSheet

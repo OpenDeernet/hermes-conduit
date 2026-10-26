@@ -7,7 +7,7 @@ import SwiftUI
 struct CapabilitiesView: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     @EnvironmentObject var appState: AppState
-    @StateObject private var store = CapabilitiesStore()
+    @State private var store = CapabilitiesStore()
     @AppStorage("capabilities.tab") private var tabRaw = CapabilitiesTab.skills.rawValue
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
@@ -187,8 +187,8 @@ struct CapabilitiesView: View {
         guard !query.isEmpty else { return CapabilitySearchCounts.Sources() }
         // Skills and tools only once they're this profile's.
         let ownRows = CapabilityLoadPolicy.shouldPresentRows(
-            snapshotProfile: appState.capabilitiesProfile,
-            activeProfile: appState.activeProfile
+            snapshot: appState.capabilitiesOwner,
+            active: appState.currentCapabilitiesOwner
         )
         return CapabilitySearchCounts.Sources(
             skills: ownRows ? appState.skills : [],
@@ -254,12 +254,12 @@ struct CapabilitiesView: View {
             // profile already shows keeps them on screen.
             let hasRows = !appState.skills.isEmpty || !appState.toolsets.isEmpty
             let showsOwnRows = hasRows && CapabilityLoadPolicy.shouldPresentRows(
-                snapshotProfile: appState.capabilitiesProfile,
-                activeProfile: appState.activeProfile
+                snapshot: appState.capabilitiesOwner,
+                active: appState.currentCapabilitiesOwner
             )
             switch CapabilityLoadPolicy.resolvePresentation(
-                snapshotProfile: appState.capabilitiesProfile,
-                activeProfile: appState.activeProfile,
+                snapshot: appState.capabilitiesOwner,
+                active: appState.currentCapabilitiesOwner,
                 isLoading: capabilitiesLoading && !showsOwnRows,
                 loadError: loadError,
                 hasRows: hasRows
@@ -325,18 +325,18 @@ struct CapabilitiesView: View {
         // A genuinely newer request starts with clean local error state; the
         // token guard below keeps any older completion from re-setting it.
         loadError = nil
-        let requestedProfile = appState.activeProfile
+        let requested = appState.currentCapabilitiesOwner
         let outcome = await appState.loadCapabilities()
 
         guard capabilityRequestID == myToken else { return }
         capabilitiesLoading = false
-        guard appState.activeProfile == requestedProfile, !outcome.isSuperseded else { return }
+        guard appState.currentCapabilitiesOwner == requested, !outcome.isSuperseded else { return }
 
         loadError = Self.localError(
             for: outcome,
             hasData: CapabilityLoadPolicy.shouldPresentRows(
-                snapshotProfile: appState.capabilitiesProfile,
-                activeProfile: requestedProfile
+                snapshot: appState.capabilitiesOwner,
+                active: requested
             ) && (!appState.skills.isEmpty || !appState.toolsets.isEmpty)
         )
     }

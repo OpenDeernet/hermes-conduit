@@ -6,6 +6,7 @@
 //  This is a NATIVE SwiftUI app, not a React Native port.
 //
 
+import Combine
 import SwiftUI
 import UIKit
 import UserNotifications
@@ -18,6 +19,8 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
         UNUserNotificationCenter.current().delegate = self
         // A "Hermes wants to talk" notification's Talk button (#449).
         HermesCallNotifications.registerCategory()
+        // Workspace files a previous run prepared for Save to Files.
+        Task.detached(priority: .utility) { _ = WorkspaceDownloads.root }
         // Set up before launch returns: a call the Apple Watch starts can
         // launch Conduit in the background, and its message waits on this.
         MainActor.assumeIsolated {
@@ -283,6 +286,22 @@ struct ConduitApp: App {
                 guard (try? await Task.sleep(for: .milliseconds(600))) != nil else { return }
                 appState.shareWatchCallVoices()
             }
+            // So does the padlock or shield: shared again once any change to
+            // the notifications state settles (keys, confirmations, the
+            // switch, and also unrelated ones such as push routes; the Watch
+            // link sends only a context that differs from the last one).
+            .task {
+                let changes = PushNotificationService.shared.objectWillChange
+                    .debounce(for: .milliseconds(600), scheduler: RunLoop.main)
+                for await _ in changes.values {
+                    appState.shareWatchCallVoices()
+                }
+            }
+            // And when the active dashboard changes, even when nothing about
+            // notifications does (a switch whose sign-in fails).
+            .task(id: appState.activeDashboardID) {
+                appState.shareWatchCallVoices()
+            }
 #if DEBUG
             .modifier(WidgetLaunchUITestFixture.modifier(appState: appState))
             .modifier(ScreenshotCallFixtureModifier(appState: appState))
@@ -324,6 +343,11 @@ struct ConduitApp: App {
             }
             // A draft shared from another app while Conduit is on screen.
             .task { SharedDraftStagedObserver.start() }
+            // Pictures' sizes and cards' heights from earlier launches, read
+            // once off the main thread as the app opens, so the rows of a
+            // chat it restores take their final height when they mount
+            // (#1238). ChatView asks too; a read under way is joined.
+            .task { await TranscriptPictureMemory.loadKeptSizes() }
             .task { await PushNotificationService.shared.refresh() }
             // Siri learns the cached profile names for its profile phrases.
             .task { SiriProfileShortcuts.refresh() }

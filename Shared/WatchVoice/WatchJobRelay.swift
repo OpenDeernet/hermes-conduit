@@ -48,8 +48,10 @@ enum WatchJobAnswer {
     static func arguments(name: String, _ arguments: [String: String]) -> [String: Any]? {
         switch name {
         case startJob:
-            let instructions = WatchBridgeDelegation.removingQuickMarker(arguments["instructions"] ?? "")
-            return instructions.isEmpty ? nil : ["instructions": instructions]
+            let requested = arguments["instructions"] ?? ""
+            let instructions = WatchBridgeDelegation.removingQuickMarker(requested)
+            guard !instructions.isEmpty else { return nil }
+            return ["instructions": instructions, "joins_call": joinsCall(requested, profile: arguments["profile"])]
         case cancelJob:
             let jobID = arguments["job_id"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return jobID.isEmpty ? [:] : ["job_id": jobID]
@@ -69,6 +71,16 @@ enum WatchJobAnswer {
         default:
             return nil
         }
+    }
+
+    /// Whether a start_job is ordinary work, which goes to the chat the
+    /// call's first such job made (#1250): not asked for in the background,
+    /// in a separate chat or quickly, and not for another profile. Read on
+    /// the words as the model sent them, "Quick:" included. A plugin before
+    /// 0.78 ignores it and starts a chat for each job.
+    static func joinsCall(_ instructions: String, profile: String?) -> Bool {
+        (profile ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !VoiceJobRouting.wantsJobOfItsOwn(instructions)
     }
 
     /// GeminiLiveToolBridge's answers to an interrupt_job it can't send.
@@ -297,6 +309,51 @@ enum WatchJobAnswer {
     /// again.
     static func answerTaken(_ result: [String: String]) -> Bool {
         result["error"] == nil && result["status"] != "failed" && result["status"] != "changed"
+    }
+
+    /// A news item's statuses that settle its job.
+    static let settledStatuses: Set<String> = ["finished", "failed", "cancelled"]
+
+    /// A settled job whose outcome the Watch holds for the model and
+    /// hasn't said yet.
+    struct UnsaidJob: Equatable {
+        let jobID: String
+        let title: String
+        let status: String
+    }
+
+    /// The host's list_jobs answer with the jobs whose outcome the Watch
+    /// hasn't said yet: the host counts an outcome told once the Watch has
+    /// it, but the user hears it only at the next quiet moment. The iPhone
+    /// lists such a job until it's said (VoiceBackgroundJobSupervisor
+    /// .listedJobs, #1210).
+    static func listing(_ result: [String: String], unsaid: [UnsaidJob]) -> [String: String] {
+        guard result["error"] == nil else { return result }
+        let entries = result.filter { $0.key.hasPrefix("job_") }
+        let listed = Set(entries.values.compactMap { entry -> String? in
+            guard entry.hasPrefix("id=") else { return nil }
+            return entry.dropFirst(3).split(separator: ";").first.map(String.init)
+        })
+        var merged = result
+        // After the host's highest number, in case its numbers have gaps.
+        var number = entries.keys.compactMap { Int($0.dropFirst(4)) }.max() ?? 0
+        var lines: [String] = []
+        for job in unsaid where !listed.contains(job.jobID) {
+            number += 1
+            merged["job_\(number)"] = "id=\(job.jobID); title=\(job.title); status=\(job.status)"
+            switch job.status {
+            case "failed": lines.append("\(job.title) failed.")
+            case "cancelled": lines.append("\(job.title) was cancelled.")
+            default: lines.append("\(job.title) has finished.")
+            }
+        }
+        guard !lines.isEmpty else { return result }
+        let summary = result["summary"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // Nothing listed: its summary says so (in the app's language, from
+        // the iPhone), which the unsaid jobs now contradict.
+        let before = summary.isEmpty || entries.isEmpty ? [] : [summary]
+        merged["summary"] = (before + lines).joined(separator: " ")
+        return merged
     }
 
     /// What the model hears about a news item, as the iPhone's supervisor

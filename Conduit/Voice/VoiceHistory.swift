@@ -2,8 +2,8 @@
 //  VoiceHistory.swift
 //  Conduit
 //
-//  Saved live voice calls. Gemini Live and GPT-Live never run a Hermes
-//  turn, so nothing on the host records them. The conduit_push plugin
+//  Saved live voice calls. Gemini Live, Qwen Live and GPT-Live never run
+//  a Hermes turn, so nothing on the host records them. The conduit_push plugin
 //  writes a call's settled turns straight into the profile's session store
 //  as an ordinary session row (no agent turn), and a resumed call appends
 //  to the same row. A call attached to a chat is part of that chat (#556):
@@ -24,7 +24,7 @@ private let voiceHistoryLogger = Logger(subsystem: "com.milim.relay", category: 
 /// Conduit's label for a session voice started, kept on the Hermes host.
 struct VoiceSessionTag: Equatable, Codable {
     enum Kind: String, Equatable, Codable {
-        /// A saved Gemini Live or GPT-Live call.
+        /// A saved live call (Gemini Live, Qwen Live, GPT-Live, Grok Live).
         case call
         /// A chat classic Voice started fresh.
         case classic
@@ -54,6 +54,7 @@ struct VoiceSessionTag: Equatable, Codable {
 
 enum VoiceCallEngine: String, Equatable, Codable {
     case geminiLive = "gemini-live"
+    case qwenLive = "qwen-live"
     case gptLive = "gpt-live"
     case grokLive = "grok-live"
     case localLive = "local-live"
@@ -63,6 +64,7 @@ extension VoiceCallEngine {
     /// A Watch call's engine as the host's audio bridge names it.
     static func watchBridge(_ engine: String) -> VoiceCallEngine? {
         switch engine {
+        case "qwen-live": return .qwenLive
         case WatchAudioBridgeWire.gptLive: return .gptLive
         case WatchAudioBridgeWire.grok: return .grokLive
         case WatchAudioBridgeWire.localLive: return .localLive
@@ -397,6 +399,13 @@ final class VoiceTranscriptRecorder {
     private(set) var isDisabled = false
 
     private var recordedEntries: Set<UUID> = []
+    /// How far into the engine's transcript the last capture got, and the
+    /// entry there: the next capture starts after it, so a long call isn't
+    /// rescanned from its first line on every update (#1004). An engine
+    /// that removed or replaced an earlier line moves the entry, and that
+    /// capture scans from the start.
+    private var capturedPrefix = 0
+    private var capturedPrefixEnd: UUID?
     private let save: Save
     /// The title a new row gets, asked for when the first save creates it.
     private let title: @MainActor (_ turns: [VoiceTranscriptTurn]) async -> String
@@ -455,17 +464,34 @@ final class VoiceTranscriptRecorder {
     /// Takes the settled prefix of the engine's transcript: every entry up
     /// to the first one still streaming.
     func capture(_ entries: [VoiceConversationTranscriptEntry], unsettled: Set<UUID>) {
-        for entry in entries {
+        var index = 0
+        if capturedPrefix > 0, capturedPrefix <= entries.count,
+           entries[capturedPrefix - 1].id == capturedPrefixEnd {
+            index = capturedPrefix
+        }
+        while index < entries.count {
+            let entry = entries[index]
             if unsettled.contains(entry.id) { break }
+            index += 1
             guard !recordedEntries.contains(entry.id) else { continue }
             recordedEntries.insert(entry.id)
             append(entry.speaker == .user ? .user : .assistant, entry.text)
         }
+        capturedPrefix = index
+        capturedPrefixEnd = index > 0 ? entries[index - 1].id : nil
     }
 
     /// A line the call itself adds (a started job, the resume marker).
     func note(_ text: String) {
         append(.assistant, text)
+    }
+
+    /// Rewrites a note not saved yet: a job's line once the call took the
+    /// job's chat as its own (#1250).
+    func replaceNote(_ text: String, with replacement: String) {
+        guard let index = turns.lastIndex(where: { $0.index >= written && $0.role == .assistant && $0.text == Self.clipped(text) }) else { return }
+        let old = turns[index]
+        turns[index] = VoiceTranscriptTurn(index: old.index, role: old.role, text: Self.clipped(replacement), at: old.at, cards: old.cards)
     }
 
     /// Something the live model put on screen: its Markdown as the line,
@@ -488,13 +514,16 @@ final class VoiceTranscriptRecorder {
 
     /// `text` within what the plugin keeps, cut here so a code block the
     /// cut leaves open is closed (a screen turn can hold 20,000 characters).
-    /// Cut in code points, as the plugin counts, in one pass.
+    /// Cut in code points, as the plugin counts.
     static func clipped(_ text: String) -> String {
         guard text.unicodeScalars.count > maxTurnCharacters else { return text }
-        // Room for a closing fence, so the turn stays within the limit.
-        var cut = String.UnicodeScalarView()
-        cut.append(contentsOf: text.unicodeScalars.prefix(maxTurnCharacters - 16))
-        return VoiceBackgroundJobSupervisor.closingCutFence(String(cut))
+        // The closing fence's room comes off the cut, so the turn stays
+        // within the limit however long the fence.
+        return VoiceBackgroundJobSupervisor.fenceClosedPrefix(within: maxTurnCharacters, length: \.unicodeScalars.count) {
+            var cut = String.UnicodeScalarView()
+            cut.append(contentsOf: text.unicodeScalars.prefix($0))
+            return String(cut)
+        }
     }
 
     /// Saves whatever the host doesn't have. Saves run one at a time, in
@@ -897,6 +926,16 @@ struct VoiceCallAttachment: Equatable, Codable {
     var resumed: Bool
     /// Set when the call closes, so a slow save doesn't lengthen it.
     var endedAt: Date? = nil
+}
+
+/// What a running call's checkpoint puts in the outbox, less the time it
+/// was taken: one equal to the last is nothing new to store.
+struct VoiceCallCheckpoint: Equatable {
+    var request: VoiceTranscriptSaveRequest
+    var dashboard: String
+    var profile: String
+    var jobs: [String]
+    var attachment: VoiceCallAttachment?
 }
 
 struct VoiceCallChatLinks: Codable, Equatable {

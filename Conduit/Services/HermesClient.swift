@@ -1069,6 +1069,14 @@ final class HermesClient: ObservableObject {
     // nonisolated(unsafe): deinit cancels it; cancel() is thread-safe.
     nonisolated(unsafe) private var keepaliveTask: Task<Void, Never>?
     private var lastInboundAt = Date()
+    /// Requests with a large frame (a picture going up) the socket is still
+    /// writing, until the write finishes or the request's own budget ends.
+    /// One can take a minute on a slow link, and a ping queued behind it
+    /// can't be answered before it's through (#1265).
+    private var requestsBeingWritten: Set<Int> = []
+    /// A frame this size or larger counts as being written until the socket
+    /// says it's through; a smaller one goes out at once.
+    static let largeFrameBytes = 256 * 1024
     private var isProbing = false
     private let keepaliveInterval: TimeInterval?
     private let backgroundKeepaliveInterval: TimeInterval?
@@ -1094,6 +1102,13 @@ final class HermesClient: ObservableObject {
     var onDisconnected: (() -> Void)?
 
     static let requestTimeout: TimeInterval = 30
+    /// An upload's budget: two minutes, or about 1 s for every 64 KB of
+    /// request (about 0.5 Mbit/s) if that is longer, the rate a group room's
+    /// upload allows, so a large file on a slow link isn't cut off (#1265).
+    static let minimumUploadTimeout: TimeInterval = 120
+    static func uploadTimeout(forPayloadCharacters count: Int) -> TimeInterval {
+        max(minimumUploadTimeout, TimeInterval(count) / 64_000)
+    }
     static let promptSubmitTimeout: TimeInterval = 180 // 3 minutes
     static let titleGenerationTimeout: TimeInterval = 90
     /// The legacy full-transcript resume is the RPC most likely to carry the
@@ -1339,6 +1354,9 @@ final class HermesClient: ObservableObject {
     /// it is no longer this client's socket.
     private func keepaliveQuietTimeLeft(on socket: any HermesWebSocket, interval: TimeInterval) -> TimeInterval? {
         guard self.socket === socket else { return nil }
+        // A frame still being written: a ping would wait behind it and look
+        // lost, closing the socket under the upload. Look again later.
+        if !requestsBeingWritten.isEmpty { return interval }
         return interval - Date().timeIntervalSince(lastInboundAt)
     }
 
@@ -1361,6 +1379,11 @@ final class HermesClient: ObservableObject {
     /// reports the disconnect so AppState reconnects as for any other drop.
     private func probe(_ socket: any HermesWebSocket) async {
         guard !isProbing, self.socket === socket, !closedIntentionally else { return }
+        // Behind a large frame still being written the pings can't be
+        // answered in time (#1265). A path change that really killed the
+        // connection fails the write itself, and the request's own budget
+        // answers for the socket meanwhile.
+        guard requestsBeingWritten.isEmpty else { return }
         isProbing = true
         defer { isProbing = false }
         let probeStarted = Date()
@@ -1376,7 +1399,7 @@ final class HermesClient: ObservableObject {
                 if lastInboundAt > probeStarted { return }
             }
         }
-        guard self.socket === socket, !closedIntentionally else { return }
+        guard self.socket === socket, !closedIntentionally, requestsBeingWritten.isEmpty else { return }
         logger.error("Keepalive ping unanswered twice; closing the socket")
         socket.cancel(with: .goingAway, reason: nil)
     }
@@ -1390,7 +1413,7 @@ final class HermesClient: ObservableObject {
             openTimeoutTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(15))
                 guard !Task.isCancelled else { return }
-                await self?.failSocketOpen(socket, error: HermesError.timeout(AppLocalization.string("WebSocket connection")))
+                self?.failSocketOpen(socket, error: HermesError.timeout(AppLocalization.string("WebSocket connection")))
             }
         }
     }
@@ -1831,6 +1854,8 @@ final class HermesClient: ObservableObject {
     }
 
     private func failAllPendingRequests(with error: Error) {
+        // The socket is gone, and its frames with it.
+        requestsBeingWritten.removeAll()
         for (_, request) in pending {
             request.timer?.invalidate()
             request.continuation.resume(throwing: error)
@@ -1871,6 +1896,7 @@ final class HermesClient: ObservableObject {
                 // Timeout
                 let timer = Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { [weak self] _ in
                     Task { @MainActor in
+                        self?.requestsBeingWritten.remove(id)
                         if let pending = self?.pending.removeValue(forKey: id) {
                             pending.continuation.resume(throwing: HermesError.timeout(method))
                         }
@@ -1883,7 +1909,10 @@ final class HermesClient: ObservableObject {
                 // frames (`socket.send(JSON.stringify(...))`). The gateway accepts
                 // the connection but does not dispatch binary JSON-RPC frames.
                 let text = String(decoding: body, as: UTF8.self)
+                let isLarge = body.count >= Self.largeFrameBytes
+                if isLarge { requestsBeingWritten.insert(id) }
                 socket.send(.string(text)) { [weak self] error in
+                    if isLarge { Task { @MainActor in self?.requestsBeingWritten.remove(id) } }
                     if let error {
                         self?.logger.error("RPC send failed for \(method, privacy: .public): \(LogRedaction.message(error), privacy: .public)")
                         Task { @MainActor in
@@ -1903,6 +1932,15 @@ final class HermesClient: ObservableObject {
     }
 
     private func cancelPendingRequest(id: Int) {
+        // A cancelled request's frame may still be going out: it stays in
+        // `requestsBeingWritten` until the socket says the write is through,
+        // or at most an upload's minimum budget, as its own timer is gone.
+        if requestsBeingWritten.contains(id) {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(Self.minimumUploadTimeout))
+                self?.requestsBeingWritten.remove(id)
+            }
+        }
         guard let pending = pending.removeValue(forKey: id) else { return }
         pending.timer?.invalidate()
         pending.continuation.resume(throwing: CancellationError())
@@ -2049,12 +2087,14 @@ final class HermesClient: ObservableObject {
 
     /// `mcp.servers.add` from a catalog preset.
     func addBotMcpServer(profile: String, name: String, preset: String) async throws -> AnyCodable {
-        try await rpc(
-            "mcp.servers.add",
-            params: ["profile": profile, "name": name, "preset": preset],
-            timeout: 60,
-            scoped: false
-        )
+        try await ProfileConfigWriteQueue.runThrowing { [self] in
+            try await rpc(
+                "mcp.servers.add",
+                params: ["profile": profile, "name": name, "preset": preset],
+                timeout: 60,
+                scoped: false
+            )
+        }
     }
 
     /// `mcp.servers.set_api_key`: Hermes keeps the value in the profile's
@@ -2098,7 +2138,10 @@ final class HermesClient: ObservableObject {
     func configureBotModel(name: String, provider: String, model: String, confirmed: Bool) async throws -> AnyCodable {
         var params: [String: Any] = ["name": name, "provider": provider, "model": model]
         if confirmed { params["confirm_expensive_model"] = true }
-        return try await rpc("profiles.configure", params: params, scoped: false)
+        // A profile config write: it waits its turn with Settings' saves.
+        return try await ProfileConfigWriteQueue.runThrowing { [self] in
+            try await rpc("profiles.configure", params: params, scoped: false)
+        }
     }
 
     /// `profiles.configure`. Sections are independent; the answer's
@@ -2122,7 +2165,9 @@ final class HermesClient: ObservableObject {
         }
         if let description { params["description"] = description }
         if let soul { params["soul"] = soul }
-        return try await rpc("profiles.configure", params: params, scoped: false)
+        return try await ProfileConfigWriteQueue.runThrowing { [self] in
+            try await rpc("profiles.configure", params: params, scoped: false)
+        }
     }
 
     /// `profiles.get_asset` for the bot's avatar. Nil when it has none.
@@ -2209,7 +2254,16 @@ final class HermesClient: ObservableObject {
     /// A gateway that predates `ping` answers "method not found". That reply
     /// travelled over this socket, so it proves the socket alive exactly as a
     /// pong would; Hermes Desktop reads it the same way.
+    ///
+    /// While a request's frame is still being written (a picture going up),
+    /// the ping would wait behind it past its budget and drop a working
+    /// socket: that request's own budget answers for the socket instead
+    /// (#1265).
     func healthCheck() async throws {
+        guard requestsBeingWritten.isEmpty else {
+            logger.notice("Connection check skipped: a large frame is still being written")
+            return
+        }
         try await ping(timeout: Self.pingTimeout)
     }
 
@@ -2385,7 +2439,10 @@ final class HermesClient: ObservableObject {
     }
 
     func setBusyInputMode(_ mode: BusyInputMode) async throws {
-        _ = try await rpc("config.set", params: ["key": "busy", "value": mode.rawValue])
+        // Saved in the profile config, so it queues with the other saves.
+        _ = try await ProfileConfigWriteQueue.runThrowing { [self] in
+            try await rpc("config.set", params: ["key": "busy", "value": mode.rawValue])
+        }
     }
 
     /// `inProfile` creates the session in another profile on the same
@@ -2552,13 +2609,19 @@ final class HermesClient: ObservableObject {
         text: String,
         surface: String? = nil,
         voiceTurn: Bool = false,
-        queued: Bool = false
+        queued: Bool = false,
+        hidden: Bool = false
     ) async throws -> PromptSubmissionOutcome {
         var params: [String: Any] = [
             "session_id": sessionId,
             "text": text
         ]
         if let surface { params["surface"] = surface }
+        // Seen by the model, never shown as the user's (Predictive follow-ups).
+        if hidden {
+            guard !gatewayRefusesHiddenPrompts else { throw HiddenPromptUnsupportedError() }
+            params["display_kind"] = "hidden"
+        }
         let marksVoiceTurn = voiceTurn && !gatewayRefusesVoiceTurn
         if marksVoiceTurn { params["voice_turn"] = true }
         if queued {
@@ -2575,6 +2638,11 @@ final class HermesClient: ObservableObject {
         } catch let error as RpcError where queued && error.refusesUnknownParam("queued") {
             gatewayRefusesQueued = true
             throw QueueUnsupportedError()
+        } catch let error as RpcError where hidden && error.refusesUnknownParam("display_kind") {
+            // Never resent without it: that would show Conduit's nudge as
+            // the user's own message.
+            gatewayRefusesHiddenPrompts = true
+            throw HiddenPromptUnsupportedError()
         }
         return PromptSubmissionOutcome(
             gatewayStatus: result.objectValue?["status"]?.stringValue
@@ -2591,6 +2659,14 @@ final class HermesClient: ObservableObject {
 
     /// This gateway is known to refuse Queue.
     var refusesQueuedPrompts: Bool { gatewayRefusesQueued }
+
+    /// Set once this gateway refused `prompt.submit`'s `display_kind`, so
+    /// Predictive follow-ups stop asking on it. Internal so tests can stand
+    /// in for that refusal.
+    var gatewayRefusesHiddenPrompts = false
+
+    /// A hidden prompt on a Hermes without `display_kind`.
+    struct HiddenPromptUnsupportedError: Error {}
 
     /// Queue on a Hermes without `prompt.submit`'s `queued` key.
     struct QueueUnsupportedError: LocalizedError {
@@ -3163,7 +3239,7 @@ final class HermesClient: ObservableObject {
             "session_id": sessionId,
             "content_base64": base64,
             "filename": filename
-        ])
+        ], timeout: Self.uploadTimeout(forPayloadCharacters: base64.utf8.count))
         return result.objectValue?["path"]?.stringValue
     }
 
@@ -3186,7 +3262,7 @@ final class HermesClient: ObservableObject {
             "data_url": dataUrl,
             "name": name,
             "path": path
-        ], timeout: 120)
+        ], timeout: Self.uploadTimeout(forPayloadCharacters: dataUrl.utf8.count))
         return Self.fileAttachmentReference(from: result)
     }
 
@@ -4638,22 +4714,25 @@ enum MessageNormalizer {
     /// `pending_clarify` snapshot (`session.resume`): the same payload as the
     /// one-shot `clarify.request`, plus the answers locked before the client
     /// detached, keyed by `qid`. Locked answers are accepted in either wire
-    /// form — the array string the app sends, or a real JSON array echo.
+    /// form — the array string the app sends, or a real JSON array echo. A
+    /// qid locked with null or an empty answer was left blank (skipped).
     static func pendingClarifyActivity(from payload: [String: AnyCodable]) -> ClarifyActivity? {
         guard var activity = clarifyActivity(from: payload) else { return nil }
         let answers = payload["answers"]?.objectValue ?? [:]
         guard !answers.isEmpty else { return activity }
         for index in activity.questions.indices {
-            guard let raw = answers[activity.questions[index].id], raw != .null else { continue }
+            guard let raw = answers[activity.questions[index].id] else { continue }
             let answer: String?
-            if let text = raw.stringValue {
+            if raw == .null {
+                answer = ""
+            } else if let text = raw.stringValue {
                 answer = text
             } else if let values = raw.arrayValue?.compactMap(\.stringValue) {
                 answer = ClarifyQuestion.multiSelectAnswer(values)
             } else {
                 answer = nil
             }
-            guard let answer, !answer.isEmpty else { continue }
+            guard let answer else { continue }
             activity.questions[index].status = .answered
             activity.questions[index].answer = answer
         }

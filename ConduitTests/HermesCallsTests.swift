@@ -806,6 +806,15 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(HermesCallCopy.callerName(profile: "Default", mainName: " ", title: nil), "Hermes")
         XCTAssertEqual(HermesCallCopy.callerName(profile: "default", mainName: nil, title: nil), "Hermes")
         XCTAssertEqual(HermesCallCopy.callerName(profile: "  ", mainName: "Ada", title: nil), "Hermes", "No profile: nothing names the caller")
+        // The bot's name in Hermes, as the Bots list shows it, when the push carries one.
+        XCTAssertEqual(HermesCallCopy.callerName(profile: "research", mainName: "Ada", profileName: " Atlas  Prime ", title: "Deploy"), "Atlas Prime · Deploy")
+        XCTAssertEqual(HermesCallCopy.callerName(profile: "default", mainName: "Ada", profileName: "Nova", title: nil), "Ada", "A name set in Conduit still wins for the main profile")
+        XCTAssertEqual(HermesCallCopy.callerName(profile: "default", mainName: "Hermes", profileName: "Nova", title: nil), "Nova", "A main profile never named in Conduit goes by its bot's name")
+        XCTAssertEqual(HermesCallCopy.callerName(profile: "default", mainName: nil, profileName: "Nova", title: nil), "Nova")
+        XCTAssertEqual(HermesCallCopy.callerName(profile: "research", mainName: nil, profileName: " ", title: nil), "Research")
+        XCTAssertEqual(HermesCallCopy.callerName(profile: "research", mainName: nil, profileName: "research", title: nil), "Research", "A name that is only the id reads as the id does")
+        XCTAssertEqual(HermesCallCopy.callerName(profile: "default", mainName: nil, profileName: "Default", title: nil), "Hermes")
+        XCTAssertEqual(HermesCallCopy.callerName(profile: "  ", mainName: nil, profileName: "Nova", title: nil), "Hermes", "No profile: nothing names the caller")
 
         // The Watch reads the caller from a push in the clear.
         let dashboard = UUID()
@@ -813,6 +822,8 @@ extension VoiceConversationControllerTests {
         let caller = HermesRingPush.caller(clear)
         XCTAssertEqual(caller.profile, "default")
         XCTAssertEqual(caller.dashboardID, dashboard)
+        XCTAssertNil(HermesRingPush.profileName(clear))
+        XCTAssertEqual(HermesRingPush.profileName(["body": ["conduit": ["profile": "default", "profile_name": "Nova"]]]), "Nova")
         XCTAssertEqual(HermesCallerName.mainName(dashboardID: caller.dashboardID, in: [dashboard.uuidString: "Ada"]), "Ada")
         XCTAssertNil(HermesCallerName.mainName(dashboardID: UUID(), in: [dashboard.uuidString: "Ada"]))
         XCTAssertEqual(HermesCallerName.mainName(dashboardID: nil, in: [dashboard.uuidString: "Ada"], activeDashboardID: dashboard.uuidString.lowercased()), "Ada", "A push naming no dashboard: the iPhone's active one, as on the iPhone")
@@ -835,6 +846,21 @@ extension VoiceConversationControllerTests {
         let older = try JSONEncoder().encode(WatchPhoneContext(voices: [:], callsRing: true))
         XCTAssertNil(WatchPhoneContext.decode([WatchPhoneContext.key: older])?.mainProfileNames, "An older iPhone app names no one")
         XCTAssertNil(WatchPhoneContext.decode([WatchPhoneContext.key: older])?.accent, "An older iPhone app picks no accent: the Watch draws gold")
+    }
+
+    func testTheWatchShowsTheActiveDashboardsPadlockOrShield() throws {
+        XCTAssertNil(AppState.watchNotificationsEncryption(nil), "Not encrypted: the Watch shows nothing")
+        XCTAssertEqual(AppState.watchNotificationsEncryption(false), "encrypted")
+        XCTAssertEqual(AppState.watchNotificationsEncryption(true), "quantumSafe")
+
+        let shield = WatchPhoneContext(callsRing: true, notificationsEncryption: AppState.watchNotificationsEncryption(true))
+        let decoded = try XCTUnwrap(WatchPhoneContext.decode(shield.encoded()))
+        XCTAssertEqual(decoded, shield)
+        XCTAssertEqual(decoded.encryption, .quantumSafe)
+        XCTAssertEqual(WatchPhoneContext(notificationsEncryption: "encrypted").encryption, .encrypted)
+        let older = try JSONEncoder().encode(WatchPhoneContext(voices: [:], callsRing: true))
+        XCTAssertNil(WatchPhoneContext.decode([WatchPhoneContext.key: older])?.encryption, "An older iPhone app claims no padlock")
+        XCTAssertNil(WatchPhoneContext(notificationsEncryption: "someday").encryption, "A word from a newer iPhone app the Watch doesn't know claims nothing")
     }
 
     func testAVoIPPushSaysWhenItWasSentAndTheRelayLearnsTheToken() throws {
@@ -1084,9 +1110,7 @@ extension VoiceConversationControllerTests {
     }
 
     private func outcomeDefaults() throws -> UserDefaults {
-        let suite = "HermesCallsTests.outcomes.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeScratchDefaults("HermesCallsTests.outcomes")
         return defaults
     }
 
@@ -1538,6 +1562,151 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(WatchVoiceWire.decode([WatchVoiceWire.messageKey: older]), .callsToken(token: "abcd", key: nil))
     }
 
+    // MARK: A Watch answer kept on the iPhone's headset (#1204)
+
+    func testAWatchAnswerStaysOnThePhoneOnlyWithAHeadsetThereAndAWatchThatControlsIt() {
+        XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.bluetoothHFP]), "AirPods on the phone")
+        XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.bluetoothA2DP]))
+        XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.bluetoothLE]))
+        XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.headphones]), "Wired too")
+        XCTAssertTrue(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.usbAudio]), "USB-C too")
+        XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.builtInReceiver]), "No headset: the Watch has it")
+        XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.builtInSpeaker]))
+        XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: []))
+        XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: true, outputs: [.carAudio, .bluetoothHFP]), "Never the car's")
+        XCTAssertFalse(HermesNativeCalls.keepsWatchAnswer(watchControls: false, outputs: [.bluetoothHFP]), "An older Watch couldn't end it")
+    }
+
+    func testTheWatchSaysItControlsACallOnThePhoneAndHearsTheCallStayedThere() {
+        let token = WatchVoiceWire.Message.callsToken(token: "abcd", key: "a2V5", engine: "geminiLive", phoneHeadset: true)
+        XCTAssertEqual(WatchVoiceWire.decode(WatchVoiceWire.encode(token)), token)
+        let older = Data(#"{"callsToken":{"token":"abcd","key":"a2V5","engine":"geminiLive"}}"#.utf8)
+        XCTAssertEqual(WatchVoiceWire.decode([WatchVoiceWire.messageKey: older]), .callsToken(token: "abcd", key: "a2V5", engine: "geminiLive", phoneHeadset: nil))
+        let kept = WatchVoiceWire.Message.callOnPhone(callID: 41)
+        XCTAssertEqual(WatchVoiceWire.decode(WatchVoiceWire.encode(kept)), kept)
+
+        XCTAssertEqual(WatchVoiceWire.Message.directStart(callID: 7, version: 2, ring: Self.ringID).watchCallID, 7)
+        XCTAssertEqual(WatchVoiceWire.Message.bridgeStart(callID: 8, version: 2, engine: "gpt", ring: Self.ringID).watchCallRing, Self.ringID)
+        XCTAssertEqual(WatchVoiceWire.Message.localLiveStart(callID: 9, version: 2).watchCallID, 9)
+        XCTAssertNil(WatchVoiceWire.Message.grokStart(callID: 9, version: 2).watchCallRing, "A call of its own answers no ring")
+        XCTAssertNil(kept.watchCallID, "Only a start names a call")
+    }
+
+    func testTheWatchAndThePhoneShareTheKeptCallsMuteAndEndThroughTheRing() throws {
+        let ring = try answeredRing().ring
+        XCTAssertEqual(HermesRingControl.url(ring).absoluteString, "https://push.example/v1/rings/\(Self.ringID)/control")
+
+        let mute = HermesRingControl.setRequest(ring, by: .watch, muted: true)
+        XCTAssertEqual(mute.httpMethod, "POST")
+        let muteBody = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(mute.httpBody)) as? [String: Any])
+        XCTAssertEqual(muteBody["token"] as? String, Self.ringToken)
+        XCTAssertEqual(muteBody["by"] as? String, "watch")
+        XCTAssertEqual(muteBody["muted"] as? Bool, true)
+        XCTAssertEqual(muteBody["adopt"] as? Bool, true, "A ring a relay restart dropped comes back")
+        XCTAssertNil(muteBody["ended"])
+        let end = HermesRingControl.setRequest(ring, by: .phone, ended: true)
+        let endBody = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(end.httpBody)) as? [String: Any])
+        XCTAssertEqual(endBody["ended"] as? Bool, true)
+        XCTAssertNil(endBody["muted"], "An end leaves the mute alone")
+
+        let read = HermesRingControl.readRequest(ring, after: 3, wait: 45)
+        XCTAssertEqual(read.url?.absoluteString, "https://push.example/v1/rings/\(Self.ringID)/control?after=3&wait=20", "The relay waits 20 s at most")
+        XCTAssertEqual(read.value(forHTTPHeaderField: "Authorization"), "Bearer \(Self.ringToken)")
+
+        let state = Data(#"{"seq":4,"muted":true,"ended":false,"by":"watch"}"#.utf8)
+        XCTAssertEqual(HermesRingControl.readResult(status: 200, data: state), .state(.init(seq: 4, muted: true, ended: false)))
+        XCTAssertEqual(HermesRingControl.readResult(status: 204, data: Data()), .notYet)
+        XCTAssertEqual(HermesRingControl.readResult(status: 404, data: Data()), .gone, "A relay older than 0.17, or a forgotten ring")
+        XCTAssertEqual(HermesRingControl.readResult(status: 200, data: Data("{}".utf8)), .retry, "Unreadable, not lost")
+        XCTAssertEqual(HermesRingControl.readResult(status: 503, data: Data()), .retry)
+    }
+
+    func testAKeptCallFollowsTheOtherDevicesChangesUntilItEnds() async throws {
+        let ring = try answeredRing().ring
+        var answers: [(Data, Int)] = [
+            (Data(), 204),
+            (Data(#"{"seq":2,"muted":true,"ended":false}"#.utf8), 200),
+            (Data(#"{"seq":2,"muted":true,"ended":false}"#.utf8), 200),
+            (Data(#"{"seq":3,"muted":true,"ended":true}"#.utf8), 200),
+            (Data(), 204),
+        ]
+        var asked: [String] = []
+        var seen: [HermesRingControl.State] = []
+        await HermesRingControl.follow(ring, after: 1, retryDelay: 0, send: { request in
+            asked.append(request.url?.query ?? "")
+            return answers.removeFirst()
+        }, rewrite: { true }, changed: { seen.append($0) })
+        XCTAssertEqual(seen, [.init(seq: 2, muted: true, ended: false), .init(seq: 3, muted: true, ended: true)], "Each change once, until the end")
+        XCTAssertEqual(asked, ["after=1&wait=20", "after=1&wait=20", "after=2&wait=20", "after=2&wait=20"])
+
+        // The relay restarted: written again, then read from the start.
+        answers = [
+            (Data(), 404),
+            (Data(#"{"seq":1,"muted":false,"ended":false}"#.utf8), 200),
+            (Data(), 404),
+            (Data(), 404),
+        ]
+        asked = []
+        seen = []
+        var rewrites = 0
+        await HermesRingControl.follow(ring, after: 7, send: { request in
+            asked.append(request.url?.query ?? "")
+            return answers.removeFirst()
+        }, rewrite: {
+            rewrites += 1
+            return true
+        }, changed: { seen.append($0) })
+        XCTAssertEqual(seen, [.init(seq: 1, muted: false, ended: false)])
+        XCTAssertEqual(asked, ["after=7&wait=20", "after=0&wait=20", "after=1&wait=20", "after=0&wait=20"], "Gone twice with nothing between: it stops")
+        XCTAssertEqual(rewrites, 2)
+
+        answers = [(Data(), 404)]
+        seen = []
+        await HermesRingControl.follow(ring, after: 0, send: { _ in answers.removeFirst() }, rewrite: { false }, changed: { seen.append($0) })
+        XCTAssertEqual(seen, [], "A ring that can't be written again stops the reads")
+
+        let posted = await HermesRingControl.set(ring, by: .phone, muted: false) { _ in (Data(#"{"seq":1,"muted":false,"ended":false}"#.utf8), 200) }
+        XCTAssertEqual(posted, .init(seq: 1, muted: false, ended: false))
+        var tries = 0
+        let refused = await HermesRingControl.set(ring, by: .phone, muted: false, attempts: 3, retryDelay: 0) { _ in
+            tries += 1
+            return (Data(), 404)
+        }
+        XCTAssertNil(refused, "An older relay: the Watch keeps the call")
+        XCTAssertEqual(tries, 1, "A refusal isn't tried again")
+        tries = 0
+        let retried = await HermesRingControl.set(ring, by: .watch, ended: true, attempts: 3, retryDelay: 0) { _ in
+            tries += 1
+            if tries < 3 { throw URLError(.cannotConnectToHost) }
+            return (Data(#"{"seq":2,"muted":false,"ended":true}"#.utf8), 200)
+        }
+        XCTAssertEqual(retried, .init(seq: 2, muted: false, ended: true), "A restarting relay is tried again")
+        XCTAssertEqual(tries, 3)
+
+        let stands = await HermesRingControl.current(ring) { request in
+            XCTAssertEqual(request.url?.query, "after=0&wait=0")
+            return (Data(#"{"seq":1,"muted":true,"ended":false}"#.utf8), 200)
+        }
+        XCTAssertEqual(stands, .state(.init(seq: 1, muted: true, ended: false)), "A mute the Watch sent first stands")
+        let unwritten = await HermesRingControl.current(ring) { _ in (Data(), 204) }
+        XCTAssertEqual(unwritten, .state(.init(seq: 0, muted: false, ended: false)))
+        let lost = await HermesRingControl.current(ring) { _ in (Data(), 404) }
+        XCTAssertEqual(lost, .gone, "A ring the relay lost, or an older relay: written instead")
+        var reads = 0
+        let unreachable = await HermesRingControl.current(ring, retryDelay: 0) { _ in
+            reads += 1
+            if reads < 3 { throw URLError(.timedOut) }
+            return (Data(#"{"seq":4,"muted":true,"ended":false}"#.utf8), 200)
+        }
+        XCTAssertEqual(unreachable, .state(.init(seq: 4, muted: true, ended: false)), "A read that didn't get through is tried again before anything is written")
+        let down = await HermesRingControl.current(ring, retryDelay: 0) { _ in throw URLError(.timedOut) }
+        XCTAssertEqual(down, .retry, "Never read: nothing is written over it")
+
+        var bodies = [Data("garbled".utf8), Data(#"{"seq":3,"muted":true,"ended":false}"#.utf8)]
+        let reread = await HermesRingControl.set(ring, by: .phone, muted: true, attempts: 2, retryDelay: 0) { _ in (bodies.removeFirst(), 200) }
+        XCTAssertEqual(reread, .init(seq: 3, muted: true, ended: false), "A 200 it can't read is tried again")
+    }
+
     // MARK: Ringing the Watch only while its voice can start
 
     func testTheWatchRingsOnlyWhileTheVoiceItAnswersWithCanStart() {
@@ -1607,22 +1776,23 @@ extension VoiceConversationControllerTests {
         // isn't set up, whatever an earlier check found.
         let older = NotifierPluginStatus.State.reported(version: "0.8.0", capabilities: ["gemini-live", "gpt-live", "grok-live", "memory"])
         let shared = AppState.watchContextVoices(voices, scope: "d|default", plugin: older)
-        XCTAssertEqual(shared, ["geminiLive": true, "gptLive": false, "grokLive": false, "localLive": false])
+        XCTAssertEqual(shared, ["geminiLive": true, "qwenLive": false, "gptLive": false, "grokLive": false, "localLive": false])
         let context = WatchPhoneContext(voices: shared, callsRing: false)
         XCTAssertFalse(context.notSetUp(.geminiLive), "Its route is there: the voice may start")
+        XCTAssertTrue(context.notSetUp(.qwenLive), "Older plugins have no Qwen credential route")
         XCTAssertTrue(context.notSetUp(.gptLive))
         XCTAssertTrue(context.notSetUp(.grokLive), "No audio bridge: a stale ready check doesn't count")
         XCTAssertEqual(
             AppState.watchContextVoices(WatchCallVoices(), scope: "d|default", plugin: older),
-            ["gptLive": false, "grokLive": false, "localLive": false],
+            ["qwenLive": false, "gptLive": false, "grokLive": false, "localLive": false],
             "Gemini not checked, but served: nothing to say"
         )
 
         // 0.9-0.12 serves every Watch voice of its time without
         // hermes-calls: only the checks are missing, so nothing else is
-        // marked. Local Live on the Watch came with 0.48.
+        // marked. Local Live on the Watch came with 0.48; Qwen with 0.70.
         let bridged = NotifierPluginStatus.State.reported(version: "0.10.0", capabilities: ["gemini-live", "gpt-live", "grok-live", "watch-audio"])
-        XCTAssertEqual(AppState.watchContextVoices(WatchCallVoices(), scope: "d|default", plugin: bridged), ["localLive": false])
+        XCTAssertEqual(AppState.watchContextVoices(WatchCallVoices(), scope: "d|default", plugin: bridged), ["qwenLive": false, "localLive": false])
     }
 
     func testLocalLiveOnTheWatchNeedsTheBridgesLocalLiveEngine() {
@@ -1631,9 +1801,37 @@ extension VoiceConversationControllerTests {
         voices.note(.localLive, ready: true, scope: "d|default")
         // Local Live on the phone (0.42), before the Watch could use it.
         let phoneOnly = NotifierPluginStatus.State.reported(version: "0.47.0", capabilities: ["gemini-live", "gpt-live", "grok-live", "local-live", "watch-audio", "hermes-calls"])
-        XCTAssertEqual(AppState.watchContextVoices(voices, scope: "d|default", plugin: phoneOnly), ["localLive": false])
+        XCTAssertEqual(AppState.watchContextVoices(voices, scope: "d|default", plugin: phoneOnly), ["qwenLive": false, "localLive": false])
         let current = NotifierPluginStatus.State.reported(version: "0.48.0", capabilities: ["gemini-live", "gpt-live", "grok-live", "local-live", "watch-audio", "watch-local-live", "hermes-calls"])
-        XCTAssertEqual(AppState.watchContextVoices(voices, scope: "d|default", plugin: current), ["localLive": true])
+        XCTAssertEqual(AppState.watchContextVoices(voices, scope: "d|default", plugin: current), ["qwenLive": false, "localLive": true])
+    }
+
+    func testWatchQwenAvailabilityIsIndependentOfGeminiAndTheAudioBridge() {
+        XCTAssertEqual(AppState.watchVoiceCapabilities(.qwenLive), ["qwen-live"])
+        var voices = WatchCallVoices()
+        voices.note(.geminiLive, ready: true, scope: "d|default")
+        voices.note(.qwenLive, ready: true, scope: "d|default")
+        let qwenOnly = NotifierPluginStatus.State.reported(version: "0.70.0", capabilities: ["qwen-live", "hermes-calls"])
+        let qwenContext = AppState.watchContextVoices(voices, scope: "d|default", plugin: qwenOnly)
+        XCTAssertEqual(qwenContext["qwenLive"], true, "Direct Qwen needs neither Gemini nor watch-audio")
+        XCTAssertEqual(qwenContext["geminiLive"], false, "A stale Gemini ready check cannot replace a missing route")
+        XCTAssertTrue(WatchPhoneContext(voices: qwenContext, callsRing: true).notSetUp(.geminiLive))
+        XCTAssertFalse(WatchPhoneContext(voices: qwenContext, callsRing: true).notSetUp(.qwenLive))
+
+        let geminiOnly = NotifierPluginStatus.State.reported(version: "0.69.0", capabilities: ["gemini-live", "hermes-calls"])
+        let geminiContext = AppState.watchContextVoices(voices, scope: "d|default", plugin: geminiOnly)
+        XCTAssertEqual(geminiContext["geminiLive"], true)
+        XCTAssertEqual(geminiContext["qwenLive"], false, "A stale Qwen check cannot override a missing Qwen route")
+
+        let both = NotifierPluginStatus.State.reported(version: "0.70.0", capabilities: ["gemini-live", "qwen-live", "hermes-calls"])
+        let bothContext = AppState.watchContextVoices(voices, scope: "d|default", plugin: both)
+        XCTAssertEqual(bothContext["geminiLive"], true)
+        XCTAssertEqual(bothContext["qwenLive"], true)
+        voices.note(.qwenLive, ready: false, scope: "d|default")
+        let unavailable = AppState.watchContextVoices(voices, scope: "d|default", plugin: both)
+        XCTAssertEqual(unavailable["qwenLive"], false)
+        XCTAssertEqual(unavailable["geminiLive"], true, "A failed Qwen check leaves Gemini available")
+        XCTAssertNil(AppState.watchContextVoices(voices, scope: "d|work", plugin: both)["qwenLive"], "Another profile must perform its own check")
     }
 
     func testCallsFromHermesRingAWatchOnLocalLiveWhenItsReady() {

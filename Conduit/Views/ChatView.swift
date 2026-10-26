@@ -139,12 +139,7 @@ struct ChatView: View {
         let preferences = appState.displayPreferences
         let isBusy = appState.isBusy
         let draws: (ChatMessageScrollTarget) -> Bool = { target in
-            target.step?.drawsRow(
-                messageID: target.id,
-                preferences: preferences,
-                isBusy: isBusy,
-                disclosure: rowDisclosure
-            ) ?? true
+            target.drawsRow(preferences: preferences, isBusy: isBusy, disclosure: rowDisclosure)
         }
         guard targets.contains(where: { !draws($0) }) else { return targets }
         return targets.filter(draws)
@@ -285,6 +280,8 @@ struct ChatView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             planDock
+            // Predictive guesses (off unless turned on in Settings > Chat).
+            PredictiveRow(store: appState.predictive, appState: appState)
             // Composer + control bar. Equatable: it redraws for what it
             // shows, not for every redraw of this view.
             ComposerBar(appState: appState).equatable()
@@ -380,6 +377,9 @@ struct ChatView: View {
         .environment(\.selectableTextDrawsUntilTouched, true)
         // Gateway videos, audio and documents open from a download (#569).
         .environment(\.gatewayMediaFiles, appState.gatewayMediaResolver)
+        // Pictures' sizes from earlier launches, read once off the main
+        // thread, so rows above take their final height (#1238).
+        .task { await TranscriptPictureMemory.loadKeptSizes() }
         .background(Color.clear)
         .overlay(alignment: .top) {
             if appState.isOpeningNotificationSession {
@@ -415,7 +415,7 @@ struct ChatView: View {
         // The rows show AppState through this, not by observing it.
         .chatRows()
         .sheet(isPresented: $showsPinnedReplies) {
-            PinnedRepliesSheet()
+            PinnedRepliesSheet(fromOpenChat: true)
                 .environmentObject(appState)
         }
         .pinnedReplyLabelEditor($labelingPin) { pin, label in
@@ -452,7 +452,8 @@ struct ChatView: View {
                     MessageBubble(
                         message: target.message,
                         gatewayResolver: appState.gatewayMediaResolver,
-                        step: target.step
+                        step: target.step,
+                        stepsAbove: target.stepsAbove
                     )
                         .equatable()
                         .id(target.id)
@@ -582,6 +583,8 @@ struct ChatView: View {
                     isInitialSync: true
                 )
                 scrollEngine.trackMessageVisibility(of: appState.pendingClarifyMessageID)
+                // An unread open that finished before this view was up.
+                takeReplyStartLanding()
                 appState.installChatViewportSnapshotProvider(
                     id: viewportSnapshotProviderID,
                     capture: { [weak engine = scrollEngine] in
@@ -779,7 +782,10 @@ struct ChatView: View {
         content
             .onChange(of: appState.chatScrollRequest) { _, _ in
                 ChatViewportTrace.shared.log("event explicitLatest (send pulse)")
-                requestLatest(animated: false)
+                requestLatest(animated: false, armsReplyHold: true)
+            }
+            .onChange(of: appState.chatReplyStartLandingRequest) { _, _ in
+                takeReplyStartLanding()
             }
             .onChange(of: appState.chatScrollToTopRequest) { _, request in
                 ChatViewportTrace.shared.log("event explicitTop request=\(request)")
@@ -830,10 +836,16 @@ struct ChatView: View {
             }
     }
 
+    private func takeReplyStartLanding() {
+        guard appState.takeChatReplyStartLanding() else { return }
+        ChatViewportTrace.shared.log("event replyStartLanding (unread chat opened)")
+        scrollEngine.replyStartLandingRequested()
+    }
+
     /// Send and the jump-to-latest button. An animated jump gets one final
     /// pin once the animation has had time to land.
-    private func requestLatest(animated: Bool) {
-        scrollEngine.explicitLatestRequested(animated: animated)
+    private func requestLatest(animated: Bool, armsReplyHold: Bool = false) {
+        scrollEngine.explicitLatestRequested(animated: animated, armsReplyHold: armsReplyHold)
         latestAnimationTask?.cancel()
         guard animated else { return }
         latestAnimationTask = Task { @MainActor in
@@ -873,6 +885,7 @@ struct ChatView: View {
         }
         router.proxy = proxy
         router.rebuildTranscript = { transcriptScrollID &+= 1 }
+        scrollEngine.holdsRepliesAtStart = { ChatReplyStartPreference.isOn }
         scrollEngine.liveTailShowing = { [weak appState = appState] in
             guard let appState else { return false }
             let live = appState.liveTurn
@@ -1117,9 +1130,13 @@ struct MessageBubble: View, Equatable {
     /// A thinking or tool row's place in its turn's run of steps, which
     /// draws as one card. Nil outside the chat transcript.
     var step: ChatStepPlacement? = nil
+    /// On a reply, the run of steps above it when it has thinking (the
+    /// reply's Show thinking). Nil outside the chat transcript.
+    var stepsAbove: ChatStepGroup? = nil
 
     nonisolated static func == (lhs: MessageBubble, rhs: MessageBubble) -> Bool {
         lhs.message == rhs.message && lhs.gatewayResolver === rhs.gatewayResolver && lhs.step == rhs.step
+            && lhs.stepsAbove == rhs.stepsAbove
     }
     @Environment(\.chatRowState) private var rowState
     @Environment(\.chatRowActions) private var rowActions
@@ -1137,7 +1154,12 @@ struct MessageBubble: View, Equatable {
                 // A teammate bot's delivery is an event in the chat, not
                 // something the user said (Desktop's agent message note).
                 VStack(spacing: 4) {
-                    TeammateMessageNote(inbound: inbound, roster: appState.botRoster, appState: appState)
+                    TeammateMessageNote(
+                        inbound: inbound,
+                        roster: appState.botRoster,
+                        appState: appState,
+                        disclosureID: message.id
+                    )
                     // The agent can react to it like any user turn.
                     if !message.reactions.isEmpty {
                         MessageReactionChips(
@@ -1166,7 +1188,8 @@ struct MessageBubble: View, Equatable {
                 // The bot answering a teammate, not the user: folded, as on
                 // Desktop ("Replied to Atlas", the reply a tap away).
                 TeammateReplyNote(
-                    name: BotTeammateMessages.displayName(for: sender, in: appState.botRoster)
+                    name: BotTeammateMessages.displayName(for: sender, in: appState.botRoster),
+                    disclosureID: message.id
                 ) {
                     AssistantBubble(
                         message: message,
@@ -1174,11 +1197,23 @@ struct MessageBubble: View, Equatable {
                         gatewayResolver: gatewayResolver
                     )
                 }
+            } else if let why = rowState.followUpReasons[message.id] {
+                // A reply Hermes wrote on its own (Predictive follow-ups).
+                VStack(alignment: .leading, spacing: 4) {
+                    PredictiveFollowUpTag(why: why)
+                    AssistantBubble(
+                        message: message,
+                        readAloudController: appState.messageReadAloudController,
+                        gatewayResolver: gatewayResolver,
+                        stepsAbove: stepsAbove
+                    )
+                }
             } else {
                 AssistantBubble(
                     message: message,
                     readAloudController: appState.messageReadAloudController,
-                    gatewayResolver: gatewayResolver
+                    gatewayResolver: gatewayResolver,
+                    stepsAbove: stepsAbove
                 )
             }
         case .reasoning:
@@ -1306,13 +1341,19 @@ struct TeammateMessageNote: View {
     @State private var name: String
     /// Loads the face; held, not observed, like the rows' AppState.
     let appState: AppState
-    @State private var expanded = false
+    /// The row's key in `disclosure`, so a rebuilt row stays open.
+    let disclosureID: String
+    @Environment(\.chatRowDisclosure) private var disclosure
+    /// Nil until tapped here: a rebuilt row takes what the reader chose
+    /// from `disclosure`.
+    @State private var tapped: Bool?
     @State private var image: UIImage?
     @ScaledMetric(relativeTo: .footnote) private var faceSize: CGFloat = 18
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(inbound: BotTeammateMessages.Inbound, roster: [BotProfile], appState: AppState) {
+    init(inbound: BotTeammateMessages.Inbound, roster: [BotProfile], appState: AppState, disclosureID: String) {
         self.inbound = inbound
+        self.disclosureID = disclosureID
         let bot = Self.resolve(inbound, in: roster)
         _bot = State(initialValue: bot)
         _name = State(initialValue: bot?.displayLabel ?? inbound.sender)
@@ -1320,11 +1361,20 @@ struct TeammateMessageNote: View {
         _image = State(initialValue: bot.flatMap { appState.botAvatarImage(for: $0) })
     }
 
+    private var expanded: Bool {
+        tapped ?? disclosure?.isExpanded(disclosureID, default: false) ?? false
+    }
+
     var body: some View {
         VStack(spacing: 6) {
             Button {
                 Haptics.selection()
-                withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { expanded.toggle() }
+                let opens = !expanded
+                // Tells the scroll engine first, as every row that opens
+                // does: following the running turn would pin the growing
+                // row's bottom instead of keeping it where it was tapped.
+                disclosure?.willToggle(disclosureID, to: opens)
+                withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { tapped = opens }
             } label: {
                 HStack(spacing: 6) {
                     BotAvatarView(
@@ -1402,15 +1452,25 @@ struct TeammateMessageNote: View {
 /// (Desktop's inter-agent reply notice). Tap shows the reply as usual.
 struct TeammateReplyNote<Reply: View>: View {
     let name: String
+    /// The row's key in `disclosure`, so a rebuilt row stays open.
+    let disclosureID: String
     @ViewBuilder let reply: () -> Reply
-    @State private var expanded = false
+    @Environment(\.chatRowDisclosure) private var disclosure
+    /// Nil until tapped here (see TeammateMessageNote).
+    @State private var tapped: Bool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var expanded: Bool {
+        tapped ?? disclosure?.isExpanded(disclosureID, default: false) ?? false
+    }
 
     var body: some View {
         VStack(spacing: 6) {
             Button {
                 Haptics.selection()
-                withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { expanded.toggle() }
+                let opens = !expanded
+                disclosure?.willToggle(disclosureID, to: opens)
+                withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { tapped = opens }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrowshape.turn.up.right")
@@ -1713,28 +1773,36 @@ private struct UserImageAttachmentPreview: View {
     @State private var gatewayImageKey: String?
     @State private var opening = false
     @State private var openTask: Task<Void, Never>?
-    @State private var gatewayLoadFailed = false
+    /// The cache key a load from Hermes failed for.
+    @State private var gatewayFailedKey: String?
     @State private var localPreview: UIImage?
     @State private var localPreviewPath: String?
     @State private var localPreviewFailedPath: String?
-
-    /// Body re-evaluates at streaming frame rate, and re-reading + fully
-    /// decoding the file each time hitches scrolling. Previews are downsampled
-    /// to the display size and shared across rows; NSCache evicts them under
-    /// memory pressure. Cost-bounded so a handful of large photos can't
-    /// exhaust it before then.
-    private static let localImageCache: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 64
-        cache.totalCostLimit = 64 * 1024 * 1024
-        return cache
-    }()
+    /// The chat's scroll engine, which says when a picture that will grow
+    /// its row shows (#1238).
+    @Environment(\.chatRowDisclosure) private var disclosure
+    /// The row's frame, and the picture waiting to show in it.
+    @StateObject private var arrival = ChatRowArrival()
 
     /// Cache-only lookup (no decode) so a hit renders on the first frame.
     /// Misses are filled asynchronously — see the `.task` in `body`.
     private var cachedLocalImage: UIImage? {
         guard let key = memoryCacheKey else { return nil }
-        return Self.localImageCache.object(forKey: key as NSString)
+        return TranscriptPictureMemory.previews.object(forKey: key as NSString)
+    }
+
+    /// A cache hit as the row shows it: on its first frame, or where the
+    /// row has its height already. A row laid out with its loading line
+    /// (another row of the same picture decoded it since) takes it
+    /// through the task, which asks the scroll engine (#1238).
+    private var shownCachedImage: UIImage? {
+        guard let cached = cachedLocalImage, arrival.holds(previewHeight(for: cached.size)) else { return nil }
+        return cached
+    }
+
+    /// Which picture the row loads.
+    private var loadIdentity: String {
+        "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.imageCacheKey(for: attachment) ?? "")"
     }
 
     /// The photo's own path when it is on this device, else where a picture
@@ -1753,18 +1821,14 @@ private struct UserImageAttachmentPreview: View {
         return localPreview
     }
 
+    /// True only for a failed load of the *current* picture from Hermes.
+    private var gatewayLoadFailed: Bool {
+        gatewayFailedKey != nil && gatewayFailedKey == gatewayResolver?.imageCacheKey(for: attachment)
+    }
+
     /// True only for a decode failure of the *current* path.
     private var localPreviewFailed: Bool {
         localPreviewFailedPath == localFileURL?.path
-    }
-
-    /// Estimated decoded byte cost for NSCache. `bytesPerRow * height` accounts
-    /// for the row-alignment padding that a naive `width * height * 4` misses.
-    private static func bitmapCost(of image: UIImage) -> Int {
-        if let cg = image.cgImage {
-            return cg.bytesPerRow * cg.height
-        }
-        return Int(image.size.width * image.scale * image.size.height * image.scale) * 4
     }
 
     /// Decodes `url` as a thumbnail sized for the 224pt attachment preview
@@ -1800,15 +1864,15 @@ private struct UserImageAttachmentPreview: View {
 
     var body: some View {
         Group {
-            if let image = cachedLocalImage ?? currentLocalPreview ?? currentGatewayImage {
+            if let image = shownCachedImage ?? currentLocalPreview ?? currentGatewayImage {
                 imagePreview(image)
             } else if loadsFromHermes && localFileURL == nil && !gatewayLoadFailed {
-                loadingPlaceholder
+                placeholder
                     .modifier(ImageDescriptionMenu(description: attachment.imageDescription))
                     .modifier(OptionalAccessibilityHint(hint: attachment.imageDescription))
             } else if localFileURL != nil && !localPreviewFailed {
                 // Local file decoding off-main on a cache miss.
-                loadingPlaceholder
+                placeholder
                     .modifier(ImageDescriptionMenu(description: attachment.imageDescription))
                     .modifier(OptionalAccessibilityHint(hint: attachment.imageDescription))
             } else {
@@ -1825,23 +1889,52 @@ private struct UserImageAttachmentPreview: View {
                 .modifier(OptionalAccessibilityHint(hint: attachment.imageDescription))
             }
         }
-        .task(id: "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.imageCacheKey(for: attachment) ?? "")") {
-            // Local file: cache hits are already shown by `body` on the first
-            // frame via `cachedLocalImage`, so only misses reach here. Decode
-            // off the MainActor so a large photo can't hitch scrolling.
+        .chatRowFrame(arrival)
+        // A picture still waiting to show is dropped with the row; the task
+        // loads it again when the row is back.
+        .onDisappear { arrival.rowDisappeared() }
+        // Handed another picture: whatever still waits was the last one's.
+        .onChange(of: loadIdentity) { arrival.rowDisappeared() }
+        .task(id: loadIdentity) {
+            // Local file: cache hits show in `body` on the first frame via
+            // `shownCachedImage`, and one decoded since by another row of
+            // it arrives here. Misses decode off the MainActor so a large
+            // photo can't hitch scrolling.
             if let url = localFileURL {
-                guard currentLocalPreview == nil, cachedLocalImage == nil else { return }
+                guard currentLocalPreview == nil, shownCachedImage == nil else { return }
+                if let cached = cachedLocalImage {
+                    let path = url.path
+                    arrival.arrive(rowHeight: previewHeight(for: cached.size), engine: disclosure?.engine) {
+                        localPreview = cached
+                        localPreviewPath = path
+                    }
+                    return
+                }
+                let generation = TranscriptImageCache.generation
                 let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
                     Self.downsampledPreview(url: url)
                 }.value
                 guard !Task.isCancelled else { return }
                 guard let image else {
-                    localPreviewFailedPath = url.path
+                    let path = url.path
+                    // Its label shows already when the task restarts as
+                    // the row comes back.
+                    if localPreviewFailedPath != path {
+                        placeFailure { localPreviewFailedPath = path }
+                    }
                     return
                 }
-                Self.localImageCache.setObject(image, forKey: url.path as NSString, cost: Self.bitmapCost(of: image))
-                localPreview = image
-                localPreviewPath = url.path
+                // Shows once the reader's scrolling allows, kept and its
+                // size remembered then: either would resize the loading
+                // line on its own first.
+                arrival.arrive(rowHeight: previewHeight(for: image.size), engine: disclosure?.engine) {
+                    if generation == TranscriptImageCache.generation {
+                        TranscriptPictureMemory.previews.setObject(image, forKey: url.path as NSString, cost: TranscriptPictureMemory.bitmapCost(of: image))
+                        TranscriptPictureMemory.rememberSize(image.size, for: url.path)
+                    }
+                    localPreview = image
+                    localPreviewPath = url.path
+                }
                 // A picture from Hermes. The local-file branch returns above,
                 // so a local URI never reaches here — which also removes the
                 // old `localImage == nil` check that decoded local files on
@@ -1849,17 +1942,20 @@ private struct UserImageAttachmentPreview: View {
             } else if loadsFromHermes, let gatewayResolver,
                       let cacheKey = gatewayResolver.imageCacheKey(for: attachment) {
                 // Held by the view too, so the picture stays when the
-                // shared cache evicts it while this row is on screen.
+                // shared cache evicts it while this row is on screen; one
+                // decoded since by another row of it arrives like a load.
                 if let cached = cachedLocalImage {
-                    remember(cached, as: cacheKey)
+                    place(cached, as: cacheKey, generation: TranscriptImageCache.generation)
                     return
                 }
+                // One that failed keeps its label while it loads again.
                 gatewayImage = nil
-                gatewayLoadFailed = false
-                // Kept on the phone from an earlier load (#652).
+                // Kept on the phone from an earlier load (#652). Read
+                // first: after a sign-out it shows, but isn't remembered.
+                let keptGeneration = TranscriptImageCache.generation
                 if let image = await Self.keptPreview(for: cacheKey) {
                     guard !Task.isCancelled else { return }
-                    remember(image, as: cacheKey)
+                    place(image, as: cacheKey, generation: keptGeneration)
                     return
                 }
                 guard !Task.isCancelled else { return }
@@ -1877,17 +1973,42 @@ private struct UserImageAttachmentPreview: View {
                 }
                 guard !Task.isCancelled else { return }
                 guard let dataURL, let image = await Self.keep(dataURL, as: cacheKey, generation: generation) else {
-                    gatewayLoadFailed = true
+                    if gatewayFailedKey != cacheKey {
+                        placeFailure { gatewayFailedKey = cacheKey }
+                    }
                     return
                 }
                 guard !Task.isCancelled else { return }
-                remember(image, as: cacheKey)
+                place(image, as: cacheKey, generation: generation)
+            }
+        }
+    }
+
+    /// A picture that won't load gives its place to the label once the
+    /// reader's scrolling allows (ChatRowArrival), a height only the
+    /// label's layout tells.
+    private func placeFailure(_ mark: @escaping () -> Void) {
+        arrival.arrive(rowHeight: nil, engine: disclosure?.engine, show: mark)
+    }
+
+    /// Puts a picture from Hermes in the row once the reader's scrolling
+    /// allows (ChatRowArrival), remembering it then: remembered first,
+    /// its size would resize the loading line on its own. After a sign-out
+    /// it shows, but isn't remembered.
+    private func place(_ image: UIImage, as key: String, generation: Int) {
+        arrival.arrive(rowHeight: previewHeight(for: image.size), engine: disclosure?.engine) {
+            if generation == TranscriptImageCache.generation {
+                remember(image, as: key)
+            } else {
+                gatewayImage = image
+                gatewayImageKey = key
             }
         }
     }
 
     private func remember(_ image: UIImage, as key: String) {
-        Self.localImageCache.setObject(image, forKey: key as NSString, cost: Self.bitmapCost(of: image))
+        TranscriptPictureMemory.previews.setObject(image, forKey: key as NSString, cost: TranscriptPictureMemory.bitmapCost(of: image))
+        TranscriptPictureMemory.rememberSize(image.size, for: key)
         gatewayImage = image
         gatewayImageKey = key
     }
@@ -1922,6 +2043,31 @@ private struct UserImageAttachmentPreview: View {
         }.value
     }
 
+    /// The picture's size when it's known before it loads (remembered when
+    /// it last loaded, on this launch or an earlier one). A row scrolled
+    /// back into view then takes its final height at once instead of
+    /// growing from the loading line (#1238).
+    private var reservedSize: CGSize? {
+        memoryCacheKey.flatMap(TranscriptPictureMemory.size(for:))
+    }
+
+    /// At the reserved size when it was known as the row was first laid
+    /// out: one remembered after (another row of the same picture, or a
+    /// cold launch's kept sizes loading) would resize the loading line on
+    /// its own.
+    @ViewBuilder private var placeholder: some View {
+        if let size = reservedSize, arrival.holds(previewHeight(for: size)) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.13))
+                .frame(width: 224, height: previewHeight(for: size))
+                .overlay { ProgressView().tint(.white) }
+                .accessibilityElement()
+                .accessibilityLabel(Text("Loading image…"))
+        } else {
+            loadingPlaceholder
+        }
+    }
+
     private var loadingPlaceholder: some View {
         HStack(spacing: 8) {
             ProgressView()
@@ -1949,7 +2095,7 @@ private struct UserImageAttachmentPreview: View {
         Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
-                .frame(width: 224, height: previewHeight(for: image))
+                .frame(width: 224, height: previewHeight(for: image.size))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -2006,9 +2152,9 @@ private struct UserImageAttachmentPreview: View {
         }
     }
 
-    private func previewHeight(for image: UIImage) -> CGFloat {
-        guard image.size.width > 0 else { return 168 }
-        return min(260, max(120, 224 * image.size.height / image.size.width))
+    private func previewHeight(for size: CGSize) -> CGFloat {
+        guard size.width > 0 else { return 168 }
+        return min(260, max(120, 224 * size.height / size.width))
     }
 
 }
@@ -2266,10 +2412,13 @@ struct AssistantMessageActions: View {
 }
 
 /// The ⋯ at the end of a reply's row (#1147): Quote, Branch and Pin reply,
-/// so the row keeps a few icons while each action stays a tap away.
+/// so the row keeps a few icons while each action stays a tap away, and
+/// Show thinking while Settings > Chat's Thinking is On request.
 struct AssistantMessageMoreMenu: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     let message: ChatMessage
+    /// The thinking right above the reply (ChatThinkingReveal).
+    var thinking: ChatThinkingReveal? = nil
     @Environment(\.chatRowState) private var rowState
     @Environment(\.chatRowActions) private var rowActions
     /// Acted on, not observed: what a row shows comes from `rowState`.
@@ -2312,6 +2461,12 @@ struct AssistantMessageMoreMenu: View {
                 }
                 .disabled(!hasText)
             }
+
+            if let thinking {
+                Button(action: thinking.toggle) {
+                    Label(thinking.title, systemImage: ChatStepStyle.thinking.symbol)
+                }
+            }
         } label: {
             Image(systemName: "ellipsis")
                 .font(.subheadline.weight(.semibold))
@@ -2322,6 +2477,23 @@ struct AssistantMessageMoreMenu: View {
         .foregroundStyle(.secondary)
         .accessibilityLabel(AppLocalization.string("More"))
         .accessibilityIdentifier("chat.replyMoreMenu")
+    }
+}
+
+/// A reply's ⋯ when the run above it has thinking that Settings > Chat's
+/// Thinking keeps for On request: it follows the runs' toggles, so the item reads Hide thinking
+/// once that thinking shows, whichever menu showed it.
+private struct AssistantMessageMoreMenuWithThinking: View {
+    let message: ChatMessage
+    let run: ChatStepGroup
+    let disclosure: ChatRowDisclosure
+    @ObservedObject var toggles: ChatStepGroupToggles
+
+    var body: some View {
+        AssistantMessageMoreMenu(
+            message: message,
+            thinking: ChatThinkingReveal(group: run, disclosure: disclosure)
+        )
     }
 }
 
@@ -2395,8 +2567,11 @@ struct AssistantBubble: View {
     /// read-aloud state transition. Only ReadAloudButton observes it.
     let readAloudController: MessageReadAloudController
     let gatewayResolver: GatewayMediaDataURLResolver?
+    /// The run of steps above the reply, when it has thinking.
+    var stepsAbove: ChatStepGroup? = nil
     @Environment(\.chatRowState) private var rowState
     @Environment(\.chatRowActions) private var rowActions
+    @Environment(\.chatRowDisclosure) private var disclosure
     /// Acted on, not observed: what a row shows comes from `rowState`.
     private var appState: AppState { rowActions.required }
     @Environment(\.sizeCategory) private var sizeCategory
@@ -2447,7 +2622,16 @@ struct AssistantBubble: View {
                     ReadAloudButton(message: message, controller: readAloudController)
                 }
 
-                AssistantMessageMoreMenu(message: message)
+                if let run = stepsAbove, let disclosure, rowState.displayPreferences.offersShowThinking {
+                    AssistantMessageMoreMenuWithThinking(
+                        message: message,
+                        run: run,
+                        disclosure: disclosure,
+                        toggles: disclosure.groupToggles
+                    )
+                } else {
+                    AssistantMessageMoreMenu(message: message)
+                }
             }
             .padding(.top, 2)
             // Fixed 34 pt buttons: larger glyphs would overlap each other.
@@ -2812,6 +2996,8 @@ struct SettledThinkingCardContent: View, Equatable {
 struct ThinkingCard: View {
     let message: ChatMessage
     var grouped = false
+    /// Its run's Show thinking, with Settings > Chat's Thinking On request.
+    var shownAnyway = false
     @Environment(\.chatRowState) private var rowState
     @Environment(\.chatRowActions) private var rowActions
     /// Acted on, not observed: what a row shows comes from `rowState`.
@@ -2820,7 +3006,7 @@ struct ThinkingCard: View {
     @Environment(\.chatTextSize) private var chatTextSize
 
     var body: some View {
-        if rowState.displayPreferences.showReasoning, !message.content.isEmpty {
+        if rowState.displayPreferences.showReasoning || shownAnyway, !message.content.isEmpty {
             SettledThinkingCardContent(
                 message: message,
                 sizeCategory: sizeCategory,
@@ -3107,7 +3293,8 @@ private struct SettledToolCardContent: View, Equatable {
                             body: reply
                         ),
                         roster: appState.botRoster,
-                        appState: appState
+                        appState: appState,
+                        disclosureID: message.id + "#teammate-reply"
                     )
                     .padding(.bottom, 8)
                 }
@@ -3221,15 +3408,22 @@ struct ClarifyCard: View {
     /// Acted on, not observed (`ChatRowState`).
     private var appState: AppState { rowActions.required }
     // Per-question draft state, keyed by the gateway qid: typed custom text
-    // and in-progress multi-select selections. Multi-select intentionally
-    // buffers locally — an RPC fires only on that question's confirm.
+    // and in-progress picks (a multi-select's, or any form field's). Picks
+    // intentionally buffer locally — an RPC fires only on that question's
+    // confirm, or the form's Send.
     @State private var customAnswers: [String: String] = [:]
     @State private var multiSelections: [String: Set<String>] = [:]
+    // A form's choice fields the user answers in their own words
+    // ("Something else…").
+    @State private var ownAnswerFields: Set<String> = []
 
     var body: some View {
         if let clarify = message.clarify {
             let layout = ClarifyCardLayout(questionCount: clarify.questions.count)
             let displayStatus = clarify.presentationStatus
+            // Fields filled in and sent together (`isForm`), while any of
+            // them still waits.
+            let showsForm = clarify.isForm && clarify.hasPendingDecision
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "questionmark.bubble")
@@ -3260,15 +3454,44 @@ struct ClarifyCard: View {
                     MessageTimestampLabel(timestamp: message.timestamp, tone: .supporting)
                 }
 
+                if showsForm {
+                    Text("Fill in what you know, and leave the rest blank.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 ForEach(clarify.questions) { question in
                     ClarifyQuestionRow(
                         question: question,
                         showsTitle: layout.rowsShowTitles,
+                        isFormField: clarify.isForm,
                         customAnswer: bindingForCustomAnswer(question),
                         selection: bindingForSelection(question),
+                        typesOwnAnswer: bindingForOwnAnswer(question),
                         onSend: { answer in send(answer, for: question, in: clarify) },
                         onConfirmMultiSelect: { confirmMultiSelect(for: question, in: clarify) }
                     )
+                }
+
+                if showsForm {
+                    let canSend = canSendForm(clarify)
+                    Button {
+                        sendForm(clarify)
+                    } label: {
+                        HStack {
+                            Text("Send")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Image(systemName: "arrow.up")
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.conduitAccent.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .foregroundStyle(.primary)
+                    }
+                    .disabled(!canSend)
+                    .opacity(canSend ? 1 : 0.45)
+                    .accessibilityHint("Fill in what you know, and leave the rest blank.")
                 }
 
                 if let error = clarify.error, !error.isEmpty {
@@ -3296,11 +3519,52 @@ struct ClarifyCard: View {
         )
     }
 
+    private func bindingForOwnAnswer(_ question: ClarifyQuestion) -> Binding<Bool> {
+        Binding(
+            get: { ownAnswerFields.contains(question.id) },
+            set: { typing in
+                if typing {
+                    ownAnswerFields.insert(question.id)
+                } else {
+                    ownAnswerFields.remove(question.id)
+                }
+            }
+        )
+    }
+
     private func send(_ answer: String, for question: ClarifyQuestion, in clarify: ClarifyActivity) {
         let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, question.isAnswerable else { return }
         // Keep the typed answer available if submission fails.
         Task { await appState.respondToClarify(requestId: clarify.requestId, questionId: question.id, answer: trimmed) }
+    }
+
+    /// What each open field of a form holds, by qid; empty when left blank.
+    private func formAnswers(for clarify: ClarifyActivity) -> [String: String] {
+        var answers: [String: String] = [:]
+        for question in clarify.questions where question.isAnswerable {
+            let typed = question.isFreeText || ownAnswerFields.contains(question.id)
+                ? customAnswers[question.id] ?? ""
+                : ""
+            answers[question.id] = question.formAnswer(picked: multiSelections[question.id] ?? [], typed: typed)
+        }
+        return answers
+    }
+
+    /// A form sends once something in it is filled in, or once Hermes
+    /// already has an answer from it (a retry where only blanks are left),
+    /// and not while it is sending.
+    private func canSendForm(_ clarify: ClarifyActivity) -> Bool {
+        guard clarify.needsAnswer, !clarify.questions.contains(where: { $0.status == .submitting }) else { return false }
+        return formAnswers(for: clarify).values.contains { !$0.isEmpty }
+            || clarify.questions.contains { $0.status == .answered && !$0.isSkipped }
+    }
+
+    private func sendForm(_ clarify: ClarifyActivity) {
+        guard canSendForm(clarify) else { return }
+        // The fields keep what was typed if a question fails to send.
+        let answers = formAnswers(for: clarify)
+        Task { await appState.respondToClarifyForm(requestId: clarify.requestId, answers: answers) }
     }
 
     private func confirmMultiSelect(for question: ClarifyQuestion, in clarify: ClarifyActivity) {
@@ -3336,13 +3600,19 @@ struct ClarifyCard: View {
 /// owns its answer/lock lifecycle — one question submitting or failing never
 /// disables its siblings, and an accepted answer renders locked. In a batch
 /// each row draws its own grouped box and title; a single-question card keeps
-/// the legacy flat layout (the card header already carries the title).
+/// the legacy flat layout (the card header already carries the title). A
+/// form's row is a field instead, sent with the card's one Send.
 struct ClarifyQuestionRow: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     let question: ClarifyQuestion
     var showsTitle: Bool = true
+    /// A form's field (`ClarifyActivity.isForm`): a text box, or a menu of
+    /// the choices, with no send of its own.
+    var isFormField: Bool = false
     @Binding var customAnswer: String
     @Binding var selection: Set<String>
+    /// A form's choice field the user answers in their own words.
+    var typesOwnAnswer: Binding<Bool> = .constant(false)
     let onSend: (String) -> Void
     let onConfirmMultiSelect: () -> Void
 
@@ -3398,9 +3668,12 @@ struct ClarifyQuestionRow: View {
     private var statusIcon: some View {
         switch question.status {
         case .answered:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.green)
+            // A field left blank says Skipped below instead.
+            if !question.isSkipped {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
         case .error:
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.caption)
@@ -3416,7 +3689,12 @@ struct ClarifyQuestionRow: View {
 
     @ViewBuilder
     private var answeredBlock: some View {
-        if let answer = question.resolvedAnswer, !answer.isEmpty {
+        if question.isSkipped {
+            // A form's field left blank: Hermes read it as skipped.
+            Label(AppLocalization.string("Skipped"), systemImage: "forward")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+        } else if let answer = question.resolvedAnswer, !answer.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 Text("YOUR ANSWER")
                     .font(.caption2.weight(.bold))
@@ -3442,11 +3720,126 @@ struct ClarifyQuestionRow: View {
 
     @ViewBuilder
     private var controls: some View {
-        if question.multiSelect {
+        if isFormField {
+            formField
+        } else if question.multiSelect {
             multiSelectControls
         } else {
             singleChoiceControls
         }
+    }
+
+    /// A form's field: a text box for an open question, or a menu of the
+    /// choices that also takes the user's own words. Nothing here sends;
+    /// left alone, the field goes back blank.
+    @ViewBuilder
+    private var formField: some View {
+        if question.isFreeText {
+            formTextField
+        } else {
+            Menu {
+                ForEach(question.choices) { choice in
+                    Button {
+                        pick(choice.value)
+                    } label: {
+                        if selection.contains(choice.value) {
+                            Label(choice.label, systemImage: "checkmark")
+                        } else {
+                            Text(choice.label)
+                        }
+                    }
+                    // Several picks in one go.
+                    .menuActionDismissBehavior(question.multiSelect ? .disabled : .automatic)
+                }
+                Divider()
+                Button {
+                    typeOwnAnswer()
+                } label: {
+                    if typesOwnAnswer.wrappedValue {
+                        Label(AppLocalization.string("Something else…"), systemImage: "checkmark")
+                    } else {
+                        Text(AppLocalization.string("Something else…"))
+                    }
+                }
+                if hasFormPick {
+                    Button(AppLocalization.string("Leave blank")) {
+                        leaveBlank()
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(formMenuTitle)
+                        .font(.body)
+                        .foregroundStyle(hasFormPick ? Color.primary : Color.secondary)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.conduitAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .disabled(!isAnswerable)
+            .accessibilityLabel(question.question)
+            .accessibilityValue(formMenuTitle)
+
+            if typesOwnAnswer.wrappedValue {
+                formTextField
+            }
+        }
+    }
+
+    private var formTextField: some View {
+        TextField(AppLocalization.string("Type your answer…"), text: $customAnswer, axis: .vertical)
+            .lineLimit(1...4)
+            .disabled(!isAnswerable)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            // Named by its question for VoiceOver, like a choice field's menu.
+            .accessibilityLabel(question.question)
+    }
+
+    /// What a form's choice field shows: the picks, or Choose while blank.
+    private var formMenuTitle: String {
+        var parts = question.choices.filter { selection.contains($0.value) }.map(\.label)
+        if typesOwnAnswer.wrappedValue {
+            parts.append(AppLocalization.string("Something else…"))
+        }
+        return parts.isEmpty ? AppLocalization.string("Choose") : parts.joined(separator: ", ")
+    }
+
+    private var hasFormPick: Bool {
+        !selection.isEmpty || typesOwnAnswer.wrappedValue
+    }
+
+    private func pick(_ value: String) {
+        guard isAnswerable else { return }
+        if question.multiSelect {
+            toggle(value)
+        } else {
+            selection = [value]
+            typesOwnAnswer.wrappedValue = false
+        }
+    }
+
+    private func typeOwnAnswer() {
+        guard isAnswerable else { return }
+        if question.multiSelect {
+            typesOwnAnswer.wrappedValue.toggle()
+        } else {
+            // One answer: the user's words take the pick's place.
+            selection = []
+            typesOwnAnswer.wrappedValue = true
+        }
+    }
+
+    private func leaveBlank() {
+        selection = []
+        typesOwnAnswer.wrappedValue = false
+        customAnswer = ""
     }
 
     @ViewBuilder

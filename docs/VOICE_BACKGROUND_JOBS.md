@@ -99,7 +99,10 @@ reply pending or playing):
   talking after asking, the result tells the model to deal with anything they
   said since (passing it on to Hermes if needed) and then say that Hermes has
   come back on the earlier request. Hanging up returns an unsaid result to
-  the job, as for other notices.
+  the job, as for other notices, and so does a reconnect that replaces the
+  conversation while a result is still on its way (#1223). A quiet result
+  the conversation couldn't take yet waits for the next quiet window instead
+  of being dropped.
 - Gemini Live: a job that finishes while the model is answering something
   else no longer has its result sent on its call straight away (Gemini could
   take it without saying it). The answer waits for the same quiet window; if
@@ -107,6 +110,20 @@ reply pending or playing):
   a text turn. A result whose call is withdrawn goes out as a text update,
   and hanging up returns an unsaid one to the job. Grok Live already reported
   results as text turns sent only while quiet.
+- A result is checked for being said (#1210). A text update with a job's
+  result, the only way Grok Live and Local Live hear one, counts as told once
+  the model has said something since; if it hasn't within 6 seconds, the
+  result goes out once more and then counts as told, never sent a third
+  time. The same goes for Gemini's
+  text updates, GPT-Live's delegation results and job notices, and job news
+  on Apple Watch calls, whether the job runs on the push relay or on the
+  iPhone. A result already sent when the call ends counts as told, as
+  before: it isn't carried into the next call.
+- `list_jobs` (and Classic's job status, GPT-Live's status note and the
+  Watch's job list) names a finished job until its result counts as told: a
+  result waiting for a quiet moment, or sent and not yet said or sent again,
+  keeps the job listed as finished. Before, a job left the list as soon as its result was
+  queued, so a call that never got to say it showed no job and no result.
 
 ## Limits of this phase
 
@@ -117,7 +134,9 @@ reply pending or playing):
 
 ## Live Voice attached to a chat (issue #290)
 
-Live Voice (Gemini, Grok or GPT-Live) started from a chat's mic is attached to that chat for the whole call. So is a call started in CarPlay after picking a chat from its chat list, including one started with CarPlay's Listen button after that pick. A Bot Chat counts: its turns, liveness reads and saved history are addressed to the bot's profile, and its links open the bot's chat (`conduit://bot/<profile>`). Starting it anywhere else (Siri, a wake phrase, CarPlay without a picked chat, a saved call, a room, or the sidebar's New voice call button) leaves it unattached, as before. So does starting it from a new chat with no messages yet: there is nothing to continue, so its work runs as jobs on the Voice Jobs model.
+Live Voice (Gemini, Grok or GPT-Live) started from a chat's mic is attached to that chat for the whole call. So is a call started in CarPlay after picking a chat from its chat list, including one started with CarPlay's Listen button after that pick. A Bot Chat counts: its turns, liveness reads and saved history are addressed to the bot's profile, and its links open the bot's chat (`conduit://bot/<profile>`). Starting it anywhere else (Siri, a wake phrase, CarPlay without a picked chat, a saved call, a room, or the sidebar's New voice call button) leaves it unattached until its first ordinary request. So does starting it from a new chat with no messages yet: there is nothing to continue yet.
+
+**An unattached call takes its first request's chat (#1250).** In Gemini, Qwen, Grok, GPT-Live and Local Live agent mode, on the phone and in CarPlay, the call's first ordinary request runs as a job on the Voice Jobs model, and once Hermes takes it, that job's chat becomes the call's: everything below applies to it from then on, as if the call had started there. Later requests are its next turns, so Hermes has the earlier ones, and wait while the first one still runs; a correction while it runs goes into it, as into the only running job (#472). Background, "quick" and other-profile work still runs as jobs of its own, and a first request of that kind leaves the call unattached. A request said while the first one is still making its chat waits and joins that chat. A first request that finishes starting after the hang-up attaches nothing, and the next call makes its own chat. The chat is the call's, not one of its jobs: it gets no job badge and isn't filed under the call, the call is kept with it when it ends, and Resume Call goes back to it. The saved call notes the first request as "Asked the chat". At hang-up the first request is let go of like the call's other turns there: if it still runs, its reply lands in the chat and no later call announces it. The live model's instructions are written when the call starts, so they don't gain the attached-chat block; `start_job`'s description (Gemini, Qwen, Grok, Local Live) and GPT-Live's delegation rules say how the first request's chat is used. An Apple Watch call has no attached chat, so it keeps its jobs as they are: each later ordinary one is still a job of the call, with its own news and number, but runs as the next turn of the chat its first one made, once nothing else runs there. The Watch marks a `start_job` that isn't kept apart with `joins_call` for the relay (notifier 0.78; an older plugin gives each job its own chat), and the iPhone does the same for the jobs it runs for the call (`continueJob`).
 
 - **Requests become the chat's next turn.** Gemini and Grok get `ask_thread`, and GPT-Live delegations go to the chat. No new session is created. The turn is sent as `(voice) <request>`. Hermes' reply comes back to the live model, which summarizes it unless asked to read it out. The full reply stays in the chat.
 - **Web lookups stay lookups.** Gemini and Grok still answer quick facts from the web (weather, news, prices) with their web search, not through the chat. GPT-Live does the same with a `Look up: <query>` delegation when the host has a web search backend (and Web lookups isn't off): Conduit runs the host's search and answers on the delegation, with no Hermes job.

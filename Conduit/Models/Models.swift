@@ -201,6 +201,11 @@ struct ClarifyQuestion: Codable, Equatable, Identifiable {
     /// Whether this question can accept an answer or retry.
     var isAnswerable: Bool { status == .pending || status == .error }
 
+    /// Left blank: a form's field the user didn't fill in, which Hermes
+    /// reads as skipped. Its answer is empty, where one answered on another
+    /// device has none.
+    var isSkipped: Bool { status == .answered && answer?.isEmpty == true }
+
     init(
         id: String,
         question: String,
@@ -269,6 +274,17 @@ struct ClarifyQuestion: Codable, Equatable, Identifiable {
     static func multiSelectAnswer(_ values: [String]) -> String {
         guard let data = try? JSONSerialization.data(withJSONObject: values) else { return "" }
         return String(decoding: data, as: UTF8.self)
+    }
+
+    /// A form field's answer from what the user filled in: the picked
+    /// choice, or the typed text; a multi-select's picks in choice order,
+    /// with any typed text after them. Empty when the field was left blank.
+    func formAnswer(picked: Set<String>, typed: String) -> String {
+        let typed = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        let values = choices.map(\.value).filter { picked.contains($0) }
+        guard multiSelect else { return values.first ?? typed }
+        let all = typed.isEmpty ? values : values + [typed]
+        return all.isEmpty ? "" : Self.multiSelectAnswer(all)
     }
 }
 
@@ -375,6 +391,13 @@ struct ClarifyActivity: Codable, Equatable {
         if questions.contains(where: { $0.status == .pending }) { return .pending }
         if questions.contains(where: { $0.status == .error }) { return .error }
         return .expired
+    }
+
+    /// Several questions, at least one typed: shown as a form whose fields
+    /// are sent together, any of them left blank. A question on its own,
+    /// or a batch of choices only, keeps the card that answers each one.
+    var isForm: Bool {
+        questions.count > 1 && questions.contains(where: \.isFreeText)
     }
 
     /// Visible question text for the transcript row: the joined question
@@ -1181,14 +1204,70 @@ enum BusyInputMode: String, CaseIterable, Codable, Identifiable {
 /// Display preferences are owned by the active Hermes profile, not this
 /// device. Keeping them together ensures chat and Settings render the same
 /// source of truth after a profile switch or reconnect.
-struct ProfileDisplayPreferences: Equatable {
+struct ProfileDisplayPreferences: Equatable, Codable {
     var showReasoning = true
+    /// `display.conduit_thinking_on_request` isn't false: with thinking
+    /// hidden, a run's menu and its reply's ⋯ still offer Show thinking
+    /// (ReasoningDisplayMode).
+    var thinkingOnRequest = true
     var showToolProgress = true
     var expandToolsByDefault = false
+    /// `display.memory_notifications` isn't "off": the self-improvement
+    /// review rows draw, the ones a chat already has included.
+    var showReviews = true
+
+    /// Hermes' reading of `display.memory_notifications`: a YAML bool is
+    /// on or off, anything else but "off" (unset, "default", "verbose")
+    /// shows them.
+    static func showsReviews(_ value: Any?) -> Bool {
+        if let bool = value as? Bool { return bool }
+        guard let string = value as? String else { return true }
+        return string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "off"
+    }
+
+    var reasoningMode: ReasoningDisplayMode {
+        ReasoningDisplayMode(showReasoning: showReasoning, onRequest: thinkingOnRequest)
+    }
+
+    /// Thinking is hidden and Show thinking is offered.
+    var offersShowThinking: Bool { reasoningMode == .onRequest }
+}
+
+/// The Thinking choice in Settings > Chat. Hermes' own `display.show_reasoning`
+/// stays a switch other clients read too, so Show is that switch on, and
+/// Conduit's `display.conduit_thinking_on_request` tells On request from Off
+/// while it is off. Unset reads as On request, so an install that had the
+/// switch off keeps its Show thinking menus.
+enum ReasoningDisplayMode: String, CaseIterable {
+    case show
+    case onRequest = "on_request"
+    case off
+
+    /// The settings row's own key: no config value of that name is kept.
+    static let settingKey = "conduit.reasoning_display"
+    static let onRequestConfigKey = "conduit_thinking_on_request"
+
+    init(showReasoning: Bool, onRequest: Bool) {
+        self = showReasoning ? .show : (onRequest ? .onRequest : .off)
+    }
+
+    /// Read from the profile's `display` block, Hermes' defaults applied.
+    init(display: [String: Any]) {
+        self.init(
+            showReasoning: display["show_reasoning"] as? Bool ?? true,
+            onRequest: display[Self.onRequestConfigKey] as? Bool ?? true
+        )
+    }
+
+    /// Written into the `display` block. Show leaves Conduit's own key as
+    /// it is, so turning Show off again goes back to the last of the two.
+    func write(into display: inout [String: Any]) {
+        display["show_reasoning"] = self == .show
+        if self != .show { display[Self.onRequestConfigKey] = self == .onRequest }
+    }
 }
 
 enum DisplayPreferenceKey: CaseIterable, Identifiable {
-    case reasoning
     case toolProgress
     case expandTools
 

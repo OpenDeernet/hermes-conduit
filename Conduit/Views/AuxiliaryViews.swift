@@ -72,7 +72,8 @@ struct ContextSheet: View {
             }
             .navigationTitle("Context")
         }
-        .environment(\.settingsGlowTint, appState.profileGlowTint(appState.activeProfile))
+        // The open chat's glow: a Bot Chat's is its bot's.
+        .environment(\.settingsGlowTint, appState.profileGlowTint(appState.conversationIdentityProfile))
         .task { await loadBreakdown() }
     }
 
@@ -342,7 +343,6 @@ private struct LegacySettingsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            displayToggle(.reasoning, title: AppLocalization.string("Show reasoning"), detail: AppLocalization.string("Include available agent reasoning in replies."))
             displayToggle(.toolProgress, title: AppLocalization.string("Show tool activity"), detail: AppLocalization.string("Show tool calls and their progress in chat."))
             displayToggle(.expandTools, title: AppLocalization.string("Keep tool cards expanded"), detail: AppLocalization.string("Open completed tool details by default."))
 
@@ -447,7 +447,6 @@ private struct LegacySettingsView: View {
 
     private func displayValue(for key: DisplayPreferenceKey) -> Bool {
         switch key {
-        case .reasoning: return displayPreferences.showReasoning
         case .toolProgress: return displayPreferences.showToolProgress
         case .expandTools: return displayPreferences.expandToolsByDefault
         }
@@ -471,7 +470,6 @@ private struct LegacySettingsView: View {
 
     private func setDisplayValue(_ key: DisplayPreferenceKey, enabled: Bool) {
         switch key {
-        case .reasoning: displayPreferences.showReasoning = enabled
         case .toolProgress: displayPreferences.showToolProgress = enabled
         case .expandTools: displayPreferences.expandToolsByDefault = enabled
         }
@@ -504,7 +502,7 @@ private struct LegacySettingsView: View {
 // MARK: - Settings home and detail routes
 
 private enum SettingsDestination: Hashable {
-    case profile, model, usage, chat, voice, hermesCalls, workspace, memory, advanced, capabilities, gateway, conduitPlugin, savedDashboards, appearance, notifications, syncedPreferences, health, location, phone, screenQuestion, about
+    case profile, model, usage, chat, voice, hermesCalls, workspace, memory, advanced, capabilities, gateway, conduitPlugin, savedDashboards, appearance, notifications, syncedPreferences, health, location, phone, shortcutInbox, screenQuestion, about
 
     init(_ link: ConduitAppLink.SettingsLink) {
         switch link {
@@ -654,7 +652,8 @@ struct SettingsView: View {
                 )
             },
             setListensOnCarPlay: { appState.setWakeListensOnCarPlay($0) },
-            setListensOverOtherAudio: { appState.setWakeListensOverOtherAudio($0) }
+            setListensOverOtherAudio: { appState.setWakeListensOverOtherAudio($0) },
+            listenedPhrases: { appState.wakeListenedPhrases(replacing: $0, forProfile: profile) }
         )
     }
 
@@ -769,6 +768,32 @@ struct SettingsView: View {
                         speakerBargeIn: appState.liveVoiceSpeakerBargeInEnabled,
                         setSpeakerBargeIn: { appState.setLiveVoiceSpeakerBargeInEnabled($0) }
                     ),
+                    qwenLive: GeminiLiveSettingsModel(
+                        enabled: appState.isQwenLiveEnabled,
+                        setEnabled: { appState.setQwenLiveEnabled($0) },
+                        checkAvailability: {
+                            do {
+                                let status = try await appState.qwenLiveTokenClient.availability()
+                                await MainActor.run { appState.noteWatchCallVoice(.qwenLive, ready: status.isAvailable) }
+                                return .success(status)
+                            } catch {
+                                return .failure(error)
+                            }
+                        },
+                        search: appState.qwenLiveSearchMode,
+                        setSearch: { appState.setQwenLiveSearchMode($0) },
+                        voice: appState.qwenLiveVoice,
+                        setVoice: { appState.setQwenLiveVoice($0) },
+                        memory: appState.qwenLiveMemoryEnabled,
+                        setMemory: { appState.setQwenLiveMemoryEnabled($0) },
+                        personality: appState.qwenLivePersonalityEnabled,
+                        setPersonality: { appState.setQwenLivePersonalityEnabled($0) },
+                        saveCalls: appState.voiceCallSavingEnabled,
+                        setSaveCalls: { appState.setVoiceCallSavingEnabled($0) },
+                        speakerBargeIn: appState.liveVoiceSpeakerBargeInEnabled,
+                        setSpeakerBargeIn: { appState.setLiveVoiceSpeakerBargeInEnabled($0) },
+                        provider: .qwenLive
+                    ),
                     gptLive: GPTLiveSettingsModel(
                         enabled: appState.isGPTLiveEnabled,
                         setEnabled: { appState.setGPTLiveEnabled($0) },
@@ -834,7 +859,7 @@ struct SettingsView: View {
                         agent: appState.isLocalLiveAgent,
                         setAgent: { appState.setLocalLiveAgent($0) }
                     ),
-                    liveStyle: appState.isGeminiLiveEnabled || appState.isGPTLiveEnabled || appState.isGrokLiveEnabled
+                    liveStyle: appState.isQwenLiveEnabled || appState.isGeminiLiveEnabled || appState.isGPTLiveEnabled || appState.isGrokLiveEnabled
                         ? LiveVoiceStyleSettingsModel(
                             profile: appState.activeProfile,
                             style: appState.liveVoiceStyle,
@@ -986,6 +1011,8 @@ struct SettingsView: View {
             LocationSettingsPage(controller: LocationSharingController.shared, engine: LocationSharingController.shared.engine)
         case .phone:
             PhoneSettingsPage(engine: appState.phoneSync)
+        case .shortcutInbox:
+            ShortcutInboxSettingsPage()
         case .screenQuestion:
             SettingsDetailContainer {
                 ScreenQuestionSettingsSection()
@@ -1086,6 +1113,8 @@ struct SettingsView: View {
 
 private struct SettingsHome: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
+    /// Redraws when an inbox's key or waiting events change (showsShortcutInboxSettings).
+    @ObservedObject private var shortcutInbox = ShortcutInboxLocalState.shared
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let snapshot: SettingsSnapshot
     @Binding var path: [SettingsDestination]
@@ -1178,6 +1207,9 @@ private struct SettingsHome: View {
                         }
                         if appState.showsPhoneSettings {
                             settingsLink(.phone, icon: "calendar", title: AppLocalization.string("Calendar & phone"), detail: AppLocalization.string("Share your calendar, reminders, Focus and phone status with Hermes"), identifier: "settings.phone")
+                        }
+                        if appState.showsShortcutInboxSettings {
+                            settingsLink(.shortcutInbox, icon: "tray.full", title: AppLocalization.string("Shortcuts inbox"), detail: AppLocalization.string("What your automations logged for Hermes"), identifier: "settings.shortcut-inbox")
                         }
                         settingsLink(.screenQuestion, icon: "camera.viewfinder", title: AppLocalization.string("Ask Hermes About Screen"), detail: AppLocalization.string("Action Button shortcut for screenshots"), identifier: "settings.screen-question")
                         settingsLink(.about, icon: "shield", title: AppLocalization.string("About & privacy"), detail: AppLocalization.string("App information and data handling"))
@@ -1342,7 +1374,7 @@ private struct SettingsHome: View {
             v2Link(.syncedPreferences, icon: "arrow.triangle.2.circlepath", title: AppLocalization.string("Sync across devices"), detail: syncedPreferencesDetail, identifier: "settings.sync")
             v2Link(.screenQuestion, icon: "camera.viewfinder", title: AppLocalization.string("Ask Hermes About Screen"), detail: AppLocalization.string("Action Button shortcut for screenshots"), identifier: "settings.screen-question")
         }
-        if appState.showsHealthSettings || appState.showsLocationSettings || appState.showsPhoneSettings {
+        if appState.showsHealthSettings || appState.showsLocationSettings || appState.showsPhoneSettings || appState.showsShortcutInboxSettings {
             v2Group(AppLocalization.string("On this device"), symbol: "iphone") {
                 if appState.showsHealthSettings {
                     v2Link(.health, icon: "heart.text.square", title: AppLocalization.string("Health"), detail: AppLocalization.string("Share Apple Health data with Hermes"), identifier: "settings.health", first: true)
@@ -1352,6 +1384,9 @@ private struct SettingsHome: View {
                 }
                 if appState.showsPhoneSettings {
                     v2Link(.phone, icon: "calendar", title: AppLocalization.string("Calendar & phone"), detail: AppLocalization.string("Share your calendar, reminders, Focus and phone status with Hermes"), identifier: "settings.phone", first: !appState.showsHealthSettings && !appState.showsLocationSettings)
+                }
+                if appState.showsShortcutInboxSettings {
+                    v2Link(.shortcutInbox, icon: "tray.full", title: AppLocalization.string("Shortcuts inbox"), detail: AppLocalization.string("What your automations logged for Hermes"), identifier: "settings.shortcut-inbox", first: !appState.showsHealthSettings && !appState.showsLocationSettings && !appState.showsPhoneSettings)
                 }
             }
         }
@@ -1637,10 +1672,12 @@ struct ChatSettingsDetail: View {
                 VStack(spacing: 24) {
                     ChatTextSizeSettings()
                     ChatFontStyleSettings()
+                    ReplyStartSettings()
                     ComposerReturnKeySettings()
                     AttachmentLimitSettings()
                     ChatTakeoverSettings()
                     StepSummarySettings()
+                    PredictiveSettingsSection()
                     DeviceHapticsSettings()
                 }
             ),
@@ -1653,7 +1690,7 @@ struct ChatSettingsDetail: View {
     static var fields: [ProfileSettingField] { [
         .init(key: "display.personality", label: AppLocalization.string("Personality"), help: AppLocalization.string("Default response style for new conversations."), control: .options([], defaultValue: "")),
         .init(key: ProfileTimeZone.configKey, label: AppLocalization.string("Timezone"), help: AppLocalization.string("Used for dates, reminders, and scheduled work."), control: .timeZone),
-        .init(key: "display.show_reasoning", label: AppLocalization.string("Show thinking"), help: AppLocalization.string("Show collapsible thinking blocks when provided."), control: .toggle(defaultValue: true)),
+        .init(key: ReasoningDisplayMode.settingKey, label: AppLocalization.string("Thinking"), help: AppLocalization.string("Show puts Hermes' thinking in every chat. On request hides it, with Show thinking in a run's menu and a reply's ⋯. Off hides it everywhere."), control: .labeledOptions([(value: ReasoningDisplayMode.show.rawValue, label: AppLocalization.string("Show in every chat")), (value: ReasoningDisplayMode.onRequest.rawValue, label: AppLocalization.string("On request")), (value: ReasoningDisplayMode.off.rawValue, label: AppLocalization.string("Off"))], defaultValue: ReasoningDisplayMode.show.rawValue)),
         .init(key: "display.tool_progress", label: AppLocalization.string("Tool cards"), help: AppLocalization.string("Show tool calls and expandable details in conversations."), control: .textToggle(onValue: "all", offValue: "off", defaultValue: true)),
         .init(key: "display.expand_tools", label: AppLocalization.string("Keep tool cards expanded"), help: AppLocalization.string("Keep completed tool details open by default."), control: .toggle(defaultValue: false)),
         .init(key: "display.memory_notifications", label: AppLocalization.string("Self-improvement updates"), help: AppLocalization.string("Choose whether Conduit follows Hermes, always shows, or never shows maintenance updates."), control: .labeledOptions([(value: "default", label: AppLocalization.string("Use Hermes default")), (value: "on", label: AppLocalization.string("Always show")), (value: "off", label: AppLocalization.string("Never show"))], defaultValue: "default")),
@@ -1776,7 +1813,7 @@ private struct ComposerReturnKeySettings: View {
             symbol: "keyboard",
             tint: .conduitAura
         ) {
-            Text("Press Return to send. Use Shift-Return for a new line.")
+            Text("When on, Return sends and Shift-Return starts a new line.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Text(ComposerReturnKey.defaultFootnote(onMac: onMac))
@@ -1790,6 +1827,31 @@ private struct ComposerReturnKeySettings: View {
             Toggle("Return key sends", isOn: $returnKeySends)
                 .tint(.conduitAccent)
                 .accessibilityHint(onMac ? Text(verbatim: "") : Text("Applies to hardware keyboards only. The on-screen keyboard's Return key is unchanged."))
+        }
+    }
+}
+
+/// A reply longer than the screen stops at its start (#365), and an
+/// unread chat opens there (ChatReplyStartPreference, ChatScrollEngine).
+private struct ReplyStartSettings: View {
+    @ObservedObject var appLanguage = AppLanguageStore.shared
+    @AppStorage(ChatReplyStartPreference.key) private var stopsAtStart = ChatReplyStartPreference.defaultOn
+
+    var body: some View {
+        ConduitSettingsSection(
+            title: AppLocalization.string("Long replies"),
+            symbol: "arrow.up.to.line",
+            tint: .conduitAura
+        ) {
+            Text("A reply longer than the screen stops at its first line, so you can read it from the top. The arrow button goes to its end.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text("A chat with an unread reply also opens at the start of that reply.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Toggle("Stop at the start of long replies", isOn: $stopsAtStart)
+                .tint(.conduitAccent)
+                .accessibilityHint("When off, the chat follows each reply to its end as it arrives.")
         }
     }
 }
@@ -1856,11 +1918,13 @@ private struct ChatTakeoverSettings: View {
     }
 }
 
-/// Device-only and off by default: one sentence for a finished run of
-/// steps, asked of Hermes with a hidden /btw (ChatStepSummaries).
+/// Device-only and off by default: a few lines on a finished run of
+/// steps, asked of Hermes with a hidden /btw (ChatStepSummaries). A run's
+/// menu asks for one whatever the switch says.
 private struct StepSummarySettings: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     @AppStorage(ChatStepSummaries.preferenceKey) private var enabled = ChatStepSummaries.defaultEnabled
+    @AppStorage(ChatStepSummaries.maxStepsKey) private var maxSteps = ChatStepSummaries.defaultMaxSteps
 
     var body: some View {
         ConduitSettingsSection(
@@ -1868,15 +1932,23 @@ private struct StepSummarySettings: View {
             symbol: "text.line.first.and.arrowtriangle.forward",
             tint: .conduitAura
         ) {
-            Text("When a reply took several steps, Hermes writes one sentence about what they did, shown on the folded steps.")
+            Text("When a reply took several steps, Hermes looks back on them in a short paragraph: what it set out to do and why each step came next, shown under the folded steps.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            Text("Each sentence is one more short request to your model. It reuses the chat's prompt cache and never changes the chat.")
+            Text("Each summary is one more short request to your model. It reuses the chat's prompt cache and never changes the chat.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text("On or off, you can touch and hold any folded steps and choose Explain these steps, or a single finished step and choose Explain this step.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Toggle("Describe finished steps", isOn: $enabled)
                 .tint(.conduitAccent)
-                .accessibilityHint("Sentences are kept on this device.")
+                .accessibilityHint("Summaries are kept on this device.")
+            Stepper(value: $maxSteps, in: ChatStepSummaries.maxStepsRange, step: 5) {
+                // The limit the check uses, should a stored value be out of range.
+                Text(AppLocalization.string("Skip runs over \(String(ChatStepSummaries.clampedMaxSteps(maxSteps))) steps"))
+            }
+            .disabled(!enabled)
         }
     }
 }
@@ -3069,6 +3141,7 @@ private struct GatewaySettingsDetail: View {
     @State private var reconnecting = false
     @State private var cloudflareEnabled: Bool
     @State private var clientID: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var clientSecret = ""
     @State private var confirmingRestart = false
 
@@ -3110,7 +3183,7 @@ private struct GatewaySettingsDetail: View {
             }
             ConduitSettingsSection(title: "Cloudflare Access", symbol: "shield.lefthalf.filled", tint: .conduitAccent) {
                 Toggle("Use service token", isOn: Binding(get: { cloudflareEnabled }, set: { enabled in
-                    cloudflareEnabled = enabled
+                    withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { cloudflareEnabled = enabled }
                     if !enabled { clientSecret = ""; removeCloudflareAccess() }
                 }))
                 if cloudflareEnabled {
@@ -3693,7 +3766,7 @@ private struct NotificationsSettingsDetail: View {
                             // A tap while keys are being set up would only
                             // wait for the next connect.
                             .disabled(notifications.isProvisioningEncryption)
-                            Text("Conduit gives this dashboard's hosts new keys by itself every 30 days. The old keys still open notifications already on their way for 7 days.")
+                            Text("Conduit gives this dashboard's hosts new keys by itself every 7 days. The old keys still open notifications already on their way for 7 days.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -3983,12 +4056,25 @@ private struct NotificationsSettingsDetail: View {
         // The padlock is closed only when the host confirmed it seals with
         // the key this iPhone holds, and that key isn't long overdue.
         let assurance = notifications.encryptionAssurance(gatewayID: gateway.id)
-        if case .ensured(let createdAt, let rotates) = assurance {
+        if notifications.unsavedRotationGatewayIDs.contains(gateway.id) {
+            // A rotation the host took whose new key the Keychain refused:
+            // said as it is, not as a generic mismatch.
+            Label(AppLocalization.string("This host has a new encryption key that Conduit couldn't save on this iPhone, so its notifications show only generic text. Conduit asks for it again the next time it connects to this dashboard."), systemImage: "exclamationmark.triangle.fill")
+                .font(.footnote)
+                .foregroundStyle(.orange)
+        } else if case .ensured(let createdAt, let rotates, let quantumSafe) = assurance {
+            let date = createdAt.formatted(date: .abbreviated, time: .omitted)
+            // The shield replaces the padlock once the key came from an
+            // ML-KEM rotation: quantum-safe end to end.
             Label(
-                rotates
-                    ? AppLocalization.string("End-to-end encrypted with a key from \(createdAt.formatted(date: .abbreviated, time: .omitted)). Only this iPhone can read these notifications; the relay sees when they arrive, not what they say. The key changes every 30 days.")
-                    : AppLocalization.string("End-to-end encrypted. Only this iPhone can read these notifications; the relay sees when they arrive, not what they say. Update this host's notifier so the key changes every 30 days."),
-                systemImage: "lock.fill"
+                quantumSafe
+                    ? AppLocalization.string("End-to-end encrypted and quantum-safe, with a key from \(date). Only this iPhone can read these notifications; the relay sees when they arrive, not what they say. The key changes every 7 days.")
+                    : !rotates
+                        ? AppLocalization.string("End-to-end encrypted. Only this iPhone can read these notifications; the relay sees when they arrive, not what they say. Update this host's notifier so the key changes every 7 days.")
+                        : NotificationKeyRotation.supportsPQ
+                            ? AppLocalization.string("End-to-end encrypted with a key from \(date). Only this iPhone can read these notifications; the relay sees when they arrive, not what they say. The key changes every 7 days.")
+                            : AppLocalization.string("End-to-end encrypted with a key from \(date). Only this iPhone can read these notifications; the relay sees when they arrive, not what they say. The key changes every 7 days; update to iOS 26 to make it quantum-safe."),
+                systemImage: quantumSafe ? "lock.shield.fill" : "lock.fill"
             )
             .font(.footnote)
             .foregroundStyle(.secondary)

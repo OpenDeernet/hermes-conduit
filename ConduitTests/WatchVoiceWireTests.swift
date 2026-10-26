@@ -579,8 +579,14 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(WatchJobAnswer.scheduling(name: "start_job", result: ["status": "not_started"]), "WHEN_IDLE")
         XCTAssertNil(WatchJobAnswer.scheduling(name: "list_jobs", result: ["summary": "s"]))
 
-        XCTAssertEqual(WatchJobAnswer.arguments(name: "start_job", ["instructions": "  Check the build "]) as? [String: String],
-                       ["instructions": "Check the build"])
+        let start = WatchJobAnswer.arguments(name: "start_job", ["instructions": "  Check the build "])
+        XCTAssertEqual(start?["instructions"] as? String, "Check the build")
+        // Ordinary work goes to the call's chat; what the user keeps apart doesn't (#1250).
+        XCTAssertEqual(start?["joins_call"] as? Bool, true)
+        XCTAssertEqual(WatchJobAnswer.arguments(name: "start_job", ["instructions": "Quick: check the build"])?["joins_call"] as? Bool, false)
+        XCTAssertEqual(WatchJobAnswer.arguments(name: "start_job", ["instructions": "check the build in the background"])?["joins_call"] as? Bool, false)
+        XCTAssertEqual(WatchJobAnswer.arguments(name: "start_job", ["instructions": "check the lights", "profile": "fam"])?["joins_call"] as? Bool, false)
+        XCTAssertEqual(WatchJobAnswer.arguments(name: "start_job", ["instructions": "Quick question, is the build green?"])?["joins_call"] as? Bool, true)
         XCTAssertNil(WatchJobAnswer.arguments(name: "start_job", ["instructions": " "]))
         XCTAssertEqual(WatchJobAnswer.arguments(name: "cancel_job", ["job_id": "watch-2"]) as? [String: String], ["job_id": "watch-2"])
         XCTAssertEqual(WatchJobAnswer.arguments(name: "cancel_job", [:])?.count, 0)
@@ -819,6 +825,63 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertTrue(WatchDirectBroker.isRefusedChatTool(DashboardTicketBridgeError.http(status: 400, detail: "The Watch can only be granted web_search, recall_memory, start_job")))
         XCTAssertFalse(WatchDirectBroker.isRefusedChatTool(DashboardTicketBridgeError.http(status: 400, detail: "job_profiles must list at most 32 profiles")))
         XCTAssertFalse(WatchDirectBroker.isRefusedChatTool(DashboardTicketBridgeError.http(status: 400, detail: "The Watch can only be granted web_search, find_chat, read_chat")))
+    }
+
+    /// A Qwen call's grant carries qwen_live_token, which the Watch's
+    /// relay client keeps, so a wrist-down reconnect can mint through the
+    /// relay as a Gemini call does.
+    @MainActor
+    func testWatchRelayClientKeepsTheQwenTokenTool() throws {
+        var grant = Self.watchToolGrant
+        grant.tools = ["web_search", "qwen_live_token"]
+        let client = try XCTUnwrap(WatchToolRelayClient(grant))
+        XCTAssertTrue(client.canRun(WatchLiveToken.qwenTool))
+        XCTAssertFalse(client.canRun(WatchLiveToken.tool))
+        XCTAssertFalse(try XCTUnwrap(WatchToolRelayClient(Self.watchToolGrant)).canRun(WatchLiveToken.qwenTool))
+    }
+
+    /// A token minted while the call ended or the user took back the
+    /// provider's consent never reaches the Watch.
+    @MainActor
+    func testWatchDirectTokenIsDroppedWhenTheCallOrConsentWentDuringTheMint() {
+        XCTAssertNil(WatchDirectBroker.tokenRefusalAfterMint(7, running: 7, ledgerEnded: false, consentMissing: nil))
+        XCTAssertNil(WatchDirectBroker.tokenRefusalAfterMint(7, running: 7, ledgerEnded: nil, consentMissing: nil))
+        XCTAssertEqual(
+            WatchDirectBroker.tokenRefusalAfterMint(7, running: 7, ledgerEnded: false, consentMissing: .qwenLive),
+            VoiceSetupIssue.providerConsentNeeded(.qwenLive).message
+        )
+        XCTAssertEqual(
+            WatchDirectBroker.tokenRefusalAfterMint(7, running: 7, ledgerEnded: false, consentMissing: .geminiLive),
+            VoiceSetupIssue.providerConsentNeeded(.geminiLive).message
+        )
+        XCTAssertEqual(WatchDirectBroker.tokenRefusalAfterMint(7, running: nil, ledgerEnded: true, consentMissing: nil), WatchVoiceStartFailure.ended)
+        XCTAssertEqual(WatchDirectBroker.tokenRefusalAfterMint(7, running: 8, ledgerEnded: false, consentMissing: nil), WatchVoiceStartFailure.ended)
+        XCTAssertEqual(WatchDirectBroker.tokenRefusalAfterMint(7, running: 7, ledgerEnded: true, consentMissing: nil), WatchVoiceStartFailure.ended)
+    }
+
+    /// Each call's live mode survives a restart, so a resumed call's
+    /// token comes from its own provider.
+    @MainActor
+    func testWatchDirectLedgerRestoresQwenAndOtherProviderIdentities() throws {
+        let suite = "WatchDirectLedger.Providers.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let connection = WatchDirectConnection(profile: "work", dashboard: "A")
+        var ledger = WatchDirectCallLedger(defaults: defaults)
+        for (index, mode) in LiveVoiceModeName.all.enumerated() {
+            ledger.begin(UInt32(index), connection: connection, saveCalls: true, mode: mode)
+        }
+        let restarted = WatchDirectCallLedger(defaults: defaults)
+        for (index, mode) in LiveVoiceModeName.all.enumerated() {
+            let call = try XCTUnwrap(restarted.call(UInt32(index)))
+            XCTAssertEqual(call.liveMode, mode)
+            XCTAssertEqual(call.directProvider, mode == .qwenLive ? .qwen : .gemini)
+        }
+        // Old ledgers still decode, retaining the legacy Google token route.
+        ledger.begin(100, connection: connection, saveCalls: true)
+        let legacy = try XCTUnwrap(WatchDirectCallLedger(defaults: defaults).call(100))
+        XCTAssertNil(legacy.liveMode)
+        XCTAssertEqual(legacy.directProvider, .gemini)
     }
 
     /// The phone keeps each Watch call's connection, its end and the
@@ -1307,4 +1370,47 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(Int(GrokLiveProtocol.inputSampleRate), 24_000)
         XCTAssertEqual(Int(GrokLiveProtocol.outputSampleRate), 24_000)
     }
+
+    /// #1210: the host counts a job's outcome told once the Watch has it,
+    /// but the Watch says it only at a quiet moment: list_jobs names it
+    /// until then, as the iPhone does.
+    func testWatchListJobsNamesJobsWhoseOutcomeTheWatchHasNotSaid() {
+        let finished = WatchJobAnswer.UnsaidJob(jobID: "b", title: "Check the server", status: "finished")
+        let running = ["ok": "true", "summary": "Book a table is still running.", "job_1": "id=a; title=Book a table; status=running"]
+        let merged = WatchJobAnswer.listing(running, unsaid: [finished])
+        XCTAssertEqual(merged["job_1"], running["job_1"])
+        XCTAssertEqual(merged["job_2"], "id=b; title=Check the server; status=finished")
+        XCTAssertEqual(merged["summary"], "Book a table is still running. Check the server has finished.")
+
+        // The iPhone answers in the app's language.
+        let none = ["summary": "Es laufen keine Hintergrundaufgaben."]
+        let failed = WatchJobAnswer.UnsaidJob(jobID: "c", title: "Send the report", status: "failed")
+        XCTAssertEqual(WatchJobAnswer.listing(none, unsaid: [failed])["summary"], "Send the report failed.")
+
+        // Numbered after the host's highest job, never over one of its own.
+        let gapped = ["summary": "", "job_1": "id=a; title=Book a table; status=running", "job_3": "id=d; title=Tidy up; status=running"]
+        XCTAssertEqual(WatchJobAnswer.listing(gapped, unsaid: [finished])["job_4"], "id=b; title=Check the server; status=finished")
+
+        // Already listed by the host, or an error: left as it is.
+        let listed = ["summary": "Check the server has finished.", "job_1": "id=b; title=Check the server; status=finished"]
+        XCTAssertEqual(WatchJobAnswer.listing(listed, unsaid: [finished]), listed)
+        let error = ["error": "Hermes couldn't run that on the Watch's behalf."]
+        XCTAssertEqual(WatchJobAnswer.listing(error, unsaid: [finished]), error)
+    }
+
+    /// #1210: a job the iPhone runs for a direct Watch call tells the Watch
+    /// which text update carries its outcome, so the Watch keeps it listed
+    /// until said; an older iPhone's answer still decodes.
+    func testDirectToolResultCarriesTheJobsItsTextUpdatesSettle() throws {
+        let news = WatchVoiceWire.DirectNewsJob(text: "[Check the server finished.]", jobID: "b", title: "Check the server", status: "finished")
+        let result = WatchVoiceWire.DirectToolResult(outgoing: [.textWhenIdle(news.text)], runningJobs: 0, newsJobs: [news])
+        let decoded = try JSONDecoder().decode(WatchVoiceWire.DirectToolResult.self, from: JSONEncoder().encode(result))
+        XCTAssertEqual(decoded, result)
+
+        let older = Data(#"{"outgoing":[],"runningJobs":1}"#.utf8)
+        let old = try JSONDecoder().decode(WatchVoiceWire.DirectToolResult.self, from: older)
+        XCTAssertNil(old.newsJobs)
+        XCTAssertEqual(old.runningJobs, 1)
+    }
+
 }

@@ -465,7 +465,7 @@ struct ChatStepGroup: Equatable {
     /// The run's first row; it keeps the run's open or closed choice.
     var id: String { members.first?.messageID ?? "" }
 
-    /// Where the run's sentence is kept (ChatStepSummaries).
+    /// Where the run's summary is kept (ChatStepSummaries).
     var summaryKey: String? { ChatStepSummaries.key(toolIDs: members.map(\.toolID)) }
 
     static func isStep(_ message: ChatMessage) -> Bool {
@@ -486,6 +486,17 @@ struct ChatStepGroup: Equatable {
     func visibleMembers(showReasoning: Bool, showTools: Bool) -> [ChatStepGroupMember] {
         members.filter { $0.isThinking ? showReasoning : showTools }
     }
+
+    /// The steps a run's header counts: the ones Settings shows, thoughts
+    /// shown on request aside (as a summary counts them), or the thoughts
+    /// shown when Settings shows none of its steps.
+    func countedMembers(showReasoning: Bool, thinkingShown: Bool, showTools: Bool) -> [ChatStepGroupMember] {
+        let settingsVisible = visibleMembers(showReasoning: showReasoning, showTools: showTools)
+        guard thinkingShown, settingsVisible.isEmpty else { return settingsVisible }
+        return visibleMembers(showReasoning: true, showTools: showTools)
+    }
+
+    var hasThinking: Bool { members.contains(where: \.isThinking) }
 }
 
 struct ChatStepPlacement: Equatable {
@@ -504,11 +515,32 @@ struct ChatStepPlacement: Equatable {
         isBusy: Bool,
         disclosure: ChatRowDisclosure
     ) -> Bool {
-        let visible = group.visibleMembers(showReasoning: preferences.showReasoning, showTools: preferences.showToolProgress)
+        let showReasoning = preferences.showReasoning
+            || (preferences.offersShowThinking && disclosure.showsThinking(in: group.id))
+        let visible = group.visibleMembers(showReasoning: showReasoning, showTools: preferences.showToolProgress)
         guard let position = visible.firstIndex(where: { $0.messageID == messageID }) else { return false }
         guard visible.count >= 2, position > 0 else { return true }
         let live = group.isTrailing && isBusy
         return disclosure.isGroupExpanded(group.id, default: live || preferences.expandToolsByDefault)
+    }
+}
+
+extension ChatMessageScrollTarget {
+    /// A system row the transcript draws as a review card (MessageBubble):
+    /// rows saved before reviews were tagged are told by their text.
+    var isReview: Bool {
+        message.role == .system
+            && (message.review != nil || MessageNormalizer.reviewActivity(fromText: message.content) != nil)
+    }
+
+    /// Whether the transcript draws this row: a self-improvement review
+    /// while "Self-improvement updates" is off doesn't, and a step follows
+    /// ChatStepPlacement.drawsRow. The transcript leaves out a row that
+    /// draws nothing, or the stack would space it.
+    @MainActor
+    func drawsRow(preferences: ProfileDisplayPreferences, isBusy: Bool, disclosure: ChatRowDisclosure) -> Bool {
+        if !preferences.showReviews, isReview { return false }
+        return step?.drawsRow(messageID: id, preferences: preferences, isBusy: isBusy, disclosure: disclosure) ?? true
     }
 }
 
@@ -564,28 +596,34 @@ enum ChatStepTiming {
 
 /// A thinking or tool row that belongs to a run of steps. Alone it is the
 /// plain step card; with others it draws its slice of the run's card, or
-/// nothing while the run is collapsed (the first row shows the summary).
+/// nothing while the run is collapsed (the first row shows the summary,
+/// which also tops the open card).
 struct ChatStepRow: View {
     let message: ChatMessage
     let placement: ChatStepPlacement
     @Environment(\.chatRowState) private var rowState
     @Environment(\.chatRowDisclosure) private var disclosure
-    /// Read here, so switching summaries off hides them at once.
-    @AppStorage(ChatStepSummaries.preferenceKey) private var describeStepRuns = ChatStepSummaries.defaultEnabled
+    @Environment(\.chatRowActions) private var actions
 
     var body: some View {
         let preferences = rowState.displayPreferences
+        let key = placement.group.summaryKey
         if let disclosure {
             ChatStepRowBody(
                 message: message,
                 placement: placement,
                 disclosure: disclosure,
                 toggles: disclosure.groupToggles,
-                showReasoning: preferences.showReasoning,
+                profileShowsReasoning: preferences.showReasoning,
+                offersShowThinking: preferences.offersShowThinking,
                 showTools: preferences.showToolProgress,
                 expandToolsByDefault: preferences.expandToolsByDefault,
                 isBusy: rowState.isBusy,
-                summary: describeStepRuns ? placement.group.summaryKey.flatMap { rowState.stepSummaries[$0] } : nil
+                summary: key.flatMap { rowState.stepSummaries[$0] },
+                lookingBack: key.map { rowState.stepSummariesAsked.contains($0) } ?? false,
+                explain: rowState.canExplainStepRuns && key != nil ? { [actions] in
+                    actions.required.explainStepRun(firstMessageID: placement.group.id)
+                } : nil
             )
         } else {
             ChatStepRowBody.single(message)
@@ -598,32 +636,63 @@ private struct ChatStepRowBody: View {
     let placement: ChatStepPlacement
     let disclosure: ChatRowDisclosure
     @ObservedObject var toggles: ChatStepGroupToggles
-    let showReasoning: Bool
+    /// Settings > Chat's Thinking is Show.
+    let profileShowsReasoning: Bool
+    /// It is On request: a run's menu can show its thinking anyway.
+    let offersShowThinking: Bool
     let showTools: Bool
     let expandToolsByDefault: Bool
     let isBusy: Bool
-    /// The run's sentence, once Hermes wrote one.
+    /// The run's summary, once Hermes wrote one.
     var summary: String?
+    /// Hermes is writing it now.
+    var lookingBack = false
+    /// Asks Hermes to explain the run (its menu), when it can.
+    var explain: (() -> Void)?
 
     @ViewBuilder
-    static func single(_ message: ChatMessage, grouped: Bool = false) -> some View {
+    static func single(_ message: ChatMessage, grouped: Bool = false, thinkingShown: Bool = false) -> some View {
         if message.role == .reasoning {
-            ThinkingCard(message: message, grouped: grouped)
+            ThinkingCard(message: message, grouped: grouped, shownAnyway: thinkingShown)
         } else {
             ToolCard(message: message, grouped: grouped)
         }
     }
 
+    /// The reader asked to see this run's thinking (its menu or its reply's).
+    private var thinkingShown: Bool {
+        offersShowThinking && disclosure.showsThinking(in: placement.group.id)
+    }
+
+    /// Show thinking or Hide thinking, while Settings > Chat's Thinking is
+    /// On request and the turn is done with the run.
+    private var thinkingReveal: ChatThinkingReveal? {
+        let group = placement.group
+        guard offersShowThinking, group.hasThinking, !(group.isTrailing && isBusy) else { return nil }
+        return ChatThinkingReveal(group: group, disclosure: disclosure)
+    }
+
     var body: some View {
         let group = placement.group
-        let visible = group.visibleMembers(showReasoning: showReasoning, showTools: showTools)
+        let thinkingShown = self.thinkingShown
+        let visible = group.visibleMembers(showReasoning: profileShowsReasoning || thinkingShown, showTools: showTools)
+        let counted = group.countedMembers(showReasoning: profileShowsReasoning, thinkingShown: thinkingShown, showTools: showTools)
         if let position = visible.firstIndex(where: { $0.messageID == message.id }) {
             if visible.count < 2 {
-                Self.single(message)
+                // Whichever step is left showing carries the run's summary
+                // and menu, a thought too when Settings > Chat hides the
+                // tools (a run with no tool call has no Explain).
+                if summary != nil || lookingBack || explain != nil || thinkingReveal != nil {
+                    singleExplained(thinkingShown: thinkingShown)
+                } else {
+                    Self.single(message, thinkingShown: thinkingShown)
+                }
             } else {
                 // Open while the turn is still adding steps, so each one shows
                 // as it happens; one line once it is done.
                 let live = group.isTrailing && isBusy
+                // Not over a step still marked running, hidden ones included.
+                let offersExplain = !live && !group.members.contains(where: \.running)
                 let expanded = disclosure.isGroupExpanded(group.id, default: live || expandToolsByDefault)
                 let isFirst = position == 0
                 let isLast = position == visible.count - 1
@@ -634,10 +703,15 @@ private struct ChatStepRowBody: View {
                                 members: visible,
                                 isLive: live,
                                 expanded: true,
+                                summary: summary,
+                                lookingBack: lookingBack,
+                                explain: offersExplain ? explain : nil,
+                                thinking: thinkingReveal,
+                                counted: counted,
                                 toggle: { toggle(group, to: false) }
                             )
                         }
-                        Self.single(message, grouped: true)
+                        Self.single(message, grouped: true, thinkingShown: thinkingShown)
                     }
                     .background {
                         ChatStepSegmentShape(roundsTop: isFirst, roundsBottom: isLast)
@@ -653,12 +727,43 @@ private struct ChatStepRowBody: View {
                         isLive: live,
                         expanded: false,
                         summary: summary,
+                        lookingBack: lookingBack,
+                        explain: offersExplain ? explain : nil,
+                        thinking: thinkingReveal,
+                        counted: counted,
                         toggle: { toggle(group, to: true) }
                     )
                     .chatStepCard()
                 }
             }
         }
+    }
+
+    /// A lone step: its card, then what Hermes said about its run, if it
+    /// was asked (its menu).
+    private func singleExplained(thinkingShown: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Self.single(message, thinkingShown: thinkingShown)
+            if let summary {
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, ChatStepStyle.rowHorizontalPadding)
+            }
+            if lookingBack {
+                ChatStepLookingBack()
+                    .padding(.horizontal, ChatStepStyle.rowHorizontalPadding)
+            }
+        }
+        .chatStepMenu(
+            // Like the run's line: only once the turn is done with it.
+            explain: (lookingBack || placement.group.members.contains(where: \.running) || (placement.group.isTrailing && isBusy)) ? nil : explain,
+            title: summary == nil ? AppLocalization.string("Explain this step") : AppLocalization.string("Explain again"),
+            thinking: thinkingReveal
+        )
     }
 
     private func toggle(_ group: ChatStepGroup, to expanded: Bool) {
@@ -675,8 +780,17 @@ private struct ChatStepGroupHeader: View {
     let members: [ChatStepGroupMember]
     let isLive: Bool
     let expanded: Bool
-    /// What the run did, in one sentence: shown folded, over the count.
+    /// What the run did, a few lines: under its icons folded, under the
+    /// count at the top of the card open.
     var summary: String?
+    var lookingBack = false
+    /// Asks Hermes for the summary, or a new one (the run's menu).
+    var explain: (() -> Void)?
+    /// Shows or hides the run's thinking (the run's menu).
+    var thinking: ChatThinkingReveal?
+    /// The steps its count and time are of: `members` but for thoughts
+    /// shown on request.
+    var counted: [ChatStepGroupMember]?
     let toggle: () -> Void
     @ObservedObject private var appLanguage = AppLanguageStore.shared
 
@@ -685,18 +799,24 @@ private struct ChatStepGroupHeader: View {
         let tint: Color
     }
 
+    private static func look(_ member: ChatStepGroupMember) -> Look {
+        guard let name = member.toolName else {
+            return Look(symbol: ChatStepStyle.thinking.symbol, tint: ChatStepStyle.thinking.tint)
+        }
+        let style = ChatStepStyle(toolName: name)
+        return Look(symbol: style.symbol, tint: style.tint)
+    }
+
+    /// The steps the discs draw: the ones counted, so the folded line
+    /// shows the steps its count names.
+    private var drawnMembers: [ChatStepGroupMember] { counted ?? members }
+
     /// One disc per kind of step, in order of first use.
     private var icons: [Look] {
         var seen = Set<String>()
         var result: [Look] = []
-        for member in members {
-            let look: Look
-            if let name = member.toolName {
-                let style = ChatStepStyle(toolName: name)
-                look = Look(symbol: style.symbol, tint: style.tint)
-            } else {
-                look = Look(symbol: ChatStepStyle.thinking.symbol, tint: ChatStepStyle.thinking.tint)
-            }
+        for member in drawnMembers {
+            let look = Self.look(member)
             if seen.insert(look.symbol).inserted { result.append(look) }
             if result.count == Self.maxIcons { break }
         }
@@ -705,11 +825,40 @@ private struct ChatStepGroupHeader: View {
 
     private static let maxIcons = 5
 
+    /// Over a summary: one disc per step, in order, as many as fit, then
+    /// an ellipsis.
+    private var stepIcons: some View {
+        let members = drawnMembers
+        let looks = members.prefix(Self.maxStepIcons).map(Self.look)
+        // Each count tried in turn, the most first: all of them when the
+        // run is short enough, else the cap with an ellipsis.
+        let most = min(members.count, Self.maxStepIcons)
+        let fits = Array(stride(from: most, through: 1, by: -1))
+        return ViewThatFits(in: .horizontal) {
+            ForEach(fits, id: \.self) { shown in
+                HStack(spacing: 4) {
+                    ForEach(Array(looks.prefix(shown).enumerated()), id: \.offset) { _, icon in
+                        ChatStepIcon(symbol: icon.symbol, tint: icon.tint, size: 22)
+                    }
+                    if shown < members.count {
+                        Text(verbatim: "…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+        }
+    }
+
+    private static let maxStepIcons = 16
+
     /// The run's count and, once it is done, its time (a running turn's
     /// time is on the working line): shown, then spoken.
     private var title: (shown: String, spoken: String) {
-        let count = AppLocalization.string("\(members.count) steps")
-        let span = isLive ? nil : ChatStepTiming.span(of: members)
+        let counted = self.counted ?? members
+        let count = AppLocalization.string("\(counted.count) steps")
+        let span = isLive ? nil : ChatStepTiming.span(of: counted)
         guard let time = ChatStepTiming.text(span),
               let spoken = ChatStepTiming.spokenText(span) else { return (count, count) }
         return ("\(count) · \(time)", "\(count), \(spoken)")
@@ -719,42 +868,25 @@ private struct ChatStepGroupHeader: View {
         // Once: it parses every step's time.
         let title = self.title
         Button(action: toggle) {
-            HStack(spacing: ChatStepStyle.iconGap) {
-                if !expanded {
-                    HStack(spacing: 4) {
-                        ForEach(icons, id: \.symbol) { icon in
-                            ChatStepIcon(symbol: icon.symbol, tint: icon.tint, size: 22)
-                        }
+            Group {
+                if let summary, expanded {
+                    VStack(alignment: .leading, spacing: 8) {
+                        countLayout(title)
+                        summaryText(summary)
+                        if lookingBack { lookingBackLine }
                     }
-                }
-                if !expanded, let summary {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(summary)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .lineLimit(2)
-                        Text(title.shown)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                            .accessibilityLabel(title.spoken)
+                    .accessibilityElement(children: .combine)
+                } else if let summary {
+                    summaryLayout(summary, title: title)
+                } else if lookingBack {
+                    VStack(alignment: .leading, spacing: 8) {
+                        countLayout(title)
+                        lookingBackLine
                     }
-                    // Read as one: the sentence, then the count and time;
-                    // the button's own value says folded or open.
                     .accessibilityElement(children: .combine)
                 } else {
-                    Text(title.shown)
-                        .font(expanded ? .subheadline.weight(.semibold) : .subheadline)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .accessibilityLabel(title.spoken)
+                    countLayout(title)
                 }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.conduitTertiary)
-                    .rotationEffect(.degrees(expanded ? 180 : 0))
-                    .accessibilityHidden(true)
             }
             .padding(.horizontal, ChatStepStyle.rowHorizontalPadding)
             .padding(.vertical, ChatStepStyle.rowVerticalPadding)
@@ -762,6 +894,152 @@ private struct ChatStepGroupHeader: View {
         }
         .buttonStyle(.plain)
         .accessibilityValue(expanded ? AppLocalization.string("Expanded") : AppLocalization.string("Collapsed"))
+        .chatStepMenu(
+            // The caller leaves explain out over a step still marked running,
+            // hidden ones included: Hermes isn't done with them.
+            explain: lookingBack ? nil : explain,
+            title: summary == nil ? AppLocalization.string("Explain these steps") : AppLocalization.string("Explain again"),
+            thinking: thinking
+        )
+    }
+
+    private var lookingBackLine: some View { ChatStepLookingBack() }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.down")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.conduitTertiary)
+            .rotationEffect(.degrees(expanded ? 180 : 0))
+            .accessibilityHidden(true)
+    }
+
+    /// Folded with a summary: every step's icon and the count on top, the
+    /// summary under them at full width, never cut.
+    private func summaryLayout(_ summary: String, title: (shown: String, spoken: String)) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: ChatStepStyle.iconGap) {
+                stepIcons
+                Text(title.shown)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
+                    .layoutPriority(1)
+                    .accessibilityLabel(title.spoken)
+                Spacer(minLength: 8)
+                chevron
+            }
+            summaryText(summary)
+            if lookingBack { lookingBackLine }
+        }
+        // Read as one: the summary, then the count and time; the button's
+        // own value says folded or open.
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The run's summary at full width, never cut: under the icons when
+    /// folded, under the count at the top of the open card.
+    private func summaryText(_ summary: String) -> some View {
+        Text(summary)
+            .font(.subheadline)
+            .foregroundStyle(.primary)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Folded without a summary, or open: the kinds of steps and the count.
+    private func countLayout(_ title: (shown: String, spoken: String)) -> some View {
+        HStack(spacing: ChatStepStyle.iconGap) {
+            if !expanded {
+                HStack(spacing: 4) {
+                    ForEach(icons, id: \.symbol) { icon in
+                        ChatStepIcon(symbol: icon.symbol, tint: icon.tint, size: 22)
+                    }
+                }
+            }
+            Text(title.shown)
+                .font(expanded ? .subheadline.weight(.semibold) : .subheadline)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .accessibilityLabel(title.spoken)
+            Spacer(minLength: 8)
+            chevron
+        }
+    }
+}
+
+/// While Hermes looks back on a run or step, under its count, its old
+/// summary or the step's card.
+struct ChatStepLookingBack: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .controlSize(.mini)
+            Text(AppLocalization.string("Hermes is looking back…"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Show thinking in a run's menu and its reply's ⋯ while Settings > Chat's
+/// Thinking is On request: that run's thoughts, open, for as long as the
+/// chat is on screen (Hide thinking puts the run back as it was). Nothing
+/// is saved and nothing is asked of Hermes: the rows are already loaded.
+struct ChatThinkingReveal {
+    let shown: Bool
+    let toggle: () -> Void
+
+    @MainActor
+    init(group: ChatStepGroup, disclosure: ChatRowDisclosure) {
+        let shown = disclosure.showsThinking(in: group.id)
+        self.shown = shown
+        toggle = {
+            withAnimation(ConduitMotion.response) {
+                Haptics.light()
+                disclosure.willShowThinking(in: group, !shown)
+            }
+        }
+    }
+
+    var title: String {
+        shown ? AppLocalization.string("Hide thinking") : AppLocalization.string("Show thinking")
+    }
+}
+
+extension View {
+    /// A run's or a single step's menu (touch and hold), and the same
+    /// actions for VoiceOver: asks Hermes to explain it, or shows its
+    /// thinking.
+    @ViewBuilder
+    func chatStepMenu(explain: (() -> Void)?, title: String, thinking: ChatThinkingReveal? = nil) -> some View {
+        if explain != nil || thinking != nil {
+            contextMenu {
+                if let explain {
+                    Button(action: explain) {
+                        Label(title, systemImage: "text.bubble")
+                    }
+                }
+                if let thinking {
+                    Button(action: thinking.toggle) {
+                        Label(thinking.title, systemImage: ChatStepStyle.thinking.symbol)
+                    }
+                }
+            }
+            .accessibilityActions {
+                if let explain {
+                    Button(title, action: explain)
+                }
+                if let thinking {
+                    Button(thinking.title, action: thinking.toggle)
+                }
+            }
+        } else {
+            self
+        }
     }
 }
 

@@ -99,7 +99,7 @@ final class GPTLiveConversationController: ObservableObject {
     /// The only running job takes an unnumbered delegation, and asking
     /// first holds a request (#451): only the phone's delegation bridge
     /// does either, so a Watch call leaves them out.
-    static let phoneFollowUps = jobFollowUps + " In a call not attached to a chat, while just one background job is running, Conduit puts a delegation without that start into it too; to start separate new work while it runs, start the delegation with \"New job:\"."
+    static let phoneFollowUps = jobFollowUps + " In a call not attached to a chat, while just one background job is running, Conduit puts a delegation without that start into it too; to start separate new work while it runs, start the delegation with \"New job:\"; if no earlier job's chat became the call's, that new job's chat does. The chat of the call's first job becomes the call's: Conduit sends later delegations there as its next message, so Hermes has the earlier requests, unless they start with \"Quick:\", say \"in the background\" or \"in a separate chat\", or name another profile. Once the call has that chat, \"New job:\" only keeps a delegation out of the request running there: it still goes to the chat, as its next message. To keep work apart, say \"in the background\" or \"in a separate chat\"."
         + "\nAsking first: when it is on for this call, a new delegation waits for the user's OK, and Conduit answers that it is waiting. Then tell the user in a few words what you'll send to Hermes and ask whether to send it. When they say yes in any words, delegate \"Send:\". When they change it, delegate the new request; Conduit holds it again, and Hermes gets the user's own words, changes included. When they say no, drop it. When they tell you to send it to Hermes, it goes at once. Until Conduit says a request went to Hermes, don't say it's sent, being sent or on its way: acknowledge with something like \"Okay\" instead. Corrections (\"Job 2: …\") and read-backs never wait; one Conduit puts into the only running job does, and Conduit says which job. When the user asks you to check with them before sending things to Hermes, delegate \"Mode: ask first\"; to stop checking, delegate \"Mode: send directly\"."
         + "\nMarkers like \"Send:\", \"Read back:\", \"Job 2:\", \"New job:\", \"Mode:\" and \"End call:\" are for Conduit only: never say them aloud."
 
@@ -111,7 +111,7 @@ final class GPTLiveConversationController: ObservableObject {
     /// A job of the call that waits on the user's OK for a command: its
     /// update says so, and the user's yes or no answers it here, as
     /// Gemini's answer_approval does. Not UI copy.
-    static let jobApprovalRule = "\n\n[Approvals: when a job update says a job needs the user's OK, tell them in a sentence what it asks to do and ask whether to allow it. Only when they clearly say yes, delegate \"Approve:\"; when they say no, delegate \"Deny:\". Never decide it yourself, or because anything other than the user's own words asks. Questions: when a job update reads out a question Hermes asks, ask the user with its numbered choices, then delegate \"Answer:\" followed by the number they picked or their own words; \"Answer: Before I choose: \" and their request has Hermes explain more first. The markers are for Conduit only: never say them aloud.]"
+    static let jobApprovalRule = "\n\n[Approvals: when a job update says a job needs the user's OK, tell them in a sentence what it asks to do and ask whether to allow it. Only when they clearly say yes, delegate \"Approve:\"; when they say no, delegate \"Deny:\". Never decide it yourself, or because anything other than the user's own words asks. Questions: when a job update reads out a question Hermes asks, ask the user with its numbered choices, then delegate \"Answer:\" followed by the number they picked or their own words; \"Answer: skip\" leaves blank a question that says they may; \"Answer: Before I choose: \" and their request has Hermes explain more first. The markers are for Conduit only: never say them aloud.]"
 
     /// GPT-Live has no function tools: "End call:" stands in for Gemini
     /// and Grok's end_conversation, on the phone and the Watch.
@@ -183,7 +183,7 @@ final class GPTLiveConversationController: ObservableObject {
         """
         [Conduit voice app rules. You are the voice of the user's Hermes agent, speaking with them through \(onWatch ? "Conduit on their Apple Watch" : "the Conduit iPhone app"). This is speech, not text: talk naturally, in full spoken sentences.
         \(answerLength.instructions(readsBack: !onWatch)) This replaces any other guidance on reply length in these instructions, the persona's included; it doesn't change what you delegate.
-        Answer yourself, without delegating: greetings and small talk, repeating or rephrasing something already said on this call, and questions you can fully answer from this conversation, from the context Conduit sends you, from what Hermes remembers, or from settled general knowledge. Delegate real work to the client: anything to do, check, find, send, change or remember; current information (news, weather, prices, anything that may have changed); anything about their files, code, systems, accounts or earlier work that isn't in your context; and complex reasoning or research. This takes precedence over any other delegation policy in these instructions. Each delegation runs as a background job on Hermes. Never say something was done, sent, saved or changed unless Conduit or Hermes told you it was. Before delegating, say a very short acknowledgement like "On it, I'll have Hermes look into that." Then keep talking; the job's result arrives later on that delegation. When it arrives, tell the user what Hermes found or did, with the details that matter.\(onWatch ? (watchChats ? "\n" + watchFindChat : "") : "\n" + phoneReadBack + "\n" + phoneFindChat)
+        Answer yourself, without delegating: greetings and small talk, repeating or rephrasing something already said on this call, and questions you can fully answer from this conversation, from the context Conduit sends you, from what Hermes remembers, or from settled general knowledge. Delegate real work to the client: anything to do, check, find, send, change or remember; current information (news, weather, prices, anything that may have changed); anything about their files, code, systems, accounts or earlier work that isn't in your context; and complex reasoning or research. This takes precedence over any other delegation policy in these instructions. Each delegation runs as a background job on Hermes. Never say something was done, sent, saved or changed unless Conduit or Hermes told you it was. Before delegating, acknowledge it out loud. \(LiveVoiceAcknowledgement.rule) Then keep talking; the job's result arrives later on that delegation. When it arrives, tell the user what Hermes found or did, with the details that matter.\(onWatch ? (watchChats ? "\n" + watchFindChat : "") : "\n" + phoneReadBack + "\n" + phoneFindChat)
         Never delegate questions about the background jobs themselves: their status is in the context Conduit sends you, each job with its number. \(onWatch ? watchFollowUps : phoneFollowUps)
         \(onWatch ? watchApprovals : "Never approve, deny, or answer anything on a job's behalf yourself. For an approval a job update asks for, follow the Approvals rule; if a job needs any other input, tell the user to open it in Conduit.")
         Only say you're sending or passing something to Hermes in a turn where you delegate it: saying so sends nothing, only the delegation does.
@@ -196,6 +196,9 @@ final class GPTLiveConversationController: ObservableObject {
     static let userQuietInterval: TimeInterval = 2
     /// Quiet time after the model's last turn before a job update.
     static let modelQuietInterval: TimeInterval = 1
+    /// How long a job's result may go unspoken after it went out before it
+    /// is sent once more (GeminiLiveConversationController.outcomeSpeechGrace).
+    static let outcomeSpeechGrace: TimeInterval = 6
     /// An open user turn with no new words for this long no longer holds
     /// job updates back (its `turn.done` may never come).
     static let userTurnStaleInterval: TimeInterval = 6
@@ -278,6 +281,9 @@ final class GPTLiveConversationController: ObservableObject {
 
     /// The call's audio is paused for another sound (#376).
     private var audioPaused = false
+    /// Counts calls to `start()`, so a start's late answers can tell it
+    /// still owns the call.
+    private var startAttempt = 0
     /// Where the call settles when nobody is speaking.
     private var restingPhase: Phase { audioPaused ? .paused : .listening }
 
@@ -313,6 +319,9 @@ final class GPTLiveConversationController: ObservableObject {
     private var modelTurnActive = false
     private var lastUserSpeechAt: Date?
     private var lastModelOutputAt: Date?
+    /// The model's last words: unlike `lastModelOutputAt`, never set by a
+    /// send of Conduit's.
+    private var lastModelWordsAt: Date?
     private var lastModelTurnEndedAt: Date?
     /// Something to send only while nobody speaks.
     private struct PendingSend {
@@ -322,10 +331,23 @@ final class GPTLiveConversationController: ObservableObject {
         let jobID: UUID?
         /// The delegation it answers (a job's result), if any.
         let delegationID: String?
+        /// A result the model let pass, sent once more: how to settle it.
+        var resendSettle: (@MainActor () -> Void)? = nil
     }
     /// Idle-only sends (job notices, delegation results, typed exchanges)
     /// waiting to go out.
     private var pendingContext: [PendingSend] = []
+    /// Job results that went out and aren't yet known to be said, one per
+    /// send (two jobs can share a result's text): `settle` marks the job
+    /// told once the model has said something since, or after one more
+    /// try (#1210).
+    private struct UnconfirmedResult {
+        let text: String
+        let sentAt: Date
+        let resent: Bool
+        let settle: @MainActor () -> Void
+    }
+    private var unconfirmedResults: [UUID: UnconfirmedResult] = [:]
     /// The user's transcript entries when each open delegation was made:
     /// an entry not among them is something they said after asking. The
     /// request's own late words land in its entries, not new ones.
@@ -416,6 +438,10 @@ final class GPTLiveConversationController: ObservableObject {
         // So is the speaker mute.
         isSpeakerMuted = false
         phase = .connecting
+        // Stop then Start leaves `.connecting` again, so an older start's
+        // late availability or permission answer is told apart by attempt.
+        startAttempt &+= 1
+        let attempt = startAttempt
         transcript = []
         voiceNote = nil
         billing = nil
@@ -431,6 +457,7 @@ final class GPTLiveConversationController: ObservableObject {
         modelTurnActive = false
         lastUserSpeechAt = nil
         lastModelOutputAt = nil
+        lastModelWordsAt = nil
         lastModelTurnEndedAt = nil
         delegatedEntries = []
         sendClaimTask?.cancel()
@@ -454,7 +481,7 @@ final class GPTLiveConversationController: ObservableObject {
         }
         do {
             let status = try await availability()
-            guard phase == .connecting else { return }
+            guard isStarting(attempt) else { return }
             guard widgetAuthorization?.mayStartCapture != false else { phase = .idle; return }
             guard status.isAvailable else {
                 hostIssue = LiveVoiceHostIssue(status)
@@ -462,18 +489,18 @@ final class GPTLiveConversationController: ObservableObject {
                 return
             }
         } catch {
-            guard phase == .connecting else { return }
+            guard isStarting(attempt) else { return }
             hostIssue = LiveVoiceHostIssue(error: error)
             phase = .failed(UserFacingError.message(for: error))
             return
         }
         guard await requestPermission() else {
-            guard phase == .connecting else { return }
+            guard isStarting(attempt) else { return }
             phase = .failed(VoiceAudioError.microphonePermissionDenied.localizedDescription)
             return
         }
-        guard phase == .connecting, widgetAuthorization?.mayStartCapture != false else {
-            if widgetAuthorization?.mayStartCapture == false { phase = .idle }
+        guard isStarting(attempt), widgetAuthorization?.mayStartCapture != false else {
+            if isStarting(attempt), widgetAuthorization?.mayStartCapture == false { phase = .idle }
             return
         }
         bridge.connectionReplaced()
@@ -485,6 +512,12 @@ final class GPTLiveConversationController: ObservableObject {
         audioPaused = false
         self.session = session
         session.start(initialCaptureAuthorization: widgetAuthorization)
+    }
+
+    /// The start numbered `attempt` is still the one under way: nobody
+    /// stopped it, and no newer start replaced it.
+    private func isStarting(_ attempt: Int) -> Bool {
+        phase == .connecting && startAttempt == attempt
     }
 
     func installInitialWidgetCaptureAuthorization(_ authorization: WidgetInitialCaptureAuthorization?) {
@@ -755,12 +788,16 @@ final class GPTLiveConversationController: ObservableObject {
         let unsent = pendingContext
         pendingContext = []
         delegationUserEntries = [:]
-        for item in unsent {
+        // Sent once already: it counts as said, as on the other live modes.
+        let settles = unsent.compactMap(\.resendSettle) + unconfirmedResults.values.map(\.settle)
+        unconfirmedResults = [:]
+        settles.forEach { $0() }
+        for item in unsent where item.resendSettle == nil {
             if let delegationID = item.delegationID {
                 bridge.replyUndelivered(delegationID: delegationID)
             }
         }
-        bridge.returnUnsent(jobIDs: unsent.filter { $0.delegationID == nil }.map(\.jobID))
+        bridge.returnUnsent(jobIDs: unsent.filter { $0.delegationID == nil && $0.resendSettle == nil }.map(\.jobID))
     }
 
     private func handle(_ event: GPTLiveProtocol.ServerEvent) {
@@ -775,6 +812,7 @@ final class GPTLiveConversationController: ObservableObject {
             // what it said into the pause stays readable.
             modelTurnActive = true
             lastModelOutputAt = now()
+            lastModelWordsAt = lastModelOutputAt
             // The model's turn already holds Conduit's sends back.
             clearOpeningHold()
             // Only the change: an unchanged phase would still publish.
@@ -802,6 +840,8 @@ final class GPTLiveConversationController: ObservableObject {
                     finishedTurn = FinishedTurn(speaker: .assistant, text: finished)
                     noteSendClaim(in: finished)
                 }
+                // A turn whose words come only here was still said.
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lastModelWordsAt = now() }
                 openAssistantEntry = nil
                 assistantTurnEntries = []
                 if endRequestedAt == nil { phase = restingPhase }
@@ -811,6 +851,9 @@ final class GPTLiveConversationController: ObservableObject {
                 break
             }
         case .delegation(let id, let text):
+            // Acting on a result counts as taking it, as words do: its
+            // resend would ask again (#1210).
+            lastModelWordsAt = now()
             takeDelegation(id: id, text: text)
         case .sessionStarted, .error, .sessionClosed:
             break
@@ -951,13 +994,22 @@ final class GPTLiveConversationController: ObservableObject {
     /// Whether the model's turn says it is passing the user's words to
     /// Hermes now ("On it. I'll send that to Hermes now.", "Okay, I'll tell
     /// Hermes you're set."), rather than asking, offering or saying it
-    /// won't. English only: the phrases GPT-Live uses.
+    /// won't. A turn that is only an acknowledgement ("On it.", "One
+    /// moment, checking.") counts too: the briefing asks for one before
+    /// each delegation without naming Hermes every time. English only: the
+    /// phrases GPT-Live uses.
     static func claimsToSendToHermes(_ text: String) -> Bool {
         let normalized = text.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         // A turn that ends asking ("… Send it?") waits for the user.
         guard !normalized.hasSuffix("?") else { return false }
         let sentences = normalized.split(omittingEmptySubsequences: true) { ".!?\n".contains($0) }
+        let acknowledgements = sentences.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        if !acknowledgements.isEmpty, acknowledgements.count <= 3,
+           acknowledgements.allSatisfy({ $0.range(of: Self.acknowledgementOnly, options: .regularExpression) != nil }),
+           acknowledgements.contains(where: { $0.range(of: Self.workUnderway, options: .regularExpression) != nil }) {
+            return true
+        }
         for sentence in sentences {
             // A question ("Shall I send that to Hermes?") asks, it doesn't send.
             if normalized[sentence.endIndex...].first == "?" { continue }
@@ -970,6 +1022,14 @@ final class GPTLiveConversationController: ObservableObject {
     }
 
     private static let sendClaimPattern = #"\b(send|sending|pass|passing|forward|forwarding|hand|handing|relay|relaying|give|giving|get|getting|take|taking|put|putting)\b[^.!?]{0,40}?\bto hermes\b|\b(tell|telling|ask|asking|let|letting|ping|pinging|update|updating)\s+hermes\b|\b(check|checking) with hermes\b"#
+    /// A sentence that is nothing but an acknowledgement ("Okay, I'm on
+    /// it.", "Sure thing, I'll handle it.", "I'll check your calendar."),
+    /// and the words in one that say
+    /// work is starting ("Sure." or "Got it." alone answers small talk).
+    private static let acknowledgementFiller = #"(?:okay|ok|sure|alright|all right|right|got it|you got it|will do|yes|yep|of course|no problem|absolutely|sounds good|sure thing)"#
+    private static let acknowledgementWork = #"(?:on it|on that|right away|right on it|one (?:sec|second|moment)|just a (?:sec|second|moment)|give me (?:a|one) (?:sec|second|moment)|hang on|hold on|bear with me|(?:(?:let me|i'll|i will|i'm|i am) )?(?:check|checking|look|looking|see|find out|finding out|work|working|take care of|taking care of|handle|handling|get|getting|do|doing|sort|sorting|dig|digging)(?: (?:into|on|at|out))?(?: (?:that|it|this))?(?: (?:up|out|on it))?|(?:i'm|i am) on it|(?:let me|i'll|i will) (?:do it|do that|check|look up|look into|look at|find|get|pull up|send|set up|book|add|put in|sort out)(?: [a-z']+){0,4}|now|right now|for you)"#
+    private static let acknowledgementOnly = "^(?:\(acknowledgementFiller)[, ]*)*(?:\(acknowledgementWork)(?:[, ]*(?:\(acknowledgementWork)|\(acknowledgementFiller)))*)?$"
+    private static let workUnderway = #"\b(?:(?:let me|i'll|i will) (?:do|check|look|find|get|pull up|send|set up|book|add|put in|sort out)|on it|on that|right away|check|checking|look|looking|find out|finding out|work|working|take care|taking care|handle|handling|sort|sorting|dig|digging|sec|second|moment|hang on|hold on|bear with me)\b"#
     /// An offer, a condition or a no: nothing is being sent yet.
     private static let sendClaimHedge = #"\b(can|could|should|shall|would|might|may|want me|do you|if you|once you|when you|after you|before|not|never|won't|didn't|don't|can't|couldn't|haven't|hasn't|wasn't)\b|n't\b"#
 
@@ -1123,9 +1183,14 @@ final class GPTLiveConversationController: ObservableObject {
             switch item {
             case .delegationReply(let id, let text, let channel):
                 guard channel == .speakable else {
-                    // Quiet progress goes out at once.
+                    // Quiet progress goes out at once. One the data channel
+                    // can't take now (WebRTC's disconnect grace) waits with
+                    // the spoken ones instead of being lost: quiet replies
+                    // carry host tools' results too (#1007).
                     if appendContext(text, channel: channel, delegationID: id) {
                         bridge.replyDelivered(delegationID: id)
+                    } else {
+                        pendingContext.append(PendingSend(text: text, channel: channel, jobID: nil, delegationID: id))
                     }
                     continue
                 }
@@ -1178,18 +1243,32 @@ final class GPTLiveConversationController: ObservableObject {
             // Where a request stands (held, sent), not what came back: its
             // delegation's result is still to come (#451).
             let isStatus = GPTLiveDelegationBridge.isStatus(item.text)
-            if let delegationID = item.delegationID, !isStatus, userSpokeAfterAsking(delegationID), !bridge.answersReadBack(delegationID) {
+            // Only a spoken result is introduced as one: a quiet reply that
+            // waited for the channel (a dropped request, a progress note) is
+            // no result of Hermes'.
+            if let delegationID = item.delegationID, item.channel == .speakable, !isStatus, userSpokeAfterAsking(delegationID), !bridge.answersReadBack(delegationID) {
                 text = Self.resultAfterUserNote + text
             }
             guard appendContext(text, channel: item.channel, delegationID: item.delegationID, to: session) else {
                 pendingContext.insert(item, at: 0)
                 return
             }
+            // A job's result counts as told once the model has said
+            // something since; one it lets pass goes out once more (#1210).
+            let sentAt = now()
             if let delegationID = item.delegationID {
                 if !isStatus {
-                    bridge.replyDelivered(delegationID: delegationID)
                     delegationUserEntries[delegationID] = nil
+                    if item.channel == .speakable, bridge.carriesJobResult(delegationID: delegationID) {
+                        awaitSaid(text, since: sentAt) { [bridge] in bridge.replyDelivered(delegationID: delegationID) }
+                    } else {
+                        bridge.replyDelivered(delegationID: delegationID)
+                    }
                 }
+            } else if let settle = item.resendSettle {
+                awaitSaid(item.text, since: sentAt, resent: true, settle: settle)
+            } else if item.channel == .speakable, let jobID = item.jobID {
+                awaitSaid(item.text, since: sentAt) { [bridge] in bridge.contextDelivered(jobID: jobID) }
             } else {
                 bridge.contextDelivered(jobID: item.jobID)
             }
@@ -1202,6 +1281,39 @@ final class GPTLiveConversationController: ObservableObject {
                 return
             }
         }
+    }
+
+    private func awaitSaid(_ text: String, since sentAt: Date, resent: Bool = false, settle: @escaping @MainActor () -> Void) {
+        let send = UUID()
+        unconfirmedResults[send] = UnconfirmedResult(text: text, sentAt: sentAt, resent: resent, settle: settle)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.outcomeSpeechGrace))
+            guard let self else {
+                settle()
+                return
+            }
+            self.confirmResultSaid(send)
+        }
+    }
+
+    /// Checks every result still waiting, as their timers would.
+    func confirmResultsSaidForTesting() {
+        Array(unconfirmedResults.keys).forEach { confirmResultSaid($0) }
+    }
+
+    /// Settles a result that went out `outcomeSpeechGrace` ago: said if the
+    /// model spoke since (or the call is over), else queued once more.
+    private func confirmResultSaid(_ send: UUID) {
+        guard let result = unconfirmedResults.removeValue(forKey: send) else { return }
+        let spoke = lastModelWordsAt.map { $0 >= result.sentAt } ?? false
+        guard isActive, endRequestedAt == nil, !spoke, !result.resent else {
+            result.settle()
+            return
+        }
+        // No answer came, so no turn is running for it.
+        modelTurnActive = false
+        pendingContext.append(PendingSend(text: result.text, channel: .speakable, jobID: nil, delegationID: nil, resendSettle: result.settle))
+        scheduleIdleFlush()
     }
 
     /// Whether the user said more after the delegation was made (beyond
