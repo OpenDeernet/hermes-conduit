@@ -1330,6 +1330,50 @@ final class MessageNormalizerTests: XCTestCase {
         XCTAssertNil(kept.data(forKey: PushNotificationService.waitingTapKey))
     }
 
+    /// Quiet for today's retry waiting for a call waits again after a
+    /// relaunch, as a tap does, but only on the day it was pressed: it was
+    /// Quiet for that day, so a call or a relaunch past midnight drops it.
+    func testQuietRetryWaitingForACallWaitsAgainAfterARelaunchThatDay() {
+        let kept = makeScratchDefaults("WaitingPulseQuiet")
+        guard let noon = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date()),
+              let lateEvening = Calendar.current.date(bySettingHour: 23, minute: 30, second: 0, of: noon) else {
+            return XCTFail("Expected today's noon and late evening")
+        }
+        var date = noon
+        let first = PushNotificationService(retryDelay: .zero, keptTaps: kept, date: { date })
+        let quiet = PulseQuietTarget(dashboardID: UUID().uuidString, gatewayID: "gw-2")
+        first.pulseQuietAwaitsCall(quiet)
+
+        date = noon.addingTimeInterval(3600)
+        let relaunched = PushNotificationService(retryDelay: .zero, keptTaps: kept, date: { date })
+        XCTAssertEqual(relaunched.pendingPulseQuiet, quiet)
+        XCTAssertEqual(relaunched.pulseQuietAttempt, 1, "its wait starts again")
+        XCTAssertTrue(relaunched.takePendingPulseQuiet(quiet), "it goes through that day")
+        XCTAssertNil(kept.data(forKey: PushNotificationService.waitingPulseQuietKey), "going through lets it go")
+
+        relaunched.pulseQuietAwaitsCall(quiet)
+        relaunched.receiveNotificationPayload([
+            "conduit": ["session_id": "runtime-2", "type": "response.ready"] as [String: Any]
+        ])
+        XCTAssertNil(relaunched.pendingPulseQuiet)
+        XCTAssertNil(kept.data(forKey: PushNotificationService.waitingPulseQuietKey), "a newer tap replaces it")
+
+        relaunched.pulseQuietAwaitsCall(quiet)
+        date = date.addingTimeInterval(PushNotificationService.waitingTapLifetime)
+        XCTAssertNil(PushNotificationService(retryDelay: .zero, keptTaps: kept, date: { date }).pendingPulseQuiet,
+                     "too old, as a tap would be")
+        XCTAssertNil(kept.data(forKey: PushNotificationService.waitingPulseQuietKey))
+
+        date = lateEvening
+        relaunched.pulseQuietAwaitsCall(quiet)
+        date = lateEvening.addingTimeInterval(3600)
+        XCTAssertNil(PushNotificationService(retryDelay: .zero, keptTaps: kept, date: { date }).pendingPulseQuiet,
+                     "pressed yesterday: the day it was for has ended")
+        XCTAssertNil(kept.data(forKey: PushNotificationService.waitingPulseQuietKey))
+        XCTAssertFalse(relaunched.takePendingPulseQuiet(quiet), "nor does a call past midnight carry it over")
+        XCTAssertNil(relaunched.pendingPulseQuiet)
+    }
+
     func testSessionNormalizationDoesNotInventOwnershipWithoutFallback() {
         let sessions = MessageNormalizer.normalizeSessions(
             .object([

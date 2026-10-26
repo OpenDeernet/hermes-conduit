@@ -459,21 +459,18 @@ struct ConduitApp: App {
                     notifications.notificationRouteAwaitsCall(target)
                 }
             }
-            // Quiet for today's retry waiting for a call, as a notification
-            // waits above: it goes through once two checks in a row find no
-            // call and Conduit on screen.
+            // Quiet for today's retry waiting for a call (or, after a
+            // relaunch, the one Conduit closing ended), as a notification
+            // waits above: it goes through once there's no call and Conduit
+            // is on screen.
             .task(id: notifications.pulseQuietAttempt) {
                 guard let target = notifications.pendingPulseQuiet else { return }
-                var readyBefore = false
-                while true {
-                    let ready = !appState.isVoiceCallInProgress && appState.isSceneActive
-                    if ready, readyBefore { break }
-                    readyBefore = ready
-                    do { try await Task.sleep(for: Self.callEndRecheckInterval) } catch { return }
-                }
-                // A newer tap took over meanwhile.
-                guard notifications.pendingPulseQuiet == target else { return }
-                notifications.clearPendingPulseQuiet(target)
+                guard await PushNotificationService.waitForCallToEnd(
+                    interval: Self.callEndRecheckInterval,
+                    isReady: { !appState.isVoiceCallInProgress && appState.isSceneActive }
+                ) else { return }
+                // A newer tap took over meanwhile, or the day it was for ended.
+                guard notifications.takePendingPulseQuiet(target) else { return }
                 let quiet = await appState.quietPulseForToday(target, switching: true, wait: .seconds(20))
                 if quiet || appState.pulseQuietOwnership(target) == .route {
                     appState.openPulse(card: nil)

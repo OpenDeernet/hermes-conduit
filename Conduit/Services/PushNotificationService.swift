@@ -177,6 +177,14 @@ private struct WaitingTap: Codable {
     let waitingSince: Date
 }
 
+/// Quiet for today's retry waiting for a call, kept across a relaunch as a
+/// `WaitingTap` is: where it's for, and when it was pressed.
+private struct WaitingPulseQuiet: Codable {
+    let dashboardID: String?
+    let gatewayID: String?
+    let waitingSince: Date
+}
+
 /// Relay + paired-plugin compatibility state (`GET /v1/meta`), rendered in
 /// Settings > Notifications so users can see when the notifier plugin or the
 /// relay needs an update for decision cards to work. Capability flags (not
@@ -489,9 +497,12 @@ final class PushNotificationService: ObservableObject {
     @Published private(set) var pendingRouteAwaitsCall = false
     /// Quiet for today's retry, tapped during a call when its push is from
     /// another saved dashboard: the switch would end the call, so it waits
-    /// for the call to end, as a tapped notification does. A newer tap
+    /// for the call to end, as a tapped notification does, kept across a
+    /// relaunch the same way (`restoreWaitingPulseQuiet`). A newer tap
     /// replaces it, and it replaces a tap that waits.
     @Published private(set) var pendingPulseQuiet: PulseQuietTarget?
+    /// When the waiting retry was pressed: it's for that day only.
+    private var pendingPulseQuietSince: Date?
     /// Starts the retry's wait over each time a call stops it.
     @Published private(set) var pulseQuietAttempt = 0
     @Published var preferences = ConduitNotificationPreferences() {
@@ -759,6 +770,7 @@ final class PushNotificationService: ObservableObject {
     private let keptTaps: UserDefaults?
     private let date: () -> Date
     static let waitingTapKey = "conduit.notifications.waitingTap"
+    static let waitingPulseQuietKey = "conduit.notifications.waitingPulseQuiet"
     /// How long after its wait began a kept tap still opens after a
     /// relaunch: closing Conduit ends a call on the phone, and a launch
     /// much later shouldn't switch workspace for an old tap.
@@ -807,6 +819,7 @@ final class PushNotificationService: ObservableObject {
         NotificationSharedSettings.appLanguage = AppLanguage.current.rawValue
         refreshEncryptionState()
         restoreWaitingTap()
+        restoreWaitingPulseQuiet()
     }
 
     // MARK: End-to-end encryption (#431)
@@ -2149,13 +2162,53 @@ final class PushNotificationService: ObservableObject {
     /// ended: it goes through once the call ends (ConduitApp).
     func pulseQuietAwaitsCall(_ target: PulseQuietTarget) {
         if pendingRouteAwaitsCall, let pendingTarget { clearPendingTarget(pendingTarget) }
+        let pressedAt = date()
         pendingPulseQuiet = target
+        pendingPulseQuietSince = pressedAt
+        keepWaitingPulseQuiet(target, since: pressedAt)
         pulseQuietAttempt += 1
     }
 
-    func clearPendingPulseQuiet(_ target: PulseQuietTarget) {
-        guard pendingPulseQuiet == target else { return }
+    /// The call `target` waited for has ended: it stops waiting, and goes
+    /// through if this returns true. False when a newer tap replaced it, or
+    /// when the day it was pressed has ended on the phone's clock: it was
+    /// Quiet for that day, and the next one isn't it.
+    func takePendingPulseQuiet(_ target: PulseQuietTarget) -> Bool {
+        guard pendingPulseQuiet == target else { return false }
+        let pressedAt = pendingPulseQuietSince
         pendingPulseQuiet = nil
+        pendingPulseQuietSince = nil
+        forgetWaitingPulseQuiet()
+        return pressedAt.map { Calendar.current.isDate($0, inSameDayAs: date()) } ?? false
+    }
+
+    private func keepWaitingPulseQuiet(_ target: PulseQuietTarget, since pressedAt: Date) {
+        guard let keptTaps else { return }
+        let quiet = WaitingPulseQuiet(dashboardID: target.dashboardID, gatewayID: target.gatewayID,
+                                      waitingSince: pressedAt)
+        keptTaps.set(try? JSONEncoder().encode(quiet), forKey: Self.waitingPulseQuietKey)
+    }
+
+    private func forgetWaitingPulseQuiet() {
+        keptTaps?.removeObject(forKey: Self.waitingPulseQuietKey)
+    }
+
+    /// A retry that was waiting for a call when Conduit closed waits again,
+    /// as a waiting tap does (`restoreWaitingTap`): not one older than
+    /// `waitingTapLifetime`, nor one pressed on an earlier day.
+    private func restoreWaitingPulseQuiet() {
+        guard let keptTaps, pendingPulseQuiet == nil,
+              let data = keptTaps.data(forKey: Self.waitingPulseQuietKey) else { return }
+        let relaunchedAt = date()
+        guard let quiet = try? JSONDecoder().decode(WaitingPulseQuiet.self, from: data),
+              (0..<Self.waitingTapLifetime).contains(relaunchedAt.timeIntervalSince(quiet.waitingSince)),
+              Calendar.current.isDate(quiet.waitingSince, inSameDayAs: relaunchedAt) else {
+            forgetWaitingPulseQuiet()
+            return
+        }
+        pendingPulseQuiet = PulseQuietTarget(dashboardID: quiet.dashboardID, gatewayID: quiet.gatewayID)
+        pendingPulseQuietSince = quiet.waitingSince
+        pulseQuietAttempt += 1
     }
 
     // MARK: Ringing calls (#449 step 2)
@@ -2354,6 +2407,8 @@ final class PushNotificationService: ObservableObject {
         pendingRouteRetryFiredAt = nil
         pendingRouteAwaitsCall = false
         pendingPulseQuiet = nil
+        pendingPulseQuietSince = nil
+        forgetWaitingPulseQuiet()
         forgetWaitingTap()
         navigationAttempt += 1
     }

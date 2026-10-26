@@ -141,7 +141,7 @@ extension AppState {
         case .switchFirst(let id):
             guard switching else { return false }
             guard !isVoiceCallInProgress else {
-                errorMessage = AppLocalization.string("Pulse goes quiet in the other workspace when the call ends.")
+                showCallRefusal(AppLocalization.string("Pulse goes quiet in the other workspace when the call ends."))
                 if let target { PushNotificationService.shared.pulseQuietAwaitsCall(target) }
                 return false
             }

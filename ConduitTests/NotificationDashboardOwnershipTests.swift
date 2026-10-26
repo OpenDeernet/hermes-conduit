@@ -520,16 +520,19 @@ extension NotificationDashboardOwnershipTests {
         appState.showVoiceSheet = true
         let target = PulseQuietTarget(dashboardID: dashboardB.uuidString, gatewayID: "gw-2")
         let notifications = PushNotificationService.shared
-        defer { notifications.clearPendingPulseQuiet(target) }
+        defer { _ = notifications.takePendingPulseQuiet(target) }
         let attempt = notifications.pulseQuietAttempt
 
         // Another saved dashboard's push, retried with Conduit open: a call keeps
-        // Conduit where it is, and the retry waits for the call to end, saying so.
+        // Conduit where it is, and the retry waits for the call to end, saying
+        // so over the screen (the composer's error line doesn't show during a call).
         let quieted = await appState.quietPulseForToday(target, switching: true, wait: .zero)
 
         XCTAssertFalse(quieted)
         XCTAssertEqual(appState.activeDashboardID, dashboardA)
-        XCTAssertEqual(appState.errorMessage, AppLocalization.string("Pulse goes quiet in the other workspace when the call ends."))
+        XCTAssertEqual(appState.pinSyncNotice?.message,
+                       AppLocalization.string("Pulse goes quiet in the other workspace when the call ends."))
+        XCTAssertNil(appState.errorMessage, "nothing stale for the composer to show later")
         XCTAssertTrue(appState.isVoiceCallInProgress)
         XCTAssertEqual(notifications.pendingPulseQuiet, target)
         XCTAssertEqual(notifications.pulseQuietAttempt, attempt + 1)
