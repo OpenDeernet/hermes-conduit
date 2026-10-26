@@ -267,6 +267,38 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertEqual(PulseCardKind.topic("something new"), PulseCardKind.topic(""))  // unknown topics read "Noticed"
     }
 
+    func testWhyShowsOnAReportCardOnceThePluginGivesItsReason() throws {
+        let state = try appState()
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 1, "kind": "followup", "level": "push", "news": "The deploy is still waiting.",
+           "why": "You said you would check it."},
+          {"id": 2, "kind": "noticed", "topic": "date", "level": "screen", "news": "Dentist Friday",
+           "why": "Your calendar has it for Friday."},
+          {"id": 3, "kind": "noticed", "topic": "fact", "level": "screen", "news": "Ana is in town", "why": ""},
+          {"id": 4, "kind": "brief", "level": "screen", "news": "Your morning brief",
+           "why": "Your morning brief: what's still outstanding."},
+          {"id": 5, "kind": "report", "level": "push", "news": "Pulse noticed 2 things",
+           "why": "Your Pulse report: what Hermes saw in your chats since the last one."},
+          {"id": 6, "kind": "report", "level": "push", "news": "Pulse noticed 2 things", "why": ""}
+        ]}
+        """)))
+        let followup = page.cards[0], dated = page.cards[1], plain = page.cards[2]
+        let brief = page.cards[3], whole = page.cards[4], wholeNow = page.cards[5]
+        // A plugin from before gave report and brief cards stock lines: only a follow-up's reason shows.
+        state.setNotifierPluginStateForTesting(.reported(version: "0.80.0", capabilities: [PulseClient.feedCapability]))
+        XCTAssertTrue(state.explainsPulseCard(followup))
+        XCTAssertFalse(state.explainsPulseCard(dated) || state.explainsPulseCard(plain))
+        XCTAssertFalse(state.explainsPulseCard(brief) || state.explainsPulseCard(whole))
+        // One that gives each report item its candidate's reason (0.80.1): Why? where there is one.
+        state.setNotifierPluginStateForTesting(.reported(version: "0.80.1", capabilities: [
+            PulseClient.feedCapability, PulseClient.cardWhyCapability
+        ]))
+        XCTAssertTrue(state.explainsPulseCard(followup) && state.explainsPulseCard(dated) && state.explainsPulseCard(brief))
+        // A whole report's card has no reason from such a plugin, so no Why?.
+        XCTAssertFalse(state.explainsPulseCard(plain) || state.explainsPulseCard(wholeNow))
+    }
+
     func testDoItsMessageFitsWhatTheCardIsAbout() throws {
         let page = try XCTUnwrap(PulseFeedPage(json: json("""
         {"cards": [
