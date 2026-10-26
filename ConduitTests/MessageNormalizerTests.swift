@@ -1219,8 +1219,10 @@ final class MessageNormalizerTests: XCTestCase {
     }
 
     /// Quiet for today's retry waiting for a call replaces a tap that waits
-    /// too, never one opening (a call's own included), and a newer tap
-    /// replaces the retry.
+    /// too, never one opening (a call's own included); a tap that starts
+    /// waiting replaces the retry, and so does a newer tap. Whichever
+    /// started waiting last owns the call's end, so only one takes the
+    /// screen when it comes.
     func testQuietRetryWaitingForACallAndTapsReplaceEachOther() {
         let (service, pending) = makeWindowedService(now: { ContinuousClock.now })
         guard let opening = pending else { return XCTFail("Expected a pending target") }
@@ -1229,7 +1231,11 @@ final class MessageNormalizerTests: XCTestCase {
         XCTAssertEqual(service.pendingTarget, opening, "a tap opening stays")
         XCTAssertEqual(service.pendingPulseQuiet, quiet)
 
+        let waiting = service.pulseQuietAttempt
         service.notificationRouteAwaitsCall(opening)
+        XCTAssertNil(service.pendingPulseQuiet, "the tap's open came back waiting: it replaces the retry")
+        XCTAssertGreaterThan(service.pulseQuietAttempt, waiting, "and ends the wait it left running")
+
         service.pulseQuietAwaitsCall(quiet)
         XCTAssertNil(service.pendingTarget, "the newer retry replaces a tap that waits")
 

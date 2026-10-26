@@ -2503,6 +2503,16 @@ final class PushNotificationService: ObservableObject {
         pendingRouteRetryFiredAt = nil
         pendingRouteAwaitsCall = true
         keepWaitingTap(target)
+        if pendingPulseQuiet != nil {
+            // Pressed while this tap's open was still running: the newer
+            // waiter owns the call's end, so the two don't both take the
+            // screen when it comes, as `pulseQuietAwaitsCall` does the
+            // other way round.
+            pendingPulseQuiet = nil
+            pendingPulseQuietSince = nil
+            forgetWaitingPulseQuiet()
+            pulseQuietAttempt += 1
+        }
         navigationAttempt += 1
     }
 
