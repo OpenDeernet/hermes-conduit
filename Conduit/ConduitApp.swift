@@ -399,6 +399,20 @@ struct ConduitApp: App {
             .task { SiriProfileShortcuts.refresh() }
             .task(id: notificationRouteKey) {
                 guard let target = notifications.pendingTarget else { return }
+                if notifications.pendingRouteAwaitsCall {
+                    // Waiting for the call its switch would have ended (or,
+                    // after a relaunch, the one Conduit closing ended): it
+                    // opens once there's no call and Conduit is on screen,
+                    // unless a newer tap replaced it meanwhile.
+                    guard await PushNotificationService.waitForCallToEnd(
+                        interval: Self.callEndRecheckInterval,
+                        isReady: { appState.callWaitCanEnd }
+                    ), !Task.isCancelled, notifications.pendingTarget == target else { return }
+                }
+                // A refusal an earlier run left on the drawer shell's error
+                // line is done with: the call it waited for ended, or this
+                // tap replaced the one it was about.
+                appState.clearCallRefusal()
                 guard appState.isConnected else {
                     notifications.notificationRouteAwaitsConnection(target)
                     return
@@ -444,6 +458,28 @@ struct ConduitApp: App {
                     if target.call != nil {
                         HermesNativeCalls.shared.routedAnswerFailed(target)
                     }
+                case .afterCall:
+                    // It said it opens when the call ends; never a call's
+                    // own open, which switches during its call.
+                    notifications.notificationRouteAwaitsCall(target)
+                }
+            }
+            // Quiet for today's retry waiting for a call (or, after a
+            // relaunch, the one Conduit closing ended), as a notification
+            // waits above: it goes through once there's no call and Conduit
+            // is on screen.
+            .task(id: notifications.pulseQuietAttempt) {
+                guard let target = notifications.pendingPulseQuiet else { return }
+                guard await PushNotificationService.waitForCallToEnd(
+                    interval: Self.callEndRecheckInterval,
+                    isReady: { appState.callWaitCanEnd }
+                ) else { return }
+                appState.clearCallRefusal()
+                // A newer tap took over meanwhile, or the day it was for ended.
+                guard notifications.takePendingPulseQuiet(target) else { return }
+                let quiet = await appState.quietPulseForToday(target, switching: true, wait: .seconds(20))
+                if quiet || appState.pulseQuietOwnership(target) == .route {
+                    appState.openPulse(card: nil)
                 }
             }
             .task(id: voiceIntentRouteKey) {
@@ -469,6 +505,10 @@ struct ConduitApp: App {
 
     /// How often a screenshot waiting for Conduit to settle checks again.
     private static let settleRecheckInterval: Duration = .milliseconds(250)
+
+    /// How often a notification waiting for a call checks it again; it
+    /// opens once two checks in a row find no call, with Conduit on screen.
+    private static let callEndRecheckInterval: Duration = .seconds(1)
 
     private var parkedScreenQuestionKey: String {
         "\(appState.isConnected):\(appState.isConnecting):\(appState.isProfileSwitching):\(appState.parkedScreenQuestionRevision)"

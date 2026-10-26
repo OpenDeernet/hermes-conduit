@@ -11,6 +11,10 @@
 //  a lesson the user can undo. Before 0.81.1 thumbs moved a kind along the
 //  ladder; from then (`pulse_learns`) thumbs, Do it and Done teach Pulse
 //  what to bring up and how loudly, and a kind's level is the loudest it gets.
+//  From 0.84.0 (`pulse_explains`) it shows what it learned: a card's Why?
+//  names the biggest part learning played, What Pulse learned lists what
+//  learning holds with Reset, and What Pulse left out lists what the reports
+//  didn't bring up, with Bring it up.
 //
 
 import Foundation
@@ -61,6 +65,9 @@ struct PulseCard: Equatable, Identifiable {
     /// Hermes' reply as it wrote it (a report, a brief): bold, links and
     /// lines kept. Parsed once, not on every redraw.
     let formattedNews: AttributedString
+    /// The biggest part what Pulse learned played in bringing it up, for
+    /// its Why? (0.84.0); nil when learning added next to nothing.
+    let learned: PulsePreference?
 
     init?(json: Any) {
         guard let object = json as? [String: Any], let id = PulseJSON.int(object["id"]) else { return nil }
@@ -88,6 +95,8 @@ struct PulseCard: Equatable, Identifiable {
         rating = object["rating"] as? String ?? ""
         reason = object["reason"] as? String ?? ""
         formattedNews = Self.formatted(news, markdown: kind != "followup")
+        learned = PulsePreference(json: object["learned"], chatPlace: PulsePreference.chatPlace(profile, chatID),
+                                  chatTitle: chatTitle)
     }
 
     /// Held for the morning brief and not in one yet.
@@ -293,13 +302,16 @@ enum PulseCardKind {
 struct PulseLesson: Equatable, Identifiable {
     let id: Int
     let kind: String
-    /// "level", "rule", "sooner" or "seen".
+    /// "level", "rule", "sooner", "seen" or "reset" (whose kind is the
+    /// scope it forgot, 0.84.0).
     let what: String
-    /// The level, or a rule's topic.
+    /// The level, a rule's topic, or what a reset forgot.
     let value: String
     /// Why it was learned ("2 thumbs down", "too often", "set").
     let cause: String
     let createdAt: Date?
+    /// A reset of what was learned about a chat: the chat's title (0.84.0).
+    let chatTitle: String
 
     init?(json: Any) {
         guard let object = json as? [String: Any], let id = PulseJSON.int(object["id"]),
@@ -310,6 +322,7 @@ struct PulseLesson: Equatable, Identifiable {
         value = object["value"] as? String ?? ""
         cause = object["cause"] as? String ?? ""
         createdAt = PulseJSON.date(object["created_at"])
+        chatTitle = object["chat_title"] as? String ?? ""
     }
 
     /// The lesson in a line, in the app's language.
@@ -326,6 +339,10 @@ struct PulseLesson: Equatable, Identifiable {
         case "seen":
             return kind == "followup" ? AppLocalization.string("Skip news you already saw in the chat")
                 : AppLocalization.string("\(PulseCardKind.name(kind)): Skip what you already know")
+        case "reset":
+            // A reset is about what learning held (its kind is the scope), or everything.
+            return kind == "everything" ? AppLocalization.string("Forgot everything learned before this")
+                : AppLocalization.string("Reset: \(PulsePreference.subject(scope: kind, value: value, chatTitle: chatTitle))")
         default:
             return what
         }
@@ -334,7 +351,7 @@ struct PulseLesson: Equatable, Identifiable {
     /// Why it was learned, in the app's language; nil when set by hand.
     var causeText: String? {
         switch cause {
-        case "", "set": return nil
+        case "", "set", "reset": return nil
         case "too often": return AppLocalization.string("You said too often")
         case "too late": return AppLocalization.string("You said too late")
         case "already knew": return AppLocalization.string("You said you already knew")
@@ -396,6 +413,8 @@ struct PulseFeedPage: Equatable {
 struct PulseLearned: Equatable {
     var lessons: [PulseLesson] = []
     var levels: [String: PulseLevel] = [:]
+    /// What learning holds, strongest first (0.84.0); empty from an older plugin.
+    var preferences: [PulsePreference] = []
 
     init() {}
 
@@ -403,6 +422,7 @@ struct PulseLearned: Equatable {
         guard let lessons = json["lessons"] as? [Any] else { return nil }
         self.lessons = lessons.compactMap(PulseLesson.init(json:))
         levels = PulseFeedPage.levels(json["levels"])
+        preferences = (json["preferences"] as? [Any] ?? []).compactMap { PulsePreference(json: $0) }
     }
 
     /// Under each kind's level in What Pulse learned: what moves it. With a
@@ -421,6 +441,213 @@ struct PulseLearned: Equatable {
         learns
             ? AppLocalization.string("Nothing yet. When you give a reason with a thumbs down, what it changes shows up here.")
             : AppLocalization.string("Nothing yet. Rate Pulse's cards and what it learns shows up here.")
+    }
+
+    /// What Pulse learned with nothing that stands out yet.
+    static var noPreferences: String {
+        AppLocalization.string("Nothing stands out yet. The more you use thumbs, Do it and Done, the more Pulse learns what to bring up.")
+    }
+}
+
+/// What Pulse learned about one thing (pulse_prefs, 0.84.0): one of What
+/// Pulse learned's preferences, or the biggest part learning played in
+/// bringing a card up (its Why?) or keeping something out.
+struct PulsePreference: Equatable, Identifiable {
+    /// "all" (Pulse's cards in general), "kind", "place" (a chat, an area
+    /// of life or where Pulse found it), "timely" ("yes": overdue or due
+    /// within a day) or "loud" (a kind's loudness from pushes acted on
+    /// within the hour).
+    let scope: String
+    /// The kind, the place ("chat:<profile>:<chat id>", "area:work",
+    /// "source:calendar"), or "yes" or "no"; "" for "all".
+    let value: String
+    /// How far it moves things, in log-odds: above 0, more of it (or louder).
+    let effect: Double
+    /// The votes behind it lately, and how useful they found it.
+    let useful: Double
+    let votes: Double
+    /// "loud": how many pushes acted on within the hour earned it.
+    let pushCount: Int
+    /// A chat's title, for a chat; "" when Pulse doesn't know it.
+    let chatTitle: String
+
+    var id: String { scope + "|" + value }
+
+    /// `chatTitle` names the chat at `chatPlace` (a card's, or a left-out
+    /// item's), when the plugin didn't name one.
+    init?(json: Any?, chatPlace: String = "", chatTitle: String = "") {
+        guard let object = json as? [String: Any], let scope = object["scope"] as? String,
+              Self.scopes.contains(scope), let effect = PulseJSON.double(object["effect"]) else { return nil }
+        self.scope = scope
+        value = object["value"] as? String ?? ""
+        self.effect = effect
+        useful = max(0, PulseJSON.double(object["useful"]) ?? 0)
+        votes = max(0, PulseJSON.double(object["votes"]) ?? 0)
+        pushCount = max(0, PulseJSON.int(object["pushes"]) ?? 0)
+        let named = object["chat_title"] as? String ?? ""
+        self.chatTitle = named.isEmpty && !chatPlace.isEmpty && value == chatPlace ? chatTitle : named
+    }
+
+    private static let scopes: Set<String> = ["all", "kind", "place", "timely", "loud"]
+
+    /// A chat's place, as learning names it (pulse_prefs.place).
+    static func chatPlace(_ profile: String, _ chatID: String) -> String {
+        chatID.isEmpty ? "" : "chat:\(profile):\(chatID)"
+    }
+
+    /// Reset takes it back: all but the lean over Pulse's cards in
+    /// general, which every vote makes, so only Start over forgets it.
+    var canReset: Bool { scope != "all" }
+
+    /// What it's about, as What Pulse learned and Why? name it.
+    var subject: String { Self.subject(scope: scope, value: value, chatTitle: chatTitle) }
+
+    static func subject(scope: String, value: String, chatTitle: String) -> String {
+        switch scope {
+        case "all":
+            return AppLocalization.string("Pulse's cards in general")
+        case "kind":
+            return AppLocalization.string("“\(PulseCardKind.name(value))” cards")
+        case "loud":
+            return AppLocalization.string("How loudly “\(PulseCardKind.name(value))” cards come up")
+        case "timely":
+            return value == "yes" ? AppLocalization.string("What's overdue or due within a day")
+                : AppLocalization.string("What isn't due within a day")
+        default:
+            if value.hasPrefix("area:") {
+                return AppLocalization.string("Things about “\(PulsePlace.area(String(value.dropFirst(5))))”")
+            }
+            if value.hasPrefix("source:") {
+                return AppLocalization.string("Things from “\(PulsePlace.source(String(value.dropFirst(7))))”")
+            }
+            return chatTitle.isEmpty ? AppLocalization.string("Things from a chat")
+                : AppLocalization.string("Things from “\(chatTitle)”")
+        }
+    }
+
+    /// Which way it moves things, how strongly, and the votes behind it
+    /// lately (as they came, not faded as learning fades them).
+    var detail: String {
+        if scope == "loud" {
+            let louder = AppLocalization.string("Louder")
+            return pushCount > 0
+                ? louder + " · " + AppLocalization.string("After \(pushCount) notifications you acted on within the hour")
+                : louder
+        }
+        var parts = [effect > 0 ? AppLocalization.string("Brings up more") : AppLocalization.string("Brings up less"), strength]
+        if votes > 0 {
+            parts.append(AppLocalization.string("Useful \(Self.number(useful)) out of \(Self.number(votes)) lately"))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// How strongly it moves things, as the notifier's `pulse learned` words it.
+    var strength: String {
+        let size = abs(effect)
+        return size >= 1.5 ? AppLocalization.string("Strong effect")
+            : size >= 0.5 ? AppLocalization.string("Moderate effect") : AppLocalization.string("Slight effect")
+    }
+
+    /// Votes count Do it and Done as parts of one (opened, something sent,
+    /// done), so they can be fractions.
+    static func number(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1)).locale(AppLocalization.formattingLocale))
+    }
+}
+
+/// Where a learned place points when it isn't a chat: an area of life, or
+/// where Pulse found it (pulse_candidates.AREAS and SOURCES).
+enum PulsePlace {
+    static func area(_ area: String) -> String {
+        switch area {
+        case "work": AppLocalization.string("Work and career")
+        case "personal": AppLocalization.string("Personal matters")
+        case "health": AppLocalization.string("Health and wellbeing")
+        case "home": AppLocalization.string("Home and household")
+        case "money": AppLocalization.string("Money and finances")
+        case "social": AppLocalization.string("Friends and family")
+        case "travel": AppLocalization.string("Trips and travel")
+        default: AppLocalization.string("Other matters")
+        }
+    }
+
+    static func source(_ source: String) -> String {
+        switch source {
+        case "calendar": AppLocalization.string("Calendar")
+        case "reminders": AppLocalization.string("Reminders")
+        case "notes": AppLocalization.string("Hermes' notes")
+        case "jobs": AppLocalization.string("Scheduled jobs")
+        case "tools": AppLocalization.string("Tools")
+        default: AppLocalization.string("Chats")
+        }
+    }
+}
+
+/// Something the latest reports considered and left out, and why (GET
+/// /pulse/left_out, 0.84.0): What Pulse left out lists it, with Bring it up.
+struct PulseLeftOut: Equatable, Identifiable {
+    /// Its candidate in the journal, which Bring it up names.
+    let id: Int
+    /// What it's about (a report item's topic, as its card would say).
+    let kind: String
+    let text: String
+    /// Why it stayed out: "quieted" (what the user did with things like
+    /// it), "muted" (a "not relevant" rule on its chat), "off" (its kind's
+    /// level), "over_limit" (the report was full), "skipped" (the model's
+    /// reason, in `skip`), "not_picked", "resting" (rated down or put off,
+    /// in `skip`) or "unanswered".
+    let decision: String
+    let skip: String
+    /// What learning held against it, for one learning kept out.
+    let learned: PulsePreference?
+    let chatTitle: String
+    let createdAt: Date?
+    /// The card Bring it up made of it; nil until then.
+    var cardID: Int?
+
+    init?(json: Any) {
+        guard let object = json as? [String: Any], let id = PulseJSON.int(object["id"]),
+              let text = object["text"] as? String, !text.isEmpty else { return nil }
+        self.id = id
+        self.text = text
+        kind = object["kind"] as? String ?? ""
+        decision = object["decision"] as? String ?? ""
+        skip = object["skip"] as? String ?? ""
+        chatTitle = object["chat_title"] as? String ?? ""
+        createdAt = PulseJSON.date(object["created_at"])
+        cardID = PulseJSON.int(object["card_id"])
+        learned = PulsePreference(json: object["learned"],
+                                  chatPlace: PulsePreference.chatPlace(object["profile"] as? String ?? "",
+                                                                       object["chat_id"] as? String ?? ""),
+                                  chatTitle: chatTitle)
+    }
+
+    /// Kept out by what the user taught Pulse or set, rather than by the
+    /// report's own picking.
+    var isKeptOut: Bool { ["quieted", "muted", "off"].contains(decision) }
+
+    /// Why it stayed out, in a line.
+    var reason: String {
+        switch decision {
+        case "quieted": return AppLocalization.string("What you did with cards like this kept it out")
+        case "muted": return AppLocalization.string("You said things from this chat aren't relevant")
+        case "off": return AppLocalization.string("You turned this kind off")
+        case "over_limit": return AppLocalization.string("Picked, but the report was full")
+        case "not_picked": return AppLocalization.string("Not picked for the report")
+        case "unanswered": return AppLocalization.string("The report passed over it")
+        case "resting":
+            return skip == "rated" ? AppLocalization.string("Resting after your thumbs down")
+                : AppLocalization.string("Resting after you said Not now")
+        default:
+            switch skip {
+            case "done": return AppLocalization.string("Already done")
+            case "covered": return AppLocalization.string("Your calendar, reminders or a scheduled job covers it")
+            case "raised": return AppLocalization.string("Brought up lately, and nothing changed since")
+            case "rated": return AppLocalization.string("You said before that it wasn't useful")
+            case "minor": return AppLocalization.string("Too minor to bring up")
+            default: return AppLocalization.string("Pulse chose to leave it out")
+            }
+        }
     }
 }
 
@@ -488,6 +715,32 @@ extension PulseClient {
         let response = try await request("\(Self.path)/levels", "PUT", ["kind": kind, "level": level.rawValue])
         guard let learned = PulseLearned(json: response) else { throw HermesError.invalidResponse }
         return learned
+    }
+
+    /// Forgets what Pulse learned about one thing, or everything for nil
+    /// (0.84.0): what's learned now, with the reset among the lessons,
+    /// where Undo takes it back.
+    func reset(_ preference: PulsePreference?) async throws -> PulseLearned {
+        let body: [String: Any] = preference.map { ["scope": $0.scope, "value": $0.value] }
+            ?? ["scope": "everything", "value": ""]
+        let response = try await request("\(Self.path)/learned/reset", "POST", body)
+        guard let learned = PulseLearned(json: response) else { throw HermesError.invalidResponse }
+        return learned
+    }
+
+    /// What the latest reports left out, and why (0.84.0).
+    func leftOut() async throws -> [PulseLeftOut] {
+        let response = try await request("\(Self.path)/left_out", "GET", nil)
+        guard let entries = response["left_out"] as? [Any] else { throw HermesError.invalidResponse }
+        return entries.compactMap(PulseLeftOut.init(json:))
+    }
+
+    /// Makes a card on the Pulse screen of something a report left out: the
+    /// card, or the one it already became.
+    func bringUp(_ id: Int) async throws -> PulseCard {
+        let response = try await request("\(Self.path)/left_out/bring_up", "POST", ["id": id])
+        guard let raw = response["card"], let card = PulseCard(json: raw) else { throw HermesError.invalidResponse }
+        return card
     }
 }
 
@@ -595,12 +848,22 @@ extension AppState {
             || card.isFound && card.hasReminder && notifierPlugin.reports(PulseClient.foundActionsCapability)
     }
 
-    /// Why? on this card: a follow-up's reason, or any other card's once the
-    /// plugin gives each report item its candidate's reason (0.80.1). A
-    /// plugin from before gave report and brief cards stock lines, not reasons.
+    /// Why? on this card: its reason, or what Pulse learned played in it,
+    /// which goes with the rest of what learning shows (0.84.0).
     func explainsPulseCard(_ card: PulseCard) -> Bool {
+        explainsPulseCardReason(card) || (pulseExplainsLearning && card.learned != nil)
+    }
+
+    /// A follow-up's reason, or any other card's once the plugin gives each
+    /// report item its candidate's reason (0.80.1). A plugin from before
+    /// gave report and brief cards stock lines, not reasons.
+    func explainsPulseCardReason(_ card: PulseCard) -> Bool {
         !card.why.isEmpty && (card.kind == "followup" || notifierPlugin.reports(PulseClient.cardWhyCapability))
     }
+
+    /// What Pulse learned lists what learning holds with Reset, and What
+    /// Pulse left out shows (0.84.0).
+    var pulseExplainsLearning: Bool { notifierPlugin.reports(PulseClient.explainsCapability) }
 
     /// A thumbs down on this card asks why: a follow-up's, or a report
     /// card's once the plugin acts on its reasons (0.81.1). Before, a report
@@ -728,6 +991,10 @@ extension PulseClient {
     /// Pulse learns from thumbs, Do it and Done what to bring up and how
     /// loudly, and a kind's level is the loudest it gets (0.81.1).
     static let learnsCapability = "pulse_learns"
+    /// Pulse shows what it learned: a card's part learning played, what
+    /// learning holds with reset, and what the reports left out with Bring
+    /// it up (0.84.0).
+    static let explainsCapability = "pulse_explains"
 }
 
 /// What Not now puts a card off until, as the plugin names it.
