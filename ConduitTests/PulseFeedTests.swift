@@ -1044,6 +1044,22 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertTrue(page.cards.allSatisfy(\.isCleared))
     }
 
+    func testACardPulseMarksDoneWhileItRestsShowsAsDone() throws {
+        // Marked done while it's put off, it won't come back at its time: its cleared row says
+        // Done, not when it comes back, and Undo there leaves it put off.
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 1, "kind": "followup", "level": "screen", "news": "Call the bank", "item_id": 7, "created_at": 30,
+           "dismissed_at": 60, "rest_until": 90, "done_at": 70, "done_by": "pulse"},
+          {"id": 2, "kind": "followup", "level": "screen", "news": "Book the car", "item_id": 8, "created_at": 30,
+           "dismissed_at": 60, "rest_until": 90}
+        ]}
+        """)))
+        XCTAssertEqual(page.cards.map(\.isResting), [false, true])
+        XCTAssertEqual(page.cards.map(\.doneBy), ["pulse", ""])
+        XCTAssertTrue(page.cards.allSatisfy(\.isCleared))
+    }
+
     func testTheClearedRowSaysWhenAPutOffCardComesBack() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!

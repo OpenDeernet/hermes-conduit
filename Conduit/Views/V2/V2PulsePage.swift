@@ -574,8 +574,8 @@ struct V2PulsePage: View {
                 .padding(.horizontal, -16)
             if card.isCleared {
                 HStack(spacing: 8) {
-                    Image(systemName: card.dismissedAt != nil ? "clock" : "checkmark.circle")
-                        .foregroundStyle(card.dismissedAt != nil ? Color.secondary : Color.green)
+                    Image(systemName: card.isResting ? "clock" : "checkmark.circle")
+                        .foregroundStyle(card.isResting ? Color.secondary : Color.green)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(card.formattedNews)
@@ -584,8 +584,8 @@ struct V2PulsePage: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                         // Put off until a time: when it comes back, as a cleared card says it, and
-                        // Wrong time's says why.
-                        if card.dismissedAt != nil, let back = card.restUntil {
+                        // Wrong time's says why. Done meanwhile, it doesn't come back.
+                        if card.isResting, let back = card.restUntil {
                             Text(verbatim: card.isAwayForWrongTime
                                 ? PulseDownReason.wrongTime.title + " · " + PulseRest.backText(back)
                                 : PulseRest.backText(back))
@@ -798,8 +798,9 @@ struct V2PulsePage: View {
             }
             whyNote(card)
             actionRow(card)
-            // Put away by Wrong time, its cleared label says so already.
-            if card.rating == "down", let reason = PulseDownReason(rawValue: card.reason), !card.isAwayForWrongTime {
+            // Put away by Wrong time, its cleared label says so already, unless it got done meanwhile.
+            if card.rating == "down", let reason = PulseDownReason(rawValue: card.reason),
+               !(card.isAwayForWrongTime && card.isResting) {
                 Text(verbatim: reason.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -932,19 +933,20 @@ struct V2PulsePage: View {
     }
 
     private func clearedLabel(_ card: PulseCard) -> some View {
-        // Put away by Wrong time, or by Not now.
+        // Put away by Wrong time, or by Not now; done comes first, as it doesn't come back.
         let away = card.isAwayForWrongTime ? PulseDownReason.wrongTime.title : AppLocalization.string("Not now")
-        var title = card.dismissedAt != nil ? away
+        var title = card.isResting ? away
             : card.doneBy == "pulse" ? AppLocalization.string("Done, seen in the chat") : AppLocalization.string("Done")
-        if card.dismissedAt != nil, let back = card.restUntil { title += " · " + PulseRest.backText(back) }
-        return Label(title, systemImage: card.dismissedAt != nil ? "clock" : "checkmark.circle.fill")
+        if card.isResting, let back = card.restUntil { title += " · " + PulseRest.backText(back) }
+        return Label(title, systemImage: card.isResting ? "clock" : "checkmark.circle.fill")
             .font(.footnote.weight(.semibold))
-            .foregroundStyle(card.dismissedAt != nil ? Color.secondary : Color.green)
+            .foregroundStyle(card.isResting ? Color.secondary : Color.green)
     }
 
-    /// Puts a swiped-away card back, or takes Done off.
+    /// Puts a swiped-away card back, or takes Done off: Undo, too, on one
+    /// marked done while it rested, which leaves it put away.
     @ViewBuilder private func clearedUndoButton(_ card: PulseCard) -> some View {
-        if card.dismissedAt != nil, canDismiss {
+        if card.isResting, canDismiss {
             Button {
                 Haptics.selection()
                 dismiss(card, false)
@@ -966,9 +968,18 @@ struct V2PulsePage: View {
             .buttonStyle(.borderless)
             .disabled(isBusy(card))
             .accessibilityLabel(Text(AppLocalization.string("Undo Done")))
-            .accessibilityHint(Text(AppLocalization.string("Pulse checks on it again")))
+            .accessibilityHint(Text(Self.undoDoneHint(card)))
             .accessibilityIdentifier("pulse.card.undo-done")
         }
+    }
+
+    /// What Undo does: a card put away stays away; one about something
+    /// Pulse remembers has that thing checked on again; any other is back
+    /// on the list.
+    private static func undoDoneHint(_ card: PulseCard) -> String {
+        if card.dismissedAt != nil { return AppLocalization.string("Keeps the card put away") }
+        return card.itemID != nil ? AppLocalization.string("Pulse checks on it again")
+            : AppLocalization.string("Puts the card back on the list")
     }
 
     private func doItButton(_ card: PulseCard) -> some View {
