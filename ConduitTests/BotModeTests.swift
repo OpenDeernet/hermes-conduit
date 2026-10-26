@@ -521,15 +521,20 @@ final class BotModeTests: XCTestCase {
         XCTAssertEqual(harness.appState.activeSessionTitle, "bo")
     }
 
-    func testMissingCanonicalCreatesHiddenTitledChatThenOpensRuntime() async {
+    func testMissingCanonicalCreatesHiddenTitledChatThenOpensStoredID() async {
         var order: [String] = []
         var resumedIDs: [String] = []
         let harness = makeBotHarness(lifecycleOperations: ChatResumeLifecycleOperations(
             openSessionWithProfile: { _, id, _, profile in
                 order.append("open:\(profile ?? "nil")")
                 resumedIDs.append(id)
+                // Hermes resumes a chat by its stored key and answers 4007
+                // for a runtime id (`uuid4().hex[:8]`), even a live one.
+                guard id == "stored-new" else {
+                    throw RpcError(code: 4007, message: "session not found")
+                }
                 return SessionResumeResult(
-                    sessionId: id,
+                    sessionId: "runtime-new",
                     storedSessionId: "stored-new",
                     messages: [],
                     snapshot: SessionRuntimeSnapshot(object: ["running": .bool(false)])
@@ -570,8 +575,10 @@ final class BotModeTests: XCTestCase {
             "the open only happens after the canonical title landed"
         )
         XCTAssertEqual(order.last, "open:atlas", "the open resumes under the BOT's profile scope")
-        XCTAssertEqual(resumedIDs, ["runtime-new"])
+        XCTAssertEqual(resumedIDs, ["stored-new"], "a new Bot Chat opens by its stored id, as Desktop's does")
         XCTAssertEqual(harness.appState.activeSessionId, "runtime-new")
+        XCTAssertEqual(harness.appState.activeBotChatProfile, "atlas")
+        XCTAssertNil(harness.appState.errorMessage)
     }
 
     func testCreationTitleCollisionAdoptsWinnerInsteadOfForking() async {

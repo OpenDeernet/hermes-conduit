@@ -22223,10 +22223,16 @@ final class AppState: ObservableObject {
         if let stored = created.storedSessionId {
             noteBotChatSession(stored, profile: bot.name, label: bot.displayLabel)
         }
+        // The open resumes the STORED id, as Desktop's does: Hermes finds a
+        // chat by its stored key (the live session it just made, or the row
+        // the title wrote) and answers 4007 for a runtime id. Opening the
+        // runtime id failed the open, so a new bot's first message went to
+        // a chat Conduit never had open, and it was gone on the way back.
+        let storedID = created.storedSessionId ?? created.sessionId
         return await openCanonicalBotChat(
             bot,
-            registryID: created.storedSessionId ?? created.sessionId,
-            resumeID: created.sessionId,
+            registryID: storedID,
+            resumeID: storedID,
             epoch: epoch,
             client: client,
             presentationMigrationSessionIDs: presentationMigrationSessionIDs,
