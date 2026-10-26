@@ -417,6 +417,12 @@ struct HermesCallWaiting: Equatable {
         "это", "этот", "эту", "вопрос", "поле", "пожалуйста", "просто", "я", "его", "её", "ее", "ок", "давай", "давайте",
         "пока", "можно", "и", "тогда", "лучше",
         "bunu", "bu", "soruyu", "soru", "alanı", "lütfen", "sadece", "ben", "şimdilik", "tamam", "ve", "zaman", "onu",
+        // On to the next one ("skip to the next question").
+        "next", "nächste", "nächsten", "nächstes", "zur", "zum", "weiter", "siguiente", "próxima", "próximo", "al", "à",
+        "suivante", "suivant", "prochaine", "prochain", "berikutnya", "selanjutnya", "lanjut", "ke", "alla", "prossima",
+        "prossimo", "successiva", "następne", "następnego", "następny", "kolejne", "kolejnego", "do", "dalej", "pra",
+        "para", "seguinte", "ao", "следующий", "следующему", "следующая", "следующую", "следующее", "дальше", "к",
+        "sonraki", "sonrakine",
     ]
 
     /// Japanese, Chinese and Korean, read with no word breaks: a skip word
@@ -433,7 +439,7 @@ struct HermesCallWaiting: Equatable {
         "この質問は", "この質問", "これは", "ここは", "それは", "今回は", "とりあえず", "じゃあ", "じゃ", "では",
         "えっと", "这个问题", "這個問題", "这一题", "這一題", "这个", "這個", "这题", "這題", "那就", "我们",
         "我們", "直接", "还是", "還是", "那", "就", "请", "請", "先", "我", "이질문은", "이질문", "질문은",
-        "이거는", "이건", "이거", "그건", "그거", "그냥", "일단", "저는", "나는",
+        "이거는", "이건", "이거", "그건", "그거", "그냥", "일단", "저는", "나는", "다음질문으로", "다음으로",
     ].sorted { $0.count > $1.count }
     private static let cjkSkipTails = [
         "お願いします", "お願い", "ください", "しておいて", "しといて", "しましょう", "します", "して", "しよう",
@@ -441,7 +447,9 @@ struct HermesCallWaiting: Equatable {
         "一下", "就好", "就行", "就可以", "即可", "好了", "掉", "谢谢", "謝謝", "这个问题", "這個問題", "这一题",
         "這一題", "这个", "這個", "这题", "這題", "해주세요", "해줘요", "해줘", "해요", "할게요", "할게",
         "합시다", "하자", "할래요", "할래", "해", "주세요", "줘요", "줘", "두세요", "둬요", "둬", "둘게요",
-        "둘게", "놔", "요",
+        "둘게", "놔", "요", "次へ", "次に", "次の質問へ", "次の質問に", "次の質問", "次に行って", "次に進んで",
+        "下一题", "下一題", "下一个", "下一個", "下一个问题", "下一個問題", "다음", "다음질문", "다음질문으로",
+        "다음으로",
     ].sorted { $0.count > $1.count }
 
     private static func isCJK(_ scalar: Unicode.Scalar) -> Bool {
