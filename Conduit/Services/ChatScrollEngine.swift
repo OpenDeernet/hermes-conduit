@@ -190,12 +190,9 @@ final class ChatScrollEngine: ObservableObject {
     /// per card: a card that announces again before it lands keeps its own.
     struct CardShift {
         weak var card: ChatScrollMeasuredCard?
-        /// The card's height and the content height when it first
-        /// announced. The change has landed once the card's own frame has
-        /// changed, and a growth once the offset has the room for it or
-        /// the pass's content size has come (`takeCardShifts`).
+        /// The card's height when it first announced. The change has landed
+        /// once the card's own frame has changed (`takeCardShifts`).
         let cardHeight: CGFloat
-        let contentHeight: CGFloat
         let announcedAt: TimeInterval
     }
 
@@ -279,6 +276,15 @@ final class ChatScrollEngine: ObservableObject {
     private var measuredCards: [MeasuredCard] = []
     private var restCheckGeneration: UInt64 = 0
     private(set) var cardShifts: [CardShift] = []
+    /// What the shifts landed last still owe the reader past the content's
+    /// end as it stood: the pass reported a card's frame before its content
+    /// size. That content size lands it, and the check after the pass drops
+    /// what no room came for (`cardShiftSettled`).
+    private var cardShiftOwed: CGFloat = 0
+    /// While the engine writes a card's shift: the end it measured from may
+    /// not be the pass's yet, so the write doesn't relatch following.
+    private var landingCardShift = false
+    private var cardShiftSettleScheduled = false
     /// Whether rows that report no frame (the running turn's live rows, a
     /// send waiting on screen) sit below the latest row.
     var liveTailShowing: @MainActor () -> Bool = { false }
@@ -413,6 +419,7 @@ final class ChatScrollEngine: ObservableObject {
             refreshTopVisibleRow(persist: mode == .browsing)
         }
         if mode == .browsing,
+           !landingCardShift,
            !surface.isTracking,
            !deceleratingAway,
            surface.distanceFromBottom <= Self.nearBottomTolerance {
@@ -487,7 +494,7 @@ final class ChatScrollEngine: ObservableObject {
         latestAnimationUntil = nil
         prependAnchor = nil
         // A finger owns the offset; a growth landing under it is theirs.
-        cardShifts = []
+        dropCardShifts()
         restoration = nil
         replyStartLandingPending = false
         landedAtReplyStart = false
@@ -611,10 +618,11 @@ final class ChatScrollEngine: ObservableObject {
             return
         }
         // A landed page of earlier messages holds the reader's rows in place
-        // itself; one still loading holds nothing yet.
-        if mode == .browsing, prependAnchor?.landedAt == nil,
+        // itself; one still loading holds nothing yet, and nor does one
+        // whose hold has lapsed.
+        if mode == .browsing, !prependHolds,
            frame.minY < visibleStackRange(of: surface).lowerBound {
-            announce(card, growingTo: frame.height + card.pendingGrowth, from: frame, on: surface)
+            announce(card, growingTo: frame.height + card.pendingGrowth, from: frame)
         }
         card.takeMeasuredHeight()
     }
@@ -624,7 +632,7 @@ final class ChatScrollEngine: ObservableObject {
     /// reported twice before a layout) keeps its shift, from its height
     /// before the first: a second shift from that same height would count
     /// the whole growth again when the layout lands it.
-    private func announce(_ card: ChatScrollMeasuredCard, growingTo height: CGFloat, from frame: CGRect, on surface: ChatScrollSurface) {
+    private func announce(_ card: ChatScrollMeasuredCard, growingTo height: CGFloat, from frame: CGRect) {
         let index = cardShifts.firstIndex { $0.card === card }
         let earlier = index.map { cardShifts[$0] }
         if let index { cardShifts.remove(at: index) }
@@ -632,12 +640,7 @@ final class ChatScrollEngine: ObservableObject {
         // Keeping its height, or back to its height before the first:
         // nothing will move. One whose layout alone knows may move anything.
         guard card.growthUnknown || abs(height - cardHeight) > 0.5 else { return }
-        cardShifts.append(CardShift(
-            card: card,
-            cardHeight: cardHeight,
-            contentHeight: earlier?.contentHeight ?? surface.contentHeight,
-            announcedAt: now()
-        ))
+        cardShifts.append(CardShift(card: card, cardHeight: cardHeight, announcedAt: now()))
     }
 
     /// Runs `scrollRestDelay` after the last scroll tick or lift, once a
@@ -662,9 +665,9 @@ final class ChatScrollEngine: ObservableObject {
         }
     }
 
-    /// The card's frame changed with a layout. The pass that lands an
-    /// announced growth can report the card's frame after the content size;
-    /// the shift then lands here, still inside the pass.
+    /// The card's frame changed with a layout: an announced shift lands
+    /// here, still inside the pass, whether the pass reports the content
+    /// size before the card's frame or after it.
     func cardFrameChanged(_ card: ChatScrollMeasuredCard) {
         guard let surface, !isPaused, cardShifts.contains(where: { $0.card === card }) else { return }
         surfaceCallbackDepth += 1
@@ -679,62 +682,80 @@ final class ChatScrollEngine: ObservableObject {
     /// and must not pass for a card above them. The offset moves by the
     /// card's own change, which for a picture can differ a little from what
     /// it announced (its height comes from its layout), whatever else grew
-    /// or shrank below the reader in the same pass. A card that grew needs
-    /// the room: when its frame reports before the content size, the end is
-    /// still the content's old one, and a move that would end near it waits
-    /// for the pass's content size (a move into a stale end would be
-    /// clamped, or relatch following). The layout that lands a card is the
-    /// first after its announcement, which goes with its height, so a
-    /// content size changed since is that pass's: the move lands then
-    /// whatever the end, clamped there, and leaves a reader the rows below
-    /// shrank under at it, as those rows would have anyway. One that shrank
-    /// needs no room, since the top bounds the move, and makes room for a
-    /// growth tried before it in the pass.
+    /// or shrank below the reader in the same pass, at the first report
+    /// that shows it. The pass can report the card's frame before its
+    /// content size, and nothing tells that end from the pass's: so the
+    /// move goes as far as the content's end as it stands, owes the rest
+    /// until the pass's content size makes the room (`cardShiftOwed`), and
+    /// its write never relatches following on an end that may be stale.
+    /// After the pass (`cardShiftSettled`), a reader the move left within
+    /// `nearBottomTolerance` of the end follows again, and what no room
+    /// came for is dropped: rows below shrank under the reader by as much,
+    /// and the end is as far as anything can keep them. A shrink is bounded
+    /// by the top alone.
     /// Another pass first (an inset change) leaves a shift waiting; a
-    /// reader who moves, a jump to the top or to a message, a landed page
-    /// of earlier messages (its hold has the reader's rows), a card whose
-    /// row left the stack, or a growth that never lands, drops it.
+    /// reader who moves, a jump to the top or to a message, a page of
+    /// earlier messages holding the reader's rows, a card whose row left
+    /// the stack, or a growth that never lands, drops it.
     private func takeCardShifts(on surface: ChatScrollSurface) {
-        guard !cardShifts.isEmpty else { return }
-        guard mode == .browsing, prependAnchor?.landedAt == nil,
+        guard !cardShifts.isEmpty || cardShiftOwed > 0 else { return }
+        guard mode == .browsing, !prependHolds,
               !surface.isTracking, !surface.isDecelerating else {
-            cardShifts = []
+            dropCardShifts()
             return
         }
         let time = now()
-        var landed: CGFloat = 0
-        // Until none lands: a shrink landing moves the reader up, which can
-        // give a growth passed over before it the room.
-        var landing = true
-        while landing {
-            landing = false
-            cardShifts.removeAll { shift in
-                guard let card = shift.card, time - shift.announcedAt <= Self.cardGrowthDeadline else { return true }
-                guard let frame = card.stackFrame else { return false }
-                let grown = frame.height - shift.cardHeight
-                // Short of the content's end as it stands, or that end is the
-                // pass's: a move into an end not reported yet would be
-                // clamped, or end near enough to it to relatch following.
-                let reaches = surface.contentOffsetY + landed + grown
-                let hasLanded = grown > 0.5
-                    ? surface.maxOffsetY - reaches > Self.nearBottomTolerance
-                        || abs(surface.contentHeight - shift.contentHeight) > 0.5
-                    : grown < -0.5
-                if hasLanded {
-                    landed += grown
-                    landing = true
-                }
-                return hasLanded
-            }
+        var landed = cardShiftOwed
+        cardShiftOwed = 0
+        cardShifts.removeAll { shift in
+            guard let card = shift.card, time - shift.announcedAt <= Self.cardGrowthDeadline else { return true }
+            guard let frame = card.stackFrame, abs(frame.height - shift.cardHeight) > 0.5 else { return false }
+            landed += frame.height - shift.cardHeight
+            return true
         }
         guard abs(landed) > 0.5 else { return }
-        let target = surface.clampedOffsetY(surface.contentOffsetY + landed)
-        guard abs(target - surface.contentOffsetY) > 0.5 else { return }
+        scheduleCardShiftSettle()
+        let target = max(surface.minOffsetY, surface.contentOffsetY + landed)
+        // Never past the end as it stands, nor back from a reader past it.
+        let written = min(target, max(surface.maxOffsetY, surface.contentOffsetY))
+        if target - written > 0.5 { cardShiftOwed = target - written }
+        guard abs(written - surface.contentOffsetY) > 0.5 else { return }
         ChatViewportTrace.shared.log(String(
-            format: "card growth %.1f above the reader: offset %.1f -> %.1f",
-            landed, surface.contentOffsetY, target
+            format: "card growth %.1f above the reader: offset %.1f -> %.1f, %.1f owed past the end",
+            landed, surface.contentOffsetY, written, cardShiftOwed
         ))
-        surface.setContentOffsetY(target, animated: false)
+        landingCardShift = true
+        surface.setContentOffsetY(written, animated: false)
+        landingCardShift = false
+    }
+
+    private func dropCardShifts() {
+        cardShifts = []
+        cardShiftOwed = 0
+    }
+
+    private func scheduleCardShiftSettle() {
+        guard !cardShiftSettleScheduled else { return }
+        cardShiftSettleScheduled = true
+        schedule(0) { [weak self] in
+            guard let self else { return }
+            self.cardShiftSettleScheduled = false
+            self.cardShiftSettled()
+        }
+    }
+
+    /// After the pass that moved the reader for a card, outside it. What
+    /// the move still owes was past every end the pass reported, and is
+    /// dropped. A reader it left within `nearBottomTolerance` of the end
+    /// follows again: the relatch its write skipped, now that the end is
+    /// the pass's.
+    private func cardShiftSettled() {
+        cardShiftOwed = 0
+        guard mode == .browsing, !isPaused, !isDragging, let surface,
+              !surface.isTracking, !surface.isDecelerating,
+              surface.distanceFromBottom <= Self.nearBottomTolerance else { return }
+        setMode(.following)
+        emit(.persistSnapshot(renderedSessionKey))
     }
 
     // MARK: - Session identity
@@ -775,7 +796,7 @@ final class ChatScrollEngine: ObservableObject {
         topVisibleMessageID = nil
         rowFrames = [:]
         measuredCards = []
-        cardShifts = []
+        dropCardShifts()
         // The new conversation's first transcript names its latest user
         // message without arming; an open with an unread reply asks for its
         // landing after this.
@@ -953,7 +974,7 @@ final class ChatScrollEngine: ObservableObject {
         restoration = nil
         prependAnchor = nil
         // A growth owed to the place the reader leaves.
-        cardShifts = []
+        dropCardShifts()
         latestAnimationUntil = nil
         disarmReplyHold()
         cancelPastBottomCheck()
@@ -979,7 +1000,7 @@ final class ChatScrollEngine: ObservableObject {
         restoration = nil
         prependAnchor = nil
         // A growth owed to the place the reader leaves.
-        cardShifts = []
+        dropCardShifts()
         latestAnimationUntil = nil
         disarmReplyHold()
         cancelPastBottomCheck()
@@ -1159,7 +1180,7 @@ final class ChatScrollEngine: ObservableObject {
         // left waiting for a rest that never comes.
         let waiting = measuredCards.compactMap { $0.card }
         measuredCards = []
-        cardShifts = []
+        dropCardShifts()
         waiting.forEach { $0.takeMeasuredHeight() }
         // A landing belongs to the open that asked for it. The hold stays
         // armed: the reply may still be running when the chat is back.
@@ -1465,6 +1486,14 @@ final class ChatScrollEngine: ObservableObject {
             surface.contentHeight, surface.contentOffsetY, target, rowTarget == nil ? "estimate" : "row"
         ))
         surface.setContentOffsetY(target, animated: false)
+    }
+
+    /// A landed page of earlier messages still holding the reader's rows.
+    /// One whose hold has lapsed holds nothing, though no layout or scroll
+    /// has cleared it yet (`holdPrependAnchor`).
+    private var prependHolds: Bool {
+        guard let anchor = prependAnchor, let landedAt = anchor.landedAt else { return false }
+        return !prependHoldLapsed(anchor, landedAt: landedAt)
     }
 
     private func prependHoldLapsed(_ anchor: PrependAnchor, landedAt: TimeInterval) -> Bool {
