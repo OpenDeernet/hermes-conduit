@@ -903,7 +903,7 @@ in the bot's profile), makes it the first time, and opens it.
 
 **Siblings:** a tap in the Bots list · a new bot's first open and its
 introduction · a push or a call from a Bot Chat · a link, card or artifact
-that names a bot · Hermes Desktop's Bot Chat open (same lookup, same title,
+that names a bot · a widget or last-chat restore that lands on a Bot Chat (resumes the saved row's stored id already) · Hermes Desktop's Bot Chat open (same lookup, same title,
 same stored-id open)
 
 **Code**
@@ -913,7 +913,7 @@ same stored-id open)
 
 **Rulings**
 - One chat per bot, found by its title on the bot's profile; a lookup that fails, or comes back empty while the roster still names a chat, never makes a new one (Desktop's rule).
-- A chat Conduit makes is opened by its stored id, as Desktop does: Hermes resumes a chat by its stored key and answers 4007 for a runtime id. Opening the runtime id failed the open, so a new bot's first message went to a chat Conduit didn't have open and was gone on the way back (2026-10-26, a tester's report via Eric, #1300).
+- A chat Conduit makes is opened by its stored id, as Desktop does: Hermes resumes a chat by its stored key and answers 4007 for a runtime id. Opening the runtime id failed the open, so a new bot's first message went to a chat Conduit didn't have open and was gone on the way back (2026-10-26, a tester's report via Eric, #1300). A gateway that returns no stored id still opens by the runtime id, the only id it gave.
 - A title collision while making the chat adopts the chat that won instead of making a second one.
 
 **Open gaps**
