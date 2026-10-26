@@ -2244,6 +2244,66 @@ final class AppState: ObservableObject {
         pulseRememberedHomes = homes
         defaults.set(homes, forKey: Self.pulseHomesKey)
     }
+
+    /// Morning briefs folded on the Pulse screen, per dashboard: each
+    /// brief's card id with the cards in it still open when it was folded,
+    /// each with when it came (PulseLayout.Brief.isFolded), kept across
+    /// launches, so a brief read and folded stays out of the way until it's
+    /// opened again or a card in it comes back open. `pulseFoldedBriefsKept`
+    /// briefs of each: the one just folded, and the others with the highest
+    /// ids, which are the newest: the host numbers cards in the order it
+    /// makes them.
+    private(set) lazy var pulseFoldedBriefs: [String: [String: [String: Double]]] =
+        defaults.dictionary(forKey: Self.pulseFoldedBriefsKey) as? [String: [String: [String: Double]]] ?? [:]
+    static let pulseFoldedBriefsKey = "conduit.pulse.foldedBriefs"
+    static let pulseFoldedBriefsKept = 30
+
+    /// The cards `brief` had open when it was folded, by id, each with when
+    /// it came; nil while it isn't folded.
+    func pulseBriefFold(_ brief: Int) -> [Int: Double]? {
+        guard let key = activeDashboardID?.uuidString,
+              let open = pulseFoldedBriefs[key]?[String(brief)] else { return nil }
+        let cards = open.compactMap { card, at in Int(card).map { ($0, at) } }
+        return Dictionary(cards, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// Folds `brief` with `open`, the cards in it still open then
+    /// (PulseLayout.Brief.openCards), or opens it again (nil).
+    func foldPulseBrief(_ brief: Int, open: [Int: Double]?) {
+        guard let key = activeDashboardID?.uuidString else { return }
+        var briefs = pulseFoldedBriefs[key] ?? [:]
+        let noted = open.map { cards in Dictionary(uniqueKeysWithValues: cards.map { (String($0.key), $0.value) }) }
+        guard briefs[String(brief)] != noted else { return }
+        briefs[String(brief)] = noted
+        // An older brief folded now stays folded: the oldest other fold goes.
+        let others = briefs.keys.compactMap { Int($0) }.filter { $0 != brief }.sorted()
+        let kept = Set(others.suffix(Self.pulseFoldedBriefsKept - 1)).union([brief])
+        briefs = briefs.filter { id, _ in Int(id).map { kept.contains($0) } ?? false }
+        var all = pulseFoldedBriefs
+        all[key] = briefs.isEmpty ? nil : briefs
+        storePulseFoldedBriefs(all)
+    }
+
+    /// `card`, in `brief`, put back open with Undo or Put back: the fold no
+    /// longer counts it as open when it was folded, so a folded brief opens
+    /// to show it, and folds again once it's handled.
+    func unfoldPulseCard(_ card: Int, in brief: Int) {
+        guard var open = pulseBriefFold(brief), open.removeValue(forKey: card) != nil else { return }
+        foldPulseBrief(brief, open: open)
+    }
+
+    /// A removed dashboard's folded briefs go with it.
+    private func forgetPulseFoldedBriefs(of dashboardID: UUID) {
+        var all = pulseFoldedBriefs
+        guard all.removeValue(forKey: dashboardID.uuidString) != nil else { return }
+        storePulseFoldedBriefs(all)
+    }
+
+    private func storePulseFoldedBriefs(_ all: [String: [String: [String: Double]]]) {
+        objectWillChange.send()
+        pulseFoldedBriefs = all
+        defaults.set(all, forKey: Self.pulseFoldedBriefsKey)
+    }
     @Published private(set) var composerPrefillText = ""
     @Published private(set) var composerPrefillToken = UUID()
     /// The draft the prefill is for, until ComposerBar puts it in. A new
@@ -12090,6 +12150,7 @@ final class AppState: ObservableObject {
             persistModelVisibilities(visibilities)
         }
         forgetPulseHome(of: id)
+        forgetPulseFoldedBriefs(of: id)
     }
 
     // MARK: Relay gateways each dashboard's host reported

@@ -179,6 +179,28 @@ struct PulseLayout: Equatable {
         var left: Int { items.filter { !$0.isCleared }.count }
         /// Every card it brought is done or swiped away.
         var isHandled: Bool { left == 0 }
+
+        /// Its cards still open, by id, each with when it came, which a
+        /// fold notes.
+        var openCards: [Int: Double] {
+            let open = items.filter { !$0.isCleared }.map { ($0.id, ($0.createdAt ?? .distantPast).timeIntervalSince1970) }
+            return Dictionary(open, uniquingKeysWith: { first, _ in first })
+        }
+
+        /// Shown as one row: folded from its header (`folded`, its
+        /// `openCards` then) until it's opened again, or with every card it
+        /// brought handled, unless `opened` on this visit. Not once a card in
+        /// it is open that wasn't then, or has come again since: one back
+        /// from Not now (the host makes it new again), or put back with Undo.
+        /// Nor while `focused`, the card a Pulse mark or Bring it up opened
+        /// (a push opens the screen at its top), is it or one of its cards.
+        func isFolded(folded: [Int: Double]?, opened: Bool, focused: Int?) -> Bool {
+            if let focused, focused == id || items.contains(where: { $0.id == focused }) { return false }
+            if let folded, openCards.allSatisfy({ card, at in folded[card].map { abs($0 - at) < 0.001 } ?? false }) {
+                return true
+            }
+            return !isSummary && isHandled && !opened
+        }
     }
 
     /// Briefs still holding something open, newest first, then the newest
@@ -192,7 +214,7 @@ struct PulseLayout: Equatable {
     init() {}
 
     /// `keeping`: cards that stay where they are though cleared (the one a
-    /// push or a Pulse mark opened).
+    /// Pulse mark or Bring it up opened).
     init(cards: [PulseCard], keeping: Set<Int> = []) {
         var grouped: [String: [PulseCard]] = [:]
         for card in cards where !card.brief.isEmpty && card.kind != "brief" {
@@ -215,6 +237,11 @@ struct PulseLayout: Equatable {
         for card in cards where !taken.contains(card.id) {
             if card.isCleared && !keeping.contains(card.id) { cleared.append(card) } else { open.append(card) }
         }
+    }
+
+    /// The brief that brought `card`, with cards left or all handled.
+    func brief(bringing card: Int) -> Brief? {
+        (briefs + clearedBriefs).first { brief in brief.items.contains { $0.id == card } }
     }
 
     /// A brief that brought nothing counts as one.

@@ -486,13 +486,14 @@ struct V2PulsePage: View {
 
     // MARK: Morning brief
 
-    /// A morning brief and the cards it brought, as one block: open while
-    /// anything in it is, else one row that opens it again.
+    /// A morning brief and the cards it brought, as one block, or folded to
+    /// one row that opens it again: once the user folds it, or once
+    /// everything in it is handled (`PulseLayout.Brief.isFolded`).
     @ViewBuilder private func briefRows(_ brief: PulseLayout.Brief) -> some View {
-        // Open when a push pointed at one of its cards, even before focus() could expand it.
-        if !brief.isSummary, brief.isHandled, !expandedBriefs.contains(brief.id),
-           !brief.items.contains(where: { $0.id == focusedCard }) {
-            handledBriefRow(brief)
+        // Open when a Pulse mark pointed at it or one of its cards, even before focus() could expand it.
+        if brief.isFolded(folded: appState.pulseBriefFold(brief.id),
+                          opened: expandedBriefs.contains(brief.id), focused: focusedCard) {
+            foldedBriefRow(brief)
                 .id(brief.card.id)
                 .pulseRow()
         } else {
@@ -521,24 +522,25 @@ struct V2PulsePage: View {
                 Text("Morning brief")
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
+                    .accessibilityFocused($voiceOverCard, equals: brief.card.id)
                 Spacer(minLength: 0)
-                if brief.isHandled, !brief.isSummary {
-                    Button {
-                        withAnimation(.snappy) { _ = expandedBriefs.remove(brief.id) }
-                    } label: {
-                        Image(systemName: "chevron.up")
-                            .font(.footnote.weight(.semibold))
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel(AppLocalization.string("Fold the morning brief"))
-                }
                 if let stamp = briefStamp(brief) {
                     Text(verbatim: stamp)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                // Read it, fold it: it stays one row, here and after a relaunch, until it's opened again.
+                Button {
+                    fold(brief, true)
+                } label: {
+                    Image(systemName: "chevron.up")
+                        .font(.footnote.weight(.semibold))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(AppLocalization.string("Fold the morning brief"))
+                .accessibilityIdentifier("pulse.brief.fold")
             }
             if !brief.card.news.isEmpty {
                 Text(brief.card.formattedNews)
@@ -609,7 +611,7 @@ struct V2PulsePage: View {
         .padding(.top, 0)
         .padding(.bottom, last ? 12 : 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // The card a push opened, marked as a standalone card's stroke would.
+        // The card a Pulse mark opened, marked as a standalone card's stroke would.
         .overlay(alignment: .leading) {
             if focusedCard == card.id {
                 Capsule().fill(Color.conduitAccent).frame(width: 3).padding(.vertical, 10).padding(.leading, 4)
@@ -626,21 +628,50 @@ struct V2PulsePage: View {
             .fill(Color.conduitAccent.opacity(0.10))
     }
 
-    private func handledBriefRow(_ brief: PulseLayout.Brief) -> some View {
+    /// Opens the brief, or folds it, as the user left it: a fold is kept
+    /// for that brief (AppState.pulseFoldedBriefs) until a card in it comes
+    /// back open. Folding the brief a Pulse mark pointed into lets the
+    /// mark's card go, so it folds at once; an older brief all handled then
+    /// goes back to Done and cleared, where it was before the mark.
+    private func fold(_ brief: PulseLayout.Brief, _ folded: Bool) {
+        Haptics.selection()
+        withAnimation(.snappy) {
+            if folded {
+                expandedBriefs.remove(brief.id)
+                if let focused = focusedCard, focused == brief.id || brief.items.contains(where: { $0.id == focused }) {
+                    focusedCard = nil
+                    voiceOverCard = nil
+                }
+            } else {
+                expandedBriefs.insert(brief.id)
+            }
+            appState.foldPulseBrief(brief.id, open: folded ? brief.openCards : nil)
+        }
+    }
+
+    /// A folded brief: when it came and what's left in it ("08:00 · 2 left",
+    /// "All handled"), and a tap opens it.
+    private func foldedBriefRow(_ brief: PulseLayout.Brief) -> some View {
         Button {
-            Haptics.selection()
-            withAnimation(.snappy) { _ = expandedBriefs.insert(brief.id) }
+            fold(brief, false)
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "sunrise")
                     .foregroundStyle(Color.conduitAccent)
-                Text(AppLocalization.string("Morning brief · all \(brief.items.count) handled"))
+                    .accessibilityHidden(true)
+                Text("Morning brief")
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
+                if let stamp = briefStamp(brief) {
+                    Text(verbatim: stamp)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Image(systemName: "chevron.down")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, 16)
             .frame(minHeight: 52)
@@ -649,7 +680,10 @@ struct V2PulsePage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(.isHeader)
         .accessibilityHint(Text(AppLocalization.string("Shows what the brief brought")))
+        .accessibilityFocused($voiceOverCard, equals: brief.card.id)
+        .accessibilityIdentifier("pulse.brief.open")
     }
 
     // MARK: Done and cleared
@@ -1122,6 +1156,7 @@ struct V2PulsePage: View {
                         page?.cards[index].restUntil = dismissed ? answer.restUntil : nil
                     }
                     if focusedCard == card.id, dismissed { focusedCard = nil; voiceOverCard = nil }
+                    if !dismissed { unfold(card) }
                 }
                 if dismissed { showUndo(.dismissed, card: card.id, back: answer.restUntil) }
                 errorMessage = nil
@@ -1130,6 +1165,13 @@ struct V2PulsePage: View {
                 showError(PulseRefusal.message(for: error))
             }
         }
+    }
+
+    /// A card put back open with Undo or Put back: the brief that brought
+    /// it, folded since, opens to show it (AppState.unfoldPulseCard).
+    private func unfold(_ card: PulseCard) {
+        guard let cards = page?.cards, let brief = PulseLayout(cards: cards).brief(bringing: card.id) else { return }
+        appState.unfoldPulseCard(card.id, in: brief.id)
     }
 
     /// Done (or Undo) on a follow-up card: the promise closes or comes
@@ -1151,6 +1193,7 @@ struct V2PulsePage: View {
                 }
                 // Handled like Not now: it folds with the rest (Undo brings it back).
                 if done, focusedCard == card.id { focusedCard = nil; voiceOverCard = nil }
+                if !done { unfold(card) }
                 if done {
                     untoldCards.remove(card.id)
                     showUndo(.done, card: card.id)
