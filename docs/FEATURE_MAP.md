@@ -1110,7 +1110,7 @@ Keyboard caption is unchanged, as it describes the option)
   #1315, see Send while dictating).
 
 **Open gaps**
-- None known.
+- Group rooms' composer doesn't take the option: Return there always starts a new line, which ends a running dictation as typing does, keeping its words (found in #1315 review).
 
 **Checked:** 2026-10-26, at #1315.
 

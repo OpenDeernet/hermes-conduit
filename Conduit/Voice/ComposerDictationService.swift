@@ -312,7 +312,9 @@ final class ComposerDictationService: ObservableObject {
         ComposerDictation.slotFace(
             isCapturing: isCapturing,
             isStarting: isStarting,
-            isTranscribing: isTranscribing,
+            // Words that reached the draft after the stop (a Hermes partial)
+            // can be kept: past the grace, Done may end it there.
+            isTranscribing: isTranscribing && !producedText,
             settleCanEnd: settleCanEnd
         )
     }
