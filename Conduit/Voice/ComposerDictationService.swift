@@ -25,6 +25,13 @@ final class ComposerDictationService: ObservableObject {
     /// Stopped, and the words are still on their way (a Hermes upload).
     /// A new dictation waits for them rather than dropping them.
     @Published private(set) var isTranscribing = false
+    /// Stopped, and its usual settle has passed: Send's Stop may end it
+    /// now, keeping the draft's words, rather than wait out a slow host.
+    @Published private(set) var settleCanEnd = false
+
+    /// How long a settle runs before Send's Stop may cut it short: longer
+    /// than an Apple engine's usual final result (#1315 review).
+    nonisolated static let settleGrace: Duration = .seconds(2)
 
     /// The whole transcript of this dictation so far, each time it changes.
     /// Cleared when the dictation ends: the view that set it is captured.
@@ -198,9 +205,17 @@ final class ComposerDictationService: ObservableObject {
         isTranscribing = (recognizer?.holdsWordsWhileSettling ?? false) && !producedText
         let generation = generation
         let timeout = recognizer?.settleTimeout ?? .milliseconds(1_500)
+        settleCanEnd = false
         finishTask?.cancel()
         finishTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: timeout)
+            if timeout > Self.settleGrace {
+                try? await Task.sleep(for: Self.settleGrace)
+                guard !Task.isCancelled, self?.generation == generation else { return }
+                self?.settleCanEnd = true
+                try? await Task.sleep(for: timeout - Self.settleGrace)
+            } else {
+                try? await Task.sleep(for: timeout)
+            }
             guard let self, !Task.isCancelled, self.generation == generation else { return }
             // Its words never came: say so rather than end in silence.
             if self.isTranscribing {
@@ -284,10 +299,30 @@ final class ComposerDictationService: ObservableObject {
         releaseAudio()
         isCapturing = false
         isTranscribing = false
+        settleCanEnd = false
         isDictating = false
         let onFinish = onFinish
         clearCallbacks()
         onFinish?(producedText)
+    }
+
+    /// What Send's Stop shows now (#1309).
+    var slotFace: ComposerDictation.SlotFace {
+        ComposerDictation.slotFace(
+            isCapturing: isCapturing,
+            isStarting: isStarting,
+            isTranscribing: isTranscribing,
+            settleCanEnd: settleCanEnd
+        )
+    }
+
+    /// A tap on Send's Stop, or Return in its place.
+    func tapSlot() {
+        switch ComposerDictation.slotTap(slotFace) {
+        case .stop: stop()
+        case .cancelStart: cancel()
+        case .start, .nothing: break
+        }
     }
 
     private func clearCallbacks() {
@@ -398,25 +433,27 @@ enum ComposerDictation {
         case stop
         /// Still coming up: call it off.
         case cancelStart
-        /// Stopped, with words in the draft and the last ones settling:
-        /// done ends it there, so a slow host never holds Send back.
+        /// Stopped, with words in the draft, past the usual settle and the
+        /// last ones still coming: done ends it there, so a slow host never
+        /// holds Send back.
         case finishing
-        /// Stopped, and none of its words have reached the draft yet (a
-        /// Hermes upload): wait, or they're lost.
+        /// Stopped, and its last words are on their way: within the usual
+        /// settle, or none of its words have reached the draft yet (a
+        /// Hermes upload). Wait, or they're lost.
         case transcribing
     }
 
-    static func slotFace(isCapturing: Bool, isStarting: Bool, isTranscribing: Bool) -> SlotFace {
+    static func slotFace(isCapturing: Bool, isStarting: Bool, isTranscribing: Bool, settleCanEnd: Bool) -> SlotFace {
         if isCapturing { return .stop }
         if isStarting { return .cancelStart }
-        return isTranscribing ? .transcribing : .finishing
+        return isTranscribing || !settleCanEnd ? .transcribing : .finishing
     }
 
     /// What a tap on that Stop, or Return in its place, does: it never
     /// starts a dictation. Calling off (cancel) ends it at once, keeping
     /// whatever words the draft has.
-    static func slotTap(isCapturing: Bool, isStarting: Bool, isTranscribing: Bool) -> Tap {
-        switch slotFace(isCapturing: isCapturing, isStarting: isStarting, isTranscribing: isTranscribing) {
+    static func slotTap(_ face: SlotFace) -> Tap {
+        switch face {
         case .stop: return .stop
         case .cancelStart, .finishing: return .cancelStart
         case .transcribing: return .nothing

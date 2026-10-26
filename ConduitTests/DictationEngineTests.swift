@@ -76,30 +76,28 @@ extension ComposerFullEditorTests {
     }
 
     func testTheStopInSendsSlotStopsCancelsFinishesOrWaits() {
-        XCTAssertEqual(ComposerDictation.slotFace(isCapturing: true, isStarting: false, isTranscribing: false), .stop)
-        XCTAssertEqual(ComposerDictation.slotFace(isCapturing: false, isStarting: true, isTranscribing: false), .cancelStart)
-        XCTAssertEqual(
-            ComposerDictation.slotFace(isCapturing: false, isStarting: false, isTranscribing: false),
-            .finishing,
-            "stopped with words in the draft: Done ends it there"
-        )
-        XCTAssertEqual(
-            ComposerDictation.slotFace(isCapturing: false, isStarting: false, isTranscribing: true),
-            .transcribing,
-            "none of its words are in yet: nothing to tap"
-        )
+        func face(capturing: Bool = false, starting: Bool = false, transcribing: Bool = false, canEnd: Bool = false) -> ComposerDictation.SlotFace {
+            ComposerDictation.slotFace(isCapturing: capturing, isStarting: starting, isTranscribing: transcribing, settleCanEnd: canEnd)
+        }
+        XCTAssertEqual(face(capturing: true), .stop)
+        XCTAssertEqual(face(starting: true), .cancelStart)
+        XCTAssertEqual(face(), .transcribing, "within the usual settle: its last words are still coming")
+        XCTAssertEqual(face(canEnd: true), .finishing, "past the usual settle with words in the draft: Done ends it there")
+        XCTAssertEqual(face(transcribing: true, canEnd: true), .transcribing, "none of its words are in yet: nothing to tap")
     }
 
     /// The Stop and Return in its place: stop, call off, or wait; never a
     /// new dictation and never a send.
     func testTheStopAndReturnStopCallOffOrWait() {
-        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: true, isStarting: false, isTranscribing: false), .stop)
-        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: false, isStarting: true, isTranscribing: false), .cancelStart)
-        XCTAssertEqual(
-            ComposerDictation.slotTap(isCapturing: false, isStarting: false, isTranscribing: false),
-            .cancelStart,
-            "a slow settle ends at once, keeping the draft's words"
-        )
-        XCTAssertEqual(ComposerDictation.slotTap(isCapturing: false, isStarting: false, isTranscribing: true), .nothing)
+        XCTAssertEqual(ComposerDictation.slotTap(.stop), .stop)
+        XCTAssertEqual(ComposerDictation.slotTap(.cancelStart), .cancelStart)
+        XCTAssertEqual(ComposerDictation.slotTap(.finishing), .cancelStart, "a slow settle ends at once, keeping the draft's words")
+        XCTAssertEqual(ComposerDictation.slotTap(.transcribing), .nothing)
+    }
+
+    /// An Apple engine's settle ends on its own before Done could cut it
+    /// short; only a slower one (Hermes) offers Done.
+    func testSettleGraceOutlastsTheAppleSettle() {
+        XCTAssertGreaterThan(ComposerDictationService.settleGrace, .milliseconds(1_500))
     }
 }

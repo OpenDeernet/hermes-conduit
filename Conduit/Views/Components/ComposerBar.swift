@@ -1528,15 +1528,7 @@ struct ComposerBar: View, Equatable {
     private func submitFromReturnKey() -> Bool {
         // Return stands for Send, which is dictation's Stop while it runs.
         if dictationHoldsSendSlot {
-            switch ComposerDictation.slotTap(
-                isCapturing: dictation.isCapturing,
-                isStarting: dictation.isStarting,
-                isTranscribing: dictation.isTranscribing
-            ) {
-            case .stop: dictation.stop()
-            case .cancelStart: dictation.cancel()
-            case .start, .nothing: break
-            }
+            dictation.tapSlot()
             return true
         }
         guard ComposerReturnKey.canSubmit(action: action) else { return false }
@@ -1983,15 +1975,7 @@ struct ComposerBar: View, Equatable {
         // Already dictating: the button's second tap does what the Stop in
         // Send's place does, a settle included (#1309).
         if dictationHoldsSendSlot {
-            switch ComposerDictation.slotTap(
-                isCapturing: dictation.isCapturing,
-                isStarting: dictation.isStarting,
-                isTranscribing: dictation.isTranscribing
-            ) {
-            case .stop: dictation.stop()
-            case .cancelStart: dictation.cancel()
-            case .start, .nothing: break
-            }
+            dictation.tapSlot()
             return
         }
         switch ComposerDictation.tap(

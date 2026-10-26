@@ -9,22 +9,10 @@ struct ComposerDictationStopButton: View {
     var identifier = "composer.dictation.stop"
 
     var body: some View {
-        let face = ComposerDictation.slotFace(
-            isCapturing: dictation.isCapturing,
-            isStarting: dictation.isStarting,
-            isTranscribing: dictation.isTranscribing
-        )
+        let face = dictation.slotFace
         let waits = face == .transcribing
         Button {
-            switch ComposerDictation.slotTap(
-                isCapturing: dictation.isCapturing,
-                isStarting: dictation.isStarting,
-                isTranscribing: dictation.isTranscribing
-            ) {
-            case .stop: dictation.stop()
-            case .cancelStart: dictation.cancel()
-            case .start, .nothing: break
-            }
+            dictation.tapSlot()
         } label: {
             // Named by accessibilityTitle below.
             faceLabel(face)
@@ -37,7 +25,7 @@ struct ComposerDictationStopButton: View {
                 .contentShape(ComposerBar.controlHitShape)
         }
         .buttonStyle(.plain)
-        // None of its words are in yet: stopping now would lose them.
+        // Its last words are on their way: stopping now would lose them.
         .disabled(waits)
         .conduitGlassControl(
             cornerRadius: ComposerBar.controlSize / 2,
