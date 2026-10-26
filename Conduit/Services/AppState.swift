@@ -2163,6 +2163,10 @@ final class AppState: ObservableObject {
     /// (DashboardConnectLink.swift). RootView asks about it in a sheet,
     /// over the sign-in screen or a connected app alike.
     @Published var pendingConnectLink: DashboardConnectLink?
+    /// A Link invite that opened Conduit or was tapped in a chat
+    /// (RoomLinks.swift). RootView shows who it's from in a sheet, which
+    /// asks before linking.
+    @Published var pendingRoomLink: RoomLinkURL?
     /// Round 6: the classified failure of the most recent failed connection
     /// attempt (saved-credential reconnect, repair activation, or a failed
     /// explicit connect). Typed — never recovered from user-facing strings —

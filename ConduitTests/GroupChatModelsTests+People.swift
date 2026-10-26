@@ -2,11 +2,11 @@ import XCTest
 
 @testable import Conduit
 
-/// Settings > People (designs/cross-owner-agents, C2a): the Links this
-/// installation keeps, its four words, and the host setup for rooms with
-/// other people's agents. Notifier 0.83 (`room_links.py`, the links routes)
-/// and 0.85 (`room_setup.py`, `/rooms/setup`). An extension, so no new class
-/// to plan.
+/// Settings > People (designs/cross-owner-agents, C2): the Links this
+/// installation keeps, its four words, the host setup for rooms with other
+/// people's agents (C2a), and invites made, opened and accepted (C2b).
+/// Notifier 0.83 (`room_links.py`, the links routes) and 0.85
+/// (`room_setup.py`, `/rooms/setup`). An extension, so no new class to plan.
 extension GroupChatModelsTests {
     private static let peopleWords = ["amber", "birch", "cedar", "delta"]
 
@@ -358,6 +358,199 @@ extension GroupChatModelsTests {
         answer["ceiling"] = [String]()
         XCTAssertEqual(PeopleSettingsText.tools(try RoomSetupClient.parseState(answer), profileName: "Furina"),
                        AppLocalization.string("Rooms can't let \("Furina") use tools: it only talks there."))
+    }
+
+    // MARK: - Invites (C2b)
+
+    /// An invite as the plugin writes one: base64url without padding.
+    private static let peopleInviteText = "conduit://link/eyJ2IjoxLCJuYW1lIjoiRXJpYyJ9"
+
+    private func peoplePreview(expired: Bool = false, own: Bool = false, linkedAs: Any = NSNull()) -> [String: Any] {
+        [
+            "ok": true, "name": "Eric", "words": Self.peopleWords, "mailbox": "rooms.milim.dev",
+            "expires_at": 1_790_086_400, "expired": expired, "own": own, "linked_as": linkedAs,
+        ]
+    }
+
+    func testRoomLinkURLTakesOnlyConduitLinkInvites() throws {
+        let text = Self.peopleInviteText
+        XCTAssertEqual(RoomLinkURL(text)?.text, text)
+        XCTAssertEqual(RoomLinkURL(url: try XCTUnwrap(URL(string: text)))?.text, text)
+        // Trimmed, and sent in the plugin's spelling whatever the case of its
+        // scheme and host. The payload keeps its own.
+        XCTAssertEqual(RoomLinkURL("  \(text)\n")?.text, text)
+        XCTAssertEqual(RoomLinkURL("CONDUIT://Link/eyJ2IjoxLCJuYW1lIjoiRXJpYyJ9")?.text, text)
+        XCTAssertEqual(RoomLinkURL("conduit://link/ABCD_-xy")?.text, "conduit://link/ABCD_-xy")
+
+        // Other links, and payloads the plugin can't read.
+        for other in [
+            "https://link/eyJ2IjoxfQ", "xconduit://link/eyJ2IjoxfQ", "conduit://connect?url=example.com",
+            "conduit://session/abc", "conduit://links/eyJ2IjoxfQ", "conduit://link", "conduit://link/",
+            "conduit://link/eyJ2Ijox+Q", "conduit://link/eyJ2Ijox/Q", "conduit://link/eyJ2IjoxfQ==",
+            "conduit://link/eyJ2IjoxfQ?x=1", "conduit://link/eyJ2IjoxfQ#x", "conduit://link/eyJ2 IjoxfQ",
+            // Five characters: base64 never ends with one left over.
+            "conduit://link/abcde",
+        ] {
+            XCTAssertNil(RoomLinkURL(other), other)
+        }
+        // Up to the plugin's 2,048 characters.
+        let longest = RoomLinkURL.prefix + String(repeating: "A", count: 2_032)
+        XCTAssertEqual(RoomLinkURL(longest)?.text.count, 2_047)
+        XCTAssertNil(RoomLinkURL(longest + "AA"))
+
+        // Pasted with words around it.
+        XCTAssertEqual(RoomLinkURL.find(in: "Link with me: \(text). See you!")?.text, text)
+        XCTAssertEqual(RoomLinkURL.find(in: "(Conduit://LINK/eyJ2IjoxLCJuYW1lIjoiRXJpYyJ9)")?.text, text)
+        XCTAssertNil(RoomLinkURL.find(in: "conduit://session/abc"))
+        XCTAssertNil(RoomLinkURL.find(in: "No invite here"))
+    }
+
+    func testRoomLinkURLNeverShowsItsPayload() throws {
+        let invite = try XCTUnwrap(RoomLinkURL(Self.peopleInviteText))
+        let payload = String(Self.peopleInviteText.dropFirst(RoomLinkURL.prefix.count))
+        // Its token links whoever holds it with the inviter.
+        for shown in [invite.description, invite.debugDescription, String(describing: invite), String(reflecting: invite), "\(invite)"] {
+            XCTAssertFalse(shown.contains(payload), shown)
+        }
+        var dumped = ""
+        dump(invite, to: &dumped)
+        XCTAssertFalse(dumped.contains(payload), dumped)
+        XCTAssertFalse(Mirror(reflecting: invite).children.contains { "\($0.value)".contains(payload) })
+    }
+
+    func testAnInvitesQRCodeHoldsTheLongestInvite() throws {
+        let longest = try XCTUnwrap(RoomLinkURL(RoomLinkURL.prefix + String(repeating: "A", count: 2_032)))
+        let image = try XCTUnwrap(RoomLinkQRCode.image(for: longest.text))
+        XCTAssertGreaterThan(image.size.width, 0)
+        XCTAssertEqual(image.size.width, image.size.height)
+    }
+
+    @MainActor
+    func testInvitePreviewAndAcceptPathsBodiesAndTimeouts() async throws {
+        let text = Self.peopleInviteText
+        let words = Self.peopleWords
+        var asked: [(path: String, method: String, body: [String: Any]?, timeout: Int?)] = []
+        let client = RoomLinksClient { path, method, body, timeout in
+            asked.append((path, method, body, timeout))
+            switch path {
+            case "/api/plugins/conduit_push/rooms/links/invites":
+                let invite: [String: Any] = ["id": "inv1", "name": "Eric", "expires_at": 1_790_086_400]
+                return ["ok": true, "url": text, "invite": invite, "words": words]
+            case "/api/plugins/conduit_push/rooms/links/preview":
+                return self.peoplePreview()
+            default:
+                return ["ok": true, "link": self.peopleLink("lk9", name: "Eric", status: "waiting", createdAt: 1_790_000_000)]
+            }
+        }
+        let made = try await client.invite(name: "Eric")
+        XCTAssertEqual(made.url.text, text)
+        XCTAssertEqual(made.invite, RoomLinkInvite(id: "inv1", name: "Eric", expiresAt: Date(timeIntervalSince1970: 1_790_086_400)))
+        XCTAssertEqual(made.words, words)
+        let invite = try XCTUnwrap(RoomLinkURL(text))
+        let preview = try await client.preview(invite)
+        XCTAssertEqual(preview, RoomLinkPreview(
+            name: "Eric", words: words, mailbox: "rooms.milim.dev",
+            expiresAt: Date(timeIntervalSince1970: 1_790_086_400), expired: false, own: false, linkedAs: nil
+        ))
+        let link = try await client.accept(invite, name: "Mona")
+        XCTAssertEqual(link, RoomLink(
+            id: "lk9", name: "Eric", status: "waiting", words: words, createdAt: Date(timeIntervalSince1970: 1_790_000_000)
+        ))
+
+        XCTAssertEqual(asked.map(\.path), [
+            "/api/plugins/conduit_push/rooms/links/invites",
+            "/api/plugins/conduit_push/rooms/links/preview",
+            "/api/plugins/conduit_push/rooms/links",
+        ])
+        XCTAssertEqual(asked.map(\.method), ["POST", "POST", "POST"])
+        XCTAssertEqual(asked[0].body as? [String: String], ["name": "Eric"])
+        // The invite goes to the plugin, which alone reads it, as it came.
+        XCTAssertEqual(asked[1].body as? [String: String], ["url": text])
+        XCTAssertEqual(asked[2].body as? [String: String], ["url": text, "name": "Mona"])
+        // Making and accepting an invite wait on the rooms mailbox; a
+        // preview keeps the dashboard request's own time.
+        XCTAssertEqual(asked.map(\.timeout), [55_000, nil, 55_000])
+        // Links are the installation's: no route names a profile.
+        XCTAssertFalse(asked.contains { $0.path.contains("profile=") })
+
+        // An invite answer whose link isn't an invite, and an accept without
+        // its Link, aren't read as done.
+        let odd = RoomLinksClient { _, _, _, _ in
+            let invite: [String: Any] = ["id": "inv1", "name": "Eric", "expires_at": 1_790_086_400]
+            return ["ok": true, "url": "https://example.com/invite", "invite": invite, "words": words]
+        }
+        do {
+            _ = try await odd.invite(name: "Eric")
+            XCTFail("An invite answer without an invite read as made")
+        } catch HermesError.invalidResponse {}
+        let bare = RoomLinksClient { _, _, _, _ in ["ok": true] }
+        do {
+            _ = try await bare.accept(invite, name: "Mona")
+            XCTFail("An accept answer without its Link read as done")
+        } catch HermesError.invalidResponse {}
+    }
+
+    func testPreviewReadsExpiredOwnAndLinkedAs() throws {
+        XCTAssertNil(try RoomLinksClient.parsePreview(peoplePreview()).stop)
+        XCTAssertEqual(try RoomLinksClient.parsePreview(peoplePreview(expired: true)).stop, .expired)
+        XCTAssertEqual(try RoomLinksClient.parsePreview(peoplePreview(own: true)).stop, .own)
+        // Your own invite says so, even once it ran out.
+        XCTAssertEqual(try RoomLinksClient.parsePreview(peoplePreview(expired: true, own: true)).stop, .own)
+        let linked = try RoomLinksClient.parsePreview(peoplePreview(linkedAs: "lk1"))
+        XCTAssertEqual(linked.linkedAs, "lk1")
+        XCTAssertEqual(linked.stop, .linked("lk1"))
+        XCTAssertNil(try RoomLinksClient.parsePreview(peoplePreview(linkedAs: "")).linkedAs)
+
+        // Without what the sheet shows, it's no preview.
+        for key in ["ok", "name", "words", "mailbox", "expires_at", "expired", "own"] {
+            var answer = peoplePreview()
+            answer.removeValue(forKey: key)
+            XCTAssertThrowsError(try RoomLinksClient.parsePreview(answer), key)
+        }
+        var refused = peoplePreview()
+        refused["ok"] = false
+        XCTAssertThrowsError(try RoomLinksClient.parsePreview(refused))
+
+        // What the sheet says in place of Link.
+        XCTAssertEqual(RoomLinkSheetText.stop(.own, name: "Eric", existing: nil),
+                       AppLocalization.string("This invite is from your own Hermes. Send it to the person you're linking with."))
+        XCTAssertEqual(RoomLinkSheetText.stop(.expired, name: "Eric", existing: nil),
+                       AppLocalization.string("This invite has run out. Ask \("Eric") for a new one."))
+        // The Link's own name, as this Hermes keeps it, where the list has it.
+        let existing = RoomLink(id: "lk1", name: "Eric M.", status: "linked", words: Self.peopleWords, createdAt: nil)
+        XCTAssertEqual(RoomLinkSheetText.stop(.linked("lk1"), name: "Eric", existing: existing),
+                       AppLocalization.string("Your Hermes is already linked with \("Eric M.")."))
+        XCTAssertEqual(RoomLinkSheetText.stop(.linked("lk1"), name: "Eric", existing: nil),
+                       AppLocalization.string("Your Hermes is already linked with \("Eric")."))
+    }
+
+    @MainActor
+    func testOpeningAnInviteOpensItsSheetAndNothingElse() throws {
+        let suite = "GroupChatModelsTests.People.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else { return XCTFail("No test defaults") }
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let appState = AppState(defaults: defaults, loadSavedConnection: false)
+        let text = Self.peopleInviteText
+        let url = try XCTUnwrap(URL(string: text))
+
+        XCTAssertTrue(appState.routeRoomLink(url))
+        XCTAssertEqual(appState.pendingRoomLink?.text, text)
+        // Nothing else reads it: not as a chat or Settings link, from inside
+        // the app or outside, nor as a sign-in code.
+        XCTAssertNil(ConduitAppLink(url: url))
+        XCTAssertNil(ConduitAppLink(externalURL: url))
+        XCTAssertFalse(appState.routeConnectLink(url))
+        XCTAssertNil(appState.pendingConnectLink)
+
+        // An invite Conduit can't read is still an invite: it opens nothing.
+        appState.pendingRoomLink = nil
+        XCTAssertTrue(appState.routeRoomLink(try XCTUnwrap(URL(string: "conduit://link/abcde"))))
+        XCTAssertNil(appState.pendingRoomLink)
+        // Other links aren't invites.
+        for other in ["conduit://session/abc", "conduit://connect?url=example.com", "conduit://settings/voice", "https://link/abc"] {
+            XCTAssertFalse(appState.routeRoomLink(try XCTUnwrap(URL(string: other))), other)
+        }
+        XCTAssertNil(appState.pendingRoomLink)
     }
 
     // MARK: - Refusals
