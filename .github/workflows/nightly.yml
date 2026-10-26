@@ -1,7 +1,7 @@
 name: Nightly
 
 # The comprehensive half of hosted CI, which never gates a merge (docs/CI.md,
-# CI v5). PR and main runs (ci.yml) only build and run the curated smoke
+# CI v5). PR and push runs (ci.yml) only build and run the curated smoke
 # classes; this workflow runs everything else:
 #   unit       EVERY unit class except the timing families, split into
 #              balanced shards from scripts/hosted-suite.json (unit_shards),

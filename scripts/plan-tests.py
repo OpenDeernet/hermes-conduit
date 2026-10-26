@@ -1402,7 +1402,7 @@ def cmd_hosted(args) -> int:
     `unit_shards` balanced shards; the timing families, run with repeats; and
     the whole UI suite split into `nightly_ui_shards` shards. Every discovered
     class lands in exactly one of those lists, so nothing is silently unrun
-    (PR and main runs only run the smoke sample of `cmd_smoke`).
+    (PR and push runs only run the smoke sample of `cmd_smoke`).
     """
     discovery = discover_test_classes(args.repo_root)
     for w in discovery["warnings"]:

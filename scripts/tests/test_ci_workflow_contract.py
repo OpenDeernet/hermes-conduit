@@ -5,7 +5,7 @@ again (e.g. passing observation files positionally when the script requires
 --observations).
 
 CI v5 shape (docs/CI.md): GitHub-hosted CI is the merge gate, and it is light.
-A PR or push to main runs the cheap Linux validation and ONE macOS `smoke` job
+A PR or a push runs the cheap Linux validation and ONE macOS `smoke` job
 that compiles the app (without its Watch app and extensions unless the plan
 job's ui-spec says otherwise, incrementally from main's last build) and every
 test target once, then runs the curated unit smoke classes and the curated UI
@@ -131,9 +131,20 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("CI Gate", text)
         self.assertNotIn("Build & Test", text)
 
+    def test_ci_runs_for_main_and_linked_rooms(self):
+        """linked-rooms' copy runs on that branch's pushes and the PRs into
+        it as on main's, as pulse's copy does for pulse (docs/CI.md). Only
+        this branch has the test: main's copy runs for main alone and never
+        gets it, so neither does pulse."""
+        text = self._workflow_text()
+        triggers = text[text.index("\non:\n"):text.index("\nconcurrency:")]
+        self.assertIn("\n  push:\n    branches: [main, linked-rooms]\n  pull_request:\n", triggers)
+        self.assertRegex(triggers.split("\n  pull_request:\n", 1)[1],
+                         r"\A(    #.*\n)*    branches: \[main, linked-rooms\]\n")
+
     def test_one_macos_job_per_run(self):
         """Runner queueing (5 concurrent macOS jobs per account) was CI v4's
-        bottleneck: a PR or main run gets exactly one macOS job."""
+        bottleneck: a PR or push run gets exactly one macOS job."""
         jobs = _job_keys(WORKFLOW)
         self.assertEqual(jobs, ["plan", "self-test", "smoke", "ci-gate"], jobs)
         self.assertEqual(self._workflow_text().count("runs-on: macos-"), 1)
@@ -167,8 +178,9 @@ class WorkflowContractTests(unittest.TestCase):
     def test_the_feature_map_check_knows_the_pr_and_its_base(self):
         """On a PR, an entry it edits names it on its Checked line: the step
         passes the PR's number and the base's map (HEAD^1 of the merge commit),
-        and for a PR into pulse, main's map where the PR meets main, so the
-        entries a merge of main brings in keep main's Checked lines."""
+        and for a PR into pulse or linked-rooms, main's maps where the PR and
+        its base meet main, so the entries a merge of main brings in keep
+        main's Checked lines."""
         step = _step_text(self._job_text("plan"), "Feature map paths exist")
         self.assertIn("PR_NUMBER: ${{ github.event.pull_request.number }}", step)
         self.assertIn("git show HEAD^1:docs/FEATURE_MAP.md", step)
@@ -279,10 +291,12 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn(f"- target: {target}", spec)
 
     def test_smoke_job_builds_incrementally_and_main_saves_the_full_build(self):
-        """The smoke job restores the newest main build's DerivedData before
-        building, and saves its own only on pushes to main (always the full
-        app there), after a successful build, with the same path list (a
-        different list is a different cache)."""
+        """The smoke job restores the newest DerivedData it can reach (main's,
+        and on a PR into pulse or linked-rooms that branch's) before
+        building, and saves its own only on pushes (to main, and in pulse's
+        and linked-rooms' copies to that branch; always the full app there),
+        after a successful build, with the same path list (a different list
+        is a different cache)."""
         text = self._job_text("smoke")
         _assert_cache_round_trip(self, text, "steps.cache-key.outputs.kind == 'full'", "smoke")
         self.assertIn("&& github.event_name == 'push'\n", text)
