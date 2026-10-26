@@ -1576,8 +1576,8 @@ go. Talking and sending in one go is Voice message's or Voice's job.
 
 **Siblings:** chat composer (chats, project chats, Bot Chat; done) · group
 rooms (done) · the full editor, both composers' (done, it shows the same
-Stop) · the hardware Return key with Return sends on (done, it stops the
-dictation) · the big voice button set to Dictation (done, its second
+Stop) · the hardware Return key with Return sends on (done in chats, it stops the
+dictation; group rooms don't take the option, see Composer Return key's gap) · the big voice button set to Dictation (done, its second
 tap does what the Stop does, a settle included) · Voice
 message's hold to record, let go to send (not changed, it's the one-tap
 path) · docs/VOICE_SETTINGS.md "Dictate into the composer" (done) · strings (not
@@ -1588,8 +1588,8 @@ notifier (not needed, dictation is app-side)
 **Code**
 - Policy: `Conduit/Voice/ComposerDictationService.swift` (ComposerDictation.holdsSendSlot, slotFace, slotTap; the service's settleCanEnd, slotFace and tapSlot)
 - The Stop: `Conduit/Views/Components/ComposerDictationStopButton.swift`
-- Chat composer: `Conduit/Views/Components/ComposerBar.swift` (trailingControl, dictationHoldsSendSlot, submitFromReturnKey, the full editor's buttons)
-- Group rooms: `Conduit/Views/Components/GroupRoomComposer.swift` (sendSlot, dictationHoldsSendSlot)
+- Chat composer: `Conduit/Views/Components/ComposerBar.swift` (trailingControl, dictationHoldsSendSlot, submitFromReturnKey, applyDictationRequest for the big voice button, the full editor's buttons)
+- Group rooms: `Conduit/Views/Components/GroupRoomComposer.swift` (sendSlot, dictationHoldsSendSlot, isDictationActive)
 - Tests: `ConduitTests/DictationEngineTests.swift`, `ConduitTests/AppStateVoiceCapabilityTests.swift`
 
 **Rulings**
