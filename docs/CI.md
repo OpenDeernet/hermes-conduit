@@ -189,6 +189,8 @@ side by side before anything queues. "Require branches to be up to date
 before merging" is a repository setting (Settings > Branches > main) that this
 workflow assumes is off; if it is turned back on, PRs must update again. Grow
 the smoke set or add a macOS job to ci.yml only with that ceiling in mind.
+Pushes to `pulse` and `linked-rooms` run the same way, each in that branch's
+copy of the workflow.
 
 A nightly run schedules 8 macOS jobs (2 unit shards + 3 timing repeats + 3 UI
 shards), so three of them queue behind the ceiling, and a nightly that
@@ -198,7 +200,8 @@ more build and one more queued job.
 
 ## Hosted gate architecture
 
-The CI v5 shape of `.github/workflows/ci.yml` (every PR and push to `main`):
+The CI v5 shape of `.github/workflows/ci.yml` (every PR, and every push to
+`main`, `pulse` or `linked-rooms`):
 
 ```
         source scan (inventory)                     CI tooling self-test (ubuntu)
@@ -213,12 +216,12 @@ The CI v5 shape of `.github/workflows/ci.yml` (every PR and push to `main`):
                  |
                  v
    smoke (ONE macOS job)
-     restore main's build cache
+     restore main's (or its base branch's) build cache
      build-for-testing  ||  simulator boot      (ci-hosted-build.sh)
      unit smoke: 7 curated classes, ONE invocation, no retry
      UI smoke:   2 curated classes, ONE invocation, one targeted retry
                  (runs even if unit smoke failed)
-     main only: save the full build cache
+     pushes only: save the full build cache
                  |
                  v
           ci-gate  ->  "CI Gate" (the single required status check)
@@ -235,7 +238,7 @@ nightly-only families) and `ui` (one job per UI shard).
 |---|---|---|
 | `plan` | ubuntu | Inventory/planner validation (`plan-tests.py validate`), localization coverage, the recommended plugin version, the feature map's paths and entry shape and, on a PR, that each entry it adds or edits names the PR on its Checked line (`check-feature-map.py`, given the base's map from `HEAD^1` and, on a PR into `pulse` or `linked-rooms` that merges main, main's maps where the PR and its base meet main, so the entries a merge of main brings in keep main's Checked lines (if GitHub can't say whether the PR merges main or give those maps, it warns and checks without them, so those entries fail as the PR's edits until a re-run); its notifier/ paths are looked up on the plugin's main, so a file removed there turns every PR red until the map follows, and a GitHub outage during that lookup only warns), cheap CI-tooling tests, the **smoke selection** (`plan-tests.py smoke`: `unit-csv`, `ui-csv`), the **nightly partition** check (`plan-tests.py hosted`), and the smoke build's project (`ui-spec`). |
 | `self-test` | ubuntu | CI-tooling regression suites (planner tests, destination lookup, gate/contract tests, the bash wrapper tests the plan job skips) in one job, concurrent with `smoke`. |
-| `smoke` (`Smoke`) | macos-26 | The only macOS job: restores main's build cache, builds the app and every test target once while the simulator boots (the compile gate), then runs the curated unit classes (one invocation, no retry) and the curated UI classes (one invocation, one targeted retry) on that build. Saves the full build cache on pushes to `main`. |
+| `smoke` (`Smoke`) | macos-26 | The only macOS job: restores main's build cache (on a PR into `pulse` or `linked-rooms`, that branch's when it has one), builds the app and every test target once while the simulator boots (the compile gate), then runs the curated unit classes (one invocation, no retry) and the curated UI classes (one invocation, one targeted retry) on that build. Saves the full build cache on pushes to `main`, `pulse` or `linked-rooms`. |
 | `ci-gate` | ubuntu | The single stable branch-protection verdict (`CI Gate`), aggregating `plan`, `smoke` and `self-test` via `scripts/ci-gate.py`. |
 
 The self-test job's timeout layering holds: each synthetic hang in the suites
@@ -274,7 +277,8 @@ test.
 ### The smoke selection
 
 `scripts/smoke-suite.json` is the checked-in selection the `smoke` job runs on
-every PR and push to `main` (CI v5), and `plan-tests.py smoke` validates it
+every PR and every push to `main`, `pulse` or `linked-rooms` (CI v5), and
+`plan-tests.py smoke` validates it
 against the discovered inventory on every run:
 
 * a class that is **renamed, deleted or moved between targets fails the plan
@@ -357,7 +361,7 @@ caught. `SmokeSelectionTests` asserts they never enter the smoke set, and
 
 ### Cost
 
-CI v5: one macOS job per PR or main run (one build, one boot, two test
+CI v5: one macOS job per PR run or push run (one build, one boot, two test
 invocations, plus a UI retry when needed), against CI v4's three (each with
 its own build and boot, ~18 minutes of wall clock per run). The full unit
 suite's macOS minutes moved to the nightly run, which spends them once a day

@@ -131,6 +131,15 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("CI Gate", text)
         self.assertNotIn("Build & Test", text)
 
+    def test_ci_runs_for_main_and_linked_rooms(self):
+        """linked-rooms' copy runs on that branch's pushes and the PRs into
+        it as on main's, as pulse's copy does for pulse (docs/CI.md)."""
+        text = self._workflow_text()
+        triggers = text[text.index("\non:\n"):text.index("\nconcurrency:")]
+        self.assertIn("\n  push:\n    branches: [main, linked-rooms]\n  pull_request:\n", triggers)
+        self.assertRegex(triggers.split("\n  pull_request:\n", 1)[1],
+                         r"\A(    #.*\n)*    branches: \[main, linked-rooms\]\n")
+
     def test_one_macos_job_per_run(self):
         """Runner queueing (5 concurrent macOS jobs per account) was CI v4's
         bottleneck: a PR or main run gets exactly one macOS job."""
@@ -280,7 +289,8 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn(f"- target: {target}", spec)
 
     def test_smoke_job_builds_incrementally_and_main_saves_the_full_build(self):
-        """The smoke job restores the newest main build's DerivedData before
+        """The smoke job restores the newest DerivedData it can reach (main's,
+        and on a PR into pulse or linked-rooms that branch's) before
         building, and saves its own only on pushes (to main, and in pulse's
         and linked-rooms' copies to that branch; always the full app there),
         after a successful build, with the same path list (a different list
