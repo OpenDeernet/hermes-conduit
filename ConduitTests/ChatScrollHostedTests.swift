@@ -572,6 +572,10 @@ final class ChatScrollHostedTests: XCTestCase {
         appState.messages.append(ChatMessage(id: "turn-user", role: .user, content: "Do the thing.", timestamp: "2026-01-01T00:00:00Z"))
         settle(mounted.host.view, seconds: 0.2)
         assertAtLatest(mounted, "the send is followed")
+        // Read while it's on screen: once the stop leaves it just above the
+        // viewport, the lazy stack may drop its frame. Rows below it don't
+        // move it.
+        let userRow = try XCTUnwrap(mounted.engine.rowFrame(for: "turn-user"), "the user's message is laid out")
         for step in 0..<4 {
             appState.messages.append(ChatMessage(
                 id: "turn-partial-\(step)",
@@ -587,7 +591,6 @@ final class ChatScrollHostedTests: XCTestCase {
         checkpoint("hold", mounted, recorder)
 
         let surface = try XCTUnwrap(mounted.engine.surface)
-        let userRow = try XCTUnwrap(mounted.engine.rowFrame(for: "turn-user"), "the user's message is laid out")
         let rowBottom = surface.transcriptOriginY + userRow.maxY - mounted.scrollView.contentOffset.y
         XCTAssertEqual(rowBottom, surface.insetTop, accuracy: 1, "stops at the bottom of the user's message\n\(recorder.dump())")
         XCTAssertEqual(mounted.engine.mode, .browsing, "the reader is left browsing at the stop")
