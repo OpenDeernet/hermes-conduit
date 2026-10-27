@@ -227,9 +227,8 @@ final class ChatScrollEngineTests: XCTestCase {
     /// transcript, so its layout passes check.
     func testALayoutPassDuringALiveTurnFindsABlankViewport() {
         let (engine, surface) = makeEngine()
+        // Nothing laid out, live rows included.
         engine.liveTailShowing = { true }
-        engine.rowFramesChanged([:])
-        engine.liveRowFramesChanged([:])
         events = []
         scheduled = []
         surface.layOut(contentHeight: 4100)
