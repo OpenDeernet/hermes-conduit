@@ -86,7 +86,7 @@ struct PulseCard: Equatable, Identifiable {
     let learned: PulsePreference?
     /// What the turn that brought it up looked at first, by source
     /// (pulse_tools labels: "calendar", "phone", "contacts", "maps", "web";
-    /// 0.96.0), for its Why?. Never the queries.
+    /// 0.96.0; "location", 0.100.0), for its Why?. Never the queries.
     let looked: [String]
     /// A suggestion's (kind "proposal", 0.98.0): what Add puts on the phone,
     /// and where it stands.
@@ -490,6 +490,7 @@ enum PulseCardKind {
         case "contacts": return AppLocalization.string("your contacts")
         case "maps": return AppLocalization.string("Maps")
         case "web": return AppLocalization.string("the web")
+        case "location": return AppLocalization.string("where you are")
         default: return nil
         }
     }
@@ -1166,6 +1167,14 @@ extension AppState {
     /// card with Add (0.98.0): the feed brings them to an app that asks.
     var pulseSuggests: Bool { notifierPlugin.reports(PulseClient.proposalsCapability) }
 
+    /// Pulse reads where the user is with Where you are on (0.100.0):
+    /// Settings > Pulse's switch.
+    var pulseReadsWhere: Bool { notifierPlugin.reports(PulseClient.whereCapability) }
+
+    /// Settings > Pulse's Hide private reminders on the Lock Screen, and
+    /// how much each Pulse push may interrupt (0.104.0).
+    var pulseHidesPrivate: Bool { notifierPlugin.reports(PulseClient.privateCapability) }
+
     /// A thumbs down on this card asks why: a follow-up's, or a report
     /// card's once the plugin acts on its reasons (0.81.1). Before, a report
     /// card's reason changed nothing, so its thumbs down was enough.
@@ -1343,6 +1352,13 @@ extension PulseClient {
     /// An event or reminder a Pulse turn would add is a suggestion on a card
     /// of its own, with Add, Not now and Undo (0.98.0).
     static let proposalsCapability = "pulse_proposals"
+    /// Pulse reads where the user is with Where you are on: Settings >
+    /// Pulse's switch, a remembered item's place in What Pulse remembers,
+    /// and "where you are" in what a card's turn looked at (0.100.0).
+    static let whereCapability = "pulse_where"
+    /// Hide private reminders on the Lock Screen: Settings > Pulse's switch,
+    /// and a private push's body in the app's language (0.104.0).
+    static let privateCapability = "pulse_private"
 }
 
 /// What Not now puts a card off until, as the plugin names it. Wrong time

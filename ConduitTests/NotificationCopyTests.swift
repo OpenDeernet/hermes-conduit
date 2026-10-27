@@ -73,6 +73,18 @@ final class NotificationCopyTests: XCTestCase {
         XCTAssertEqual(NotificationCopy.preview(["title_label": "pulse.followup"]).title, "Pulse · Follow-up")
     }
 
+    func testAPrivatePulsePushSaysOnlyThatPulseHasSomething() {
+        let content: [String: Any] = [
+            "title_label": "pulse.followup", "body": "Pulse has something for you.", "private": true,
+        ]
+        XCTAssertEqual(NotificationCopy.preview(content).title, "Pulse · Follow-up")
+        XCTAssertEqual(NotificationCopy.preview(content).body, "Pulse has something for you.")
+        standardDefaults.set("de", forKey: AppLanguageStore.defaultsKey)
+        XCTAssertEqual(NotificationCopy.preview(content).body, "Pulse hat etwas für dich.")
+        XCTAssertEqual(NotificationCopy.preview(["title_label": "pulse.followup", "body": "Book it.", "private": "yes"]).body,
+                       "Book it.", "only a private flag the plugin set")
+    }
+
     func testPulsePushesOfferQuietForTodayWhereTheirPluginTakesIt() {
         let quiet: Set<String> = ["gw-home"]
         let offers = { (label: String?, gateway: String) in

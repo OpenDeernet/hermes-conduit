@@ -370907,6 +370907,990 @@
           }
         }
       }
+    },
+    "Pulse has something for you." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse hat etwas für dich."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse tiene algo para ti."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse a quelque chose pour vous."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse punya sesuatu untuk Anda."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse ha qualcosa per te."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulseからお知らせがあります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse가 알려 드릴 게 있어요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse ma coś dla Ciebie."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Pulse tem algo para você."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "У Pulse есть кое-что для вас."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse'ın sizin için bir şeyi var."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 有事要告诉你。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 有事要告訴你。"
+          }
+        }
+      }
+    },
+    "where you are" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dein Standort"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tu ubicación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "votre position"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "lokasi Anda"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "la tua posizione"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在地"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 위치"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Twoja lokalizacja"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "sua localização"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ваша геопозиция"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "konumunuz"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的位置"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的位置"
+          }
+        }
+      }
+    },
+    "When you leave %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Verlassen: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al salir: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En partant : %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saat meninggalkan %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quando esci: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を出るとき"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에서 나갈 때"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gdy wyjdziesz: %@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ao sair: %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Когда уйдёте: %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayrılırken: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离开%@时"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "離開%@時"
+          }
+        }
+      }
+    },
+    "When you get to %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bei Ankunft: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al llegar: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En arrivant : %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saat tiba di %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quando arrivi: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@に着いたとき"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 도착할 때"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gdy dotrzesz: %@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ao chegar: %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Когда придёте: %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Varınca: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "到达%@时"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "到達%@時"
+          }
+        }
+      }
+    },
+    "No saved place has that name yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch hat kein gespeicherter Ort diesen Namen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no hay ningún lugar guardado con ese nombre."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun lieu enregistré ne porte encore ce nom."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada tempat tersimpan dengan nama itu."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nessun luogo salvato ha ancora questo nome."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "その名前の保存した場所はまだありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 그 이름의 저장된 장소가 없어요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Żadne zapisane miejsce nie ma jeszcze tej nazwy."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nenhum lugar salvo tem esse nome ainda."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пока нет сохранённого места с таким названием."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Henüz bu adda kayıtlı bir yer yok."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有叫这个名字的已保存地点。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "還沒有叫這個名字的已儲存地點。"
+          }
+        }
+      }
+    },
+    "Saved place: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gespeicherter Ort: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lugar guardado: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lieu enregistré : %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tempat tersimpan: %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Luogo salvato: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存した場所：%@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장된 장소: %@"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zapisane miejsce: %@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lugar salvo: %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сохранённое место: %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kayıtlı yer: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存的地点：%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已儲存的地點：%@"
+          }
+        }
+      }
+    },
+    "A reminder for a place, or one that can't wait, comes as Time Sensitive, at most three a day. While you're busy, Pulse's notifications go quietly to Notification Center." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine Erinnerung für einen Ort oder eine, die nicht warten kann, kommt als zeitkritische Mitteilung, höchstens drei am Tag. Während du beschäftigt bist, landen die Mitteilungen von Pulse leise in der Mitteilungszentrale."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un recordatorio para un lugar, o uno que no puede esperar, llega como notificación urgente, como máximo tres al día. Mientras estás ocupado, las notificaciones de Pulse van en silencio al Centro de notificaciones."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un rappel pour un lieu, ou qui ne peut pas attendre, arrive comme notification urgente, trois par jour au plus. Quand vous êtes occupé, les notifications de Pulse vont discrètement dans le Centre de notifications."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pengingat untuk suatu tempat, atau yang tidak bisa menunggu, datang sebagai notifikasi sensitif waktu, paling banyak tiga sehari. Saat Anda sibuk, notifikasi Pulse masuk diam-diam ke Pusat Notifikasi."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un promemoria per un luogo, o uno che non può aspettare, arriva come notifica urgente, al massimo tre al giorno. Mentre sei occupato, le notifiche di Pulse vanno in silenzio nel Centro Notifiche."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "場所のリマインダーや待てない知らせは即時通知として届きます（1日3件まで）。忙しいあいだ、Pulseの通知は通知センターに静かに届きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "장소에 대한 알림이나 기다릴 수 없는 알림은 시간 민감 알림으로 와요(하루 최대 3개). 바쁠 때는 Pulse 알림이 알림 센터로 조용히 가요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przypomnienie dotyczące miejsca albo takie, które nie może czekać, przychodzi jako pilne, najwyżej trzy dziennie. Gdy jesteś zajęty, powiadomienia Pulse trafiają po cichu do centrum powiadomień."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Um lembrete para um lugar, ou um que não pode esperar, chega como notificação urgente, no máximo três por dia. Enquanto você está ocupado, as notificações do Pulse vão discretamente para a Central de Notificações."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Напоминание для места или такое, что не может ждать, приходит как срочное уведомление, не больше трёх в день. Пока вы заняты, уведомления Pulse тихо попадают в Центр уведомлений."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bir yer için hatırlatma ya da bekleyemeyecek bir hatırlatma, günde en fazla üç tane olmak üzere zamana duyarlı bildirim olarak gelir. Meşgulken Pulse bildirimleri sessizce Bildirim Merkezi'ne gider."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地点提醒或不能等的提醒会作为时效性通知送达，每天最多三条。你忙碌时，Pulse 的通知会静静地进入通知中心。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地點提醒或不能等的提醒會以時效性通知送達，每天最多三則。你忙碌時，Pulse 的通知會靜靜地進入通知中心。"
+          }
+        }
+      }
+    },
+    "Hide private reminders on the Lock Screen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Private Erinnerungen auf dem Sperrbildschirm ausblenden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar recordatorios privados en la pantalla de bloqueo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Masquer les rappels privés sur l’écran verrouillé"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sembunyikan pengingat pribadi di Layar Kunci"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nascondi i promemoria privati nella schermata di blocco"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ロック画面でプライベートなリマインダーを隠す"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잠금 화면에서 개인적인 알림 숨기기"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ukrywaj prywatne przypomnienia na ekranie blokady"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar lembretes privados na Tela Bloqueada"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Скрывать личные напоминания на экране блокировки"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Özel hatırlatmaları Kilit Ekranında gizle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在锁定屏幕上隐藏私密提醒"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在鎖定畫面上隱藏私密提醒"
+          }
+        }
+      }
+    },
+    "A Pulse notification about a birthday, an anniversary, a gift, a surprise, health or money says only “Pulse has something for you.”, even with Show previews on. Its card shows everything." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine Pulse-Mitteilung über einen Geburtstag, einen Jahrestag, ein Geschenk, eine Überraschung, Gesundheit oder Geld zeigt nur „Pulse hat etwas für dich.“, auch wenn „Vorschauen anzeigen“ eingeschaltet ist. Ihre Karte zeigt alles."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una notificación de Pulse sobre un cumpleaños, un aniversario, un regalo, una sorpresa, la salud o el dinero solo dice «Pulse tiene algo para ti.», aunque «Mostrar vistas previas» esté activado. Su tarjeta lo muestra todo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une notification de Pulse à propos d’un anniversaire, d’un cadeau, d’une surprise, de santé ou d’argent indique seulement « Pulse a quelque chose pour vous. », même avec « Afficher les aperçus » activé. Sa carte montre tout."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifikasi Pulse tentang ulang tahun, hari jadi, hadiah, kejutan, kesehatan, atau uang hanya menampilkan “Pulse punya sesuatu untuk Anda.”, meskipun Tampilkan pratinjau aktif. Kartunya menampilkan semuanya."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una notifica di Pulse su un compleanno, un anniversario, un regalo, una sorpresa, la salute o i soldi dice solo “Pulse ha qualcosa per te.”, anche con Mostra anteprime attivo. La sua scheda mostra tutto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "誕生日、記念日、プレゼント、サプライズ、健康、お金に関するPulseの通知は、「プレビューを表示」がオンでも「Pulseからお知らせがあります。」とだけ表示されます。カードにはすべて表示されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "생일, 기념일, 선물, 깜짝 이벤트, 건강, 돈에 관한 Pulse 알림은 미리보기 표시가 켜져 있어도 “Pulse가 알려 드릴 게 있어요.”라고만 표시돼요. 카드에서는 모든 내용을 볼 수 있어요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Powiadomienie Pulse o urodzinach, rocznicy, prezencie, niespodziance, zdrowiu lub pieniądzach pokazuje tylko „Pulse ma coś dla Ciebie.”, nawet gdy Pokazuj podglądy jest włączone. Jego karta pokazuje wszystko."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uma notificação do Pulse sobre um aniversário, uma data comemorativa, um presente, uma surpresa, saúde ou dinheiro diz apenas “O Pulse tem algo para você.”, mesmo com Mostrar pré-visualizações ativado. O cartão mostra tudo."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Уведомление Pulse о дне рождения, годовщине, подарке, сюрпризе, здоровье или деньгах показывает только «У Pulse есть кое-что для вас.», даже если включено «Показывать превью». Его карточка показывает всё."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doğum günü, yıl dönümü, hediye, sürpriz, sağlık ya da parayla ilgili bir Pulse bildirimi, Önizlemeleri göster açık olsa bile yalnızca “Pulse'ın sizin için bir şeyi var.” der. Kartı her şeyi gösterir."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于生日、纪念日、礼物、惊喜、健康或金钱的 Pulse 通知只会显示“Pulse 有事要告诉你。”，即使开启了“显示预览”也是如此。卡片上会显示全部内容。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "關於生日、紀念日、禮物、驚喜、健康或金錢的 Pulse 通知只會顯示「Pulse 有事要告訴你。」，即使開啟了「顯示預覽」也是如此。卡片上會顯示全部內容。"
+          }
+        }
+      }
+    },
+    "Where you are" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wo du bist"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dónde estás"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Où vous êtes"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lokasi Anda"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dove sei"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在地"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 위치"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gdzie jesteś"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Onde você está"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Где вы"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konumunuz"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你在哪里"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你在哪裡"
+          }
+        }
+      }
+    },
+    "Pulse can remind you of what you said you'd do at one of your saved places as you get there or leave, bring up something it saved for that moment, and use where you are when it looks things up. It reads your location only while this is on and Conduit shares it in the background. Each read is listed under When Hermes read your location." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse kann dich an das erinnern, was du an einem deiner gespeicherten Orte tun wolltest, wenn du dort ankommst oder ihn verlässt, etwas ansprechen, das es für diesen Moment aufgehoben hat, und beim Nachsehen deinen Standort nutzen. Es liest deinen Standort nur, solange dies eingeschaltet ist und Conduit ihn im Hintergrund teilt. Jeder Zugriff steht unter „Wann Hermes deinen Standort gelesen hat“."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse puede recordarte lo que dijiste que harías en uno de tus lugares guardados al llegar o al salir, mencionar algo que guardó para ese momento y usar tu ubicación al consultar cosas. Solo lee tu ubicación mientras esto está activado y Conduit la comparte en segundo plano. Cada lectura aparece en «Cuándo leyó Hermes tu ubicación»."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse peut vous rappeler ce que vous avez dit vouloir faire dans l’un de vos lieux enregistrés quand vous y arrivez ou en partez, évoquer quelque chose qu’il a gardé pour ce moment et utiliser votre position quand il vérifie des informations. Il ne lit votre position que lorsque cette option est activée et que Conduit la partage en arrière-plan. Chaque lecture figure sous « Quand Hermes a lu votre position »."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse dapat mengingatkan Anda tentang hal yang Anda katakan akan dilakukan di salah satu tempat tersimpan saat Anda tiba atau pergi, menyampaikan sesuatu yang disimpannya untuk saat itu, dan memakai lokasi Anda saat mencari informasi. Pulse hanya membaca lokasi Anda selama ini aktif dan Conduit membagikannya di latar belakang. Setiap pembacaan dicantumkan di Kapan Hermes membaca lokasimu."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse può ricordarti cosa hai detto che avresti fatto in uno dei tuoi luoghi salvati quando arrivi o te ne vai, proporti qualcosa che ha tenuto da parte per quel momento e usare la tua posizione quando controlla le cose. Legge la tua posizione solo mentre questa opzione è attiva e Conduit la condivide in background. Ogni lettura è elencata in Quando Hermes ha letto la tua posizione."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulseは、保存した場所に着いたときや出るときに、そこでやると言っていたことを知らせたり、そのときのために取っておいたことを伝えたり、調べものに現在地を使ったりできます。位置情報を読み取るのは、この設定がオンで、Conduitがバックグラウンドで共有しているときだけです。読み取りはすべて「Hermesが位置情報を読み取った日時」に表示されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse는 저장된 장소에 도착하거나 떠날 때 거기서 하겠다고 한 일을 알려 주고, 그 순간을 위해 아껴 둔 이야기를 꺼내고, 무언가를 찾아볼 때 현재 위치를 활용할 수 있어요. 이 설정이 켜져 있고 Conduit가 백그라운드에서 위치를 공유할 때만 위치를 읽어요. 읽은 기록은 모두 ‘Hermes가 위치를 읽은 시간’에 표시돼요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse może przypomnieć Ci, co zamierzałeś zrobić w jednym z zapisanych miejsc, gdy tam dotrzesz lub je opuścisz, poruszyć coś, co odłożył na ten moment, i używać Twojej lokalizacji, gdy coś sprawdza. Odczytuje Twoją lokalizację tylko wtedy, gdy ta opcja jest włączona, a Conduit udostępnia ją w tle. Każdy odczyt jest widoczny w sekcji Kiedy Hermes odczytał twoją lokalizację."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Pulse pode lembrar você do que disse que faria em um dos seus lugares salvos quando chegar ou sair, trazer algo que guardou para esse momento e usar sua localização quando pesquisa algo. Ele só lê sua localização enquanto isto está ativado e o Conduit a compartilha em segundo plano. Cada leitura aparece em Quando o Hermes leu sua localização."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse может напомнить вам о том, что вы собирались сделать в одном из сохранённых мест, когда вы туда придёте или уйдёте оттуда, рассказать о том, что приберёг для этого момента, и учитывать вашу геопозицию, когда что-то проверяет. Он читает вашу геопозицию, только пока это включено и Conduit передаёт её в фоне. Каждое чтение отображается в разделе «Когда Hermes читал вашу геопозицию»."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse, kayıtlı yerlerinizden birine vardığınızda ya da oradan ayrıldığınızda orada yapacağınızı söylediğiniz şeyi hatırlatabilir, o an için sakladığı bir şeyi açabilir ve bir şeye bakarken konumunuzu kullanabilir. Konumunuzu yalnızca bu açıkken ve Conduit onu arka planda paylaşırken okur. Her okuma, Hermes konumunu ne zaman okudu bölümünde listelenir."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 可以在你到达或离开某个已保存的地点时，提醒你说过要在那里做的事，提起它为那个时刻留下的内容，并在查询信息时使用你的位置。只有在此项开启且 Conduit 在后台共享你的位置时，它才会读取你的位置。每次读取都会列在“Hermes 何时读取了你的位置”中。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 可以在你到達或離開某個已儲存的地點時，提醒你說過要在那裡做的事，提起它為那個時刻留下的內容，並在查詢資訊時使用你的位置。只有在此項開啟且 Conduit 在背景分享你的位置時，它才會讀取你的位置。每次讀取都會列在「Hermes 何時讀取了你的位置」中。"
+          }
+        }
+      }
+    },
+    "Pulse can't read where you are yet: in Settings > Location, turn on Share in the background, or Resume sharing if it's paused." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse kann deinen Standort noch nicht lesen: Schalte unter Einstellungen > Standort „Im Hintergrund teilen“ ein oder tippe auf „Freigabe fortsetzen“, falls die Freigabe pausiert ist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse aún no puede leer tu ubicación: en Ajustes > Ubicación, activa «Compartir en segundo plano», o toca «Reanudar» si está en pausa."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse ne peut pas encore lire votre position : dans Réglages > Position, activez « Partager en arrière-plan », ou touchez « Reprendre le partage » s'il est en pause."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse belum dapat membaca lokasi Anda: di Pengaturan > Lokasi, aktifkan Bagikan di latar belakang, atau ketuk Lanjutkan berbagi jika sedang dijeda."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse non può ancora leggere la tua posizione: in Impostazioni > Posizione, attiva Condividi in background, oppure tocca Riprendi la condivisione se è in pausa."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulseはまだ現在地を読み取れません。「設定」>「位置情報」で「バックグラウンドで共有」をオンにするか、一時停止中なら「共有を再開」をタップしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse가 아직 현재 위치를 읽을 수 없어요. 설정 > 위치에서 ‘백그라운드에서 공유’를 켜거나, 일시 정지 중이면 ‘공유 재개’를 탭하세요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse nie może jeszcze odczytać Twojej lokalizacji: w Ustawienia > Lokalizacja włącz Udostępniaj w tle albo stuknij Wznów udostępnianie, jeśli jest wstrzymane."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Pulse ainda não consegue ler sua localização: em Ajustes > Localização, ative Compartilhar em segundo plano ou toque em Retomar se estiver pausado."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse пока не может читать вашу геопозицию: в разделе Настройки > Геопозиция включите «Передавать в фоне» или нажмите «Возобновить передачу», если она приостановлена."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse henüz konumunuzu okuyamıyor: Ayarlar > Konum'da Arka planda paylaş'ı açın ya da duraklatıldıysa Paylaşımı sürdür'e dokunun."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 还无法读取你的位置：请在“设置 > 位置”中开启“在后台共享”，如果已暂停，请轻点“恢复共享”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 還無法讀取你的位置：請在「設定 > 位置」中開啟「在背景分享」，如果已暫停，請點一下「恢復分享」。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

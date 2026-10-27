@@ -4,11 +4,12 @@
 //
 //  Settings > Pulse (beta), on TestFlight and Xcode builds: Pulse on or
 //  off; when it speaks up (how often, the times it looks through your
-//  chats, the morning brief); what it reads (profiles, memory, deadlines
-//  from Shortcuts, older chats); its model; and behind the scenes, its
-//  time zone, token budgets, a look now and latest checks
-//  (PulseSettings.swift). Every change goes to the plugin and the page
-//  shows the state it answers with.
+//  chats, the morning brief, private reminders on the Lock Screen); what it
+//  reads (profiles, memory, deadlines from Shortcuts, looking things up,
+//  where you are, older chats); its model; and behind the scenes, its time
+//  zone, token budgets, a look now and latest checks (PulseSettings.swift).
+//  Every change goes to the plugin and the page shows the state it answers
+//  with.
 //
 
 import SwiftUI
@@ -185,8 +186,9 @@ struct PulseSettingsPage: View {
         }
     }
 
-    /// How often Pulse nudges, when it looks through the chats, and the
-    /// morning brief's time.
+    /// How often Pulse nudges, when it looks through the chats, the
+    /// morning brief's time, and whether private reminders hide their words
+    /// on the Lock Screen.
     private func speakUpSection(_ state: PulseState, budgets: Bool) -> some View {
         ConduitSettingsSection(title: AppLocalization.string("When Pulse speaks up"), symbol: "bell.badge", tint: .conduitAccent) {
             if budgets {
@@ -230,6 +232,20 @@ struct PulseSettingsPage: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+            if appState.pulseHidesPrivate, let hides = state.privatePushes {
+                Text("A reminder for a place, or one that can't wait, comes as Time Sensitive, at most three a day. While you're busy, Pulse's notifications go quietly to Notification Center.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Hide private reminders on the Lock Screen", isOn: Binding(
+                    get: { hides },
+                    set: { on in change(["private_pushes": on]) { $0.privatePushes = on } }
+                ))
+                .disabled(working)
+                .accessibilityIdentifier("settings.pulse.private")
+                Text("A Pulse notification about a birthday, an anniversary, a gift, a surprise, health or money says only “Pulse has something for you.”, even with Show previews on. Its card shows everything.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -482,6 +498,22 @@ struct PulseSettingsPage: View {
                     : AppLocalization.string("Before Pulse writes to you, it can check your calendar, reminders, contacts and alarms, look up places in Maps, and search the web when it follows up on a promise. It never changes anything on your phone."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            if appState.pulseReadsWhere, let whereOn = state.whereYouAre {
+                Toggle("Where you are", isOn: Binding(
+                    get: { whereOn },
+                    set: { on in change(["where": on]) { $0.whereYouAre = on } }
+                ))
+                .disabled(working)
+                .accessibilityIdentifier("settings.pulse.where")
+                Text("Pulse can remind you of what you said you'd do at one of your saved places as you get there or leave, bring up something it saved for that moment, and use where you are when it looks things up. It reads your location only while this is on and Conduit shares it in the background. Each read is listed under When Hermes read your location.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if whereOn, !state.whereReady {
+                    Text("Pulse can't read where you are yet: in Settings > Location, turn on Share in the background, or Resume sharing if it's paused.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
         }
     }
@@ -1100,6 +1132,17 @@ struct PulseMemoryList: View {
                 Text(verbatim: yearly)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            if let place = item.place {
+                // Said for a place: it waits for the user to get there or leave.
+                Label(place.text, systemImage: "mappin.and.ellipse")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let saved = place.savedText {
+                    Text(verbatim: saved)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             if let logged = item.loggedText() {
                 // A deadline from the Shortcuts inbox: who it's from, not a chat.

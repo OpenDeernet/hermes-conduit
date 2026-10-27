@@ -38,8 +38,10 @@ enum NotificationCopy {
     ///
     /// A push whose decrypted content names a `title_label` gets that
     /// label's title, joined with the chat's title when the host sent one;
-    /// a call composes its line from the call's outcome. Any other title or
-    /// body is the host's own text (an older plugin, a tool's prompt title).
+    /// a call composes its line from the call's outcome, and a private
+    /// Pulse push (`private`) says only that Pulse has something. Any other
+    /// title or body is the host's own text (an older plugin, a tool's
+    /// prompt title).
     static func preview(_ content: [String: Any]) -> (title: String?, body: String?) {
         let hostTitle = nonEmpty(content["title"])
         let hostBody = nonEmpty(content["body"])
@@ -59,6 +61,11 @@ enum NotificationCopy {
         }
         if label == "call.requested", let call = content["call"] as? [String: Any], let line = callLine(call) {
             return (title, line)
+        }
+        if content["private"] as? Bool == true {
+            // A private Pulse push (a birthday, a gift, health or money;
+            // notifier 0.104.0): the host sent only this line, in English.
+            return (title, AppLocalization.string("Pulse has something for you."))
         }
         return (title, hostBody)
     }
