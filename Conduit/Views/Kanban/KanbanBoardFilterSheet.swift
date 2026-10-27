@@ -5,7 +5,7 @@ import SwiftUI
 /// preference). Search stays in the header; the active-filter dot lives on the
 /// filter button next to it.
 struct KanbanBoardFilterSheet: View {
-    @Environment(KanbanStore.self) private var store
+    @EnvironmentObject private var store: KanbanStore
     @Environment(\.dismiss) private var dismiss
 
     @Binding var includeArchived: Bool

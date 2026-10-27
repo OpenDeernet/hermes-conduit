@@ -223,7 +223,6 @@ struct VoiceSettingsView: View {
     @AppStorage(LiveVoiceOrbPower.preferenceKey) private var animateCallOrb = true
     @AppStorage(ReadAloudSpeed.preferenceKey) private var readAloudSpeedRaw = ReadAloudSpeed.normal.rawValue
     @AppStorage("conduit.voice.settingsAdvancedExpanded") private var advancedExpanded = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let spokenStopPhrases: [String]
     let spokenEndConversationPhrases: [String]
     let setStopPhrases: ([String]) -> Bool
@@ -733,20 +732,14 @@ struct VoiceSettingsView: View {
 
     private func setVoice(_ requested: Bool) {
         let previous = voiceEnabled
-        // Animated: turning voice on reveals the setup checklist and tests.
-        let animation = ConduitMotion.ease(reduceMotion: reduceMotion)
+        voiceEnabled = requested
         // Holds the switch from the tap on, so a second tap can't turn voice
         // off while the defaults are still being written.
-        withAnimation(animation) {
-            voiceEnabled = requested
-            if requested { isApplyingDefaults = true }
-        }
+        if requested { isApplyingDefaults = true }
         Task {
             guard await setVoiceEnabled(requested) else {
-                withAnimation(animation) {
-                    voiceEnabled = previous
-                    if requested { isApplyingDefaults = false }
-                }
+                voiceEnabled = previous
+                if requested { isApplyingDefaults = false }
                 return
             }
             if requested { await applySetupDefaults() }
@@ -869,11 +862,8 @@ struct VoiceSettingsView: View {
                 Toggle(AppLocalization.string("Hands-free on your speech server"), isOn: Binding(
                     get: { on },
                     set: { wanted in
-                        // Animated: on reveals the speech server's section.
-                        withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) {
-                            if wanted { localLive.setAgent(false) }
-                            localLive.setEnabled(wanted)
-                        }
+                        if wanted { localLive.setAgent(false) }
+                        localLive.setEnabled(wanted)
                     }
                 ))
                 .accessibilityIdentifier("voice.localHandsFree")
@@ -1854,7 +1844,6 @@ private struct WakePhraseSettingsSection: View {
     /// What's said beside each phrase about its language, worked out when
     /// the phrases change: it builds speech recognizers to ask.
     @State private var languageNotes: [String: (text: String, isUnheard: Bool)] = [:]
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(model: WakePhraseSettingsModel) {
         self.model = model
@@ -2002,13 +1991,8 @@ private struct WakePhraseSettingsSection: View {
 
     private func save(_ updated: [String]) {
         let canonical = VoiceSpokenCommands.canonicalizedPhraseList(updated)
-        // Animated only when the switch reveals or hides the phrase rows,
-        // not on each phrase edit.
-        let reveals = canonical.isEmpty != phrases.isEmpty
-        withAnimation(reveals ? ConduitMotion.ease(reduceMotion: reduceMotion) : nil) {
-            phrases = canonical
-            isEnabled = !canonical.isEmpty
-        }
+        phrases = canonical
+        isEnabled = !canonical.isEmpty
         model.save(canonical, startsFresh)
     }
 }

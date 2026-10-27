@@ -145,7 +145,6 @@ struct HermesCallSettingsSection: View {
     @AppStorage(HermesNativeCalls.ringsKey) private var ringsLikeCall = true
     @State private var loadFailed = false
     @State private var saveTask: Task<Void, Never>?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(model: HermesCallSettingsModel, startTestCall: (() -> Void)? = nil, startWatch: ((String) -> Void)? = nil) {
         self.model = model
@@ -158,11 +157,9 @@ struct HermesCallSettingsSection: View {
 
     /// Saved once the user stops tapping, so a stepper run is one save.
     /// Saves go one at a time, so the newest change lands last; one the host
-    /// didn't take puts back what it holds. Animated, so the rows a toggle
-    /// reveals slide in rather than pop.
+    /// didn't take puts back what it holds.
     private func change(_ edit: (inout HermesCallSettings) -> Void) {
-        let animation = ConduitMotion.ease(reduceMotion: reduceMotion)
-        withAnimation(animation) { edit(&draft) }
+        edit(&draft)
         let previous = saveTask
         previous?.cancel()
         let settings = draft
@@ -177,9 +174,7 @@ struct HermesCallSettingsSection: View {
             guard !Task.isCancelled else { return }
             saveTask = nil
             // What the host holds now, including saves since this edit.
-            if !saved, let hostSettings = current() ?? editTimeSettings {
-                withAnimation(animation) { draft = hostSettings }
-            }
+            if !saved, let hostSettings = current() ?? editTimeSettings { draft = hostSettings }
         }
     }
 

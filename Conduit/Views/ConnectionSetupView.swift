@@ -208,8 +208,7 @@ struct ConnectionSetupView: View {
             reconnectNow: { reconnectNow() },
             signInToReconnect: { beginRepairSignIn() },
             enterCredentials: { flow.enterCredentialsForSignInChoice() },
-            testAgain: { testAgainAfterFailedActivation() },
-            showsPrivateSignInSwitch: ConnectionRepairSignIn.mayOpenNativeSignIn(for: flow.testState)
+            testAgain: { testAgainAfterFailedActivation() }
         )
     }
 
@@ -226,8 +225,7 @@ struct ConnectionSetupView: View {
             ),
             isSigningIn: isActivating,
             signInFailure: activationFailure,
-            signInAgain: { beginRepairSignIn() },
-            showsPrivateSignInSwitch: ConnectionRepairSignIn.mayOpenNativeSignIn(for: flow.testState)
+            signInAgain: { beginRepairSignIn() }
         )
     }
 
@@ -307,7 +305,7 @@ struct ConnectionSetupView: View {
                 testGeneration: flow.testGeneration,
                 testSucceededAtRevision: flow.testSucceededAtRevision
               ),
-              onRepair != nil else { return }
+              let onRepair else { return }
         // The candidate is one-shot: consumed here, whether activation
         // succeeds or fails. A failed activation requires a fresh test.
         repairCandidate = nil

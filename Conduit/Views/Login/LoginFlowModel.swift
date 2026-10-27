@@ -11,7 +11,6 @@
 //
 
 import Foundation
-import Observation
 import os
 
 /// Where a failure is shown: under the step or the dashboard it happened to.
@@ -173,79 +172,78 @@ enum LoginAddress {
 // MARK: - Flow
 
 @MainActor
-@Observable
-final class LoginFlowModel {
+final class LoginFlowModel: ObservableObject {
     private static let logger = Logger(subsystem: "com.milim.relay", category: "login")
 
     // The address step. An edit makes any answer still on its way for the
     // old address (or token) stale: it is dropped, never followed.
-    var address = "" {
+    @Published var address = "" {
         didSet { if address != oldValue { inputsChanged() } }
     }
-    var cloudflareEnabled = false {
+    @Published var cloudflareEnabled = false {
         didSet { if cloudflareEnabled != oldValue { inputsChanged() } }
     }
-    var cloudflareClientID = "" {
+    @Published var cloudflareClientID = "" {
         didSet { if cloudflareClientID != oldValue { inputsChanged() } }
     }
-    var cloudflareClientSecret = "" {
+    @Published var cloudflareClientSecret = "" {
         didSet { if cloudflareClientSecret != oldValue { inputsChanged() } }
     }
-    var showsAdvanced = false
+    @Published var showsAdvanced = false
 
     // The sign-in step.
-    var username = ""
-    var password = ""
-    var saveSignIn = true
-    var useBiometrics = false
-    private(set) var biometrics = BiometricAuth.Status(kind: nil, isAvailable: false)
-    var showsCredentials = false
-    private(set) var target: LoginTarget?
+    @Published var username = ""
+    @Published var password = ""
+    @Published var saveSignIn = true
+    @Published var useBiometrics = false
+    @Published private(set) var biometrics = BiometricAuth.Status(kind: nil, isAvailable: false)
+    @Published var showsCredentials = false
+    @Published private(set) var target: LoginTarget?
 
     // Progress and failures.
-    private(set) var isWorking = false
+    @Published private(set) var isWorking = false
     /// The saved dashboard whose row is signing in.
-    private(set) var workingDashboardID: UUID?
-    private(set) var failure: ConnectionFailurePresentation?
-    private(set) var failurePlace: LoginFailurePlace?
+    @Published private(set) var workingDashboardID: UUID?
+    @Published private(set) var failure: ConnectionFailurePresentation?
+    @Published private(set) var failurePlace: LoginFailurePlace?
     /// Whether the failed saved connection can be repaired, worked out when
     /// the failure arrives (the takeover itself waits for the tap).
-    private(set) var savedRepairAvailable = false
+    @Published private(set) var savedRepairAvailable = false
 
     // What the screens present.
-    var nativeOAuthRequest: LoginNativeOAuthRequest?
-    var browserRequest: LoginBrowserRequest?
-    var connectionSetupDestination: ConnectionHelpDestination?
-    var connectionRepairContext: ConnectionRepairContext?
-    var extraHeadersRequest: LoginExtraHeadersRequest?
-    var extraHeadersRevision = 0
-    var showsScanner = false
+    @Published var nativeOAuthRequest: LoginNativeOAuthRequest?
+    @Published var browserRequest: LoginBrowserRequest?
+    @Published var connectionSetupDestination: ConnectionHelpDestination?
+    @Published var connectionRepairContext: ConnectionRepairContext?
+    @Published var extraHeadersRequest: LoginExtraHeadersRequest?
+    @Published var extraHeadersRevision = 0
+    @Published var showsScanner = false
     /// A scanned sign-in code, asked about in its own sheet.
-    var pendingLink: DashboardConnectLink?
+    @Published var pendingLink: DashboardConnectLink?
 
     /// Runs once a sign-in has handed its session to AppState (the Add
     /// sheet closes there).
-    @ObservationIgnored var onSignedIn: () -> Void = {}
+    var onSignedIn: () -> Void = {}
 
-    @ObservationIgnored private weak var appState: AppState?
-    @ObservationIgnored private var biometricsLoaded = false
+    private weak var appState: AppState?
+    private var biometricsLoaded = false
     /// The username the flow filled in itself, replaced when the next
     /// dashboard has its own.
-    @ObservationIgnored private var prefilledUsername: String?
+    private var prefilledUsername: String?
     /// Where the running action's failures belong, also for the ones AppState
     /// hands over after the session starts.
-    @ObservationIgnored private var runningPlace: LoginFailurePlace?
+    private var runningPlace: LoginFailurePlace?
     /// What the scanner read, handled once its sheet has closed.
-    @ObservationIgnored private var scanResult: DashboardConnectLink.Scan?
+    private var scanResult: DashboardConnectLink.Scan?
     /// The flow signs in from a sign-in code: its retry signs in again
     /// rather than stopping at the sign-in step.
-    @ObservationIgnored private var signsInFromLink = false
+    private var signsInFromLink = false
     /// Addresses a browser or single sign-on attempt saved before anyone
     /// signed in to them: the sheets need the dashboard to exist first.
-    @ObservationIgnored private var unfinishedAddresses: Set<String> = []
+    private var unfinishedAddresses: Set<String> = []
     /// Bumped by every edit of the address or the Cloudflare token: an
     /// answer counts only while the inputs it was asked with are on screen.
-    @ObservationIgnored private var inputGeneration = 0
+    private var inputGeneration = 0
     private let makeTransport: (String, CloudflareAccessCredentials?) -> any DashboardSignInTransport
 
     init(
@@ -769,7 +767,7 @@ final class LoginFlowModel {
     }
 
     /// Where a browser sign-in's failure shows once its sheet reports one.
-    @ObservationIgnored private var browserPlace: LoginFailurePlace = .address
+    private var browserPlace: LoginFailurePlace = .address
 
     /// Remembers an address with no saved dashboard yet, before a browser or
     /// single sign-on sheet saves one for it.

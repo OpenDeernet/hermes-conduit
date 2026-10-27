@@ -139,7 +139,12 @@ struct ChatView: View {
         let preferences = appState.displayPreferences
         let isBusy = appState.isBusy
         let draws: (ChatMessageScrollTarget) -> Bool = { target in
-            target.drawsRow(preferences: preferences, isBusy: isBusy, disclosure: rowDisclosure)
+            target.step?.drawsRow(
+                messageID: target.id,
+                preferences: preferences,
+                isBusy: isBusy,
+                disclosure: rowDisclosure
+            ) ?? true
         }
         guard targets.contains(where: { !draws($0) }) else { return targets }
         return targets.filter(draws)
@@ -280,8 +285,6 @@ struct ChatView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             planDock
-            // Predictive guesses (off unless turned on in Settings > Chat).
-            PredictiveRow(store: appState.predictive, appState: appState)
             // Composer + control bar. Equatable: it redraws for what it
             // shows, not for every redraw of this view.
             ComposerBar(appState: appState).equatable()
@@ -415,7 +418,7 @@ struct ChatView: View {
         // The rows show AppState through this, not by observing it.
         .chatRows()
         .sheet(isPresented: $showsPinnedReplies) {
-            PinnedRepliesSheet(fromOpenChat: true)
+            PinnedRepliesSheet()
                 .environmentObject(appState)
         }
         .pinnedReplyLabelEditor($labelingPin) { pin, label in
@@ -452,8 +455,7 @@ struct ChatView: View {
                     MessageBubble(
                         message: target.message,
                         gatewayResolver: appState.gatewayMediaResolver,
-                        step: target.step,
-                        stepsAbove: target.stepsAbove
+                        step: target.step
                     )
                         .equatable()
                         .id(target.id)
@@ -542,7 +544,7 @@ struct ChatView: View {
             ChatJumpControls(
                 chrome: scrollEngine.chrome,
                 pendingClarifyMessageID: appState.pendingClarifyMessageID,
-                pendingKind: appState.pendingDecisionKind,
+                pendingIsApproval: appState.pendingDecisionIsApproval,
                 jumpToQuestion: { id in scrollEngine.explicitMessageRequested(id: id) },
                 jumpToLatest: { requestLatest(animated: true) },
                 followingChanged: {
@@ -583,8 +585,6 @@ struct ChatView: View {
                     isInitialSync: true
                 )
                 scrollEngine.trackMessageVisibility(of: appState.pendingClarifyMessageID)
-                // An unread open that finished before this view was up.
-                takeReplyStartLanding()
                 appState.installChatViewportSnapshotProvider(
                     id: viewportSnapshotProviderID,
                     capture: { [weak engine = scrollEngine] in
@@ -677,7 +677,9 @@ struct ChatView: View {
                 // The published request disappeared on the AppState side
                 // (completed/abandoned/cancelled elsewhere).
                 scrollEngine.restorationSystemCancelled()
-                // A pinned reply waiting on the restore goes now.
+                // A pinned reply, artifact or Pulse card waiting on the
+                // restore goes now.
+                revealPendingArtifact()
                 revealPendingPinnedReply()
             }
     }
@@ -782,10 +784,7 @@ struct ChatView: View {
         content
             .onChange(of: appState.chatScrollRequest) { _, _ in
                 ChatViewportTrace.shared.log("event explicitLatest (send pulse)")
-                requestLatest(animated: false, armsReplyHold: true)
-            }
-            .onChange(of: appState.chatReplyStartLandingRequest) { _, _ in
-                takeReplyStartLanding()
+                requestLatest(animated: false)
             }
             .onChange(of: appState.chatScrollToTopRequest) { _, request in
                 ChatViewportTrace.shared.log("event explicitTop request=\(request)")
@@ -836,16 +835,10 @@ struct ChatView: View {
             }
     }
 
-    private func takeReplyStartLanding() {
-        guard appState.takeChatReplyStartLanding() else { return }
-        ChatViewportTrace.shared.log("event replyStartLanding (unread chat opened)")
-        scrollEngine.replyStartLandingRequested()
-    }
-
     /// Send and the jump-to-latest button. An animated jump gets one final
     /// pin once the animation has had time to land.
-    private func requestLatest(animated: Bool, armsReplyHold: Bool = false) {
-        scrollEngine.explicitLatestRequested(animated: animated, armsReplyHold: armsReplyHold)
+    private func requestLatest(animated: Bool) {
+        scrollEngine.explicitLatestRequested(animated: animated)
         latestAnimationTask?.cancel()
         guard animated else { return }
         latestAnimationTask = Task { @MainActor in
@@ -885,7 +878,6 @@ struct ChatView: View {
         }
         router.proxy = proxy
         router.rebuildTranscript = { transcriptScrollID &+= 1 }
-        scrollEngine.holdsRepliesAtStart = { ChatReplyStartPreference.isOn }
         scrollEngine.liveTailShowing = { [weak appState = appState] in
             guard let appState else { return false }
             let live = appState.liveTurn
@@ -971,41 +963,17 @@ private final class ChatScrollEventRouter {
     }
 }
 
-/// The jump-to-latest and go-to-what-Hermes-waits-on button. It observes the
+/// The jump-to-latest and go-to-your-question button. It observes the
 /// engine's chrome on its own, so leaving the latest message, or the button
 /// appearing and going, re-renders this button and not the transcript.
 private struct ChatJumpControls: View {
     @ObservedObject var chrome: ChatScrollChrome
     let pendingClarifyMessageID: String?
-    /// What the waiting card is: the button says so.
-    let pendingKind: PendingDecisionKind
+    /// The waiting card is an approval: the button says so.
+    let pendingIsApproval: Bool
     let jumpToQuestion: @MainActor (String) -> Void
     let jumpToLatest: @MainActor () -> Void
     let followingChanged: @MainActor () -> Void
-
-    private var jumpIcon: String {
-        switch pendingKind {
-        case .question: return "questionmark.bubble"
-        case .approval: return "checkmark.shield"
-        case .input: return "key"
-        }
-    }
-
-    private var jumpTitle: String {
-        switch pendingKind {
-        case .question: return AppLocalization.string("Go to your question")
-        case .approval: return AppLocalization.string("Go to the approval")
-        case .input: return AppLocalization.string("Go to the request")
-        }
-    }
-
-    private var jumpAccessibilityLabel: String {
-        switch pendingKind {
-        case .question: return AppLocalization.string("Go to the question that needs your answer")
-        case .approval: return AppLocalization.string("Go to the approval")
-        case .input: return AppLocalization.string("Go to the request that needs your input")
-        }
-    }
 
     var body: some View {
         let inputs = chrome.inputs
@@ -1032,8 +1000,8 @@ private struct ChatJumpControls: View {
                 } label: {
                     if hasPendingClarify {
                         HStack(spacing: 7) {
-                            Image(systemName: jumpIcon)
-                            Text(jumpTitle)
+                            Image(systemName: pendingIsApproval ? "checkmark.shield" : "questionmark.bubble")
+                            Text(pendingIsApproval ? AppLocalization.string("Go to the approval") : AppLocalization.string("Go to your question"))
                                 .lineLimit(2)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -1053,11 +1021,11 @@ private struct ChatJumpControls: View {
                 )
                 .accessibilityLabel(
                     hasPendingClarify
-                        ? jumpAccessibilityLabel
+                        ? (pendingIsApproval ? AppLocalization.string("Go to the approval") : AppLocalization.string("Go to the question that needs your answer"))
                         : AppLocalization.string("Scroll to latest message")
                 )
                 .modifier(OptionalAccessibilityHint(
-                    hint: hasPendingClarify && pendingKind == .question
+                    hint: hasPendingClarify && !pendingIsApproval
                         ? AppLocalization.string("Scrolls to the pending question in the conversation")
                         : nil
                 ))
@@ -1154,13 +1122,9 @@ struct MessageBubble: View, Equatable {
     /// A thinking or tool row's place in its turn's run of steps, which
     /// draws as one card. Nil outside the chat transcript.
     var step: ChatStepPlacement? = nil
-    /// On a reply, the run of steps above it when it has thinking (the
-    /// reply's Show thinking). Nil outside the chat transcript.
-    var stepsAbove: ChatStepGroup? = nil
 
     nonisolated static func == (lhs: MessageBubble, rhs: MessageBubble) -> Bool {
         lhs.message == rhs.message && lhs.gatewayResolver === rhs.gatewayResolver && lhs.step == rhs.step
-            && lhs.stepsAbove == rhs.stepsAbove
     }
     @Environment(\.chatRowState) private var rowState
     @Environment(\.chatRowActions) private var rowActions
@@ -1178,12 +1142,7 @@ struct MessageBubble: View, Equatable {
                 // A teammate bot's delivery is an event in the chat, not
                 // something the user said (Desktop's agent message note).
                 VStack(spacing: 4) {
-                    TeammateMessageNote(
-                        inbound: inbound,
-                        roster: appState.botRoster,
-                        appState: appState,
-                        disclosureID: message.id
-                    )
+                    TeammateMessageNote(inbound: inbound, roster: appState.botRoster, appState: appState)
                     // The agent can react to it like any user turn.
                     if !message.reactions.isEmpty {
                         MessageReactionChips(
@@ -1212,8 +1171,7 @@ struct MessageBubble: View, Equatable {
                 // The bot answering a teammate, not the user: folded, as on
                 // Desktop ("Replied to Atlas", the reply a tap away).
                 TeammateReplyNote(
-                    name: BotTeammateMessages.displayName(for: sender, in: appState.botRoster),
-                    disclosureID: message.id
+                    name: BotTeammateMessages.displayName(for: sender, in: appState.botRoster)
                 ) {
                     AssistantBubble(
                         message: message,
@@ -1221,23 +1179,11 @@ struct MessageBubble: View, Equatable {
                         gatewayResolver: gatewayResolver
                     )
                 }
-            } else if let why = rowState.followUpReasons[message.id] {
-                // A reply Hermes wrote on its own (Predictive follow-ups).
-                VStack(alignment: .leading, spacing: 4) {
-                    PredictiveFollowUpTag(why: why)
-                    AssistantBubble(
-                        message: message,
-                        readAloudController: appState.messageReadAloudController,
-                        gatewayResolver: gatewayResolver,
-                        stepsAbove: stepsAbove
-                    )
-                }
             } else {
                 AssistantBubble(
                     message: message,
                     readAloudController: appState.messageReadAloudController,
-                    gatewayResolver: gatewayResolver,
-                    stepsAbove: stepsAbove
+                    gatewayResolver: gatewayResolver
                 )
             }
         case .reasoning:
@@ -1365,19 +1311,13 @@ struct TeammateMessageNote: View {
     @State private var name: String
     /// Loads the face; held, not observed, like the rows' AppState.
     let appState: AppState
-    /// The row's key in `disclosure`, so a rebuilt row stays open.
-    let disclosureID: String
-    @Environment(\.chatRowDisclosure) private var disclosure
-    /// Nil until tapped here: a rebuilt row takes what the reader chose
-    /// from `disclosure`.
-    @State private var tapped: Bool?
+    @State private var expanded = false
     @State private var image: UIImage?
     @ScaledMetric(relativeTo: .footnote) private var faceSize: CGFloat = 18
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(inbound: BotTeammateMessages.Inbound, roster: [BotProfile], appState: AppState, disclosureID: String) {
+    init(inbound: BotTeammateMessages.Inbound, roster: [BotProfile], appState: AppState) {
         self.inbound = inbound
-        self.disclosureID = disclosureID
         let bot = Self.resolve(inbound, in: roster)
         _bot = State(initialValue: bot)
         _name = State(initialValue: bot?.displayLabel ?? inbound.sender)
@@ -1385,20 +1325,11 @@ struct TeammateMessageNote: View {
         _image = State(initialValue: bot.flatMap { appState.botAvatarImage(for: $0) })
     }
 
-    private var expanded: Bool {
-        tapped ?? disclosure?.isExpanded(disclosureID, default: false) ?? false
-    }
-
     var body: some View {
         VStack(spacing: 6) {
             Button {
                 Haptics.selection()
-                let opens = !expanded
-                // Tells the scroll engine first, as every row that opens
-                // does: following the running turn would pin the growing
-                // row's bottom instead of keeping it where it was tapped.
-                disclosure?.willToggle(disclosureID, to: opens)
-                withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { tapped = opens }
+                withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { expanded.toggle() }
             } label: {
                 HStack(spacing: 6) {
                     BotAvatarView(
@@ -1476,25 +1407,15 @@ struct TeammateMessageNote: View {
 /// (Desktop's inter-agent reply notice). Tap shows the reply as usual.
 struct TeammateReplyNote<Reply: View>: View {
     let name: String
-    /// The row's key in `disclosure`, so a rebuilt row stays open.
-    let disclosureID: String
     @ViewBuilder let reply: () -> Reply
-    @Environment(\.chatRowDisclosure) private var disclosure
-    /// Nil until tapped here (see TeammateMessageNote).
-    @State private var tapped: Bool?
+    @State private var expanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var expanded: Bool {
-        tapped ?? disclosure?.isExpanded(disclosureID, default: false) ?? false
-    }
 
     var body: some View {
         VStack(spacing: 6) {
             Button {
                 Haptics.selection()
-                let opens = !expanded
-                disclosure?.willToggle(disclosureID, to: opens)
-                withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { tapped = opens }
+                withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { expanded.toggle() }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrowshape.turn.up.right")
@@ -1802,31 +1723,12 @@ private struct UserImageAttachmentPreview: View {
     @State private var localPreview: UIImage?
     @State private var localPreviewPath: String?
     @State private var localPreviewFailedPath: String?
-    /// The chat's scroll engine, which says when a picture that will grow
-    /// its row shows (#1238).
-    @Environment(\.chatRowDisclosure) private var disclosure
-    /// The row's frame, and the picture waiting to show in it.
-    @StateObject private var arrival = ChatRowArrival()
 
     /// Cache-only lookup (no decode) so a hit renders on the first frame.
     /// Misses are filled asynchronously — see the `.task` in `body`.
     private var cachedLocalImage: UIImage? {
         guard let key = memoryCacheKey else { return nil }
         return TranscriptPictureMemory.previews.object(forKey: key as NSString)
-    }
-
-    /// A cache hit as the row shows it: on its first frame, or where the
-    /// row has its height already. A row laid out with its loading line
-    /// (another row of the same picture decoded it since) takes it
-    /// through the task, which asks the scroll engine (#1238).
-    private var shownCachedImage: UIImage? {
-        guard let cached = cachedLocalImage, arrival.holds(previewHeight(for: cached.size)) else { return nil }
-        return cached
-    }
-
-    /// Which picture the row loads.
-    private var loadIdentity: String {
-        "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.imageCacheKey(for: attachment) ?? "")"
     }
 
     /// The photo's own path when it is on this device, else where a picture
@@ -1888,7 +1790,7 @@ private struct UserImageAttachmentPreview: View {
 
     var body: some View {
         Group {
-            if let image = shownCachedImage ?? currentLocalPreview ?? currentGatewayImage {
+            if let image = cachedLocalImage ?? currentLocalPreview ?? currentGatewayImage {
                 imagePreview(image)
             } else if loadsFromHermes && localFileURL == nil && !gatewayLoadFailed {
                 placeholder
@@ -1913,52 +1815,27 @@ private struct UserImageAttachmentPreview: View {
                 .modifier(OptionalAccessibilityHint(hint: attachment.imageDescription))
             }
         }
-        .chatRowFrame(arrival)
-        // A picture still waiting to show is dropped with the row; the task
-        // loads it again when the row is back.
-        .onDisappear { arrival.rowDisappeared() }
-        // Handed another picture: whatever still waits was the last one's.
-        .onChange(of: loadIdentity) { arrival.rowDisappeared() }
-        .task(id: loadIdentity) {
-            // Local file: cache hits show in `body` on the first frame via
-            // `shownCachedImage`, and one decoded since by another row of
-            // it arrives here. Misses decode off the MainActor so a large
-            // photo can't hitch scrolling.
+        .task(id: "\(attachment.uri)|\(inlineImageIdentity)|\(gatewayResolver?.imageCacheKey(for: attachment) ?? "")") {
+            // Local file: cache hits are already shown by `body` on the first
+            // frame via `cachedLocalImage`, so only misses reach here. Decode
+            // off the MainActor so a large photo can't hitch scrolling.
             if let url = localFileURL {
-                guard currentLocalPreview == nil, shownCachedImage == nil else { return }
-                if let cached = cachedLocalImage {
-                    let path = url.path
-                    arrival.arrive(rowHeight: previewHeight(for: cached.size), engine: disclosure?.engine) {
-                        localPreview = cached
-                        localPreviewPath = path
-                    }
-                    return
-                }
+                guard currentLocalPreview == nil, cachedLocalImage == nil else { return }
                 let generation = TranscriptImageCache.generation
                 let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
                     Self.downsampledPreview(url: url)
                 }.value
                 guard !Task.isCancelled else { return }
                 guard let image else {
-                    let path = url.path
-                    // Its label shows already when the task restarts as
-                    // the row comes back.
-                    if localPreviewFailedPath != path {
-                        placeFailure { localPreviewFailedPath = path }
-                    }
+                    localPreviewFailedPath = url.path
                     return
                 }
-                // Shows once the reader's scrolling allows, kept and its
-                // size remembered then: either would resize the loading
-                // line on its own first.
-                arrival.arrive(rowHeight: previewHeight(for: image.size), engine: disclosure?.engine) {
-                    if generation == TranscriptImageCache.generation {
-                        TranscriptPictureMemory.previews.setObject(image, forKey: url.path as NSString, cost: TranscriptPictureMemory.bitmapCost(of: image))
-                        TranscriptPictureMemory.rememberSize(image.size, for: url.path)
-                    }
-                    localPreview = image
-                    localPreviewPath = url.path
+                if generation == TranscriptImageCache.generation {
+                    TranscriptPictureMemory.previews.setObject(image, forKey: url.path as NSString, cost: TranscriptPictureMemory.bitmapCost(of: image))
+                    TranscriptPictureMemory.rememberSize(image.size, for: url.path)
                 }
+                localPreview = image
+                localPreviewPath = url.path
                 // A picture from Hermes. The local-file branch returns above,
                 // so a local URI never reaches here — which also removes the
                 // old `localImage == nil` check that decoded local files on
@@ -1966,20 +1843,24 @@ private struct UserImageAttachmentPreview: View {
             } else if loadsFromHermes, let gatewayResolver,
                       let cacheKey = gatewayResolver.imageCacheKey(for: attachment) {
                 // Held by the view too, so the picture stays when the
-                // shared cache evicts it while this row is on screen; one
-                // decoded since by another row of it arrives like a load.
+                // shared cache evicts it while this row is on screen.
                 if let cached = cachedLocalImage {
-                    place(cached, as: cacheKey, generation: TranscriptImageCache.generation)
+                    remember(cached, as: cacheKey)
                     return
                 }
-                // One that failed keeps its label while it loads again.
                 gatewayImage = nil
+                gatewayFailedKey = nil
                 // Kept on the phone from an earlier load (#652). Read
                 // first: after a sign-out it shows, but isn't remembered.
                 let keptGeneration = TranscriptImageCache.generation
                 if let image = await Self.keptPreview(for: cacheKey) {
                     guard !Task.isCancelled else { return }
-                    place(image, as: cacheKey, generation: keptGeneration)
+                    if keptGeneration == TranscriptImageCache.generation {
+                        remember(image, as: cacheKey)
+                    } else {
+                        gatewayImage = image
+                        gatewayImageKey = cacheKey
+                    }
                     return
                 }
                 guard !Task.isCancelled else { return }
@@ -1997,35 +1878,16 @@ private struct UserImageAttachmentPreview: View {
                 }
                 guard !Task.isCancelled else { return }
                 guard let dataURL, let image = await Self.keep(dataURL, as: cacheKey, generation: generation) else {
-                    if gatewayFailedKey != cacheKey {
-                        placeFailure { gatewayFailedKey = cacheKey }
-                    }
+                    gatewayFailedKey = cacheKey
                     return
                 }
                 guard !Task.isCancelled else { return }
-                place(image, as: cacheKey, generation: generation)
-            }
-        }
-    }
-
-    /// A picture that won't load gives its place to the label once the
-    /// reader's scrolling allows (ChatRowArrival), a height only the
-    /// label's layout tells.
-    private func placeFailure(_ mark: @escaping () -> Void) {
-        arrival.arrive(rowHeight: nil, engine: disclosure?.engine, show: mark)
-    }
-
-    /// Puts a picture from Hermes in the row once the reader's scrolling
-    /// allows (ChatRowArrival), remembering it then: remembered first,
-    /// its size would resize the loading line on its own. After a sign-out
-    /// it shows, but isn't remembered.
-    private func place(_ image: UIImage, as key: String, generation: Int) {
-        arrival.arrive(rowHeight: previewHeight(for: image.size), engine: disclosure?.engine) {
-            if generation == TranscriptImageCache.generation {
-                remember(image, as: key)
-            } else {
-                gatewayImage = image
-                gatewayImageKey = key
+                if generation == TranscriptImageCache.generation {
+                    remember(image, as: cacheKey)
+                } else {
+                    gatewayImage = image
+                    gatewayImageKey = cacheKey
+                }
             }
         }
     }
@@ -2075,12 +1937,8 @@ private struct UserImageAttachmentPreview: View {
         memoryCacheKey.flatMap(TranscriptPictureMemory.size(for:))
     }
 
-    /// At the reserved size when it was known as the row was first laid
-    /// out: one remembered after (another row of the same picture, or a
-    /// cold launch's kept sizes loading) would resize the loading line on
-    /// its own.
     @ViewBuilder private var placeholder: some View {
-        if let size = reservedSize, arrival.holds(previewHeight(for: size)) {
+        if let size = reservedSize {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.white.opacity(0.13))
                 .frame(width: 224, height: previewHeight(for: size))
@@ -2436,13 +2294,10 @@ struct AssistantMessageActions: View {
 }
 
 /// The ⋯ at the end of a reply's row (#1147): Quote, Branch and Pin reply,
-/// so the row keeps a few icons while each action stays a tap away, and
-/// Show thinking while Settings > Chat's Thinking is On request.
+/// so the row keeps a few icons while each action stays a tap away.
 struct AssistantMessageMoreMenu: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     let message: ChatMessage
-    /// The thinking right above the reply (ChatThinkingReveal).
-    var thinking: ChatThinkingReveal? = nil
     @Environment(\.chatRowState) private var rowState
     @Environment(\.chatRowActions) private var rowActions
     /// Acted on, not observed: what a row shows comes from `rowState`.
@@ -2485,12 +2340,6 @@ struct AssistantMessageMoreMenu: View {
                 }
                 .disabled(!hasText)
             }
-
-            if let thinking {
-                Button(action: thinking.toggle) {
-                    Label(thinking.title, systemImage: ChatStepStyle.thinking.symbol)
-                }
-            }
         } label: {
             Image(systemName: "ellipsis")
                 .font(.subheadline.weight(.semibold))
@@ -2501,23 +2350,6 @@ struct AssistantMessageMoreMenu: View {
         .foregroundStyle(.secondary)
         .accessibilityLabel(AppLocalization.string("More"))
         .accessibilityIdentifier("chat.replyMoreMenu")
-    }
-}
-
-/// A reply's ⋯ when the run above it has thinking that Settings > Chat's
-/// Thinking keeps for On request: it follows the runs' toggles, so the item reads Hide thinking
-/// once that thinking shows, whichever menu showed it.
-private struct AssistantMessageMoreMenuWithThinking: View {
-    let message: ChatMessage
-    let run: ChatStepGroup
-    let disclosure: ChatRowDisclosure
-    @ObservedObject var toggles: ChatStepGroupToggles
-
-    var body: some View {
-        AssistantMessageMoreMenu(
-            message: message,
-            thinking: ChatThinkingReveal(group: run, disclosure: disclosure)
-        )
     }
 }
 
@@ -2591,11 +2423,8 @@ struct AssistantBubble: View {
     /// read-aloud state transition. Only ReadAloudButton observes it.
     let readAloudController: MessageReadAloudController
     let gatewayResolver: GatewayMediaDataURLResolver?
-    /// The run of steps above the reply, when it has thinking.
-    var stepsAbove: ChatStepGroup? = nil
     @Environment(\.chatRowState) private var rowState
     @Environment(\.chatRowActions) private var rowActions
-    @Environment(\.chatRowDisclosure) private var disclosure
     /// Acted on, not observed: what a row shows comes from `rowState`.
     private var appState: AppState { rowActions.required }
     @Environment(\.sizeCategory) private var sizeCategory
@@ -2635,6 +2464,10 @@ struct AssistantBubble: View {
             }
 
             HStack(spacing: 4) {
+                // Pulse follows up on what Hermes promised here: opens its card.
+                if let rowID = message.rowId, let card = rowState.pulseCards[rowID] {
+                    PulseMessageMark { appState.openPulse(card: card) }
+                }
                 Spacer(minLength: 0)
                 if message.role == .assistant {
                     MessageReactButton(message: message, isPresented: $showsTapback)
@@ -2646,16 +2479,7 @@ struct AssistantBubble: View {
                     ReadAloudButton(message: message, controller: readAloudController)
                 }
 
-                if let run = stepsAbove, let disclosure, rowState.displayPreferences.offersShowThinking {
-                    AssistantMessageMoreMenuWithThinking(
-                        message: message,
-                        run: run,
-                        disclosure: disclosure,
-                        toggles: disclosure.groupToggles
-                    )
-                } else {
-                    AssistantMessageMoreMenu(message: message)
-                }
+                AssistantMessageMoreMenu(message: message)
             }
             .padding(.top, 2)
             // Fixed 34 pt buttons: larger glyphs would overlap each other.
@@ -3020,8 +2844,6 @@ struct SettledThinkingCardContent: View, Equatable {
 struct ThinkingCard: View {
     let message: ChatMessage
     var grouped = false
-    /// Its run's Show thinking, with Settings > Chat's Thinking On request.
-    var shownAnyway = false
     @Environment(\.chatRowState) private var rowState
     @Environment(\.chatRowActions) private var rowActions
     /// Acted on, not observed: what a row shows comes from `rowState`.
@@ -3030,7 +2852,7 @@ struct ThinkingCard: View {
     @Environment(\.chatTextSize) private var chatTextSize
 
     var body: some View {
-        if rowState.displayPreferences.showReasoning || shownAnyway, !message.content.isEmpty {
+        if rowState.displayPreferences.showReasoning, !message.content.isEmpty {
             SettledThinkingCardContent(
                 message: message,
                 sizeCategory: sizeCategory,
@@ -3317,8 +3139,7 @@ private struct SettledToolCardContent: View, Equatable {
                             body: reply
                         ),
                         roster: appState.botRoster,
-                        appState: appState,
-                        disclosureID: message.id + "#teammate-reply"
+                        appState: appState
                     )
                     .padding(.bottom, 8)
                 }
@@ -3432,22 +3253,15 @@ struct ClarifyCard: View {
     /// Acted on, not observed (`ChatRowState`).
     private var appState: AppState { rowActions.required }
     // Per-question draft state, keyed by the gateway qid: typed custom text
-    // and in-progress picks (a multi-select's, or any form field's). Picks
-    // intentionally buffer locally — an RPC fires only on that question's
-    // confirm, or the form's Send.
+    // and in-progress multi-select selections. Multi-select intentionally
+    // buffers locally — an RPC fires only on that question's confirm.
     @State private var customAnswers: [String: String] = [:]
     @State private var multiSelections: [String: Set<String>] = [:]
-    // A form's choice fields the user answers in their own words
-    // ("Something else…").
-    @State private var ownAnswerFields: Set<String> = []
 
     var body: some View {
         if let clarify = message.clarify {
             let layout = ClarifyCardLayout(questionCount: clarify.questions.count)
             let displayStatus = clarify.presentationStatus
-            // Fields filled in and sent together (`isForm`), while any of
-            // them still waits.
-            let showsForm = clarify.isForm && clarify.hasPendingDecision
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "questionmark.bubble")
@@ -3478,44 +3292,15 @@ struct ClarifyCard: View {
                     MessageTimestampLabel(timestamp: message.timestamp, tone: .supporting)
                 }
 
-                if showsForm {
-                    Text("Fill in what you know, and leave the rest blank.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
                 ForEach(clarify.questions) { question in
                     ClarifyQuestionRow(
                         question: question,
                         showsTitle: layout.rowsShowTitles,
-                        isFormField: clarify.isForm,
                         customAnswer: bindingForCustomAnswer(question),
                         selection: bindingForSelection(question),
-                        typesOwnAnswer: bindingForOwnAnswer(question),
                         onSend: { answer in send(answer, for: question, in: clarify) },
                         onConfirmMultiSelect: { confirmMultiSelect(for: question, in: clarify) }
                     )
-                }
-
-                if showsForm {
-                    let canSend = canSendForm(clarify)
-                    Button {
-                        sendForm(clarify)
-                    } label: {
-                        HStack {
-                            Text("Send")
-                                .font(.subheadline.weight(.semibold))
-                            Spacer()
-                            Image(systemName: "arrow.up")
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(Color.conduitAccent.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .foregroundStyle(.primary)
-                    }
-                    .disabled(!canSend)
-                    .opacity(canSend ? 1 : 0.45)
-                    .accessibilityHint("Fill in what you know, and leave the rest blank.")
                 }
 
                 if let error = clarify.error, !error.isEmpty {
@@ -3543,52 +3328,11 @@ struct ClarifyCard: View {
         )
     }
 
-    private func bindingForOwnAnswer(_ question: ClarifyQuestion) -> Binding<Bool> {
-        Binding(
-            get: { ownAnswerFields.contains(question.id) },
-            set: { typing in
-                if typing {
-                    ownAnswerFields.insert(question.id)
-                } else {
-                    ownAnswerFields.remove(question.id)
-                }
-            }
-        )
-    }
-
     private func send(_ answer: String, for question: ClarifyQuestion, in clarify: ClarifyActivity) {
         let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, question.isAnswerable else { return }
         // Keep the typed answer available if submission fails.
         Task { await appState.respondToClarify(requestId: clarify.requestId, questionId: question.id, answer: trimmed) }
-    }
-
-    /// What each open field of a form holds, by qid; empty when left blank.
-    private func formAnswers(for clarify: ClarifyActivity) -> [String: String] {
-        var answers: [String: String] = [:]
-        for question in clarify.questions where question.isAnswerable {
-            let typed = question.isFreeText || ownAnswerFields.contains(question.id)
-                ? customAnswers[question.id] ?? ""
-                : ""
-            answers[question.id] = question.formAnswer(picked: multiSelections[question.id] ?? [], typed: typed)
-        }
-        return answers
-    }
-
-    /// A form sends once something in it is filled in, or once Hermes
-    /// already has an answer from it (a retry where only blanks are left),
-    /// and not while it is sending.
-    private func canSendForm(_ clarify: ClarifyActivity) -> Bool {
-        guard clarify.needsAnswer, !clarify.questions.contains(where: { $0.status == .submitting }) else { return false }
-        return formAnswers(for: clarify).values.contains { !$0.isEmpty }
-            || clarify.questions.contains { $0.status == .answered && !$0.isSkipped }
-    }
-
-    private func sendForm(_ clarify: ClarifyActivity) {
-        guard canSendForm(clarify) else { return }
-        // The fields keep what was typed if a question fails to send.
-        let answers = formAnswers(for: clarify)
-        Task { await appState.respondToClarifyForm(requestId: clarify.requestId, answers: answers) }
     }
 
     private func confirmMultiSelect(for question: ClarifyQuestion, in clarify: ClarifyActivity) {
@@ -3624,19 +3368,13 @@ struct ClarifyCard: View {
 /// owns its answer/lock lifecycle — one question submitting or failing never
 /// disables its siblings, and an accepted answer renders locked. In a batch
 /// each row draws its own grouped box and title; a single-question card keeps
-/// the legacy flat layout (the card header already carries the title). A
-/// form's row is a field instead, sent with the card's one Send.
+/// the legacy flat layout (the card header already carries the title).
 struct ClarifyQuestionRow: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     let question: ClarifyQuestion
     var showsTitle: Bool = true
-    /// A form's field (`ClarifyActivity.isForm`): a text box, or a menu of
-    /// the choices, with no send of its own.
-    var isFormField: Bool = false
     @Binding var customAnswer: String
     @Binding var selection: Set<String>
-    /// A form's choice field the user answers in their own words.
-    var typesOwnAnswer: Binding<Bool> = .constant(false)
     let onSend: (String) -> Void
     let onConfirmMultiSelect: () -> Void
 
@@ -3692,12 +3430,9 @@ struct ClarifyQuestionRow: View {
     private var statusIcon: some View {
         switch question.status {
         case .answered:
-            // A field left blank says Skipped below instead.
-            if !question.isSkipped {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-            }
+            Image(systemName: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
         case .error:
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.caption)
@@ -3713,12 +3448,7 @@ struct ClarifyQuestionRow: View {
 
     @ViewBuilder
     private var answeredBlock: some View {
-        if question.isSkipped {
-            // A form's field left blank: Hermes read it as skipped.
-            Label(AppLocalization.string("Skipped"), systemImage: "forward")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-        } else if let answer = question.resolvedAnswer, !answer.isEmpty {
+        if let answer = question.resolvedAnswer, !answer.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 Text("YOUR ANSWER")
                     .font(.caption2.weight(.bold))
@@ -3744,126 +3474,11 @@ struct ClarifyQuestionRow: View {
 
     @ViewBuilder
     private var controls: some View {
-        if isFormField {
-            formField
-        } else if question.multiSelect {
+        if question.multiSelect {
             multiSelectControls
         } else {
             singleChoiceControls
         }
-    }
-
-    /// A form's field: a text box for an open question, or a menu of the
-    /// choices that also takes the user's own words. Nothing here sends;
-    /// left alone, the field goes back blank.
-    @ViewBuilder
-    private var formField: some View {
-        if question.isFreeText {
-            formTextField
-        } else {
-            Menu {
-                ForEach(question.choices) { choice in
-                    Button {
-                        pick(choice.value)
-                    } label: {
-                        if selection.contains(choice.value) {
-                            Label(choice.label, systemImage: "checkmark")
-                        } else {
-                            Text(choice.label)
-                        }
-                    }
-                    // Several picks in one go.
-                    .menuActionDismissBehavior(question.multiSelect ? .disabled : .automatic)
-                }
-                Divider()
-                Button {
-                    typeOwnAnswer()
-                } label: {
-                    if typesOwnAnswer.wrappedValue {
-                        Label(AppLocalization.string("Something else…"), systemImage: "checkmark")
-                    } else {
-                        Text(AppLocalization.string("Something else…"))
-                    }
-                }
-                if hasFormPick {
-                    Button(AppLocalization.string("Leave blank")) {
-                        leaveBlank()
-                    }
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Text(formMenuTitle)
-                        .font(.body)
-                        .foregroundStyle(hasFormPick ? Color.primary : Color.secondary)
-                        .multilineTextAlignment(.leading)
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.conduitAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            .disabled(!isAnswerable)
-            .accessibilityLabel(question.question)
-            .accessibilityValue(formMenuTitle)
-
-            if typesOwnAnswer.wrappedValue {
-                formTextField
-            }
-        }
-    }
-
-    private var formTextField: some View {
-        TextField(AppLocalization.string("Type your answer…"), text: $customAnswer, axis: .vertical)
-            .lineLimit(1...4)
-            .disabled(!isAnswerable)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            // Named by its question for VoiceOver, like a choice field's menu.
-            .accessibilityLabel(question.question)
-    }
-
-    /// What a form's choice field shows: the picks, or Choose while blank.
-    private var formMenuTitle: String {
-        var parts = question.choices.filter { selection.contains($0.value) }.map(\.label)
-        if typesOwnAnswer.wrappedValue {
-            parts.append(AppLocalization.string("Something else…"))
-        }
-        return parts.isEmpty ? AppLocalization.string("Choose") : parts.joined(separator: ", ")
-    }
-
-    private var hasFormPick: Bool {
-        !selection.isEmpty || typesOwnAnswer.wrappedValue
-    }
-
-    private func pick(_ value: String) {
-        guard isAnswerable else { return }
-        if question.multiSelect {
-            toggle(value)
-        } else {
-            selection = [value]
-            typesOwnAnswer.wrappedValue = false
-        }
-    }
-
-    private func typeOwnAnswer() {
-        guard isAnswerable else { return }
-        if question.multiSelect {
-            typesOwnAnswer.wrappedValue.toggle()
-        } else {
-            // One answer: the user's words take the pick's place.
-            selection = []
-            typesOwnAnswer.wrappedValue = true
-        }
-    }
-
-    private func leaveBlank() {
-        selection = []
-        typesOwnAnswer.wrappedValue = false
-        customAnswer = ""
     }
 
     @ViewBuilder
@@ -4287,10 +3902,9 @@ struct ApprovalCard: View {
     }
 }
 
-/// Private-input prompt: a sudo password, a secret, a password-manager
-/// unlock, a website's login or its one-time code. What the user types lives
-/// only in this view's state: it is handed to AppState once on submit and
-/// cleared, never stored on the message.
+/// Masked single-value prompt (sudo password, secret, password-manager
+/// unlock). The typed value lives only in this view's state: it is handed to
+/// AppState once on submit and cleared, never stored on the message.
 struct InputPromptCard: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     let message: ChatMessage
@@ -4302,9 +3916,6 @@ struct InputPromptCard: View {
     /// it if the row scrolls far away: retyping is the accepted cost of the
     /// value never outliving this card.
     @State private var value = ""
-    /// vault.save_login: the account's email or username (the password is
-    /// `value`). View state only, like `value`.
-    @State private var identifier = ""
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -4334,13 +3945,6 @@ struct InputPromptCard: View {
                     MessageTimestampLabel(timestamp: message.timestamp, tone: .supporting)
                 }
 
-                if let note = explanation(for: prompt) {
-                    Text(note)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
                 if let detail = detail(for: prompt), !detail.isEmpty {
                     SelectableTextView(
                         text: detail,
@@ -4368,20 +3972,32 @@ struct InputPromptCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 case .pending, .submitting, .error:
-                    fields(for: prompt)
+                    // No .textContentType(.password): it would offer to save
+                    // a sudo or password-manager master password to the
+                    // system keychain.
+                    SecureField(placeholder(for: prompt.kind), text: $value)
+                        .accessibilityHint(AppLocalization.string("Send gives Hermes this value. Skip lets it continue without one."))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($fieldFocused)
+                        .submitLabel(.send)
+                        .onSubmit { submit(prompt) }
+                        .padding(10)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .disabled(!prompt.isAnswerable)
 
                     HStack(spacing: 8) {
                         Button {
                             submit(prompt)
                         } label: {
-                            Label(sendTitle(for: prompt.kind), systemImage: "paperplane.fill")
+                            Label(AppLocalization.string("Send"), systemImage: "paperplane.fill")
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(!prompt.isAnswerable || answer(for: prompt) == nil)
+                        .disabled(!prompt.isAnswerable || !hasValue)
 
                         Spacer(minLength: 0)
 
-                        Button(skipTitle(for: prompt.kind)) {
+                        Button(AppLocalization.string("Skip")) {
                             skip(prompt)
                         }
                         .buttonStyle(.bordered)
@@ -4402,91 +4018,17 @@ struct InputPromptCard: View {
                 // Drop the typed value once the request is settled either
                 // way. A failed send (.error) keeps it so the user can retry
                 // without retyping; it never leaves this view's state.
-                if status == .submitted || status == .skipped || status == .expired {
-                    value = ""
-                    identifier = ""
-                }
+                if status == .submitted || status == .skipped || status == .expired { value = "" }
             }
         }
     }
 
-    @ViewBuilder
-    private func fields(for prompt: InputPromptActivity) -> some View {
-        switch prompt.kind {
-        case .vaultSaveLogin:
-            // No .username / .password content types: once the card
-            // settles, iOS would offer to save the site's login to the
-            // keychain under Conduit's own domain.
-            TextField(AppLocalization.string("Email or username"), text: $identifier)
-                .privacySensitive()
-                .accessibilityHint(AppLocalization.string("Save & sign in gives Hermes this login for the site. The model never sees the password."))
-                .keyboardType(.emailAddress)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.next)
-                .onSubmit { fieldFocused = true }
-                .inputPromptField()
-                .disabled(!prompt.isAnswerable)
-            SecureField(placeholder(for: prompt.kind), text: $value)
-                .accessibilityHint(AppLocalization.string("Save & sign in gives Hermes this login for the site. The model never sees the password."))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($fieldFocused)
-                .submitLabel(.send)
-                .onSubmit { submit(prompt) }
-                .inputPromptField()
-                .disabled(!prompt.isAnswerable)
-        case .vaultCode:
-            // Shown as typed, like Hermes Desktop: a short code is not worth
-            // masking and a typo must be visible. .oneTimeCode offers the
-            // code a text message or email just brought; letters come first
-            // because an email's code can have them.
-            TextField(placeholder(for: prompt.kind), text: $value)
-                .accessibilityHint(AppLocalization.string("Enter code has Hermes type it into the page. The model never sees it."))
-                .privacySensitive()
-                .textContentType(.oneTimeCode)
-                .keyboardType(.asciiCapable)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($fieldFocused)
-                .submitLabel(.send)
-                .onSubmit { submit(prompt) }
-                .inputPromptField()
-                .disabled(!prompt.isAnswerable)
-        case .sudo, .secret, .vaultUnlock:
-            // No .textContentType(.password): it would offer to save
-            // a sudo or password-manager master password to the
-            // system keychain.
-            SecureField(placeholder(for: prompt.kind), text: $value)
-                .accessibilityHint(AppLocalization.string("Send gives Hermes this value. Skip lets it continue without one."))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($fieldFocused)
-                .submitLabel(.send)
-                .onSubmit { submit(prompt) }
-                .inputPromptField()
-                .disabled(!prompt.isAnswerable)
-        }
-    }
-
     private func submit(_ prompt: InputPromptActivity) {
-        guard prompt.isAnswerable, let answer = answer(for: prompt) else { return }
+        guard prompt.isAnswerable, hasValue else { return }
+        // Sent untrimmed: a password may legitimately contain spaces.
+        let answer = value
         fieldFocused = false
         Task { await appState.respondToInputPrompt(messageId: message.id, value: answer) }
-    }
-
-    /// What Send gives Hermes, or nil while there is nothing to send.
-    private func answer(for prompt: InputPromptActivity) -> String? {
-        switch prompt.kind {
-        case .vaultSaveLogin:
-            return InputPromptActivity.loginAnswer(identifier: identifier, password: value)
-        case .vaultCode:
-            let code = InputPromptActivity.codeAnswer(value)
-            return code.isEmpty ? nil : code
-        case .sudo, .secret, .vaultUnlock:
-            // Sent untrimmed: a password may legitimately contain spaces.
-            return hasValue ? value : nil
-        }
     }
 
     /// Whitespace alone is not an answer (Hermes would store it as the
@@ -4500,7 +4042,6 @@ struct InputPromptCard: View {
     private func skip(_ prompt: InputPromptActivity) {
         guard prompt.isAnswerable else { return }
         value = ""
-        identifier = ""
         fieldFocused = false
         Task { await appState.respondToInputPrompt(messageId: message.id, value: nil) }
     }
@@ -4509,20 +4050,7 @@ struct InputPromptCard: View {
         switch prompt.kind {
         case .sudo: return prompt.command
         case .secret: return prompt.envVar
-        case .vaultUnlock, .vaultCode: return nil
-        // The exact origin, so the user sees which site gets the login.
-        case .vaultSaveLogin: return prompt.origin
-        }
-    }
-
-    private func explanation(for prompt: InputPromptActivity) -> String? {
-        switch prompt.kind {
-        case .vaultSaveLogin:
-            return AppLocalization.string("Hermes reached this sign-in page and has no login for it. It's saved encrypted where Hermes runs and filled into the page; the model never sees the password.")
-        case .vaultCode:
-            return AppLocalization.string("The site is asking for a one-time code from a text message, email or authenticator app. Hermes types it into the page; the model never sees it.")
-        case .sudo, .secret, .vaultUnlock:
-            return nil
+        case .vaultUnlock: return nil
         }
     }
 
@@ -4531,8 +4059,6 @@ struct InputPromptCard: View {
         case .sudo: return "lock.shield"
         case .secret: return "key"
         case .vaultUnlock: return "lock.rectangle.stack"
-        case .vaultSaveLogin: return "person.badge.key"
-        case .vaultCode: return "number"
         }
     }
 
@@ -4541,24 +4067,6 @@ struct InputPromptCard: View {
         case .sudo: return AppLocalization.string("sudo password")
         case .secret: return AppLocalization.string("Secret value")
         case .vaultUnlock: return AppLocalization.string("Master password")
-        case .vaultSaveLogin: return AppLocalization.string("Password")
-        // Not "Code": some languages read that key as program code.
-        case .vaultCode: return AppLocalization.string("Verification code")
-        }
-    }
-
-    private func sendTitle(for kind: InputPromptActivity.Kind) -> String {
-        switch kind {
-        case .vaultSaveLogin: return AppLocalization.string("Save & sign in")
-        case .vaultCode: return AppLocalization.string("Enter code")
-        case .sudo, .secret, .vaultUnlock: return AppLocalization.string("Send")
-        }
-    }
-
-    private func skipTitle(for kind: InputPromptActivity.Kind) -> String {
-        switch kind {
-        case .vaultSaveLogin: return AppLocalization.string("Don't save")
-        case .sudo, .secret, .vaultUnlock, .vaultCode: return AppLocalization.string("Skip")
         }
     }
 
@@ -4580,14 +4088,6 @@ struct InputPromptCard: View {
         case .skipped: return .secondary
         case .expired, .error: return .red
         }
-    }
-}
-
-private extension View {
-    /// The input card's field well.
-    func inputPromptField() -> some View {
-        padding(10)
-            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 

@@ -246,9 +246,7 @@ extension HermesVoiceGatewayTimeoutTests {
     func testGrokLiveInstructionsHoldJobClaimsForTheResult() {
         let text = GrokLiveProtocol.grokInstructions(now: Date(timeIntervalSince1970: 0), timeZone: TimeZone(identifier: "UTC")!)
         XCTAssertTrue(text.contains(GrokLiveProtocol.jobClaimInstructions))
-        let shared = GeminiLiveConversationController.instructions(search: .grok, acknowledgesOnceStarted: true)
-        XCTAssertTrue(shared.contains("only once it returns started"))
-        XCTAssertFalse(shared.contains("first acknowledge it out loud"), "one timing per mode")
+        XCTAssertTrue(GrokLiveProtocol.jobClaimInstructions.contains("only once it returns started"))
         XCTAssertTrue(GrokLiveProtocol.jobClaimInstructions.contains("never speak a tool call"))
     }
 

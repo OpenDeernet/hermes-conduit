@@ -2117,7 +2117,7 @@ final class HermesClientTests: XCTestCase {
             "result": [
                 "session_id": "runtime-1", "running": true, "messages": [Any](), "info": [String: Any](),
                 "open_requests": [
-                    ["id": "srq-dec1dec1dec1", "method": "theme.pick", "params": ["session_id": "runtime-1"]]
+                    ["id": "srq-dec1dec1dec1", "method": "vault.code", "params": ["session_id": "runtime-1"]]
                 ]
             ]
         ], to: socket)
@@ -2194,8 +2194,8 @@ final class HermesClientTests: XCTestCase {
         let sent = Gate()
         socket.onSend = { sent.signal() }
         try await deliverFrame([
-            "jsonrpc": "2.0", "id": "srq-cccccccccccc", "method": "theme.pick",
-            "params": ["session_id": "runtime-1"]
+            "jsonrpc": "2.0", "id": "srq-cccccccccccc", "method": "vault.code",
+            "params": ["session_id": "runtime-1", "site": "example.com"]
         ], to: socket)
         try await sent.wait("the decline to be sent")
 
@@ -2280,167 +2280,11 @@ final class HermesClientTests: XCTestCase {
         client.disconnect()
     }
 
-    func testWebsiteLoginRequestPresentsCardAndAnswersWithLoginJSON() async throws {
-        let (client, socket) = try await connectedClientForServerRequests()
-        var events: [StreamEvent] = []
-        client.onEvent = { events.append($0) }
-        try await deliverFrame([
-            "jsonrpc": "2.0", "id": "srq-5a5a5a5a5a5a", "method": "vault.save_login",
-            "params": ["session_id": "runtime-1", "origin": "https://accounts.example.com", "site": "accounts.example.com"]
-        ], to: socket)
-        guard case .inputPrompt(let sessionId, let activity)? = events.first else {
-            return XCTFail("Expected an input prompt event, got \(events)")
-        }
-        XCTAssertEqual(sessionId, "runtime-1")
-        XCTAssertEqual(activity.kind, .vaultSaveLogin)
-        XCTAssertEqual(activity.origin, "https://accounts.example.com")
-        XCTAssertEqual(activity.site, "accounts.example.com")
-        XCTAssertTrue(socket.sentTexts.isEmpty, "The request stays open until the user answers")
-
-        let login = try XCTUnwrap(InputPromptActivity.loginAnswer(identifier: " me@example.com ", password: " p\"w "))
-        try await client.respondToInputPrompt(requestId: "srq-5a5a5a5a5a5a", value: login)
-        let reply = try sentFrame(socket)
-        XCTAssertEqual(reply["id"] as? String, "srq-5a5a5a5a5a5a")
-        let value = try XCTUnwrap((reply["result"] as? [String: Any])?["value"] as? String)
-        let decoded = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(value.utf8)) as? [String: String])
-        XCTAssertEqual(decoded, ["identifier": "me@example.com", "password": " p\"w "],
-                       "The identifier is trimmed; the password goes as typed")
-        client.disconnect()
-    }
-
-    func testWebsiteLoginAnswerNeedsBothParts() {
-        XCTAssertNil(InputPromptActivity.loginAnswer(identifier: "  ", password: "secret"))
-        XCTAssertNil(InputPromptActivity.loginAnswer(identifier: "me", password: ""))
-        XCTAssertNil(InputPromptActivity.loginAnswer(identifier: "me", password: "  \t "),
-                     "A password of spaces alone is not an answer")
-    }
-
-    func testResumeDeclinesALoginRequestWithoutAnOrigin() async throws {
-        let (client, socket) = try await connectedClientForServerRequests()
-        let sent = Gate()
-        socket.onSend = { sent.signal() }
-        let openTask = Task<SessionResumeResult, Error> { try await client.openSession("runtime-1") }
-        try await sent.wait("the session.resume request to be sent")
-        let id = try XCTUnwrap(try sentFrame(socket)["id"] as? Int)
-        try await deliverFrame([
-            "jsonrpc": "2.0", "id": id,
-            "result": [
-                "session_id": "runtime-1", "running": true, "messages": [Any](), "info": [String: Any](),
-                "open_requests": [
-                    ["id": "srq-777777777777", "method": "vault.save_login",
-                     "params": ["session_id": "runtime-1", "site": "example.com"]]
-                ]
-            ]
-        ], to: socket)
-        let result = try await awaitResult(of: openTask, "the session.resume response")
-        XCTAssertTrue(result.snapshot.pendingInputPrompts.isEmpty)
-        await waitForSends(2, on: socket)
-        let reply = try sentFrame(socket)
-        XCTAssertEqual(reply["id"] as? String, "srq-777777777777")
-        XCTAssertEqual((reply["error"] as? [String: Any])?["code"] as? Int, -32602,
-                       "A replayed request no card can show fails fast, like the live frame")
-        client.disconnect()
-    }
-
-    func testWebsiteLoginFallsBackToTheOriginsHost() throws {
-        let activity = try XCTUnwrap(InputPromptActivity.from(
-            requestId: "srq-1", method: "vault.save_login",
-            params: ["session_id": .string("s1"), "origin": .string("https://shop.example.com")]
-        ))
-        XCTAssertEqual(activity.site, "shop.example.com")
-    }
-
-    func testWebsiteLoginTitleNamesTheOriginsHostNotAnotherSite() throws {
-        let activity = try XCTUnwrap(InputPromptActivity.from(
-            requestId: "srq-1", method: "vault.save_login",
-            params: ["session_id": .string("s1"), "origin": .string("https://evil.example"), "site": .string("bank.example")]
-        ))
-        XCTAssertEqual(activity.site, "evil.example")
-
-        let bare = try XCTUnwrap(InputPromptActivity.from(
-            requestId: "srq-2", method: "vault.save_login",
-            params: ["session_id": .string("s1"), "origin": .string("evil.example"), "site": .string("bank.example")]
-        ))
-        XCTAssertEqual(bare.site, "evil.example", "An origin with no host is its own title")
-    }
-
-    func testLiveLoginRequestWithoutAnOriginIsRefused() async throws {
-        let (client, socket) = try await connectedClientForServerRequests()
-        var events: [StreamEvent] = []
-        client.onEvent = { events.append($0) }
-        let sent = Gate()
-        socket.onSend = { sent.signal() }
-        try await deliverFrame([
-            "jsonrpc": "2.0", "id": "srq-0b0b0b0b0b0b", "method": "vault.save_login",
-            "params": ["session_id": "runtime-1", "site": "example.com"]
-        ], to: socket)
-        try await sent.wait("the refusal to be sent")
-
-        let reply = try sentFrame(socket)
-        XCTAssertEqual(reply["id"] as? String, "srq-0b0b0b0b0b0b")
-        XCTAssertEqual((reply["error"] as? [String: Any])?["code"] as? Int, -32602)
-        XCTAssertTrue(events.isEmpty, "No card for a login that names no origin")
-        client.disconnect()
-    }
-
-    func testVerificationCodeRequestPresentsCardAndAnswersWithTheCode() async throws {
-        let (client, socket) = try await connectedClientForServerRequests()
-        var events: [StreamEvent] = []
-        client.onEvent = { events.append($0) }
-        try await deliverFrame([
-            "jsonrpc": "2.0", "id": "srq-c0dec0dec0de", "method": "vault.code",
-            "params": ["session_id": "runtime-1", "site": "example.com", "hint": ""]
-        ], to: socket)
-        guard case .inputPrompt(_, let activity)? = events.first else {
-            return XCTFail("Expected an input prompt event, got \(events)")
-        }
-        XCTAssertEqual(activity.kind, .vaultCode)
-        XCTAssertEqual(activity.site, "example.com")
-        XCTAssertTrue(socket.sentTexts.isEmpty, "The request stays open until the user answers")
-
-        try await client.respondToInputPrompt(
-            requestId: "srq-c0dec0dec0de",
-            value: InputPromptActivity.codeAnswer(" 123 456-7 ")
-        )
-        let result = try XCTUnwrap(try sentFrame(socket)["result"] as? [String: Any])
-        XCTAssertEqual(result["value"] as? String, "1234567", "Spaces and dashes a site groups a code with are dropped")
-        client.disconnect()
-    }
-
-    func testResumeRestoresWebsiteLoginAndCodePrompts() async throws {
-        let (client, socket) = try await connectedClientForServerRequests()
-        let sent = Gate()
-        socket.onSend = { sent.signal() }
-        let openTask = Task<SessionResumeResult, Error> { try await client.openSession("runtime-1") }
-        try await sent.wait("the session.resume request to be sent")
-        let id = try XCTUnwrap(try sentFrame(socket)["id"] as? Int)
-        try await deliverFrame([
-            "jsonrpc": "2.0", "id": id,
-            "result": [
-                "session_id": "runtime-1", "running": true, "messages": [Any](), "info": [String: Any](),
-                "open_requests": [
-                    ["id": "srq-555555555555", "method": "vault.save_login",
-                     "params": ["session_id": "runtime-1", "origin": "https://example.com", "site": "example.com"]],
-                    ["id": "srq-666666666666", "method": "vault.code",
-                     "params": ["session_id": "runtime-1", "site": "example.com"]]
-                ]
-            ]
-        ], to: socket)
-        let result = try await awaitResult(of: openTask, "the session.resume response")
-        XCTAssertEqual(result.snapshot.pendingInputPrompts.map(\.kind), [.vaultSaveLogin, .vaultCode])
-        for _ in 0..<50 { await Task.yield() }
-        XCTAssertEqual(socket.sentTexts.count, 1, "Presented prompts are never declined")
-        client.disconnect()
-    }
-
     func testInputPromptRequiresSessionAndKnownMethod() {
         XCTAssertNil(InputPromptActivity.from(requestId: "srq-1", method: "sudo", params: [:]))
         XCTAssertNil(InputPromptActivity.from(
-            requestId: "srq-1", method: "theme.pick", params: ["session_id": .string("s1")]
+            requestId: "srq-1", method: "vault.code", params: ["session_id": .string("s1")]
         ))
-        XCTAssertNil(InputPromptActivity.from(
-            requestId: "srq-1", method: "vault.save_login", params: ["session_id": .string("s1")]
-        ), "A login card must name the origin it is saved for")
         XCTAssertNil(InputPromptActivity.from(
             requestId: "", method: "sudo", params: ["session_id": .string("s1")]
         ))
@@ -3067,28 +2911,12 @@ private final class FakeSocket: HermesWebSocket {
         }
     }
 
-    /// True holds each send's completion until `finishHeldSends()`, as a
-    /// large frame on a slow link is still being written.
-    var holdsSendCompletion = false
-    private var heldSendCompletions: [@Sendable (Error?) -> Void] = []
-
     func send(_ message: URLSessionWebSocketTask.Message, completionHandler: @escaping @Sendable (Error?) -> Void) {
         if case .string(let text) = message {
             sentTexts.append(text)
             onSend?()
         }
-        if holdsSendCompletion {
-            heldSendCompletions.append(completionHandler)
-        } else {
-            completionHandler(nil)
-        }
-    }
-
-    func finishHeldSends() {
-        holdsSendCompletion = false
-        let held = heldSendCompletions
-        heldSendCompletions = []
-        held.forEach { $0(nil) }
+        completionHandler(nil)
     }
 
     func receive() async throws -> URLSessionWebSocketTask.Message {
@@ -3254,9 +3082,7 @@ extension HermesClientTests {
     /// right after it is never missed.
     private func connectKeepaliveClient(
         onSend: (() -> Void)? = nil,
-        interval: TimeInterval = 0.3,
-        backgroundInterval: TimeInterval? = nil,
-        monitorsPath: Bool = false
+        backgroundInterval: TimeInterval? = nil
     ) async throws -> (client: HermesClient, socket: FakeSocket) {
         let transport = FakeTransport()
         let socket = FakeSocket()
@@ -3265,10 +3091,10 @@ extension HermesClientTests {
         let client = HermesClient(
             connection: HermesConnection(baseUrl: "https://test.example", ticket: "ticket"),
             transportFactory: { transport },
-            keepaliveInterval: interval,
+            keepaliveInterval: 0.3,
             backgroundKeepaliveInterval: backgroundInterval,
             keepalivePingTimeout: 0.3,
-            monitorsPath: monitorsPath
+            monitorsPath: false
         )
         let connectTask = Task { try? await client.connect() }
         transport.open(socket)
@@ -3320,96 +3146,6 @@ extension HermesClientTests {
         }
         XCTAssertEqual(pings(), 1, "The quiet socket is still pinged off screen")
         client.disconnect()
-    }
-
-    /// A picture still being written to a slow link (#1265): a ping queued
-    /// behind it can't be answered, so the keepalive waits instead of
-    /// closing the socket under the upload.
-    func testKeepaliveWaitsWhileAFrameIsStillBeingWritten() async throws {
-        // A longer interval, so no ping goes out before the upload does.
-        let (client, socket) = try await connectKeepaliveClient(interval: 1)
-        socket.holdsSendCompletion = true
-        let sent = Gate()
-        socket.onSend = { sent.signal() }
-        let picture = String(repeating: "A", count: HermesClient.largeFrameBytes)
-        let upload = Task { try await client.attachImage("s1", base64: picture, filename: "photo.jpg") }
-        try await sent.wait("the image upload to go out")
-        socket.onSend = nil
-        // Past the quiet interval and two ping budgets.
-        try await Task.sleep(for: .seconds(2.5))
-        XCTAssertFalse(socket.sentTexts.contains { $0.contains("\"ping\"") }, "No ping behind a frame still being written")
-        XCTAssertFalse(socket.cancelled, "The upload's socket stays open")
-
-        socket.finishHeldSends()
-        let request = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: Data(try XCTUnwrap(socket.sentTexts.first { $0.contains("image.attach_bytes") }).utf8)) as? [String: Any]
-        )
-        let id = try XCTUnwrap(request["id"] as? Int)
-        try deliverReply(["jsonrpc": "2.0", "id": id, "result": ["path": "/tmp/photo.jpg"]], on: socket)
-        let path = try await awaitResult(of: upload, "the upload's reply")
-        XCTAssertEqual(path, "/tmp/photo.jpg")
-        client.disconnect()
-    }
-
-    /// A network path change during the upload doesn't probe behind it
-    /// either: two lost pings would close the working socket (#1265).
-    func testPathChangeDoesNotProbeBehindAFrameStillBeingWritten() async throws {
-        let (client, socket) = try await connectKeepaliveClient(interval: 30, monitorsPath: true)
-        socket.holdsSendCompletion = true
-        let sent = Gate()
-        socket.onSend = { sent.signal() }
-        let picture = String(repeating: "A", count: HermesClient.largeFrameBytes)
-        let upload = Task { try await client.attachImage("s1", base64: picture, filename: "photo.jpg") }
-        try await sent.wait("the image upload to go out")
-        socket.onSend = nil
-
-        client.networkPathChanged()
-        // Past two 0.3 s ping budgets.
-        try await Task.sleep(for: .seconds(1))
-        XCTAssertFalse(socket.sentTexts.contains { $0.contains("\"ping\"") }, "No probe behind the upload")
-        XCTAssertFalse(socket.cancelled, "The upload's socket stays open")
-        upload.cancel()
-        socket.finishHeldSends()
-        client.disconnect()
-    }
-
-    /// The foreground check doesn't ping behind a picture still going up:
-    /// its 5 s budget would run out and drop a working socket (#1265).
-    func testHealthCheckDoesNotPingBehindAFrameStillBeingWritten() async throws {
-        let transport = FakeTransport()
-        let socket = FakeSocket()
-        transport.nextSocket = { socket }
-        let client = makeClient(transport: transport)
-        let connectTask = Task { try? await client.connect() }
-        transport.open(socket)
-        try await awaitCompletion(of: connectTask, "connect() to complete after the handshake")
-        socket.holdsSendCompletion = true
-        let sent = Gate()
-        socket.onSend = { sent.signal() }
-        let picture = String(repeating: "A", count: HermesClient.largeFrameBytes)
-        let upload = Task { try await client.attachImage("s1", base64: picture, filename: "photo.jpg") }
-        try await sent.wait("the image upload to go out")
-        socket.onSend = nil
-
-        try await client.healthCheck()
-        XCTAssertFalse(socket.sentTexts.contains { $0.contains("\"ping\"") }, "No ping behind the upload")
-        upload.cancel()
-        socket.finishHeldSends()
-        client.disconnect()
-    }
-
-    /// An upload's budget grows with its size: a 4 MB photo (about 5.3 MB
-    /// as base64) on a 0.5 Mbit/s link needs more than the usual 30 s
-    /// (#1265).
-    func testUploadTimeoutGrowsWithThePayload() {
-        XCTAssertEqual(HermesClient.uploadTimeout(forPayloadCharacters: 1_000), HermesClient.minimumUploadTimeout)
-        XCTAssertGreaterThan(HermesClient.minimumUploadTimeout, HermesClient.requestTimeout)
-        XCTAssertEqual(HermesClient.uploadTimeout(forPayloadCharacters: 64_000_000), 1_000)
-        XCTAssertEqual(
-            HermesClient.uploadTimeout(forPayloadCharacters: 64_000_000),
-            TimeInterval(GroupRoomFilesClient.timeoutMilliseconds(forBodyBytes: 64_000_000)) / 1_000,
-            "The same rate a group room's upload allows (base64 is one byte a character)"
-        )
     }
 
     func testPingBudgetIsShorterThanTheOldProbe() {
