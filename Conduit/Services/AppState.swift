@@ -5690,15 +5690,24 @@ final class AppState: ObservableObject {
         guard let dashboardID = activeDashboardID,
               let kept = keptBotChatCopies[Self.keptBotChatCopyKey(dashboardID: dashboardID, bot: bot)],
               kept.sessionIDs.contains(sessionID) else { return }
+        // Under the id it opens as, the Bot Chat's own: the one it was kept
+        // under was that run's runtime id, and words typed while it opens
+        // must keep to a draft the chat finds again.
+        let transcript = OfflineCachedTranscript(
+            sessionID: sessionID,
+            title: kept.transcript.title,
+            savedAt: kept.transcript.savedAt,
+            messages: kept.transcript.messages
+        )
         offlineChatPresentation = OfflineChatPresentation(
             dashboardID: dashboardID,
             profile: activeProfile,
             snapshot: OfflineChatSnapshot(lastSessionID: nil, sessions: [], transcripts: []),
-            displayedTranscript: kept.transcript,
+            displayedTranscript: transcript,
             picked: OfflineChatPresentation.PickedChat(
                 title: title ?? kept.transcript.title,
-                sessionIDs: kept.sessionIDs,
-                durableSessionID: kept.transcript.sessionID
+                sessionIDs: kept.sessionIDs.union([sessionID]),
+                durableSessionID: sessionID
             )
         )
     }

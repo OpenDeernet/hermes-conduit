@@ -1507,6 +1507,8 @@ final class OfflineChatCacheTests: XCTestCase {
         let reopening = Task { @MainActor in await appState.openBotChat(for: atlas) }
         await suspension.waitUntilSuspended()
         XCTAssertEqual(appState.offlineChatPresentation?.displayedMessages.map(\.id), ["atlas-reply-1"])
+        XCTAssertEqual(appState.offlineChatPresentation?.composerSessionID, "atlas-chat",
+                       "Words typed while it opens keep to the Bot Chat's own draft, not a runtime id")
         XCTAssertTrue(appState.messages.isEmpty, "The copy never feeds the live transcript")
 
         gate = nil

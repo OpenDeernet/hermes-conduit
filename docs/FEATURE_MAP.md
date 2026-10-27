@@ -1328,7 +1328,8 @@ the rest, instead of a blank chat.
 
 **Siblings:** chats and project chats · Bot Chat · group rooms · a cold
 launch and a chat picked in the saved Chats list (the same read-only copy) ·
-iPad and Mac windows (the same chat view) · Settings' Data handling caption
+iPad and Mac windows (the same chat view) · Settings' Data handling caption ·
+Watch and CarPlay (not needed: neither shows a transcript)
 
 | Opening | Shows while it loads | Kept |
 |---|---|---|
