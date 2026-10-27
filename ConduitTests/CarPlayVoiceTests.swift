@@ -1854,7 +1854,7 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.observedVoiceMode, .classic)
     }
 
-    func testLocalLiveInAgentModeIsACarPlayModeAndItsHandsFreeOptionStaysClassic() async {
+    func testLocalLiveIsACarPlayModeAndItsHandsFreeOptionIsListedAsClassic() async {
         let harness = makeHarness()
         harness.coordinator.handleConnect(harness.spy)
 
@@ -1864,13 +1864,23 @@ final class CarPlayVoiceCoordinatorTests: XCTestCase {
         XCTAssertEqual(harness.coordinator.observedVoiceMode, .localLive)
         XCTAssertEqual(CarPlayBrowse.modeRows(current: .localLive).filter(\.isSelected).map(\.title), ["Local Live"])
 
-        // Classic's hands-free option on the speech server is listed as
-        // Classic, as on the phone.
+        // Classic's hands-free option on the speech server runs on Local
+        // Live's controller in the car too, and is listed as Classic, as on
+        // the phone.
         harness.appState.setLocalLiveAgent(false)
-        XCTAssertEqual(CarPlayVoiceMode.current(in: harness.appState), .classic)
-        XCTAssertEqual(harness.coordinator.observedVoiceMode, .classic)
+        XCTAssertEqual(CarPlayVoiceMode.current(in: harness.appState), .localLive)
+        XCTAssertEqual(CarPlayVoiceMode.listed(in: harness.appState), .classic)
+        XCTAssertEqual(harness.coordinator.observedVoiceMode, .localLive)
 
-        harness.appState.setLocalLiveAgent(true)
+        // Classic is already what the list shows: picking it changes nothing.
+        harness.coordinator.selectVoiceMode(.classic)
+        XCTAssertTrue(harness.appState.isLocalLiveEnabled)
+
+        // Local picked from there moves to agent mode.
+        harness.coordinator.selectVoiceMode(.localLive)
+        XCTAssertTrue(harness.appState.isLocalLiveAgent)
+        XCTAssertEqual(CarPlayVoiceMode.listed(in: harness.appState), .localLive)
+
         harness.coordinator.selectVoiceMode(.classic)
         XCTAssertFalse(harness.appState.isLocalLiveEnabled)
         XCTAssertEqual(harness.coordinator.observedVoiceMode, .classic)

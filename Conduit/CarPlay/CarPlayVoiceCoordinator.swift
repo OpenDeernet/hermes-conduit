@@ -72,8 +72,8 @@ enum CarPlayVoiceMode: Equatable {
     case qwenLive
     case gptLive
     case grokLive
-    /// Live > Local (agent mode). Classic's hands-free option on the speech
-    /// server is listed as Classic, as on the phone, and runs Classic here.
+    /// Live > Local (agent mode), and Classic's hands-free option on the
+    /// speech server, which runs on the same controller as on the phone.
     case localLive
 
     @MainActor
@@ -82,8 +82,20 @@ enum CarPlayVoiceMode: Equatable {
         if appState.isQwenLiveEnabled { return .qwenLive }
         if appState.isGPTLiveEnabled { return .gptLive }
         if appState.isGrokLiveEnabled { return .grokLive }
-        if appState.isLocalLiveEnabled, appState.isLocalLiveAgent { return .localLive }
+        if appState.isLocalLiveEnabled {
+            // A call from Hermes on the hands-free option opens classic
+            // voice, which says why Hermes called: the car follows it.
+            if appState.isLocalLiveAgent || !appState.voiceConversationController.hasLiveVoiceSession { return .localLive }
+        }
         return .classic
+    }
+
+    /// The mode as the car's voice list shows it: the hands-free option on
+    /// the speech server is listed as Classic, as on the phone.
+    @MainActor
+    static func listed(in appState: AppState) -> CarPlayVoiceMode {
+        let mode = current(in: appState)
+        return mode == .localLive && !appState.isLocalLiveAgent ? .classic : mode
     }
 }
 
@@ -1091,6 +1103,9 @@ final class CarPlayVoiceCoordinator {
     /// only once it was listening: the car didn't hear the driver.
     func conversationStartingOnPhone(in appState: AppState) {
         guard isConnected, lastBoundAppState === appState else { return }
+        // The phone may have opened another voice than the profile's mode
+        // (classic voice for a call from Hermes on the hands-free option).
+        observeCurrentVoiceMode(appState)
         // A chat list still waiting for the voice screen stays closed.
         isChatPickerPending = false
         guard isBrowsing else { return }
@@ -1314,7 +1329,7 @@ final class CarPlayVoiceCoordinator {
         let appState = lastBoundAppState ?? appStateProvider()
         listedAgentProfiles = appState.profiles.count > 1 ? appState.profiles : []
         push(CarPlayBrowseTemplateFactory.voiceTemplate(
-            modes: CarPlayBrowse.modeRows(current: CarPlayVoiceMode.current(in: appState)),
+            modes: CarPlayBrowse.modeRows(current: CarPlayVoiceMode.listed(in: appState)),
             agents: CarPlayBrowse.agentRows(
                 profiles: appState.profiles,
                 active: appState.activeProfile,
@@ -1493,7 +1508,7 @@ final class CarPlayVoiceCoordinator {
         guard isConnected else { return }
         returnToVoiceScreen()
         let appState = lastBoundAppState ?? appStateProvider()
-        guard mode != CarPlayVoiceMode.current(in: appState) else { return }
+        guard mode != CarPlayVoiceMode.listed(in: appState) else { return }
         endConversation()
         // Saved as Settings > Voice > Voice mode saves it.
         appState.applyVoiceMode(mode.choice)
