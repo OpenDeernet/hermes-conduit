@@ -1435,7 +1435,7 @@ struct V2ChatsView: View, Equatable {
             }
         } header: {
             if section == .pinned {
-                pinnedHeader(count: nodes.count)
+                pinnedHeader(nodes.map(\.session))
             } else {
                 collapsibleHeader(section, count: nodes.count)
             }
@@ -1588,10 +1588,12 @@ struct V2ChatsView: View, Equatable {
     }
 
     /// The Pinned header, whose touch-and-hold menu (and VoiceOver action)
-    /// reorders the profile in use's pinned chats.
-    private func pinnedHeader(count: Int) -> some View {
-        collapsibleHeader(.pinned, count: count)
-            .reorderPinnedChatsMenu(isOn: count > 1) {
+    /// reorders the profile in use's pinned chats; in All's mixed section
+    /// it offers that once the profile in use has two pins there.
+    private func pinnedHeader(_ pinned: [SessionSummary]) -> some View {
+        let own = pinned.filter { !appState.isOtherProfileRow($0) }.count
+        return collapsibleHeader(.pinned, count: pinned.count)
+            .reorderPinnedChatsMenu(isOn: own > 1) {
                 pinnedOrderTarget = PinnedChatsOrderTarget(profile: appState.activeProfile)
             }
     }
@@ -1933,7 +1935,7 @@ struct V2ChatsView: View, Equatable {
                         listRows(pinned.map(V2ChatsListItem.leaf), movesPinned: dragsPinned)
                     }
                 } header: {
-                    pinnedHeader(count: pinned.count)
+                    pinnedHeader(pinned)
                 }
             }
 
