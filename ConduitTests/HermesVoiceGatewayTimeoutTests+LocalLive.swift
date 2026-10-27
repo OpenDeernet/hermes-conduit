@@ -480,6 +480,34 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertEqual(items.first { $0.name == "mode" }?.value, "speak")
     }
 
+    func testVoiceRoutesNameAnotherProfileAsConduitProfileWhenThePluginTakesIt() throws {
+        // Hermes 0.22.3+ sends ?profile=<another profile> to that profile's
+        // plugin host, which has no sockets (#1336).
+        var plugin = NotifierPluginStatus()
+        XCTAssertEqual(plugin.voiceProfileParameter, "profile", "not asked yet: as before")
+        plugin.state = .reported(version: "0.89.0", capabilities: ["local-live"])
+        XCTAssertEqual(plugin.voiceProfileParameter, "profile", "an older plugin keeps ?profile=")
+        plugin.state = .reported(version: "0.90.0", capabilities: ["local-live", DashboardPath.dashboardProfilesCapability])
+        XCTAssertEqual(plugin.voiceProfileParameter, DashboardPath.conduitProfileParameter)
+
+        XCTAssertEqual(DashboardPath.withProfile(LocalLiveProtocol.statusPath, profile: "work", parameter: "conduit_profile"),
+                       LocalLiveProtocol.statusPath + "?conduit_profile=work")
+        XCTAssertEqual(DashboardPath.withProfile(LocalLiveProtocol.statusPath, profile: "default", parameter: "conduit_profile"),
+                       LocalLiveProtocol.statusPath, "the dashboard's own profile still goes without one")
+        XCTAssertEqual(LocalLiveProtocol.profileQueryItems("work", parameter: "conduit_profile"),
+                       [URLQueryItem(name: "conduit_profile", value: "work")])
+        let speak = try HermesVoiceGateway.speechServerSpeechRequest(
+            baseURL: "https://hermes.example", ticket: "t", profile: "work", profileParameter: "conduit_profile", cloudflareAccess: nil)
+        let speakItems = URLComponents(url: try XCTUnwrap(speak.url), resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(speakItems.first { $0.name == "conduit_profile" }?.value, "work")
+        XCTAssertNil(speakItems.first { $0.name == "profile" })
+        let listen = try HermesVoiceGateway.speechServerRequest(
+            baseURL: "https://hermes.example", ticket: "t", profile: "work", profileParameter: "conduit_profile", cloudflareAccess: nil)
+        let listenItems = URLComponents(url: try XCTUnwrap(listen.url), resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(listenItems.first { $0.name == "conduit_profile" }?.value, "work")
+        XCTAssertNil(listenItems.first { $0.name == "profile" })
+    }
+
     func testLocalLiveSetupCopiesAsOneBlockForAnAgent() throws {
         let status = SpeechServerVoiceStatus(response: [
             "available": true,

@@ -2560,6 +2560,36 @@ or doc gives a width
 
 **Checked:** 2026-10-26, #1320.
 
+## Voice on a profile the dashboard didn't start with
+
+Voice and Watch calls on a profile other than the one the Hermes dashboard
+started with. Hermes 0.22.3+ (PLG-3) runs such a profile's plugin requests in
+a plugin host of its own, which carries no WebSockets and none of the
+dashboard process's state, so these routes take the profile as
+`?conduit_profile=` and stay in the dashboard (#1336).
+
+**Siblings:** Local Live (status, key, the call socket, Classic's speak
+socket) · Classic voice listening on a speech server · Grok Live's relay
+socket · Watch calls (tool grant, revoke, audio status and prepare) · the
+plugin update nudge (the `dashboard-profiles` capability) · Local Live's
+reason when it runs in a plugin host · the notifier README · Gemini, Qwen and
+GPT-Live tokens (plain HTTP that works in the host, so not needed)
+
+**Code**
+- App: `Conduit/Services/DashboardPath.swift` (conduitProfileParameter), `Conduit/Services/NotifierPluginStatus.swift` (voiceProfileParameter, usedCapabilities), `Conduit/Voice/LocalLive/LocalLiveClient.swift`, `Conduit/Voice/GrokLive/GrokLiveClient.swift`, `Conduit/Voice/HermesVoiceGateway.swift` (profileParameter), `Conduit/Voice/SpeechServerTranscription.swift`, `Conduit/Voice/SpeechServerSpeech.swift`, `Conduit/Voice/HermesVoiceConfigurationService.swift`, `Conduit/Watch/WatchToolGrantClient.swift`, `Shared/LocalLive/LocalLiveProtocol.swift`
+- Notifier: `notifier/dashboard/plugin_api.py` (_conduit_route_profile, LOCAL_LIVE_PLUGIN_HOST_REASON, ROUTE_CAPABILITIES), `notifier/README.md`
+- Tests: `ConduitTests/HermesVoiceGatewayTimeoutTests+LocalLive.swift`, `notifier/tests/test_local_live.py`, `notifier/tests/test_grok_live.py`
+
+**Rulings**
+- A workaround until Hermes' plugin host carries WebSockets (asked for on NousResearch/hermes-agent#140051). Conduit sends `?conduit_profile=`, which Hermes doesn't route on, only to a plugin that lists `dashboard-profiles`; an older plugin keeps `?profile=`. The plugin scopes the route to that profile after Hermes' own consent check there, and refuses it on a Hermes Desktop ticket, which acts for one profile only (2026-10-27, Eric, #1336).
+- The dashboard's own profile ("default") still goes without a profile parameter.
+
+**Open gaps**
+- Other plugin routes that rely on the dashboard process (chat takeover, Desktop views, the turn surface, Hermes calls, chat on screen) still send `?profile=`, so on such a profile they run in the plugin host; not checked one by one.
+- Drop the workaround once Hermes' plugin host carries WebSockets.
+
+**Checked:** 2026-10-27, #PRNUM.
+
 ## Feature map rules
 
 How a change brings its connected features along, and how this map stays

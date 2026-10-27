@@ -3529,6 +3529,8 @@ final class AppState: ObservableObject {
     /// at call time.
     lazy var grokLiveClient = GrokLiveClient(profile: { [weak self] in
         self?.activeProfile ?? "default"
+    }, profileParameter: { [weak self] in
+        self?.notifierPlugin.voiceProfileParameter ?? "profile"
     }, request: { [weak self] path, method, body, timeout in
         guard let bridge = self?.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
         return try await bridge.requestJSON(path: path, method: method, body: body, timeoutMilliseconds: timeout)
@@ -3855,6 +3857,8 @@ final class AppState: ObservableObject {
     /// at call time.
     lazy var localLiveClient = LocalLiveClient(profile: { [weak self] in
         self?.activeProfile ?? "default"
+    }, profileParameter: { [weak self] in
+        self?.notifierPlugin.voiceProfileParameter ?? "profile"
     }, dashboardBaseURL: { [weak self] in
         self?.connection?.baseUrl
     }, request: { [weak self] path, method, body, timeout in
@@ -34114,6 +34118,7 @@ final class AppState: ObservableObject {
             bridge: dashboardTicketBridge,
             baseURL: connection.baseUrl,
             profile: profile ?? activeProfile,
+            profileParameter: notifierPlugin.voiceProfileParameter,
             speechOutput: { [weak self] in self?.voiceSpeechOutput ?? .onDevice },
             makeOnDeviceSpeech: { onStart, onPCM16 in OnDeviceSpeechStream(onStart: onStart, onPCM16: onPCM16) },
             fallsBackToOnDeviceSpeech: fallsBackToOnDeviceSpeech
@@ -34298,7 +34303,8 @@ final class AppState: ObservableObject {
         appleSpeechAvailability = AppleOnDeviceSpeechTranscriber.currentAvailability()
         let service = HermesVoiceConfigurationService(
             requester: voiceCapabilityRequesterForTesting ?? bridge,
-            profile: profile
+            profile: profile,
+            profileParameter: notifierPlugin.voiceProfileParameter
         )
         await service.reload()
         guard profile == activeProfile, bridge === dashboardTicketBridge else { return }
