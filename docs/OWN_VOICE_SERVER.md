@@ -91,7 +91,8 @@ starts when you tap the voice button. The status screen stays on
 "Connecting" until the server has asked Hermes once, so a wrong address
 shows up right away.
 
-Local Live also works on the Apple Watch with plugin 0.48 or later.
+Local Live also works on the Apple Watch with plugin 0.48 or later, and in
+CarPlay when Voice mode is Live > Local.
 
 ## Agent mode (coming)
 

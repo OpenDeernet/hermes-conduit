@@ -4084,6 +4084,46 @@ final class AppState: ObservableObject {
         return true
     }
 
+    /// Starts Local Live for the CarPlay surface. CarPlay presents it, so no
+    /// phone sheet opens; the other voice modes and read aloud stop first,
+    /// as on the phone.
+    func startLocalLiveForCarPlay(attachingTo thread: VoiceThreadTarget? = nil) async {
+        guard isConnected else { return }
+        messageReadAloudController.stop()
+        if showVoiceSheet || voiceConversationController.hasLiveVoiceSession { closeVoiceConversation() }
+        stopQwenLiveConversation()
+        stopGeminiLiveConversation()
+        stopGPTLiveConversation()
+        stopGrokLiveConversation()
+        guard !localLiveController.isActive else { return }
+        // A call started from CarPlay's chat list is attached to that chat,
+        // as one started from a chat on the phone is.
+        if let thread {
+            voiceBackgroundJobSupervisor.attachLiveThread(thread)
+        } else {
+            voiceBackgroundJobSupervisor.detachLiveThread()
+        }
+        localLiveTurns.reset()
+        localLiveOwnChat = nil
+        beginVoiceCallRecording(engine: .localLive)
+        await localLiveController.start()
+    }
+
+    /// CarPlay went away. A Local Live call only CarPlay was presenting
+    /// ends; one the phone's sheet or minimised bar shows keeps going.
+    func releaseCarPlayLocalLive() {
+        guard !(isSceneActive && (showLocalLiveSheet || minimisedLiveVoice == .localLive)) else { return }
+        if isLocalLiveActive {
+            closeLocalLiveConversation()
+        } else {
+            // Its work lets go of the call too (#449).
+            finishHermesCallbacks(engine: .localLive)
+            if voiceCallRecorder?.engine == .localLive { finishVoiceCallRecording() }
+            // A minimised call that failed has nothing left to show.
+            if minimisedLiveVoice == .localLive { minimisedLiveVoice = nil }
+        }
+    }
+
     func closeLocalLiveConversation() {
         callOffWaitingCall(.localLive)
         // Before the call stops, while its transcript still reads (#449).
@@ -34699,8 +34739,12 @@ final class AppState: ObservableObject {
             return await resumeVoiceCall(sessionID: callID)
         }
         // A call from Hermes opens with its news, which Local Live has no
-        // model of its own to say: classic voice takes it.
-        if intent.source == .hermesCall, liveEngine == .localLive { liveEngine = nil }
+        // model of its own to say outside agent mode: classic voice takes
+        // it. In agent mode its fast model says it (#1376).
+        if intent.source == .hermesCall, liveEngine == .localLive,
+           !loadVoiceProfilePreferences(profile: targetProfile).localLiveAgent {
+            liveEngine = nil
+        }
         if intent.source == .screenQuestion {
             // The device-test gate: an engine not cleared for screen
             // questions takes them in classic voice.
