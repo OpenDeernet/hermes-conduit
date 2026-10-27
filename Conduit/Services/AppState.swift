@@ -2250,6 +2250,9 @@ final class AppState: ObservableObject {
     /// Words the composer puts back: a waiting message taken back to edit,
     /// or one its chat never took. ComposerBar applies each, then consumes it.
     @Published var composerRestoreRequests: [ComposerRestoreRequest] = []
+    /// A composer send still checking Hermes before its message shows: the
+    /// composer says it's sending meanwhile (#1401).
+    @Published private(set) var composerSendCheck: ComposerSendCheck?
     /// Why a waiting message went back to a draft, until it's dismissed or
     /// the composer is used.
     @Published var composerNotice: String? {
@@ -24049,6 +24052,12 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// The composer's send still belongs to the chat on screen: a failed
+    /// one that doesn't has said nothing about it.
+    func composerSubmissionIsCurrent(_ context: ComposerSubmissionContext) -> Bool {
+        isCurrentComposerSubmission(context)
+    }
+
     private func isCurrentComposerSubmission(_ context: ComposerSubmissionContext) -> Bool {
         guard context.profile == activeProfile,
               context.clientIdentity == client.map(ObjectIdentifier.init),
@@ -24205,7 +24214,9 @@ final class AppState: ObservableObject {
         // behind it: the first message starts one, as New Chat would, and
         // goes into it rather than nowhere.
         if composerSubmissionStartsChat(text: text, attachments: attachments, context: submissionContext) {
-            guard let started = await startChatForComposerSubmission() else { return false }
+            guard let started = await checkingBeforeSend(submissionContext, {
+                await startChatForComposerSubmission()
+            }) else { return false }
             submissionContext = started
         }
         let sent = await performComposerSubmission(
@@ -24321,7 +24332,7 @@ final class AppState: ObservableObject {
         // One authoritative read-only probe corrects the state before the
         // routing decision. Trusted state never pays for the probe.
         if turnState == .idle, turnStateIsStale,
-           await correctStaleIdleTurnState(using: submissionContext) {
+           await checkingBeforeSend(submissionContext, { await correctStaleIdleTurnState(using: submissionContext) }) {
             if let onBusy { onBusy(); return false }
             lifecycleLog.notice("submitComposer: stale-idle corrected to running → busy \(busyMode.rawValue, privacy: .public)")
             return await submitWhileBusy(text, attachments: attachments, mode: busyMode, context: submissionContext)
@@ -24347,9 +24358,9 @@ final class AppState: ObservableObject {
         // transcript.
         if turnState == .idle,
            transcriptFreshnessIsStale || pendingLocalOrderingDebt != nil {
-            switch await confirmTranscriptFreshnessBeforeSend(
-                using: submissionContext
-            ) {
+            switch await checkingBeforeSend(submissionContext, {
+                await confirmTranscriptFreshnessBeforeSend(using: submissionContext)
+            }) {
             case .proceed:
                 break
             case .routeToBusySubmission:
@@ -24380,6 +24391,32 @@ final class AppState: ObservableObject {
             restorePendingScreenshot(screenshot)
         }
         return sent
+    }
+
+    /// A check Hermes answers before a send's message shows. On a slow or
+    /// dropped connection it can take seconds, and the field is empty by
+    /// then: without a word from the composer the message looked as if it
+    /// went nowhere, and leaving the chat to retry dropped it (#1401).
+    private func checkingBeforeSend<T>(
+        _ context: ComposerSubmissionContext,
+        _ check: () async -> T
+    ) async -> T {
+        let marker = ComposerSendCheck(
+            sessionID: context.sessionID,
+            viewportTransitionGeneration: context.viewportTransitionGeneration
+        )
+        composerSendCheck = marker
+        defer {
+            if composerSendCheck?.id == marker.id { composerSendCheck = nil }
+        }
+        return await check()
+    }
+
+    /// The chat on screen has a send still checking Hermes.
+    var composerSendIsChecking: Bool {
+        guard let check = composerSendCheck else { return false }
+        return check.sessionID == activeSessionId
+            && check.viewportTransitionGeneration == chatViewportTransitionGeneration
     }
 
     /// A typed message while a turn runs, by `mode`: into the turn, as a

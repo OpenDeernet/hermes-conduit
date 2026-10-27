@@ -610,6 +610,10 @@ struct ComposerBar: View, Equatable {
                 compressingNotice
             }
 
+            if appState.composerSendIsChecking {
+                sendingNotice
+            }
+
             if let takeover = appState.activeChatTakeover {
                 chatTakeoverNotice(takeover)
             }
@@ -1159,6 +1163,24 @@ struct ComposerBar: View, Equatable {
         .padding(.bottom, 2)
     }
 
+    /// A sent message checking Hermes before it shows (#1401): the field
+    /// is empty, so this says it's on its way.
+    private var sendingNotice: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text(AppLocalization.string("Sending…"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("composer.sending")
+    }
+
     private func pasteErrorNotice(_ message: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -1587,6 +1609,8 @@ struct ComposerBar: View, Equatable {
         let submittedDraftKey = loadedDraftKey ?? activeDraftKey
         let submittedDraftBucket = draftStore.submissionBucket(for: submittedDraftKey)
         let submittedClearCount = draftStore.clearCount
+        let submittedDashboardID = appState.activeDashboardID
+        let submittedChatTitle = appState.displayedChatTitle
         let submissionContext = appState.composerSubmissionContext()
         rotateAttachmentGeneration()
         collapseSubmittedDraft(clearingReply: submittedReply != nil)
@@ -1611,6 +1635,9 @@ struct ComposerBar: View, Equatable {
                     attachments: submittedAttachments,
                     replyReference: submittedReply,
                     for: submittedDraftKey,
+                    dashboardID: submittedDashboardID,
+                    chatTitle: submittedChatTitle,
+                    stoppedQuietly: !appState.composerSubmissionIsCurrent(submissionContext),
                     clearCount: submittedClearCount
                 )
                 Haptics.error()
@@ -1960,6 +1987,9 @@ struct ComposerBar: View, Equatable {
         attachments submittedAttachments: [Attachment],
         replyReference submittedReply: ComposerReplyReference?,
         for key: ComposerDraftKey,
+        dashboardID: UUID?,
+        chatTitle: String,
+        stoppedQuietly: Bool,
         clearCount: UInt64
     ) {
         // A sign-out or server switch cleared the drafts while it was on
@@ -1972,6 +2002,20 @@ struct ComposerBar: View, Equatable {
             attachments: submittedAttachments,
             replyReference: submittedReply
         )
+        // AppState hands them to the composer on screen, which may not be
+        // this one: leaving the chat mid-send replaces it, and words put in
+        // this one's field then were lost (#1401). Words typed meanwhile
+        // stay, below the message that didn't go.
+        if let dashboardID {
+            appState.returnFailedComposerSubmission(
+                failed,
+                key: key,
+                dashboardID: dashboardID,
+                title: chatTitle,
+                stoppedQuietly: stoppedQuietly
+            )
+            return
+        }
         let restorationKey: ComposerDraftKey
         if Self.draftKeysAreEquivalent(
             key,
@@ -1987,8 +2031,6 @@ struct ComposerBar: View, Equatable {
             draftStore.restoreFailedSubmission(failed, for: restorationKey)
             return
         }
-        // Words typed while the failed request was in flight stay, below
-        // the message that didn't go.
         let restored = ComposerDraft(text: text, attachments: attachments, replyReference: replyReference)
             .restoring(failed)
         // Put back, not typed: a failed "/cmd" opens no suggestions.

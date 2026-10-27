@@ -30,6 +30,13 @@ struct ComposerRestoreRequest: Equatable, Identifiable {
     var dictationClipID: UUID? = nil
 }
 
+/// A send checking Hermes before its message shows, and the chat it's in.
+struct ComposerSendCheck: Equatable, Identifiable {
+    let id = UUID()
+    let sessionID: String?
+    let viewportTransitionGeneration: UInt64
+}
+
 /// The chat the composer types into right now.
 enum ComposerChatOnScreen: Equatable {
     case none
@@ -194,6 +201,36 @@ extension AppState {
         pendingComposerSend = nil
         composerNotice = nil
         composerRestoreRequests.append(restoreRequest(for: pending, key: durableComposerDraftKeyOnScreen, focuses: true))
+    }
+
+    /// A send that didn't go: its words go back into the draft they were
+    /// typed in. Through here rather than the composer that sent them,
+    /// which may have gone (the chat left while the send was on its way)
+    /// and would take them with it; whichever composer is on screen puts
+    /// them in its field, or in their chat's stored draft (#1401).
+    /// `stoppedQuietly`: the send stopped without an error to say so (its
+    /// chat was left before its message showed), so a notice says where
+    /// the words went.
+    func returnFailedComposerSubmission(
+        _ draft: ComposerDraft,
+        key: ComposerDraftKey,
+        dashboardID: UUID,
+        title: String,
+        stoppedQuietly: Bool
+    ) {
+        composerRestoreRequests.append(ComposerRestoreRequest(
+            dashboardID: dashboardID,
+            key: key,
+            draft: draft,
+            focuses: false,
+            pending: nil
+        ))
+        guard stoppedQuietly else { return }
+        let onScreen = dashboardID == activeDashboardID
+            && composerDraftKeysAreSameChat(key, durableComposerDraftKeyOnScreen)
+        composerNotice = onScreen
+            ? AppLocalization.string("Your message wasn't sent. It's back in the composer.")
+            : AppLocalization.string("Your message to “\(title)” wasn't sent. It's back in that chat's draft.")
     }
 
     /// The composer put the words back: the waiting message's file goes too.
