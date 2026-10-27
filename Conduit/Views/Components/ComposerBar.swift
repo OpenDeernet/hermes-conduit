@@ -1614,6 +1614,10 @@ struct ComposerBar: View, Equatable {
         let submittedClearCount = draftStore.clearCount
         let submittedDashboardID = appState.activeDashboardID
         let submittedChatTitle = appState.displayedChatTitle
+        // The words may come back after the chat's runtime id has moved on:
+        // they go back by its durable id, as a waiting message's do.
+        let submittedRestoreKey = submittedDraftKey == activeDraftKey
+            ? appState.durableComposerDraftKeyOnScreen : submittedDraftKey
         let submissionContext = appState.composerSubmissionContext()
         rotateAttachmentGeneration()
         collapseSubmittedDraft(clearingReply: submittedReply != nil)
@@ -1638,6 +1642,7 @@ struct ComposerBar: View, Equatable {
                     attachments: submittedAttachments,
                     replyReference: submittedReply,
                     for: submittedDraftKey,
+                    restoringTo: submittedRestoreKey,
                     dashboardID: submittedDashboardID,
                     chatTitle: submittedChatTitle,
                     stoppedQuietly: appState.composerSubmissionStoppedQuietly(submissionContext),
@@ -1990,6 +1995,7 @@ struct ComposerBar: View, Equatable {
         attachments submittedAttachments: [Attachment],
         replyReference submittedReply: ComposerReplyReference?,
         for key: ComposerDraftKey,
+        restoringTo durableKey: ComposerDraftKey,
         dashboardID: UUID?,
         chatTitle: String,
         stoppedQuietly: Bool,
@@ -2012,7 +2018,7 @@ struct ComposerBar: View, Equatable {
         if let dashboardID {
             appState.returnFailedComposerSubmission(
                 failed,
-                key: key,
+                key: durableKey,
                 dashboardID: dashboardID,
                 title: chatTitle,
                 stoppedQuietly: stoppedQuietly
