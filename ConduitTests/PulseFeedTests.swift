@@ -1069,10 +1069,9 @@ final class PulseFeedTests: XCTestCase {
             AppLocalization.string("Done"),
             AppLocalization.string("Done, seen in the chat"),
         ])
-        // Undo there: the one put off stays put off, a remembered thing is checked on again, and a
-        // found item is back on the list.
-        XCTAssertEqual(cards.map(\.undoDoneHint), [
-            AppLocalization.string("Keeps the card put away"),
+        // Undo on the done ones (the one only put off has Put back): the one put off stays put
+        // off, a remembered thing is checked on again, and a found item is back on the list.
+        XCTAssertEqual(cards.filter { $0.doneAt != nil }.map(\.undoDoneHint), [
             AppLocalization.string("Keeps the card put away"),
             AppLocalization.string("Pulse checks on it again"),
             AppLocalization.string("Puts the card back on the list"),
