@@ -1484,6 +1484,9 @@ struct V2ChatsView: View, Equatable {
             }
         } header: {
             profileSectionHeader(profile, count: nodes.count)
+                .reorderPinnedChatsMenu(isOn: nodes.filter { appState.isSessionPinned($0.session) }.count > 1) {
+                    pinnedOrderTarget = PinnedChatsOrderTarget(profile: profile)
+                }
         }
     }
 
@@ -1586,23 +1589,11 @@ struct V2ChatsView: View, Equatable {
 
     /// The Pinned header, whose touch-and-hold menu (and VoiceOver action)
     /// reorders the profile in use's pinned chats.
-    @ViewBuilder
     private func pinnedHeader(count: Int) -> some View {
-        if count > 1 {
-            let reorder = { pinnedOrderTarget = PinnedChatsOrderTarget(profile: appState.activeProfile) }
-            collapsibleHeader(.pinned, count: count)
-                .contextMenu {
-                    Button {
-                        Haptics.selection()
-                        DispatchQueue.main.async { reorder() }
-                    } label: {
-                        Label(AppLocalization.string("Reorder pinned chats"), systemImage: "arrow.up.arrow.down")
-                    }
-                }
-                .accessibilityAction(named: Text(AppLocalization.string("Reorder pinned chats")), reorder)
-        } else {
-            collapsibleHeader(.pinned, count: count)
-        }
+        collapsibleHeader(.pinned, count: count)
+            .reorderPinnedChatsMenu(isOn: count > 1) {
+                pinnedOrderTarget = PinnedChatsOrderTarget(profile: appState.activeProfile)
+            }
     }
 
     /// Opens the section holding a conversation opened from elsewhere (a

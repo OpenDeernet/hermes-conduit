@@ -63,3 +63,25 @@ struct PinnedChatsOrderSheet: View {
         .presentationDragIndicator(.visible)
     }
 }
+
+extension View {
+    /// A Pinned header's touch-and-hold menu and VoiceOver action, which
+    /// open Reorder pinned chats while there are pins to put in order.
+    @ViewBuilder
+    func reorderPinnedChatsMenu(isOn: Bool, open: @escaping () -> Void) -> some View {
+        if isOn {
+            contextMenu {
+                Button {
+                    Haptics.selection()
+                    // Next turn, as Rename: the sheet waits for the menu to close.
+                    DispatchQueue.main.async { open() }
+                } label: {
+                    Label(AppLocalization.string("Reorder pinned chats"), systemImage: "arrow.up.arrow.down")
+                }
+            }
+            .accessibilityAction(named: Text(AppLocalization.string("Reorder pinned chats")), open)
+        } else {
+            self
+        }
+    }
+}

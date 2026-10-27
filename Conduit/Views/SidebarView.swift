@@ -379,10 +379,12 @@ struct SessionList: View {
                     // without leaving the folder view (#338).
                     let pinned = projectsViewPinnedSessions
                     if !pinned.isEmpty {
-                        Section("Pinned") {
+                        Section {
                             ForEach(pinned) { session in
                                 sessionRow(session)
                             }
+                        } header: {
+                            pinnedHeader(count: pinned.count)
                         }
                     }
                     projectContent(hasPinnedSessions: !pinned.isEmpty)
@@ -416,10 +418,12 @@ struct SessionList: View {
 
                 let sections = nestedSessionSections
                 if layout.liveSections && !sections.pinned.isEmpty {
-                    Section("Pinned") {
+                    Section {
                         ForEach(sections.pinned) { node in
                             sessionNestRow(node, depth: 0)
                         }
+                    } header: {
+                        pinnedHeader(count: sections.pinned.count)
                     }
                 }
 
@@ -605,6 +609,15 @@ struct SessionList: View {
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The Pinned header, whose touch-and-hold menu reorders the profile in
+    /// use's pinned chats (issue 1354).
+    private func pinnedHeader(count: Int) -> some View {
+        Text(AppLocalization.string("Pinned"))
+            .reorderPinnedChatsMenu(isOn: count > 1) {
+                pinnedOrderTarget = PinnedChatsOrderTarget(profile: appState.activeProfile)
+            }
     }
 
     /// A search that only matches pinned chats shows them without a "No
