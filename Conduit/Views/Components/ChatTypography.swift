@@ -253,6 +253,7 @@ enum ChatTypography {
 
     /// How much a wide window's steps grow body text, from the size they
     /// started at to `widthCategory`, for geometry that keeps up with it.
+    /// The steps are the ones the column took, already short of the cap.
     static func widthRatio(_ appearance: ChatTextAppearance) -> CGFloat {
         guard appearance.widthSteps > 0, let grown = appearance.widthCategory,
               let index = standardCategories.firstIndex(of: grown) else { return 1 }
@@ -268,6 +269,12 @@ enum ChatTypography {
     /// ones a wide window's steps move through.
     static let standardCategories: [UIContentSizeCategory] = [
         .extraSmall, .small, .medium, .large, .extraLarge, .extraExtraLarge, .extraExtraExtraLarge
+    ]
+
+    /// The same sizes for SwiftUI, so the column and its transcript step
+    /// through the same ones (a test holds them to one another).
+    static let standardDynamicTypeSizes: [DynamicTypeSize] = [
+        .xSmall, .small, .medium, .large, .xLarge, .xxLarge, .xxxLarge
     ]
 
     /// `category` moved `steps` sizes up, stopping at the largest standard

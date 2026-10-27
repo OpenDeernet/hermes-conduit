@@ -178,6 +178,8 @@ extension SidebarLayoutTests {
             expected.pointSize * ChatTextSize.larger.scale,
             accuracy: 0.001
         )
+        // The column and its transcript step through the same sizes.
+        XCTAssertEqual(ChatTypography.standardDynamicTypeSizes, ChatTypography.standardCategories.map { DynamicTypeSize($0) })
         // Steps stop at the largest standard size; accessibility sizes stay.
         XCTAssertEqual(ChatTypography.boosted(.extraExtraLarge, by: 3), .extraExtraExtraLarge)
         XCTAssertEqual(ChatTypography.boosted(.accessibilityMedium, by: 2), .accessibilityMedium)
