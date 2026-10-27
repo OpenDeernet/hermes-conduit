@@ -1271,7 +1271,8 @@ final class PulseFeedTests: XCTestCase {
              "why": "You tapped Do it yesterday but didn't send it.", "back": "\(back)", "back_acted_at": 1800000000}
             """)))
         }
-        let now = Date(timeIntervalSince1970: 1_800_000_000 + 86_400)
+        // The next calendar day, whatever a clock change in between.
+        let now = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: 1, to: Date(timeIntervalSince1970: 1_800_000_000)))
         XCTAssertEqual(try card("unsent").backActedAt, Date(timeIntervalSince1970: 1_800_000_000))
         XCTAssertEqual(try card("unsent").backText(now: now), "You tapped Do it yesterday but didn't send it.")
         XCTAssertEqual(try card("not_done").backText(now: now), "You tapped Do it yesterday, and it isn't done yet.")
