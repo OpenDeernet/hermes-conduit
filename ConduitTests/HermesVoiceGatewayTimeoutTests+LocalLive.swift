@@ -484,11 +484,11 @@ extension HermesVoiceGatewayTimeoutTests {
         // Hermes 0.22.3+ sends ?profile=<another profile> to that profile's
         // plugin host, which has no sockets (#1336).
         var plugin = NotifierPluginStatus()
-        XCTAssertEqual(plugin.voiceProfileParameter, "profile", "not asked yet: as before")
+        XCTAssertEqual(plugin.dashboardProfileParameter, "profile", "not asked yet: as before")
         plugin.state = .reported(version: "0.89.0", capabilities: ["local-live"])
-        XCTAssertEqual(plugin.voiceProfileParameter, "profile", "an older plugin keeps ?profile=")
+        XCTAssertEqual(plugin.dashboardProfileParameter, "profile", "an older plugin keeps ?profile=")
         plugin.state = .reported(version: "0.90.0", capabilities: ["local-live", DashboardPath.dashboardProfilesCapability])
-        XCTAssertEqual(plugin.voiceProfileParameter, DashboardPath.conduitProfileParameter)
+        XCTAssertEqual(plugin.dashboardProfileParameter, DashboardPath.conduitProfileParameter)
 
         XCTAssertEqual(DashboardPath.withProfile(LocalLiveProtocol.statusPath, profile: "work", parameter: "conduit_profile"),
                        LocalLiveProtocol.statusPath + "?conduit_profile=work")

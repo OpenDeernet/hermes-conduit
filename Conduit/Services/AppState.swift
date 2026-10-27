@@ -3530,7 +3530,7 @@ final class AppState: ObservableObject {
     lazy var grokLiveClient = GrokLiveClient(profile: { [weak self] in
         self?.activeProfile ?? "default"
     }, profileParameter: { [weak self] in
-        self?.notifierPlugin.voiceProfileParameter ?? "profile"
+        self?.notifierPlugin.dashboardProfileParameter ?? "profile"
     }, request: { [weak self] path, method, body, timeout in
         guard let bridge = self?.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
         return try await bridge.requestJSON(path: path, method: method, body: body, timeoutMilliseconds: timeout)
@@ -3858,7 +3858,7 @@ final class AppState: ObservableObject {
     lazy var localLiveClient = LocalLiveClient(profile: { [weak self] in
         self?.activeProfile ?? "default"
     }, profileParameter: { [weak self] in
-        self?.notifierPlugin.voiceProfileParameter ?? "profile"
+        self?.notifierPlugin.dashboardProfileParameter ?? "profile"
     }, dashboardBaseURL: { [weak self] in
         self?.connection?.baseUrl
     }, request: { [weak self] path, method, body, timeout in
@@ -9164,7 +9164,9 @@ final class AppState: ObservableObject {
         if let cursor = desktopViewsCursor[profile] { path += "?since=\(cursor)" }
         let response: [String: Any]
         do {
-            response = try await bridge.requestJSON(path: dashboardPath(path, profile: profile))
+            // The hook watching Desktop runs in the dashboard process (#1336).
+            response = try await bridge.requestJSON(
+                path: DashboardPath.withProfile(path, profile: profile, parameter: notifierPlugin.dashboardProfileParameter))
         } catch {
             // The next tick past the interval asks again; one line per host.
             if !desktopViewsFailureLogged {
@@ -24944,6 +24946,8 @@ final class AppState: ObservableObject {
     lazy var chatTakeoverClient = ChatTakeoverClient(request: { [weak self] path, method, body in
         guard let bridge = self?.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
         return try await bridge.requestJSON(path: path, method: method, body: body)
+    }, profileParameter: { [weak self] in
+        self?.notifierPlugin.dashboardProfileParameter ?? "profile"
     })
 
     /// The refused chat's takeover offer or progress. The composer shows it
@@ -34118,7 +34122,7 @@ final class AppState: ObservableObject {
             bridge: dashboardTicketBridge,
             baseURL: connection.baseUrl,
             profile: profile ?? activeProfile,
-            profileParameter: notifierPlugin.voiceProfileParameter,
+            profileParameter: notifierPlugin.dashboardProfileParameter,
             speechOutput: { [weak self] in self?.voiceSpeechOutput ?? .onDevice },
             makeOnDeviceSpeech: { onStart, onPCM16 in OnDeviceSpeechStream(onStart: onStart, onPCM16: onPCM16) },
             fallsBackToOnDeviceSpeech: fallsBackToOnDeviceSpeech
@@ -34304,7 +34308,7 @@ final class AppState: ObservableObject {
         let service = HermesVoiceConfigurationService(
             requester: voiceCapabilityRequesterForTesting ?? bridge,
             profile: profile,
-            profileParameter: notifierPlugin.voiceProfileParameter
+            profileParameter: notifierPlugin.dashboardProfileParameter
         )
         await service.reload()
         guard profile == activeProfile, bridge === dashboardTicketBridge else { return }

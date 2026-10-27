@@ -711,7 +711,7 @@ struct SettingsView: View {
                 VoiceSettingsRoute(
                     bridge: bridge,
                     profile: snapshot.profile,
-                    profileParameter: appState.notifierPlugin.voiceProfileParameter,
+                    profileParameter: appState.notifierPlugin.dashboardProfileParameter,
                     profileName: appState.profileDisplayName(snapshot.profile),
                     conversationController: appState.voiceConversationController,
                     actions: VoiceSettingsActions(

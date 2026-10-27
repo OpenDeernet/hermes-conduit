@@ -258,12 +258,12 @@ struct NotifierPluginStatus: Equatable {
         reports("voice-tools") && !Self.isOlder(runningVersion, than: Self.locationVoiceVersion)
     }
 
-    /// Whether the running plugin takes `?conduit_profile=` on its voice and
-    /// Watch routes (DashboardPath.conduitProfileParameter).
+    /// Whether the running plugin takes `?conduit_profile=` on the routes
+    /// that need the dashboard process (DashboardPath.conduitProfileParameter).
     var servesDashboardProfiles: Bool { reports(DashboardPath.dashboardProfilesCapability) }
 
     /// The query parameter that names the profile on those routes.
-    var voiceProfileParameter: String {
+    var dashboardProfileParameter: String {
         servesDashboardProfiles ? DashboardPath.conduitProfileParameter : "profile"
     }
 

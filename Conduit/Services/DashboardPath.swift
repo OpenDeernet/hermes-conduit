@@ -9,9 +9,10 @@ enum DashboardPath {
     /// profile other than the one the dashboard started with in that
     /// profile's own plugin host, which carries no WebSockets and none of the
     /// dashboard's state. A plugin that reports `dashboard-profiles` takes
-    /// the profile as `?conduit_profile=` on its voice and Watch routes
-    /// instead, so they stay in the dashboard: a workaround until Hermes
-    /// carries them (#1336).
+    /// the profile as `?conduit_profile=` instead on the routes that need the
+    /// dashboard (voice and Watch calls, chat takeover, Desktop views,
+    /// predictions), so they stay there: a workaround until Hermes carries
+    /// them (#1336).
     static let conduitProfileParameter = "conduit_profile"
     static let dashboardProfilesCapability = "dashboard-profiles"
 

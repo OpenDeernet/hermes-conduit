@@ -37,7 +37,7 @@ final class WatchToolGrantClient {
             guard let bridge = AppStateRuntimeRegistry.shared.appState.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
             return try await bridge.requestJSON(path: path, method: method, body: body, timeoutMilliseconds: timeout)
         }, profileParameter: {
-            AppStateRuntimeRegistry.shared.appState.notifierPlugin.voiceProfileParameter
+            AppStateRuntimeRegistry.shared.appState.notifierPlugin.dashboardProfileParameter
         })
     }
 
