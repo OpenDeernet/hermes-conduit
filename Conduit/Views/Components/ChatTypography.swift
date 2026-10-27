@@ -122,6 +122,22 @@ enum ChatFontStyle: String, CaseIterable, Equatable {
 struct ChatTextAppearance: Hashable {
     var size: ChatTextSize
     var style: ChatFontStyle = .standard
+    /// Text-size steps a wide window's chat column adds on top of the
+    /// system's (`ReadableWidth.chatTextSteps`). Zero on a phone and
+    /// beside the list.
+    var widthSteps: Int = 0
+    /// The system text size those steps reach: transcript fonts resolve at
+    /// it, as the column's other text does through `dynamicTypeSize`.
+    var widthCategory: UIContentSizeCategory?
+
+    /// This appearance in a column that stepped its text up `steps` sizes,
+    /// to `category` (the column's environment size).
+    func widened(steps: Int, category: ContentSizeCategory) -> ChatTextAppearance {
+        var appearance = self
+        appearance.widthSteps = steps
+        appearance.widthCategory = steps > 0 ? UIContentSizeCategory(category) : nil
+        return appearance
+    }
 
     /// Each size in the default typeface.
     static let smallest = ChatTextAppearance(size: .smallest)
@@ -132,10 +148,13 @@ struct ChatTextAppearance: Hashable {
 
     var scale: CGFloat { size.scale }
 
-    /// The size's identity, plus the style when it isn't the default, so
-    /// default-style keys stay what they were.
+    /// The size's identity, plus the style when it isn't the default and
+    /// the wide window's steps when there are any, so default keys stay
+    /// what they were.
     var cacheIdentity: String {
-        style == .standard ? size.cacheIdentity : "\(size.cacheIdentity)-\(style.rawValue)"
+        var identity = style == .standard ? size.cacheIdentity : "\(size.cacheIdentity)-\(style.rawValue)"
+        if widthSteps > 0, let widthCategory { identity += "-w\(widthCategory.rawValue)" }
+        return identity
     }
 }
 
@@ -227,7 +246,30 @@ enum ChatTypography {
     }
 
     static func dimension(_ value: CGFloat, appearance: ChatTextAppearance) -> CGFloat {
-        dimension(value, chatSize: appearance.size)
+        dimension(value, chatSize: appearance.size) * widthRatio(steps: appearance.widthSteps)
+    }
+
+    /// About how much a wide window's steps grow body text (as at the
+    /// default size), for geometry that keeps up with it.
+    static func widthRatio(steps: Int) -> CGFloat {
+        guard steps > 0 else { return 1 }
+        let growth = ReadableWidth.chatTextGrowth
+        return growth[min(growth.count, steps) - 1]
+    }
+
+    // MARK: Wide windows
+
+    /// The standard (not accessibility) text sizes, smallest first: the
+    /// ones a wide window's steps move through.
+    static let standardCategories: [UIContentSizeCategory] = [
+        .extraSmall, .small, .medium, .large, .extraLarge, .extraExtraLarge, .extraExtraExtraLarge
+    ]
+
+    /// `category` moved `steps` sizes up, stopping at the largest standard
+    /// size. An accessibility size is already larger and stays as it is.
+    static func boosted(_ category: UIContentSizeCategory, by steps: Int) -> UIContentSizeCategory {
+        guard steps > 0, let index = standardCategories.firstIndex(of: category) else { return category }
+        return standardCategories[min(standardCategories.count - 1, index + steps)]
     }
 
     // MARK: Font resolution
@@ -251,7 +293,33 @@ enum ChatTypography {
         appearance: ChatTextAppearance,
         compatibleWith traits: UITraitCollection? = nil
     ) -> UIFont {
-        styled(font(for: role, chatSize: appearance.size, compatibleWith: traits), role: role, style: appearance.style)
+        var traits = traits
+        if appearance.widthSteps > 0 {
+            if let given = traits {
+                traits = UITraitCollection(preferredContentSizeCategory: boosted(given.preferredContentSizeCategory, by: appearance.widthSteps))
+            } else if let widthCategory = appearance.widthCategory {
+                traits = UITraitCollection(preferredContentSizeCategory: widthCategory)
+            }
+        }
+        return styled(font(for: role, chatSize: appearance.size, compatibleWith: traits), role: role, style: appearance.style)
+    }
+
+    /// `font(for:appearance:)` for a view that resolves against its
+    /// environment's text size, which a wide window's column has already
+    /// stepped up (`readableChatColumn`): the steps aren't added twice.
+    static func font(
+        for role: Role,
+        appearance: ChatTextAppearance,
+        environmentCategory: ContentSizeCategory
+    ) -> UIFont {
+        var appearance = appearance
+        appearance.widthSteps = 0
+        appearance.widthCategory = nil
+        return font(
+            for: role,
+            appearance: appearance,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(environmentCategory))
+        )
     }
 
     /// `font` in `style`'s design, its size and bold or italic kept. Code
@@ -318,7 +386,18 @@ private struct ChatTextSizeEnvironmentKey: EnvironmentKey {
     static let defaultValue: ChatTextAppearance = .default
 }
 
+/// The text-size steps a wide window's chat column adds
+/// (`readableChatColumn`), for the chat root to fold into its appearance.
+private struct ChatWidthTextStepsEnvironmentKey: EnvironmentKey {
+    static let defaultValue = 0
+}
+
 extension EnvironmentValues {
+    var chatWidthTextSteps: Int {
+        get { self[ChatWidthTextStepsEnvironmentKey.self] }
+        set { self[ChatWidthTextStepsEnvironmentKey.self] = newValue }
+    }
+
     /// The transcript typography this subtree renders content with, size
     /// and typeface (the name predates the typeface). Injected at the chat
     /// root; read by MarkdownText and friends.

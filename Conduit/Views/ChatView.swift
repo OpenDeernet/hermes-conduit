@@ -311,11 +311,16 @@ struct ChatView: View {
     /// The chat text style (typeface), stored and injected beside the size.
     @AppStorage(ChatTypography.fontStylePreferenceKey) private var chatFontStyleRaw = ChatFontStyle.standard.rawValue
 
+    /// A wide window's column steps its text up (`readableChatColumn`).
+    @Environment(\.chatWidthTextSteps) private var chatWidthTextSteps
+    @Environment(\.sizeCategory) private var columnSizeCategory
+
     private var chatTextSize: ChatTextAppearance {
         ChatTextAppearance(
             size: chatTextSizeOverride ?? ChatTypography.resolve(rawValue: chatTextSizeRaw),
             style: chatTextSizeOverride == nil ? ChatTypography.resolveStyle(rawValue: chatFontStyleRaw) : .standard
         )
+        .widened(steps: chatTextSizeOverride == nil ? chatWidthTextSteps : 0, category: columnSizeCategory)
     }
 
     var body: some View {
@@ -1625,13 +1630,7 @@ struct SteerMessageContent: View, Equatable {
 
     /// One line of the reply's body text, for the icon's box.
     private var bodyLineHeight: CGFloat {
-        ChatTypography.font(
-            for: .body,
-            appearance: chatTextSize,
-            compatibleWith: UITraitCollection(
-                preferredContentSizeCategory: UIContentSizeCategory(sizeCategory)
-            )
-        ).lineHeight
+        ChatTypography.font(for: .body, appearance: chatTextSize, environmentCategory: sizeCategory).lineHeight
     }
 
     var body: some View {

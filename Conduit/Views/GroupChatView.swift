@@ -26,6 +26,10 @@ struct GroupChatView: View {
     /// Bumped to build the transcript's scroll view again when SwiftUI left
     /// it blank (GroupRoomFollow.isBlank).
     @State private var transcriptScrollID = 0
+    /// A wide window's column steps its text up (`readableChatColumn`); the
+    /// room's messages follow it as a chat's do.
+    @Environment(\.chatWidthTextSteps) private var chatWidthTextSteps
+    @Environment(\.sizeCategory) private var columnSizeCategory
 
     var body: some View {
         Group {
@@ -45,6 +49,7 @@ struct GroupChatView: View {
         .animation(.easeInOut(duration: 0.2), value: appState.minimisedLiveVoice)
         // Each bot's color, for its name, bubble, tags and "To" chip.
         .environment(\.groupMemberTints, appState.groupMemberTints(members))
+        .environment(\.chatTextSize, ChatTextAppearance(size: .default).widened(steps: chatWidthTextSteps, category: columnSizeCategory))
         .toolbar { toolbarContent }
         // V2's screen hosts this view and owns the room menu and picker.
         .modifier(GroupRoomPicturePicker(request: $choosingPicture, isEnabled: !isV2))
