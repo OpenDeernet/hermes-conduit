@@ -1322,7 +1322,7 @@ final class ChatScrollEngine: ObservableObject {
     /// reopened. While live rows show, a layout pass checks as well, one
     /// check at a time, and not soon after a rebuild.
     private func scheduleBlankViewportCheckDuringLiveTurn() {
-        guard !blankViewportCheckPending, mode == .following, liveTailShowing() else { return }
+        guard !blankViewportCheckPending, mode == .following, !isPaused, !isDragging, liveTailShowing() else { return }
         if let last = lastBlankViewportRebuildAt, now() - last < Self.liveBlankViewportRebuildInterval {
             return
         }
