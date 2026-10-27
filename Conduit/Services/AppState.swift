@@ -23969,13 +23969,19 @@ final class AppState: ObservableObject {
             // The branch is another conversation: the parent's agents stay
             // with the parent.
             keepDelegateAgents(of: knownSessionIDs(for: branched.sessionId))
+            // Hermes' session.resume finds a conversation by its stored id
+            // (or title), never by the runtime id session.create answered
+            // with: resuming that one is "session not found" (issue 1400).
+            // The stored id reattaches the live session the create made.
+            let resumeID = branched.storedSessionId.flatMap { $0.isEmpty ? nil : $0 }
+                ?? branched.sessionId
             let token = beginReconciliation()
             let reconciled = await reconcile(
-                sessionId: branched.sessionId,
+                sessionId: resumeID,
                 using: client,
                 token: token,
-                acceptedSessionIDs: knownSessionIDs(for: branched.sessionId),
-                conversationIdentity: captureConversationIdentity(for: branched.sessionId),
+                acceptedSessionIDs: knownSessionIDs(for: resumeID),
+                conversationIdentity: captureConversationIdentity(for: resumeID),
                 requiredViewportTransitionGeneration: transitionGeneration
             )
             guard chatViewportTransitionIsCurrent(generation: transitionGeneration),
