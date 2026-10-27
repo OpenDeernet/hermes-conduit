@@ -1413,9 +1413,9 @@ starts on on a Mac and off on iPhone and iPad; the on-screen keyboard's
 Return key always inserts a new line.
 
 **Siblings:** the chat composer's inline field (chats, project chats, Bot
-Chat; done) · the full editor, a chat's and a room's (done, PRNUM) · group
-rooms' field (done, PRNUM) · the Mac, where the iPad app's text system
-takes Return before the key presses reach the field (done, PRNUM: a Return
+Chat; done) · the full editor, a chat's and a room's (done, #1394) · group
+rooms' field (done, #1394) · the Mac, where the iPad app's text system
+takes Return before the key presses reach the field (done, #1394: a Return
 key command with priority over the text system) · iPad and iPhone with a
 hardware keyboard (done, the same command, with the key-press route kept
 for keypad Enter) · the Keyboard caption ("When on, Return sends and
@@ -1445,14 +1445,14 @@ Keyboard caption is unchanged, as it describes the option)
   #1315, see Send while dictating).
 - Every composer takes the option, the full editor included: Return there
   sends like its Send button, and Shift-Return starts a new line (2026-10-27,
-  PRNUM).
+  #1394).
 
 **Open gaps**
 - Not yet checked on a Mac or an iPad with a keyboard: the Return key
   command sending, Shift-Return and the IME's Return still reaching the
   text, in chats, rooms and the full editor.
 
-**Checked:** 2026-10-27, PRNUM.
+**Checked:** 2026-10-27, #1394.
 
 ## A chat's last reply
 
@@ -2019,7 +2019,7 @@ go. Talking and sending in one go is Voice message's or Voice's job.
 **Siblings:** chat composer (chats, project chats, Bot Chat; done) · group
 rooms (done) · the full editor, both composers' (done, it shows the same
 Stop) · the hardware Return key with Return sends on (done, it stops the
-dictation, in chats, group rooms and the full editor, PRNUM) · the big voice button set to Dictation (done, its second
+dictation, in chats, group rooms and the full editor, #1394) · the big voice button set to Dictation (done, its second
 tap does what the Stop does, a settle included) · Voice
 message's hold to record, let go to send (not changed, it's the one-tap
 path) · docs/VOICE_SETTINGS.md "Dictate into the composer" (done) · strings (not
@@ -2043,7 +2043,7 @@ notifier (not needed, dictation is app-side)
 - A Hermes upload none of whose words reached the draft can't be cut short: Transcribing waits until the words come or the watchdog ends it with its message.
 - Not yet checked on a device: the Stop's width and the swap in the controls row and the full editor, with long translations and large text.
 
-**Checked:** 2026-10-27, PRNUM.
+**Checked:** 2026-10-27, #1394.
 
 ## Chats top bar and search
 
