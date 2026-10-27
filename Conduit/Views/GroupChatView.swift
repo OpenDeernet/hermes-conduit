@@ -1355,12 +1355,17 @@ struct MentionSuggestionList: View {
 
 /// New Group Chat: one name field plus a 2–6 bot picker restricted to the
 /// current gateway's roster (cross-gateway rooms are a later parity slice).
+/// When the host's plugin makes rooms with people you've linked, they can
+/// be picked too: the room then waits for their answers as a draft
+/// (RoomDrafts.swift), and one bot of yours is enough.
 struct GroupCreateSheet: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var appLanguage = AppLanguageStore.shared
     @State private var name = ""
     @State private var selected = Set<String>()
+    /// The Links of the people picked.
+    @State private var selectedPeople = Set<String>()
     /// The room id is minted ONCE per logical room (per sheet): a retry of
     /// an ambiguous create reuses the SAME id, so the gateway's create
     /// idempotency deduplicates instead of forking a twin room.
@@ -1370,6 +1375,9 @@ struct GroupCreateSheet: View {
     /// name or roster is a different room, so it gets a fresh id instead of
     /// recovering (or being refused as) the first attempt.
     @State private var attemptedInputs: GroupCreateAttempt.Inputs?
+    /// The picks of a draft that was made while its invites were still
+    /// going out: Create again would invite everyone twice.
+    @State private var sendingDraft: String?
     @State private var isCreating = false
 
     /// `preselected`: bots already picked, as from a bot's Groups menu.
@@ -1381,10 +1389,30 @@ struct GroupCreateSheet: View {
         appState.botRoster.filter { !$0.isHiddenByMeta }
     }
 
+    private var pickedBots: [BotProfile] {
+        visibleBots.filter { selected.contains($0.name) }
+    }
+
+    private var people: [RoomLink] {
+        appState.invitableLinkedPeople
+    }
+
+    /// Who's picked of the people still linked.
+    private var pickedPeople: [RoomLink] {
+        people.filter { selectedPeople.contains($0.id) }
+    }
+
+    private var draftPicks: String {
+        let bots = pickedBots.map(\.name).sorted()
+        let links = pickedPeople.map(\.id).sorted()
+        return ([name.trimmingCharacters(in: .whitespacesAndNewlines)] + bots + ["|"] + links).joined(separator: "\n")
+    }
+
     private var canCreate: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && selected.count >= 2 && selected.count <= 6
+            && GroupCreateLimits.canCreate(bots: pickedBots.count, people: pickedPeople.count)
             && !isCreating
+            && (pickedPeople.isEmpty || draftPicks != sendingDraft)
     }
 
     var body: some View {
@@ -1408,15 +1436,40 @@ struct GroupCreateSheet: View {
                         memberToggleRow(bot)
                     }
                 } header: {
-                    Text(AppLocalization.string("Members (2–6)"))
+                    Text(pickedPeople.isEmpty ? AppLocalization.string("Members (2–6)") : AppLocalization.string("Your bots"))
                 } footer: {
                     Text(AppLocalization.string(
                         "Group chats run on this gateway. The gateway drives each member's turn — closing Conduit never stops a room."
                     ))
                 }
+                if !people.isEmpty {
+                    Section {
+                        ForEach(people) { person in
+                            personToggleRow(person)
+                        }
+                    } header: {
+                        Text(AppLocalization.string("People"))
+                    } footer: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(AppLocalization.string(
+                                "Each person gets an invite on their Hermes. The room starts once they've all answered, or when you start it."
+                            ))
+                            Text(AppLocalization.string("A room holds up to 6 agents: your bots, and at least one for each person."))
+                        }
+                    }
+                } else if appState.linkedRoomStartsUnavailable {
+                    Section(AppLocalization.string("People")) {
+                        Text(AppLocalization.string(
+                            "Your Hermes can't host rooms with people you've linked yet. Update Hermes to invite them."
+                        ))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                }
             }
             .navigationTitle(AppLocalization.string("New Group Chat"))
             .navigationBarTitleDisplayMode(.inline)
+            .task { await appState.refreshLinkedRoomDrafts() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(AppLocalization.string("Cancel")) { dismiss() }
@@ -1427,11 +1480,28 @@ struct GroupCreateSheet: View {
                         // the gateway would host two real rooms.
                         guard !isCreating else { return }
                         isCreating = true
-                        let bots = visibleBots.filter { selected.contains($0.name) }
+                        let bots = pickedBots
                         let roomName = name
+                        let links = pickedPeople.map(\.id)
+                        guard links.isEmpty else {
+                            let picks = draftPicks
+                            Task {
+                                let outcome = await appState.createLinkedRoomDraft(name: roomName, bots: bots, links: links)
+                                isCreating = false
+                                switch outcome {
+                                case .made:
+                                    dismiss()
+                                case .sending:
+                                    sendingDraft = picks
+                                case .refused:
+                                    break
+                                }
+                            }
+                            return
+                        }
                         let inputs = GroupCreateAttempt.Inputs(
                             name: roomName.trimmingCharacters(in: .whitespacesAndNewlines),
-                            members: selected
+                            members: Set(bots.map(\.name))
                         )
                         roomID = GroupCreateAttempt.roomID(
                             for: inputs, current: roomID, attempted: attemptedInputs
@@ -1454,6 +1524,7 @@ struct GroupCreateSheet: View {
 
     private func memberToggleRow(_ bot: BotProfile) -> some View {
         let isSelected = selected.contains(bot.name)
+        let canPick = isSelected || GroupCreateLimits.canPickBot(bots: pickedBots.count, people: pickedPeople.count)
         return Button {
             toggle(bot.name)
         } label: {
@@ -1470,8 +1541,36 @@ struct GroupCreateSheet: View {
                 Spacer(minLength: 0)
                 selectionGlyph(isSelected: isSelected)
             }
+            .opacity(canPick ? 1 : 0.45)
         }
         .buttonStyle(.plain)
+        .disabled(!canPick)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func personToggleRow(_ person: RoomLink) -> some View {
+        let isSelected = selectedPeople.contains(person.id)
+        let canPick = isSelected || GroupCreateLimits.canPickPerson(bots: pickedBots.count, people: pickedPeople.count)
+        return Button {
+            Haptics.light()
+            if isSelected {
+                selectedPeople.remove(person.id)
+            } else {
+                selectedPeople.insert(person.id)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                RoomPersonGlyph()
+                Text(person.name)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+                selectionGlyph(isSelected: isSelected)
+            }
+            .opacity(canPick ? 1 : 0.45)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canPick)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 

@@ -21,6 +21,9 @@ struct BotRosterView: View {
     @State private var showsHiddenBots = false
     /// New Group Chat from a bot's Groups menu starts with that bot picked.
     @State private var groupSheetBot: BotProfile?
+    /// A room with people you've linked that hasn't started, shown with who's
+    /// invited and how they answered.
+    @State private var presentedDraft: RoomDraft?
     /// V2's Bots tab: its title bar's "+" asks for a new bot here, and the
     /// in-list create card steps aside.
     private let createRequest: Binding<Bool>?
@@ -155,8 +158,15 @@ struct BotRosterView: View {
     }
 
     private var hasGroupRows: Bool {
-        (hostedGroupsAvailable && !appState.groupRooms.isEmpty)
+        (hostedGroupsAvailable && (!appState.groupRooms.isEmpty || !appState.linkedRoomDraftRows.isEmpty))
             || !appState.desktopGroupChats.isEmpty
+    }
+
+    /// New Group Chat needs two bots, or one and someone you've linked to
+    /// invite (GroupCreateLimits).
+    private var offersNewGroup: Bool {
+        hostedGroupsAvailable
+            && GroupCreateLimits.offersNewGroup(visibleBots: visibleBots.count, invitesPeople: !appState.invitableLinkedPeople.isEmpty)
     }
 
     private var groupProbeFailure: String? {
@@ -211,7 +221,7 @@ struct BotRosterView: View {
             canManage: canManageBots,
             canDelete: appState.canDeleteBot(bot),
             rooms: botRooms(bot),
-            canStartGroup: hostedGroupsAvailable && !bot.isHiddenByMeta && visibleBots.count >= 2,
+            canStartGroup: offersNewGroup && !bot.isHiddenByMeta,
             actions: BotRosterRow.Actions(
                 edit: { editorMode = .edit(bot) },
                 togglePin: {
@@ -318,12 +328,17 @@ struct BotRosterView: View {
             GroupCreateSheet(preselected: [bot.name])
                 .environmentObject(appState)
         }
+        .sheet(item: $presentedDraft) { draft in
+            RoomDraftSheet(draft: draft)
+                .environmentObject(appState)
+        }
     }
 
     /// Group Chat rows, below the Bots section: hosted rooms (only when the
     /// gateway advertised the foundation `groups.*` methods — an unsupported
-    /// gateway never shows a dead control) plus the group chats Hermes
-    /// Desktop mirrored to the gateway, which need no `groups.*` support.
+    /// gateway never shows a dead control) and the rooms with people you've
+    /// linked that haven't started, plus the group chats Hermes Desktop
+    /// mirrored to the gateway, which need no `groups.*` support.
     @State private var showingGroupCreateSheet = false
 
     @ViewBuilder
@@ -349,13 +364,18 @@ struct BotRosterView: View {
                     ForEach(appState.groupRooms) { room in
                         GroupRosterRow(room: room)
                     }
+                    ForEach(appState.linkedRoomDraftRows) { draft in
+                        RoomDraftRosterRow(draft: draft) {
+                            presentedDraft = draft
+                        }
+                    }
                 }
                 ForEach(appState.desktopGroupChats) { group in
                     DesktopGroupRosterRow(group: group) {
                         presentedDesktopGroup = group
                     }
                 }
-                if hostedGroupsAvailable && visibleBots.count >= 2 {
+                if offersNewGroup {
                     Button {
                         Haptics.light()
                         // The sheet renders the shared error; start clean.

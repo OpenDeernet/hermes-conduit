@@ -10672,6 +10672,10 @@ final class AppState: ObservableObject {
     @Published private(set) var groupChatPhase: GroupChatPhase = .idle
     @Published private(set) var groupCapabilities: GroupCapabilities?
     @Published private(set) var groupRooms: [GroupRoom] = []
+    /// The rooms this Hermes hosts with people you've linked that Group
+    /// Chats lists until they start, and the people New Group Chat can
+    /// invite (RoomDrafts.swift).
+    @Published var linkedRoomDrafts: LinkedRoomDrafts?
     /// Hermes Desktop's group chats, read from its ui_meta projection on the
     /// `default` profile (refreshed with the bot roster). Read-only here:
     /// Desktop drives their rounds, and `groups.*` cannot address them.
@@ -10839,6 +10843,7 @@ final class AppState: ObservableObject {
         // Whether the gateway can make pictures is the outgoing one's answer.
         canGeneratePictures = false
         groupRooms = []
+        linkedRoomDrafts = nil
         desktopGroupChats = []
         groupRoomPictureData = [:]
         groupRoomPictureRevisions = [:]
@@ -11114,6 +11119,7 @@ final class AppState: ObservableObject {
                 pruneRoomStores(liveRoomIDs: Set(groupRooms.map(\.roomID)))
             }
             await refreshGroupRoomPictures()
+            await refreshLinkedRoomDrafts()
         } catch is CancellationError {
             return
         } catch {
@@ -11568,29 +11574,19 @@ final class AppState: ObservableObject {
         // The create sheet renders the shared errorMessage: clear the last
         // attempt's (or an unrelated surface's) failure before this one.
         errorMessage = nil
-        // `@user` is the room's human handoff: a member claiming it would be
-        // styled as the human, never as the agent.
-        var usedHandles = Set<String>(["all", "everyone", "user"])
-        var members: [[String: Any]] = []
-        for bot in bots {
-            var handle = BotMentions.mentionTag(for: bot)
-            if usedHandles.contains(handle.lowercased()) {
-                handle = BotMentions.handle(for: bot)
-            }
-            guard BotMentions.isValidMentionToken(handle),
-                  !usedHandles.contains(handle.lowercased()) else {
-                errorMessage = AppLocalization.string(
-                    "Two of these bots would claim the same @handle. Rename one bot's title, then try again."
-                )
-                return false
-            }
-            usedHandles.insert(handle.lowercased())
-            members.append([
+        guard let handles = BotMentions.roomHandles(for: bots) else {
+            errorMessage = AppLocalization.string(
+                "Two of these bots would claim the same @handle. Rename one bot's title, then try again."
+            )
+            return false
+        }
+        let members: [[String: Any]] = zip(bots, handles).map { bot, handle in
+            [
                 "member_id": bot.name,
                 "profile": bot.name,
                 "handle": handle,
                 "display_name": bot.displayLabel,
-            ])
+            ]
         }
         do {
             let room = try await groupsCreate(client, roomID: roomID, name: trimmedName, members: members)
@@ -37084,5 +37080,26 @@ extension AppState {
             showSessionMutationNotice(SessionRenameOperation.failureMessage(error))
             return false
         }
+    }
+}
+
+// MARK: - Linked Rooms' drafts removed from Group Chats
+
+extension AppState {
+    private static let dismissedRoomDraftsKey = "conduit.roomDrafts.dismissed.v1"
+
+    /// The ended drafts removed from Group Chats (RoomDrafts.swift). Room
+    /// ids are unique, so one list serves every dashboard; it keeps the
+    /// newest 200.
+    var dismissedRoomDraftIDs: Set<String> {
+        Set(defaults.stringArray(forKey: Self.dismissedRoomDraftsKey) ?? [])
+    }
+
+    func dismissRoomDraft(_ roomID: String) {
+        var ids = defaults.stringArray(forKey: Self.dismissedRoomDraftsKey) ?? []
+        guard !ids.contains(roomID) else { return }
+        objectWillChange.send()
+        ids.append(roomID)
+        defaults.set(Array(ids.suffix(200)), forKey: Self.dismissedRoomDraftsKey)
     }
 }
