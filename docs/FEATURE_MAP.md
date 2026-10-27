@@ -850,7 +850,7 @@ the selection menu · the long-press menu · VoiceOver labels · pinned replies
 **Rulings**
 - A reply's row is React, Copy, Read aloud and ⋯ (Quote, Branch, Pin reply, and Show thinking when the run above it has thinking that Settings keeps for On request (see Steps in a turn)); no more icons of their own under messages (2026-10-23, #1156; 2026-10-25, #1243).
 - Pin lives in the long-press and selection menus, not the row: Pin for a passage, Pin reply for the whole reply (2026-10-20, #982 and #1097; 2026-10-23, #1156).
-- A branch opens by the stored id `session.create` names, never its runtime id: Hermes' `session.resume` finds sessions only by stored id or title, so the runtime id is "session not found" (2026-10-27, issue 1400, #1402).
+- A branch opens by the stored id `session.create` names, and by its runtime id only when Hermes names none: Hermes' `session.resume` finds sessions only by stored id or title, so the runtime id is "session not found" (2026-10-27, issue 1400, #1402).
 - Double-tap and long-press on text stay text selection; reactions come from React or a reaction chip (2026-10-07, #437).
 - Read Aloud has no estimated follow-along highlight; only exact word timings from Hermes would bring it back (2026-10-19, #923).
 - A quoted reply travels in the message text, since Hermes has no field for hidden context (2026-10-04, #387).
