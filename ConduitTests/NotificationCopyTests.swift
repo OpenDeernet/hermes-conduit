@@ -83,6 +83,8 @@ final class NotificationCopyTests: XCTestCase {
         XCTAssertEqual(NotificationCopy.preview(content).body, "Pulse hat etwas für dich.")
         XCTAssertEqual(NotificationCopy.preview(["title_label": "pulse.followup", "body": "Book it.", "private": "yes"]).body,
                        "Book it.", "only a private flag the plugin set")
+        XCTAssertEqual(NotificationCopy.preview(["title_label": "response.ready", "body": "Done.", "private": true]).body,
+                       "Done.", "only on a Pulse push")
     }
 
     func testPulsePushesOfferQuietForTodayWhereTheirPluginTakesIt() {

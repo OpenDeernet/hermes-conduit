@@ -59,10 +59,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_IDENTITY: "Apple Distribution"
         CODE_SIGN_ENTITLEMENTS: Conduit/Conduit.entitlements
-        # Regenerated with HealthKit, the Location Push Service Extension
-        # capability (com.apple.developer.location.push) and Time Sensitive
-        # Notifications (com.apple.developer.usernotifications.time-sensitive,
-        # Pulse's reminders for a place; notifier 0.104.0).
+        # Regenerated with HealthKit and the Location Push Service Extension
+        # capability (com.apple.developer.location.push).
         PROVISIONING_PROFILE_SPECIFIER: "Hermes Conduit App Store"
         # The draft-stripping phase below deletes lprojs it can't declare
         # up front, which the user-script sandbox would refuse.

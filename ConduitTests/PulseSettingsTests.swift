@@ -346,6 +346,9 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertEqual(items[1].place?.savedText, AppLocalization.string("Saved place: \("Office")"))
         XCTAssertEqual(items[2].place?.savedText, AppLocalization.string("No saved place has that name yet."))
         XCTAssertNil(PulseMemoryPlace(json: ["words": "costco", "on": "arrive", "saved": "Costco"])?.savedText)
+        let spaced = PulseMemoryPlace(json: ["words": " Costco ", "on": "arrive", "saved": "Costco Wholesale "])
+        XCTAssertEqual(spaced?.words, "Costco")
+        XCTAssertEqual(spaced?.saved, "Costco Wholesale")
     }
 
     func testRefusalCodesSurviveTheDashboardError() throws {

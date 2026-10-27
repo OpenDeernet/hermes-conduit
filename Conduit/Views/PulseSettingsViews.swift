@@ -873,6 +873,10 @@ struct PulseSettingsPage: View {
         switch kind {
         case "report": return AppLocalization.string("Report")
         case "probe": return AppLocalization.string("Chat check")
+        case "followup": return AppLocalization.string("Follow-up")
+        case "brief": return AppLocalization.string("Morning brief")
+        // A pick the look ahead held for a place, brought up there (0.103.0).
+        case "moment": return AppLocalization.string("At a place")
         default: return kind
         }
     }

@@ -62,7 +62,7 @@ enum NotificationCopy {
         if label == "call.requested", let call = content["call"] as? [String: Any], let line = callLine(call) {
             return (title, line)
         }
-        if content["private"] as? Bool == true {
+        if label.hasPrefix("pulse."), content["private"] as? Bool == true {
             // A private Pulse push (a birthday, a gift, health or money;
             // notifier 0.104.0): the host sent only this line, in English.
             return (title, AppLocalization.string("Pulse has something for you."))

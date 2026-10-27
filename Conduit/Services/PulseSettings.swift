@@ -480,11 +480,13 @@ struct PulseMemoryPlace: Equatable {
     let saved: String?
 
     init?(json: Any?) {
-        guard let object = json as? [String: Any], let words = object["words"] as? String,
-              !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard let object = json as? [String: Any],
+              let words = (object["words"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !words.isEmpty else { return nil }
         self.words = words
         leaving = object["on"] as? String == "leave"
-        saved = (object["saved"] as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        let name = (object["saved"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        saved = name.isEmpty ? nil : name
     }
 
     /// "When you get to Costco" or "When you leave work", in the app's language.
