@@ -1521,10 +1521,10 @@ final class PushNotificationService: ObservableObject {
     /// notifications, or on a relay without the route, the activity is only
     /// updated while Conduit runs. Returns the installation whose relay
     /// took the token, the one case the Conduit plugin can update and end
-    /// it by push; nil otherwise.
+    /// it by push; nil otherwise. `startedAgo` is how long ago the activity
+    /// started, so the relay can end it at once when its turn ended before
+    /// this registration came.
     @discardableResult
-    /// `startedAgo` is how long ago the activity started, so the relay can
-    /// end it at once when its turn ended before this registration came.
     func registerLiveActivity(token: String, sessionIDs: [String], startedAgo: TimeInterval) async -> String? {
         guard let registration, liveActivitiesUnsupportedInstallation != registration.installationID,
               !sessionIDs.isEmpty else { return nil }

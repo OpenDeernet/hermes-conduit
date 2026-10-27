@@ -1570,6 +1570,7 @@ CHANGELOG
 **Open gaps**
 - The relay keeps registrations and unwatched ends in memory: a relay restart during a turn leaves its card to Conduit's next time on screen, or to iOS's 8 hours.
 - The live registry check reads the profile and dashboard on screen, so a card from another one ends only by push.
+- The registration and its retry go through `URLSession.shared`, so only their decisions (`needsRegistration`, `liveActivityStartedAgo`, `liveActivityRouteExists`) are tested.
 
 **Checked:** 2026-10-27, #1374.
 
