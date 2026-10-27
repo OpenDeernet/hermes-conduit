@@ -2483,7 +2483,7 @@ captions, Settings captions, the invite's share message
 - Changing the tools rooms may use says the agent stops answering in rooms already started, but not in which.
 - An invite opened from another app while a sheet is already up (classic Settings, say) can't show over it, as a sign-in code link can't: open it again once the sheet is closed.
 
-**Checked:** 2026-10-27, #1341 (rooms over Links, and Settings > People's lines from #1323 and #1327), with notifier #387, #390, #396, #397, #398, #401, #406 and #409.
+**Checked:** 2026-10-27, #1342 (rooms over Links, and Settings > People's lines from #1323 and #1327), with notifier #387, #390, #396, #397, #398, #401, #406 and #409.
 
 ## Kanban workers' transcripts
 
