@@ -481,6 +481,7 @@ struct KanbanModelOverrideSheet: View {
                     customEntrySection
                 }
             }
+            .searchable(text: $query, prompt: Text("Search providers or models"))
             .navigationTitle("Model override")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -504,15 +505,14 @@ struct KanbanModelOverrideSheet: View {
         }
     }
 
-    private var filteredProviders: [KanbanModelProviderOption] {
-        let trimmed = query.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !trimmed.isEmpty else { return providers }
-        return providers.compactMap { provider in
-            if provider.slug.lowercased().contains(trimmed) || provider.displayName.lowercased().contains(trimmed) {
-                return provider
-            }
-            let models = provider.models.filter { $0.lowercased().contains(trimmed) }
-            return models.isEmpty ? nil : KanbanModelProviderOption(slug: provider.slug, label: provider.label, models: models)
+    /// Search matches across providers, each naming its provider: several
+    /// often serve the same model.
+    private var searchMatches: [(provider: KanbanModelProviderOption, model: String)] {
+        let search = ModelSearchQuery(query)
+        return providers.flatMap { provider in
+            provider.models
+                .filter { search.matches([$0, provider.slug, provider.displayName]) }
+                .map { (provider: provider, model: $0) }
         }
     }
 
@@ -522,8 +522,19 @@ struct KanbanModelOverrideSheet: View {
             if isLoadingOptions {
                 HStack { ProgressView(); Text("Loading models…") }.foregroundStyle(.secondary)
             }
-            ForEach(filteredProviders) { provider in
-                providerDisclosure(provider)
+            if ModelSearchQuery(query).isEmpty {
+                ForEach(providers) { provider in
+                    providerDisclosure(provider)
+                }
+            } else {
+                let matches = searchMatches
+                if matches.isEmpty {
+                    Text(verbatim: AppLocalization.string("Nothing matches “\(query.trimmingCharacters(in: .whitespacesAndNewlines))”."))
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(Array(matches.enumerated()), id: \.offset) { _, match in
+                    modelButton(match.model, provider: match.provider, showsProvider: true)
+                }
             }
             if !isLoadingOptions && providers.isEmpty {
                 Text("No curated model catalog available from Hermes — enter a provider and model below.")
@@ -540,23 +551,31 @@ struct KanbanModelOverrideSheet: View {
     private func providerDisclosure(_ provider: KanbanModelProviderOption) -> some View {
         DisclosureGroup(isExpanded: expandedBinding(provider.slug)) {
             ForEach(provider.models, id: \.self) { model in
-                Button {
-                    value = TaskModelOverride(provider: provider.slug, model: model, reasoningEffort: value.reasoningEffort)
-                } label: {
-                    HStack {
-                        Text(model)
-                        Spacer()
-                        if isSelected(provider.slug, model) {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.conduitAccent)
-                        }
-                    }
-                }
-                .foregroundStyle(.primary)
+                modelButton(model, provider: provider, showsProvider: false)
             }
         } label: {
             Text(provider.displayName)
         }
+    }
+
+    private func modelButton(_ model: String, provider: KanbanModelProviderOption, showsProvider: Bool) -> some View {
+        Button {
+            value = TaskModelOverride(provider: provider.slug, model: model, reasoningEffort: value.reasoningEffort)
+        } label: {
+            HStack {
+                if showsProvider {
+                    ModelSearchResultText(title: model, provider: provider.displayName)
+                } else {
+                    Text(model)
+                }
+                Spacer()
+                if isSelected(provider.slug, model) {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.conduitAccent)
+                }
+            }
+        }
+        .foregroundStyle(.primary)
     }
 
     private var customEntrySection: some View {
