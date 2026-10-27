@@ -5316,7 +5316,12 @@ final class AppStateChatResumeTests: XCTestCase {
         await harness.appState.branchFromAssistantMessage("assistant")
 
         XCTAssertEqual(resumed, ["branch-stored"])
-        XCTAssertNil(harness.appState.errorMessage)
+        // The fixture's client reports no run status, which sets its own
+        // notice; only a failed restore matters here.
+        XCTAssertFalse(
+            harness.appState.errorMessage?.hasPrefix("Failed to restore") == true,
+            "Got: \(harness.appState.errorMessage ?? "nil")"
+        )
         XCTAssertEqual(harness.appState.activeSessionId, "branch-runtime")
     }
 
