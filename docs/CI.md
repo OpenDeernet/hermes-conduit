@@ -81,14 +81,14 @@ What gets compiled (2026-10-15, when builds had grown to 9-17 minutes):
   builds the full app too, as do the nightly timing and UI jobs and TestFlight
   archives. The plan job makes that choice (`ui-spec`). The nightly unit
   shards always build `project-tests.yml`.
-- **Incremental builds from main's last build.** Builds on `main` save their
+- **Incremental builds from an earlier build.** Builds on `main` save their
   DerivedData to the Actions cache after the tests, keyed by project kind,
   Xcode build and runner image (`dd-v1-<kind>-<xcode>-<image>-<sha>`): the
   smoke job of every push to `main` saves the full app, and nightly unit
   shard 1 saves the app-only (slim) build when it runs on `main`. A push to
-  `pulse` or `linked-rooms` saves its full app as well, which only PRs into
-  that branch can restore (GitHub gives a PR its base branch's entries and
-  main's). The smoke
+  `pulse` or `linked-rooms` saves its full app as well, for that branch's
+  later pushes and the PRs into it (GitHub gives a run its own branch's
+  entries, a PR's base branch's and main's). The smoke
   job and the nightly unit shards restore the newest matching entry before
   building (from the same runner
   image if there is one, otherwise from any image with the same Xcode build,

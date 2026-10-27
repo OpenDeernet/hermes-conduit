@@ -7,7 +7,7 @@ again (e.g. passing observation files positionally when the script requires
 CI v5 shape (docs/CI.md): GitHub-hosted CI is the merge gate, and it is light.
 A PR or a push runs the cheap Linux validation and ONE macOS `smoke` job
 that compiles the app (without its Watch app and extensions unless the plan
-job's ui-spec says otherwise, incrementally from main's last build) and every
+job's ui-spec says otherwise, incrementally from an earlier build) and every
 test target once, then runs the curated unit smoke classes and the curated UI
 smoke classes (scripts/smoke-suite.json) on that build and simulator.
 nightly.yml runs every other unit class in balanced shards
@@ -91,8 +91,8 @@ def _job_keys(path):
 
 
 def _assert_cache_round_trip(tc, text, saver, label):
-    """A job restores the newest main build's DerivedData before building and
-    saves its own after the tests, only from main and only after a successful
+    """A job restores the newest DerivedData it can reach before building and
+    saves its own after the tests, never a PR's and only after a successful
     build, with the same path list (a different list is a different cache)."""
     tc.assertIn("uses: actions/cache/restore@v5", text, label)
     tc.assertIn("uses: actions/cache/save@v5", text, label)
@@ -290,7 +290,7 @@ class WorkflowContractTests(unittest.TestCase):
                        "ConduitWidgets", "ConduitLocationPush"):
             self.assertIn(f"- target: {target}", spec)
 
-    def test_smoke_job_builds_incrementally_and_main_saves_the_full_build(self):
+    def test_smoke_job_builds_incrementally_and_pushes_save_the_full_build(self):
         """The smoke job restores the newest DerivedData it can reach (main's,
         and on a PR into pulse or linked-rooms that branch's) before
         building, and saves its own only on pushes (to main, and in pulse's

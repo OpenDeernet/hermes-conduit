@@ -1144,6 +1144,61 @@ final class AppStateChatResumeTests: XCTestCase {
         XCTAssertEqual(scheduler.scheduledCount, 1, "Only the failed create remains retryable")
     }
 
+    func testAutomaticReturnRetiresASavedKanbanWorker() async {
+        // Hermes refuses a Kanban worker for good (4132): the saved target is
+        // retired like a deleted chat instead of being retried on every return.
+        let scheduler = ControlledReconnectScheduler()
+        var requests: [String] = []
+        let harness = makeHarness(
+            reconnectScheduler: scheduler.schedule(after:operation:),
+            lifecycleOperations: ChatResumeLifecycleOperations(
+                loadCatalog: { _, _ in [] },
+                openSession: { _, sessionID, _ in
+                    requests.append(sessionID)
+                    throw RpcError(code: 4132, message: "Session worker is a Kanban worker transcript.")
+                }
+            )
+        )
+        installComposerClient(in: harness)
+        harness.store.setLastSessionID("worker", for: "default")
+
+        await harness.appState.syncSession(
+            purpose: .automaticReturn,
+            using: nil,
+            automaticWorkToken: nil
+        )
+
+        XCTAssertEqual(requests, ["worker"])
+        XCTAssertNil(harness.store.lastSessionID(for: "default"))
+        XCTAssertEqual(scheduler.scheduledCount, 1, "Only the failed create remains retryable")
+    }
+
+    func testAutomaticReturnDoesNotRetryAKanbanWorkerByItsStoredID() async {
+        // Hermes refuses a worker under any of its ids, so the stored-id
+        // retry a missing runtime id gets would only be refused again.
+        var requests: [String] = []
+        let row = session("runtime-w", storedID: "stored-w")
+        let harness = makeHarness(
+            lifecycleOperations: ChatResumeLifecycleOperations(
+                loadCatalog: { _, _ in [row] },
+                openSession: { _, sessionID, _ in
+                    requests.append(sessionID)
+                    throw RpcError(code: 4132, message: "Session is a Kanban worker transcript.")
+                }
+            )
+        )
+        installComposerClient(in: harness)
+        harness.store.setLastSessionID("runtime-w", for: "default")
+
+        await harness.appState.syncSession(
+            purpose: .automaticReturn,
+            using: nil,
+            automaticWorkToken: nil
+        )
+
+        XCTAssertEqual(requests.count, 1, "One refusal is final: \(requests)")
+    }
+
     func testTranscriptRpc4007DoesNotRetireMissingSavedSession() async {
         let scheduler = ControlledReconnectScheduler()
         var requests: [String] = []
@@ -1462,6 +1517,28 @@ final class AppStateChatResumeTests: XCTestCase {
         harness.appState.recordChatViewport(.latest, for: newerKey)
         harness.appState.flushChatResumeViewport()
         XCTAssertEqual(harness.store.snapshot(for: newerKey), .latest)
+    }
+
+    func testOpeningAKanbanWorkerPointsAtTheBoard() async {
+        let harness = makeHarness(
+            lifecycleOperations: ChatResumeLifecycleOperations(
+                openSession: { _, _, _ in
+                    throw RpcError(code: 4132, message: "Session worker is a Kanban worker transcript.")
+                },
+                refreshContext: { _, _ in }
+            )
+        )
+        harness.appState.client = HermesClient(
+            connection: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"), profile: "default")
+        harness.appState.isConnected = true
+        harness.appState.sessions = [session("worker")]
+
+        _ = await harness.appState.openSession("worker")
+
+        XCTAssertEqual(
+            harness.appState.errorMessage,
+            "This chat is a Kanban task's worker, so only the board can run it. Open the task on the Kanban board and check its Worker Log."
+        )
     }
 
     func testNewChatThatFailsKeepsTheOpenChatsTitle() async {
@@ -3374,9 +3451,129 @@ final class AppStateChatResumeTests: XCTestCase {
             XCTAssertEqual(harness.appState.activeSessionId, defaultSession.id)
             XCTAssertEqual(harness.appState.connection, connection)
             XCTAssertEqual(
-                harness.appState.errorMessage,
+                harness.appState.pinSyncNotice?.message,
                 AppLocalization.string("End the call to open a chat in another profile.")
             )
+        }
+    }
+
+    func testCallFromHermesForAnotherProfileStillSwitchesDuringItsCall() async {
+        // A call's own open (answered, or its Talk button) runs while its
+        // CallKit call does, and switches, unlike a notification or a link.
+        let workSession = session("work-session", profile: "work")
+        let fixture = makeCrossProfileCallFixture(
+            workCatalog: { return [workSession] },
+            workMessages: []
+        )
+        defer { PushNotificationService.shared.clearPendingTarget(fixture.target) }
+        fixture.appState.isNativeHermesCallActive = true
+
+        let opened = await fixture.appState.openNotificationTarget(fixture.target)
+
+        XCTAssertTrue(opened, "A call for another profile opens its chat during its call")
+        XCTAssertEqual(fixture.appState.activeProfile, "work")
+        XCTAssertEqual(fixture.appState.activeSessionId, workSession.id)
+    }
+
+    func testNotificationWaitsForTheCallBeforeTheProfileSwitch() async {
+        // A notification from another profile, tapped during a call or with
+        // one ringing in while its open waits on the gateway (its bot checks,
+        // or the switch's own ticket, whether or not that ticket comes),
+        // stops short of the profile switch, which would end the call, and
+        // says over the screen that it opens when the call ends. So does one
+        // whose bot checks fail during the call: retried now, it could run
+        // out of time before the call ends. With no call, a ticket that
+        // fails says so and leaves the connection as it is, and a failed
+        // check is retried.
+        enum CallStarts { case beforeTheTap, duringBotChecks, duringTicket, never }
+        enum CheckFails { case none, roster, lookup }
+        let cases: [(CallStarts, Bool, CheckFails)] = [
+            (.beforeTheTap, false, .none), (.duringBotChecks, false, .none), (.duringTicket, false, .none),
+            (.duringTicket, true, .none), (.never, true, .none),
+            (.beforeTheTap, false, .roster), (.duringBotChecks, false, .lookup), (.never, false, .roster),
+            (.never, false, .lookup),
+        ]
+        for (callStarts, ticketFails, checkFails) in cases {
+            let defaultSession = session("default-session")
+            let appReference = WeakAppStateReference()
+            let harness = makeHarness(
+                lifecycleOperations: ChatResumeLifecycleOperations(
+                    connectClient: { _ in },
+                    loadCatalog: { _, _ in [defaultSession] },
+                    mintTicket: { _ in
+                        if callStarts == .duringTicket { appReference.value?.isNativeHermesCallActive = true }
+                        if ticketFails { throw URLError(.timedOut) }
+                        return "profile-ticket"
+                    },
+                    refreshContext: { _, _ in },
+                    loadProfiles: {},
+                    loadBusyInputMode: { _ in },
+                    loadProfileDisplayPreferences: {},
+                    loadSlashCommands: {},
+                    botRoster: { _ in
+                        if callStarts == .duringBotChecks { appReference.value?.isNativeHermesCallActive = true }
+                        if checkFails == .roster { throw URLError(.timedOut) }
+                        return BotRosterSnapshot(bots: [], supportsBotProtocol: false)
+                    },
+                    findBotChat: { _, _ in
+                        if checkFails == .lookup { throw URLError(.timedOut) }
+                        return []
+                    }
+                )
+            )
+            appReference.value = harness.appState
+            let connection = HermesConnection(baseUrl: "https://127.0.0.1:1", ticket: "saved-ticket")
+            harness.appState.connection = connection
+            harness.appState.client = HermesClient(connection: connection, profile: "default")
+            harness.appState.isConnected = true
+            harness.appState.showLogin = false
+            harness.appState.sessions = [defaultSession]
+            harness.appState.activeSessionId = defaultSession.id
+            harness.appState.isNativeHermesCallActive = callStarts == .beforeTheTap
+            let target = ConduitNotificationTarget(
+                profile: "work",
+                sessionId: "work-session",
+                type: "response.ready"
+            )
+
+            let outcome = await harness.appState.openNotificationTargetOutcome(target)
+
+            let label = "call starts: \(callStarts), ticket fails: \(ticketFails), check fails: \(checkFails)"
+            let unverified = AppLocalization.string(
+                "Could not verify that workspace for this notification. Reconnect and try again."
+            )
+            let expected: AppState.NotificationOpenOutcome = callStarts != .never
+                ? .afterCall
+                : (checkFails == .none ? .retry : .unverified(unverified))
+            XCTAssertEqual(outcome, expected, label)
+            XCTAssertEqual(harness.appState.activeProfile, "default", label)
+            XCTAssertEqual(harness.appState.activeSessionId, defaultSession.id, label)
+            XCTAssertEqual(harness.appState.connection, connection, label)
+            if callStarts == .never, checkFails != .none {
+                // The route says why once its retries run out.
+                XCTAssertNil(harness.appState.errorMessage, label)
+                XCTAssertNil(harness.appState.pinSyncNotice, label)
+            } else if callStarts == .never {
+                // Said over the screen too: the composer shows its error line
+                // only while it's locked.
+                let failed = AppLocalization.string(
+                    "Could not switch workspace: \(UserFacingError.message(for: URLError(.timedOut)))"
+                )
+                XCTAssertEqual(harness.appState.errorMessage, failed, label)
+                XCTAssertEqual(harness.appState.pinSyncNotice?.message, failed, label)
+                // The route's retry fails the same way: said once while it's up.
+                let notice = harness.appState.pinSyncNotice?.id
+                let retried = await harness.appState.openNotificationTargetOutcome(target)
+                XCTAssertEqual(retried, .retry, label)
+                XCTAssertEqual(harness.appState.pinSyncNotice?.id, notice, label)
+            } else {
+                XCTAssertEqual(
+                    harness.appState.pinSyncNotice?.message,
+                    AppLocalization.string("This notification opens in the other profile when the call ends."),
+                    label
+                )
+                XCTAssertNil(harness.appState.errorMessage, label)
+            }
         }
     }
 
@@ -5654,6 +5851,34 @@ final class AppStateChatResumeTests: XCTestCase {
         XCTAssertNil(harness.appState.activeSessionId)
         XCTAssertTrue(harness.appState.sessions.isEmpty)
         XCTAssertEqual(harness.cacheClearSpy.count, 1)
+    }
+
+    func testReconnectStopsWaitingForAPredictiveFollowUp() {
+        let harness = makeHarness()
+        XCTAssertFalse(harness.appState.prepareChatResumeForConnection(to: "https://one.example"))
+        harness.appState.activeSessionId = "s1"
+        harness.appState.predictiveFollowUpTurn = ("s1", "Worth a check.", nil)
+        harness.appState.predictiveFollowUpQueued = true
+        harness.appState.predictiveFollowUpTurnsAhead = 2
+        harness.appState.predictiveFollowUpQueuedAt = Date()
+        harness.appState.predictiveFollowUpSending = true
+        harness.appState.predictiveFollowUpAheadEnded = true
+        harness.appState.predictiveFollowUpUnreadMessages = [7]
+        let send = harness.appState.predictiveFollowUpSend
+
+        XCTAssertFalse(harness.appState.prepareChatResumeForConnection(to: "https://one.example"))
+        XCTAssertNotEqual(harness.appState.predictiveFollowUpSend, send, "a send still on its way is not applied")
+        XCTAssertFalse(harness.appState.predictiveFollowUpSending)
+        XCTAssertFalse(harness.appState.predictiveFollowUpAheadEnded)
+        XCTAssertTrue(harness.appState.predictiveFollowUpUnreadMessages.isEmpty)
+        XCTAssertNil(harness.appState.predictiveFollowUpTurn)
+        XCTAssertFalse(harness.appState.predictiveFollowUpQueued)
+        XCTAssertEqual(harness.appState.predictiveFollowUpTurnsAhead, 0)
+        XCTAssertNil(harness.appState.predictiveFollowUpQueuedAt)
+
+        harness.appState.messages = [ChatMessage(id: "a1", role: .assistant, content: "Done.", timestamp: "now")]
+        harness.appState.predictiveTurnSettled(sessionId: "s1")
+        XCTAssertTrue(harness.appState.predictive.followUpReasons.isEmpty, "no reply is tagged after the reconnect")
     }
 
     func testMissingSavedSessionDirectSyncRestoresSavedViewport() async throws {

@@ -269,9 +269,10 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode.app
 
       - name: Pick the build cache
-        # DerivedData from the newest main build of the same project and
-        # Xcode (the same runner image preferred), so ci-build-for-testing.sh
-        # recompiles only what changed since. A new Xcode starts clean.
+        # DerivedData from the newest build of the same project and Xcode
+        # that this run can reach (see "Save the build cache"), the same
+        # runner image preferred, so ci-build-for-testing.sh recompiles only
+        # what changed since. A new Xcode starts clean.
         id: cache-key
         env:
           SPEC: ${{ needs.plan.outputs.ui-spec }}

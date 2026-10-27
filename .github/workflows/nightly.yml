@@ -288,7 +288,7 @@ jobs:
         # Main's builds only (PRs restore the newest of them), one job per
         # project kind: shard 1 saves the app-only (slim) build that PR smoke
         # runs restore when they need no Watch app or extensions; ci.yml's
-        # smoke job saves the full app on every push to main. After the tests,
+        # smoke job saves the full app on every push. After the tests,
         # so a test failure still saves a good build.
         if: >-
           always() && steps.build.outcome == 'success'
