@@ -1453,6 +1453,33 @@ voice reply model pickers · the Kanban task composer's catalog
 
 **Checked:** 2026-10-24, at #1190; a reload that lands under unsaved Fallback models edits keeps them at #1191 (#1016 review).
 
+## The Model sheet's settings
+
+How the composer's Model sheet changes the chat's model, reasoning, speed and
+YOLO: each one applies when it's tapped, with no Apply step.
+
+**Siblings:** the sheet's Model rows, Reasoning pills, Fast mode and YOLO
+toggles · the composer's reasoning chip · typed `/model` (opens the sheet),
+`/fast` and `/yolo` · a bot's model picker (not a sibling: it's a field of the
+bot editor, saved with the bot)
+
+**Code**
+- Sheet: `Conduit/Views/ModelPickerView.swift` (switchModel, runModelPickerSwitch, modelPickerShouldSwitch, applySpeed, applyYolo, applyReasoning)
+- Chip and writes: `Conduit/Views/Components/ComposerBar.swift` (the reasoning chip), `Conduit/Services/AppState.swift` (setReasoningEffort, setYoloModeReportingFailure), `Conduit/Services/HermesClient.swift` (setModel, setSpeed, ModelSwitchOutcome)
+- Tests: `ConduitTests/ModelPickerTests.swift`
+
+**Rulings**
+- Every control applies on tap, like Settings; the sheet has no Apply button and stays open (Eric, 2026-10-27, #1333, #PRNUM).
+- A model Hermes wants confirmed asks on the tap; Cancel leaves the checkmark on the model the session still runs. A failed switch puts it back too and says why under the list.
+- A switch made mid-turn is held by Hermes for the next turn, and the sheet says it switches when the reply finishes.
+- Switching to a model without Ultrafast drops Ultrafast to Fast.
+- Errors show in their own section of the sheet, since the composer's banner is behind it.
+
+**Open gaps**
+- The checked row doesn't follow a model changed elsewhere while the sheet is open.
+
+**Checked:** 2026-10-27, at #PRNUM.
+
 ## Files over the size limit
 
 What Conduit says when a file is too large to attach, and which limit it
