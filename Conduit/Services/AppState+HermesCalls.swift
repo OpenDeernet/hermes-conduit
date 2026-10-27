@@ -535,6 +535,14 @@ extension AppState {
         }
     }
 
+    /// What the live call from Hermes waits on, read from its chat's card
+    /// with the choices and what Hermes wrote before asking; nil while the
+    /// card isn't there, when the push's reason stands in.
+    func liveHermesCallWaiting() -> HermesCallWaiting? {
+        guard let call = liveHermesCall else { return nil }
+        return hermesCallWaiting(call)
+    }
+
     /// `liveHermesCall`'s instructions for the live model, with what its
     /// chat's card says. Read by the session builders, so a reconnect gets
     /// the card as it stands then.
@@ -657,7 +665,7 @@ extension AppState {
         // choice the words point at sends what its tap sends.
         let asked = HermesCallWaiting.Question(id: question.id, text: question.question,
                                                choices: question.choices.map { .init(label: $0.label, value: $0.value) },
-                                               multiSelect: question.multiSelect, mayLeaveBlank: clarify.isForm)
+                                               multiSelect: question.multiSelect)
         let value = HermesCallWaiting.answerValue(for: answer, question: asked)
         await respondToClarify(requestId: clarify.requestId, questionId: clarify.questions.count == 1 ? nil : question.id, answer: value)
         // The chat may have reloaded meanwhile: the same question, by its

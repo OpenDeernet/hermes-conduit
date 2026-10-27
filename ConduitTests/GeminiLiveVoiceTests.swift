@@ -136,10 +136,8 @@ final class FakeGeminiLiveSessionControl: GeminiLiveSessionControlling {
     private(set) var started = 0
     private(set) var stopped = 0
     private(set) var sent: [[String: Any]] = []
-    private(set) var cancelledResponses = 0
 
     func start() { started += 1 }
-    func cancelResponse() { cancelledResponses += 1 }
     func stop() { stopped += 1; isReady = false }
     /// When set, sends are recorded but reported as failed.
     var failSends = false
@@ -1836,16 +1834,12 @@ extension VoiceConversationControllerTests {
 
         // Interrupt is how the user cuts in on the speaker.
         session.onEvent?(.audio(Data([0, 0]), sampleRate: 24_000))
-        XCTAssertEqual(session.cancelledResponses, 0)
         controller.interruptSpeaking()
         XCTAssertFalse(output.isPlaying)
-        XCTAssertEqual(session.cancelledResponses, 1, "The server is told, so a gate it keeps opens too (#1325)")
         session.onEvent?(.audio(Data([0, 0]), sampleRate: 24_000))
         XCTAssertFalse(output.isPlaying, "The rest of an interrupted turn is dropped")
         input.onChunk?(Data([1]))
         XCTAssertEqual(session.sent.count, 3)
-        controller.interruptSpeaking()
-        XCTAssertEqual(session.cancelledResponses, 1, "With nothing playing there is nothing to cancel")
         controller.stop()
     }
 
@@ -2476,32 +2470,6 @@ extension HermesVoiceGatewayTimeoutTests {
         XCTAssertFalse(GeminiLiveToolBridge.lookupAnswerNote.contains("what this lookup returned"), "a failed lookup returned no answer to start with")
         let lost = try XCTUnwrap(GeminiLiveConversationController.lookupFallbackText(for: ["results": "1. Sunny, 21°C"]))
         XCTAssertTrue(lost.contains(noRepeat))
-    }
-
-    func testEveryLiveModeAcknowledgesHandoffsBrieflyWithoutRepeatingHermes() {
-        // One fixed example ("On it, I'll have Hermes look into that.") was
-        // said word for word on every request, in every live mode.
-        let rule = LiveVoiceAcknowledgement.rule
-        XCTAssertTrue(rule.contains("different each time"))
-        XCTAssertTrue(rule.contains("don't reuse them word for word"))
-        XCTAssertTrue(rule.contains("Don't keep saying you'll ask, tell or check with Hermes"))
-        let modes: [(String, String)] = [
-            ("Gemini and Qwen", GeminiLiveConversationController.instructions(search: .hermes)),
-            ("Watch", GeminiLiveConversationController.instructions(search: .hermes, onWatch: true)),
-            ("Grok", GeminiLiveConversationController.instructions(search: .grok, acknowledgesOnceStarted: true) + GrokLiveProtocol.grokInstructions(now: Date(), timeZone: .current)),
-            ("Local Live agent", GeminiLiveConversationController.instructions(search: .none, acknowledgesOnceStarted: true) + LocalLiveProtocol.agentInstructions),
-            ("GPT-Live", GPTLiveConversationController.briefing()),
-            ("GPT-Live on the Watch", GPTLiveConversationController.briefing(onWatch: true)),
-        ]
-        for (mode, text) in modes {
-            XCTAssertEqual(text.components(separatedBy: rule).count, 2, "\(mode) carries the rule once")
-            XCTAssertFalse(text.contains("I'll have Hermes look into that"), mode)
-            XCTAssertFalse(text.contains("that Hermes is on it."), mode)
-        }
-        // Gemini's nudge when the model stayed quiet after start_job.
-        let nudge = GeminiLiveConversationController.acknowledgementPrompt
-        XCTAssertFalse(nudge.contains("Hermes is checking"))
-        XCTAssertTrue(nudge.contains("without saying again that you're asking Hermes"))
     }
 
     func testGeminiLiveSessionWithoutGoogleSearchNeverAsksForIt() async throws {

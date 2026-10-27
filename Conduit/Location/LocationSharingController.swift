@@ -427,7 +427,14 @@ final class LocationSharingController: ObservableObject {
     /// instead of killing the app. Nothing is lost: unsent fixes and events
     /// are only dropped once the host has them.
     private static func beginBackgroundTask(_ name: String) -> () -> Void {
-        BackgroundTaskHold.begin(name)
+        var taskID = UIBackgroundTaskIdentifier.invalid
+        let end = {
+            guard taskID != .invalid else { return }
+            UIApplication.shared.endBackgroundTask(taskID)
+            taskID = .invalid
+        }
+        taskID = UIApplication.shared.beginBackgroundTask(withName: name, expirationHandler: end)
+        return end
     }
 
     /// Sends the unsent fix and events (or just the sharing choices and

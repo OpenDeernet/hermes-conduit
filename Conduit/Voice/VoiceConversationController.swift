@@ -258,7 +258,7 @@ final class VoiceConversationController: ObservableObject {
         captureEventsTask = Task { [weak self, capture] in
             for await event in capture.events {
                 guard !Task.isCancelled else { return }
-                self?.handleCaptureEvent(event)
+                await self?.handleCaptureEvent(event)
             }
         }
     }
