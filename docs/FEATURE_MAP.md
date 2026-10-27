@@ -1759,7 +1759,7 @@ or the profile, not live session settings)
 **Open gaps**
 - The checked row doesn't follow a model changed elsewhere while the sheet is open.
 
-**Checked:** 2026-10-27, at #0000 (a search match switches like a tapped row, through the same pick); at #1334.
+**Checked:** 2026-10-27, at #1395 (a search match switches like a tapped row, through the same pick); at #1334.
 
 ## Searching for a model
 
@@ -1789,7 +1789,7 @@ provider is picked first, or the menu row already reads "model · provider")
 **Open gaps**
 - A hardware keyboard connected while the sheet is open doesn't turn on the highlight until the sheet opens again.
 
-**Checked:** 2026-10-27, at #0000.
+**Checked:** 2026-10-27, at #1395.
 
 ## Files over the size limit
 
