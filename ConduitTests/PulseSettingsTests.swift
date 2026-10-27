@@ -179,7 +179,7 @@ final class PulseSettingsTests: XCTestCase {
          "memory_chunks": 12, "memory_tokens": 34000, "daily_tokens": 200000, "tokens_today": 1500,
          "backfill": {"state": "reading", "from": 1758441600, "to": 1761033600, "days": 30,
                       "narrow": false, "unreadable": ["work"]},
-         "backfill_days": 30, "ratings": {"commitment": {"yes": 3, "no": 1}}}
+         "backfill_days": 30, "ratings": {"commitment": {"yes": 3, "no": 1}}, "inbox_deadlines": false}
         """)))
 
         XCTAssertTrue(state.enabled)
@@ -201,6 +201,7 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertEqual(state.otherProfiles, ["work"])
         XCTAssertTrue(state.offersProfileChoice)
         XCTAssertTrue(state.memory)
+        XCTAssertEqual(state.inboxDeadlines, false)
         XCTAssertEqual(state.memoryCounts, ["commitment": 2, "fact": 5])
         XCTAssertEqual(state.memoryTokens, 34_000)
         XCTAssertEqual(state.dailyTokens, 200_000)
@@ -231,6 +232,8 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertEqual(state.backfillDays, 90)
         // Narrowed to this profile: the choice stays, so it can be widened.
         XCTAssertTrue(state.offersProfileChoice)
+        // A plugin from before 0.90.0 keeps no deadlines from the Shortcuts inbox.
+        XCTAssertNil(state.inboxDeadlines)
     }
 
     func testStateReadsPulsesModel() throws {
@@ -276,10 +279,15 @@ final class PulseSettingsTests: XCTestCase {
           {"id": 9, "kind": "fact", "text": "Dad was born on 29 February.", "evidence": "born on 29 February",
            "every_year": "1956-02-29", "occasion": "birthday"},
           {"id": 10, "kind": "fact", "text": "x", "evidence": "y", "every_year": "02-30"},
+          {"id": 11, "kind": "deadline", "text": "Netflix free trial ends", "evidence": "Your free trial ends on 21 October",
+           "explicit": true, "due": "2026-10-21", "due_at": 1761004800, "mentioned_at": 1760346000, "profile": "",
+           "chat_id": "", "from_inbox": true, "sender": "Netflix", "logged_at": 1760346000},
+          {"id": 12, "kind": "deadline", "text": "Electricity bill due", "evidence": "Your bill is due on 30 October",
+           "due": "2026-10-30", "mentioned_at": 1760346000, "from_inbox": true, "sender": " ", "logged_at": 1760346000},
           {"id": "bad"}]}
         """)
         let items = (response["items"] as? [Any] ?? []).compactMap(PulseMemoryItem.init(json:))
-        XCTAssertEqual(items.count, 4)
+        XCTAssertEqual(items.count, 6)
         XCTAssertEqual(items.first?.id, 7)
         XCTAssertEqual(items.first?.due, "Friday")
         XCTAssertEqual(items.first?.explicit, true)
@@ -287,9 +295,22 @@ final class PulseSettingsTests: XCTestCase {
         let british = Locale(identifier: "en_GB")
         XCTAssertEqual(items.map { $0.everyYearText(locale: british) }, [
             nil, AppLocalization.string("Every year on \("3 March")"),
-            AppLocalization.string("Every year on \("29 February")"), nil
+            AppLocalization.string("Every year on \("29 February")"), nil, nil, nil
         ])
         XCTAssertEqual(PulseMemoryKind.sorted(["fact", "zzz", "commitment"]), ["commitment", "fact", "zzz"])
+        // A deadline from the Shortcuts inbox (0.90.0) says who it's from and when it was logged, not a chat.
+        let deadline = items[4]
+        XCTAssertTrue(deadline.fromInbox)
+        XCTAssertEqual(deadline.sender, "Netflix")
+        XCTAssertEqual(deadline.loggedAt, Date(timeIntervalSince1970: 1_760_346_000))
+        let logged = Date(timeIntervalSince1970: 1_760_346_000)
+            .formatted(.relative(presentation: .named).locale(AppLocalization.formattingLocale))
+        XCTAssertEqual(deadline.loggedText(), AppLocalization.string("From \("Netflix"), logged \(logged)"))
+        XCTAssertEqual(items[5].loggedText(), AppLocalization.string("Logged on your phone \(logged)"))
+        XCTAssertFalse(items[0].fromInbox)
+        XCTAssertNil(items[0].loggedText())
+        XCTAssertEqual(PulseMemoryKind.title("deadline"), AppLocalization.string("Deadlines"))
+        XCTAssertEqual(PulseMemoryKind.sorted(["deadline", "zzz", "watch"]), ["watch", "deadline", "zzz"])
     }
 
     func testRefusalCodesSurviveTheDashboardError() throws {

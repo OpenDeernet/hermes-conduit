@@ -132,6 +132,9 @@ struct PulseState: Equatable {
     var reportProfiles = "this"
     var otherProfiles: [String] = []
     var memory = false
+    /// Memory keeps deadlines from the Shortcuts inbox (0.90.0); nil from an
+    /// older plugin.
+    var inboxDeadlines: Bool?
     var memoryCounts: [String: Int] = [:]
     var memoryChunks = 0
     var memoryTokens = 0
@@ -204,6 +207,7 @@ struct PulseState: Equatable {
         reportProfiles = json["report_profiles"] as? String == "all" ? "all" : "this"
         otherProfiles = PulseJSON.strings(json["other_profiles"])
         memory = PulseJSON.bool(json["memory"]) ?? false
+        inboxDeadlines = PulseJSON.bool(json["inbox_deadlines"])
         memoryCounts = PulseJSON.counts(json["memory_counts"])
         memoryChunks = PulseJSON.int(json["memory_chunks"]) ?? 0
         memoryTokens = PulseJSON.int(json["memory_tokens"]) ?? 0
@@ -467,6 +471,11 @@ struct PulseMemoryItem: Equatable, Identifiable {
     /// and day, "MM-DD", or "YYYY-MM-DD" with the year it began; "" for the
     /// rest.
     let everyYear: String
+    /// A deadline memory kept from the Shortcuts inbox (0.90.0), from no
+    /// chat: who its event is from, and when it was logged.
+    let fromInbox: Bool
+    let sender: String
+    let loggedAt: Date?
 
     init?(json: Any) {
         guard let object = json as? [String: Any],
@@ -483,6 +492,19 @@ struct PulseMemoryItem: Equatable, Identifiable {
         profile = object["profile"] as? String ?? ""
         chatID = object["chat_id"] as? String ?? ""
         everyYear = object["every_year"] as? String ?? ""
+        fromInbox = PulseJSON.bool(object["from_inbox"]) ?? false
+        sender = object["sender"] as? String ?? ""
+        loggedAt = PulseJSON.date(object["logged_at"])
+    }
+
+    /// Where a deadline from the Shortcuts inbox came from: "From Netflix,
+    /// logged 2 days ago"; nil for what came from a chat.
+    func loggedText() -> String? {
+        guard fromInbox, let logged = loggedAt ?? mentionedAt else { return nil }
+        let when = logged.formatted(.relative(presentation: .named).locale(AppLocalization.formattingLocale))
+        let sender = sender.trimmingCharacters(in: .whitespacesAndNewlines)
+        return sender.isEmpty ? AppLocalization.string("Logged on your phone \(when)")
+            : AppLocalization.string("From \(sender), logged \(when)")
     }
 
     /// "Every year on 3 March" for a fact about a yearly date, in the app's
@@ -509,7 +531,7 @@ struct PulseMemoryItem: Equatable, Identifiable {
 
 /// The kinds of things Pulse remembers, in the order the page lists them.
 enum PulseMemoryKind {
-    static let order = ["commitment", "promise", "intention", "interest", "fact", "watch"]
+    static let order = ["commitment", "promise", "intention", "interest", "fact", "watch", "deadline"]
 
     /// A kind's name as a heading; a kind this build doesn't know shows as
     /// the plugin sends it.
@@ -521,6 +543,7 @@ enum PulseMemoryKind {
         case "interest": return AppLocalization.string("Interests")
         case "fact": return AppLocalization.string("Facts")
         case "watch": return AppLocalization.string("Things to watch")
+        case "deadline": return AppLocalization.string("Deadlines")
         default: return kind
         }
     }
@@ -651,8 +674,8 @@ struct PulseClient {
 
     /// Any of enabled, memory, daily_report, report_profiles, report_times,
     /// brief_time, time_zone, model, nudge, memory_daily_tokens,
-    /// followup_daily_tokens, note, quiet_days, quiet_until and night;
-    /// answers with the new state.
+    /// followup_daily_tokens, note, quiet_days, quiet_until, night and
+    /// inbox_deadlines; answers with the new state.
     func update(_ changes: [String: Any]) async throws -> PulseState {
         let response = try await request(Self.path, "PUT", changes)
         return try Self.state(from: response)

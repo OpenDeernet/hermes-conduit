@@ -367053,6 +367053,990 @@
           }
         }
       }
+    },
+    "Deadline" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frist"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fecha límite"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échéance"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tenggat"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scadenza"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "期限"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기한"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Termin"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prazo"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Срок"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Son tarih"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止日期"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止日期"
+          }
+        }
+      }
+    },
+    "Deadlines" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fristen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fechas límite"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échéances"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tenggat"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scadenze"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "期限"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기한"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminy"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prazos"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сроки"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Son tarihler"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止日期"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止日期"
+          }
+        }
+      }
+    },
+    "Pulse brought this up: %@\n\nHelp me take care of it before then." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse hat das angesprochen: %@\n\nHilf mir, mich rechtzeitig darum zu kümmern."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse mencionó esto: %@\n\nAyúdame a resolverlo antes de esa fecha."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse a signalé ceci : %@\n\nAide-moi à m'en occuper avant l'échéance."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse mengangkat ini: %@\n\nBantu saya mengurusnya sebelum tenggatnya."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse ha segnalato questo: %@\n\nAiutami a occuparmene prima della scadenza."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulseからのお知らせ：%@\n\n期限までに片付けるのを手伝ってください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse가 알려 준 소식: %@\n\n기한 전에 처리하도록 도와줘."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse zwrócił na to uwagę: %@\n\nPomóż mi to załatwić przed terminem."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Pulse trouxe isto: %@\n\nMe ajude a resolver isso antes do prazo."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse обратил на это внимание: %@\n\nПомоги мне разобраться с этим до срока."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse bunu gündeme getirdi: %@\n\nSon tarihten önce halletmeme yardım et."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 提到了这件事：%@\n\n帮我在截止前处理好。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 提到了這件事：%@\n\n幫我在截止前處理好。"
+          }
+        }
+      }
+    },
+    "From %@, logged %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von %@, protokolliert %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De %@, registrado %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De %@, consigné %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dari %@, dicatat %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Da %@, registrato %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@から・記録：%@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보낸 곳: %@, %@ 기록됨"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Od %@, zapisane %@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De %@, registrado %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "От %@, записано %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönderen: %@, %@ kaydedildi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自 %@，%@记录"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "來自 %@，%@記錄"
+          }
+        }
+      }
+    },
+    "Logged on your phone %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf deinem Telefon protokolliert %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrado en tu teléfono %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Consigné sur votre téléphone %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dicatat di ponselmu %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrato sul tuo telefono %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スマートフォンで記録：%@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "휴대폰에 %@ 기록됨"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zapisane na Twoim telefonie %@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrado no seu celular %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Записано на вашем телефоне %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Telefonunda %@ kaydedildi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@在你的手机上记录"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@在你的手機上記錄"
+          }
+        }
+      }
+    },
+    "Deadlines from Shortcuts" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fristen aus Kurzbefehlen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fechas límite de Atajos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échéances depuis Raccourcis"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tenggat dari Pintasan"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scadenze da Comandi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカットからの期限"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축어에서 가져온 기한"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminy ze Skrótów"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prazos dos Atalhos"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сроки из быстрых команд"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kestirmelerden son tarihler"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自快捷指令的截止日期"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "來自捷徑的截止日期"
+          }
+        }
+      }
+    },
+    "Turn off deadlines from Shortcuts?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fristen aus Kurzbefehlen ausschalten?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Desactivar las fechas límite de Atajos?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désactiver les échéances depuis Raccourcis ?"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Matikan tenggat dari Pintasan?"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disattivare le scadenze da Comandi?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカットからの期限をオフにしますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축어에서 가져온 기한을 끌까요?"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wyłączyć terminy ze Skrótów?"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desativar prazos dos Atalhos?"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выключить сроки из быстрых команд?"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kestirmelerden son tarihler kapatılsın mı?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要关闭来自快捷指令的截止日期吗？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要關閉來自捷徑的截止日期嗎？"
+          }
+        }
+      }
+    },
+    "Turn off" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausschalten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desactivar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désactiver"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Matikan"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disattiva"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オフにする"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "끄기"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wyłącz"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desativar"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выключить"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kapat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "關閉"
+          }
+        }
+      }
+    },
+    "Pulse forgets the deadlines it kept from your Shortcuts inbox." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse vergisst die Fristen, die es aus deinem Kurzbefehle-Eingang behalten hat."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse olvida las fechas límite que guardó de tu bandeja de Atajos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse oublie les échéances qu'il a gardées de votre boîte de réception Raccourcis."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse melupakan tenggat yang disimpannya dari Kotak Masuk Pintasan kamu."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse dimentica le scadenze che ha conservato dalla tua Casella Comandi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulseはショートカット受信箱から保存した期限を忘れます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse가 단축어 받은 편지함에서 저장한 기한을 잊습니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse zapomni terminy, które zachował ze Skrzynki Skrótów."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Pulse esquece os prazos que guardou da sua Caixa de Atalhos."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse забудет сроки, которые сохранил из входящих быстрых команд."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse, Kestirmeler Gelen Kutusu'ndan sakladığı son tarihleri unutur."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 会忘记从你的快捷指令收件箱保留的截止日期。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 會忘記從你的捷徑收件匣保留的截止日期。"
+          }
+        }
+      }
+    },
+    "With memory on, Pulse also looks for deadlines in what your Shortcuts automations log, like a trial ending or a bill due, and brings each up a week ahead and the day before. Turning this off forgets the ones it kept." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ist das Gedächtnis an, sucht Pulse auch in dem, was deine Kurzbefehl-Automationen protokollieren, nach Fristen, etwa einem endenden Probeabo oder einer fälligen Rechnung, und erinnert eine Woche vorher und am Vortag daran. Beim Ausschalten vergisst Pulse die behaltenen Fristen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con la memoria activada, Pulse también busca fechas límite en lo que registran tus automatizaciones de Atajos, como el fin de una prueba gratuita o una factura por pagar, y te avisa de cada una una semana antes y el día anterior. Al desactivarlo, olvida las que guardó."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avec la mémoire activée, Pulse cherche aussi des échéances dans ce que vos automatisations Raccourcis consignent, comme la fin d'un essai gratuit ou une facture à payer, et vous rappelle chacune une semaine avant et la veille. En le désactivant, Pulse oublie celles qu'il a gardées."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saat memori aktif, Pulse juga mencari tenggat dalam apa yang dicatat otomatisasi Pintasan kamu, seperti masa uji coba yang berakhir atau tagihan yang jatuh tempo, lalu mengingatkan masing-masing seminggu sebelumnya dan sehari sebelumnya. Jika ini dimatikan, Pulse melupakan tenggat yang disimpannya."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con la memoria attiva, Pulse cerca scadenze anche in ciò che registrano le tue automazioni di Comandi, come una prova gratuita che termina o una bolletta da pagare, e te le ricorda una settimana prima e il giorno prima. Disattivandolo, Pulse dimentica quelle che ha conservato."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メモリがオンのとき、Pulseはショートカットのオートメーションが記録した内容からも、無料体験の終了や請求の支払期限などの期限を探し、それぞれ1週間前と前日にお知らせします。オフにすると、保存した期限を忘れます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메모리가 켜져 있으면 Pulse는 단축어 자동화가 기록한 내용에서도 무료 체험 종료나 청구서 납부 기한 같은 기한을 찾아 각각 1주일 전과 전날에 알려 줍니다. 끄면 저장한 기한을 잊습니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gdy pamięć jest włączona, Pulse szuka też terminów w tym, co zapisują Twoje automatyzacje Skrótów, np. końca okresu próbnego albo terminu płatności rachunku, i przypomina o każdym tydzień wcześniej i dzień wcześniej. Po wyłączeniu zapomina zachowane terminy."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Com a memória ativada, o Pulse também procura prazos no que suas automações de Atalhos registram, como o fim de um teste grátis ou uma conta a vencer, e lembra cada um uma semana antes e na véspera. Ao desativar, ele esquece os que guardou."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Когда память включена, Pulse также ищет сроки в том, что записывают ваши автоматизации быстрых команд, например окончание пробного периода или срок оплаты счёта, и напоминает о каждом за неделю и накануне. При выключении он забудет сохранённые сроки."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bellek açıkken Pulse, Kestirme otomasyonlarının kaydettiklerinde de deneme süresinin bitmesi ya da faturanın son ödeme tarihi gibi son tarihleri arar ve her birini bir hafta önce ve bir gün önce hatırlatır. Kapatırsan sakladığı son tarihleri unutur."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记忆开启时，Pulse 还会在你的快捷指令自动化记录的内容中寻找截止日期，例如试用期结束或账单到期，并在每个截止日期前一周和前一天提醒你。关闭后，它会忘记已保留的截止日期。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記憶開啟時，Pulse 也會在你的捷徑自動化記錄的內容中尋找截止日期，例如試用期結束或帳單到期，並在每個截止日期前一週和前一天提醒你。關閉後，它會忘記已保留的截止日期。"
+          }
+        }
+      }
+    },
+    "Hermes and Pulse can no longer read it, and Pulse forgets the deadlines it kept from it. Your automations keep logging new events." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes und Pulse können es dann nicht mehr lesen, und Pulse vergisst die Fristen, die es daraus behalten hat. Deine Automationen protokollieren weiterhin neue Ereignisse."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes y Pulse ya no podrán leerlo, y Pulse olvida las fechas límite que guardó de ahí. Tus automatizaciones siguen registrando eventos nuevos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes et Pulse ne pourront plus le lire, et Pulse oublie les échéances qu'il en a gardées. Vos automatisations continuent de consigner les nouveaux événements."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes dan Pulse tidak dapat membacanya lagi, dan Pulse melupakan tenggat yang disimpannya dari sana. Otomatisasi Anda tetap mencatat peristiwa baru."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes e Pulse non potranno più leggerlo, e Pulse dimentica le scadenze conservate da lì. Le tue automazioni continuano a registrare i nuovi eventi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HermesとPulseは読めなくなり、Pulseはそこから保存した期限を忘れます。オートメーションは引き続き新しいイベントを記録します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes와 Pulse가 더 이상 읽을 수 없으며, Pulse는 여기서 저장한 기한을 잊습니다. 자동화는 계속 새 이벤트를 기록합니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes i Pulse nie będą mogły tego odczytać, a Pulse zapomni terminy, które z tego zachował. Twoje automatyzacje nadal zapisują nowe zdarzenia."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Hermes e o Pulse não poderão mais ler, e o Pulse esquece os prazos que guardou dali. Suas automações continuam registrando novos eventos."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes и Pulse больше не смогут это прочитать, а Pulse забудет сохранённые из этого сроки. Ваши автоматизации продолжат записывать новые события."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes ve Pulse artık bunları okuyamaz, Pulse da buradan sakladığı son tarihleri unutur. Otomasyonlarınız yeni olayları kaydetmeye devam eder."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes 和 Pulse 将无法再读取，Pulse 也会忘记从中保留的截止日期。你的自动化会继续记录新事件。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hermes 和 Pulse 將無法再讀取，Pulse 也會忘記從中保留的截止日期。你的自動化會繼續記錄新事件。"
+          }
+        }
+      }
+    },
+    "When “Deadlines from Shortcuts” is on in Pulse's settings, Pulse keeps the deadlines it finds here, like a trial ending or a bill due. Deleting an event deletes them too." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn „Fristen aus Kurzbefehlen“ in den Einstellungen von Pulse eingeschaltet ist, behält Pulse die Fristen, die es hier findet, etwa ein endendes Probeabo oder eine fällige Rechnung. Wenn du ein Ereignis löschst, werden sie ebenfalls gelöscht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuando «Fechas límite de Atajos» está activado en los ajustes de Pulse, Pulse guarda las fechas límite que encuentra aquí, como el fin de una prueba gratuita o una factura por pagar. Al eliminar un evento, también se eliminan."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quand « Échéances depuis Raccourcis » est activé dans les réglages de Pulse, Pulse garde les échéances qu'il trouve ici, comme la fin d'un essai gratuit ou une facture à payer. Supprimer un événement les supprime aussi."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saat “Tenggat dari Pintasan” aktif di pengaturan Pulse, Pulse menyimpan tenggat yang ditemukannya di sini, seperti masa uji coba yang berakhir atau tagihan yang jatuh tempo. Menghapus peristiwa juga menghapus tenggatnya."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quando “Scadenze da Comandi” è attivo nelle impostazioni di Pulse, Pulse conserva le scadenze che trova qui, come una prova gratuita che termina o una bolletta da pagare. Eliminando un evento, vengono eliminate anche quelle."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulseの設定で「ショートカットからの期限」がオンのとき、Pulseはここで見つけた期限（無料体験の終了や請求の支払期限など）を保存します。イベントを削除すると、その期限も削除されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 설정에서 ‘단축어에서 가져온 기한’이 켜져 있으면 Pulse는 여기서 찾은 기한(무료 체험 종료, 청구서 납부 기한 등)을 저장합니다. 이벤트를 삭제하면 해당 기한도 삭제됩니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gdy opcja „Terminy ze Skrótów” jest włączona w ustawieniach Pulse, Pulse zachowuje terminy, które tu znajdzie, np. koniec okresu próbnego albo termin płatności rachunku. Usunięcie zdarzenia usuwa także je."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quando “Prazos dos Atalhos” está ativado nos ajustes do Pulse, o Pulse guarda os prazos que encontra aqui, como o fim de um teste grátis ou uma conta a vencer. Apagar um evento também apaga esses prazos."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Когда в настройках Pulse включён параметр «Сроки из быстрых команд», Pulse сохраняет сроки, которые находит здесь, например окончание пробного периода или срок оплаты счёта. При удалении события они тоже удаляются."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse ayarlarında “Kestirmelerden son tarihler” açıkken Pulse burada bulduğu, deneme süresinin bitmesi ya da faturanın son ödeme tarihi gibi son tarihleri saklar. Bir olayı silmek onları da siler."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Pulse 的设置中开启“来自快捷指令的截止日期”后，Pulse 会保留在这里找到的截止日期，例如试用期结束或账单到期。删除事件也会删除这些截止日期。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Pulse 的設定中開啟「來自捷徑的截止日期」後，Pulse 會保留在這裡找到的截止日期，例如試用期結束或帳單到期。刪除事件也會刪除這些截止日期。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

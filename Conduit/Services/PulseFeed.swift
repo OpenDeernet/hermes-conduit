@@ -20,7 +20,9 @@
 //  today ends when the night starts. From 0.88.0 (`pulse_dates`) Pulse
 //  brings up birthdays and anniversaries every year and looks two weeks
 //  ahead once a day, and What Pulse left out names the look ahead for what
-//  it left out.
+//  it left out. From 0.90.0 (`pulse_inbox`) Pulse memory keeps deadlines
+//  from the Shortcuts inbox: a deadline's card can be done, and Do it
+//  starts a new chat, as it came from none.
 //
 
 import Foundation
@@ -167,9 +169,12 @@ struct PulseCard: Equatable, Identifiable {
     /// (AppState.canMarkPulseCardDone).
     var canBeDone: Bool { (kind == "followup" || isNoticed) && itemID != nil }
 
-    /// It can be acted on in the chat the remembered thing came from.
+    /// It can be acted on in the chat the remembered thing came from, or in
+    /// a new one for a deadline from the Shortcuts inbox (0.90.0), which
+    /// came from no chat.
     var isActionable: Bool {
-        (kind == "followup" || (isNoticed && itemID != nil)) && !chatID.isEmpty && hasReminder
+        (kind == "followup" || (isNoticed && itemID != nil)) && (!chatID.isEmpty || topic == "deadline")
+            && hasReminder
     }
 
     /// Do it has a reminder to leave in the composer.
@@ -182,8 +187,9 @@ struct PulseCard: Equatable, Identifiable {
     /// that fits what the card is about, for the user to send or change.
     /// Something the user meant to do gets taken care of; what Hermes said
     /// it would do (a follow-up, a promise) gets a go-ahead; a date ahead,
-    /// getting ready; something watched, where it stands; an interest, more
-    /// about it; anything else, a look.
+    /// getting ready; a deadline, taking care of it before then; something
+    /// watched, where it stands; an interest, more about it; anything else,
+    /// a look.
     var actionMessage: String {
         let reminder = news.isEmpty ? title : news
         switch kind == "followup" ? "promise" : topic {
@@ -193,6 +199,8 @@ struct PulseCard: Equatable, Identifiable {
             return AppLocalization.string("Pulse reminded me: \(reminder)\n\nLet's take care of it now.")
         case "date":
             return AppLocalization.string("Pulse brought this up: \(reminder)\n\nHelp me get ready for it.")
+        case "deadline":
+            return AppLocalization.string("Pulse brought this up: \(reminder)\n\nHelp me take care of it before then.")
         case "watch":
             return AppLocalization.string("Pulse brought this up: \(reminder)\n\nWhere does that stand now?")
         case "interest":
@@ -367,6 +375,7 @@ enum PulseCardKind {
         case "intention": return AppLocalization.string("Plan")
         case "interest": return AppLocalization.string("Interest")
         case "fact": return AppLocalization.string("Worth knowing")
+        case "deadline": return AppLocalization.string("Deadline")
         default: return AppLocalization.string("Noticed")
         }
     }
@@ -376,6 +385,7 @@ enum PulseCardKind {
     static func name(_ kind: String) -> String {
         switch kind {
         case "followup", "report", "brief", "noticed": return title(kind)
+        case "deadline": return AppLocalization.string("Deadlines")
         default: return topic(kind)
         }
     }
@@ -681,6 +691,7 @@ enum PulsePlace {
         case "notes": AppLocalization.string("Hermes' notes")
         case "jobs": AppLocalization.string("Scheduled jobs")
         case "tools": AppLocalization.string("Tools")
+        case "inbox": AppLocalization.string("Shortcuts inbox")
         default: AppLocalization.string("Chats")
         }
     }
@@ -1003,6 +1014,21 @@ extension AppState {
         showsPulseSettings && notifierPlugin.reports(PulseClient.datesCapability)
     }
 
+    /// Settings > Shortcuts inbox says Pulse keeps the deadlines it finds
+    /// there, and deleting an event deletes them: where Pulse shows, with a
+    /// plugin that does (0.90.0).
+    var pulseKeepsInboxDeadlines: Bool {
+        showsPulseSettings && notifierPlugin.reports(PulseClient.inboxCapability)
+    }
+
+    /// The same for the inbox Settings > Shortcuts inbox shows (`scope`):
+    /// only the active dashboard's, the one whose plugin answered, and only
+    /// Pulse's own profile's, the one inbox Pulse reads.
+    func pulseKeepsDeadlines(from scope: ShortcutInboxScope?) -> Bool {
+        guard pulseKeepsInboxDeadlines, let scope, scope.dashboardID == activeDashboardID else { return false }
+        return profilesMatch(scope.profile, Self.pulseHomeProfile)
+    }
+
     /// Opens the chat a card came from.
     /// It opens at the message the card came from, as an artifact's Show
     /// in chat does, whatever the chat would otherwise land on.
@@ -1133,6 +1159,11 @@ extension PulseClient {
     /// people's included, and looks two weeks ahead once a day; What Pulse
     /// left out says what the look ahead left out (0.88.0).
     static let datesCapability = "pulse_dates"
+    /// Pulse memory keeps deadlines from the Shortcuts inbox, like a trial
+    /// ending or a bill due: Settings > Pulse's switch, What Pulse
+    /// remembers' Deadlines, and deadline cards with a level of their own
+    /// in What Pulse learned (0.90.0).
+    static let inboxCapability = "pulse_inbox"
 }
 
 /// What Not now puts a card off until, as the plugin names it. Wrong time
