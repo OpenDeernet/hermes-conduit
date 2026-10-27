@@ -269,6 +269,21 @@ final class ChatScrollEngineTests: XCTestCase {
         withExtendedLifetime(surface) {}
     }
 
+    func testALiveRowLosingItsFrameChecksForABlankViewport() {
+        let (engine, surface) = makeEngine()
+        engine.liveTailShowing = { true }
+        engine.liveRowFramesChanged([
+            "thinking": ChatScrollRowFrame(minY: 2000, maxY: 2400, order: .max),
+            "streaming": ChatScrollRowFrame(minY: 3200, maxY: 3980, order: .max),
+        ])
+        events = []
+        scheduled = []
+        engine.liveRowFramesChanged(["thinking": ChatScrollRowFrame(minY: 2000, maxY: 2400, order: .max)])
+        scheduled.forEach { $0() }
+        XCTAssertEqual(events.filter { $0 == .rebuildTranscript }.count, 1)
+        withExtendedLifetime(surface) {}
+    }
+
     /// Settled changes share the interval.
     func testASettledChangeSoonAfterARebuildWaitsOutTheInterval() {
         let (engine, surface) = settleTurn(frames: ["m3": ChatScrollRowFrame(minY: 900, maxY: 1100, order: 3)])

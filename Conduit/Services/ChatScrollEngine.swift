@@ -479,9 +479,10 @@ final class ChatScrollEngine: ObservableObject {
     }
 
     func liveRowFramesChanged(_ frames: [String: ChatScrollRowFrame]) {
+        let lostARow = liveRowFrames.keys.contains { frames[$0] == nil }
         liveRowFrames = frames
         // A stack that dropped its rows may change no size at all.
-        if frames.isEmpty {
+        if frames.isEmpty || lostARow {
             scheduleBlankViewportCheckDuringLiveTurn()
         }
     }

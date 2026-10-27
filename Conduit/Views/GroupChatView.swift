@@ -177,8 +177,10 @@ struct GroupChatView: View {
             }
             .id(transcriptScrollID)
             .onPreferenceChange(GroupRoomRowFramesPreferenceKey.self) { frames in
+                let lostARow = followFlag.rowFrames.keys.contains { frames[$0] == nil }
                 followFlag.rowFrames = frames
-                if frames.isEmpty {
+                // A stack that dropped its rows may change no size at all.
+                if frames.isEmpty || lostARow {
                     followFlag.checkForBlankViewport?()
                 }
             }
@@ -226,7 +228,10 @@ struct GroupChatView: View {
                     if appState.pendingRoomMessage != nil { return "pending-row" }
                     return appState.activeRoomReplay.events.last(where: GroupRoomTurns.isVisible)?.id
                 }
-                followFlag.rebuild = { transcriptScrollID &+= 1 }
+                // The binding, not this view: the flag would keep its own
+                // view state alive through it.
+                let scrollID = $transcriptScrollID
+                followFlag.rebuild = { scrollID.wrappedValue &+= 1 }
             }
         }
         .background(Color.clear)
