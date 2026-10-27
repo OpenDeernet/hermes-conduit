@@ -589,8 +589,22 @@ final class LiveTurnActivities {
             sessionIDs: Array(sessionIDs).sorted(),
             startedAgo: Date().timeIntervalSince(entry.activity.attributes.startedAt)
         )
-        // Unless a newer token replaced it meanwhile.
-        if running[id]?.pushToken == token { running[id]?.tokenInstallationID = installationID }
+        // Unless a newer token replaced it meanwhile. One that ended, or
+        // was replaced, while the registration was on its way goes again,
+        // in case the removal reached the relay first.
+        guard running[id]?.pushToken == token else {
+            if installationID != nil {
+                await PushNotificationService.shared.unregisterLiveActivity(token: token)
+            }
+            return
+        }
+        running[id]?.tokenInstallationID = installationID
+    }
+
+    /// Whether an activity's token still has to reach the relay: it has
+    /// one, and no relay installation took it yet.
+    nonisolated static func needsRegistration(pushToken: String?, tokenInstallationID: String?) -> Bool {
+        pushToken != nil && tokenInstallationID == nil
     }
 
     /// Conduit is back on screen: an activity whose registration didn't
@@ -598,7 +612,8 @@ final class LiveTurnActivities {
     /// again. One whose turn ended meanwhile is ended by the relay at once.
     private func registerUnregistered() {
         for (id, entry) in running {
-            guard let token = entry.pushToken, entry.tokenInstallationID == nil else { continue }
+            guard Self.needsRegistration(pushToken: entry.pushToken, tokenInstallationID: entry.tokenInstallationID),
+                  let token = entry.pushToken else { continue }
             let sessionIDs = entry.sessionIDs
             Task { [weak self] in
                 await self?.register(token: token, for: id, sessionIDs: sessionIDs)

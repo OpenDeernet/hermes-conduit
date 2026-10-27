@@ -1532,12 +1532,18 @@ final class PushNotificationService: ObservableObject {
             LiveActivityRegistration(
                 pushToken: token,
                 sessionIDs: Array(sessionIDs.prefix(6)),
-                startedAgo: startedAgo.isFinite ? max(0, startedAgo) : 0
+                startedAgo: Self.liveActivityStartedAgo(startedAgo)
             ),
             method: "PUT",
             registration: registration
         )
         return routeExists == true ? registration.installationID : nil
+    }
+
+    /// How long ago an activity started, as the relay is told: never
+    /// negative (the clock moved back) and never unreadable.
+    nonisolated static func liveActivityStartedAgo(_ startedAgo: TimeInterval) -> TimeInterval {
+        startedAgo.isFinite ? max(0, startedAgo) : 0
     }
 
     /// The activity ended on the phone: the relay forgets its token.
