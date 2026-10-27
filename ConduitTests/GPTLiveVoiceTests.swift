@@ -843,7 +843,8 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(controlled.microphoneEnabled, false)
         controller.stop()
 
-        let (session, peer) = makeGPTSession(client: FakeGPTLiveClient())
+        let peer = FakeGPTLivePeer()
+        let session = GPTLiveSession(client: FakeGPTLiveClient(), makePeer: { peer })
         session.setMicrophoneEnabled(false)
         session.start()
         await settle()
