@@ -1021,6 +1021,14 @@ extension AppState {
         showsPulseSettings && notifierPlugin.reports(PulseClient.inboxCapability)
     }
 
+    /// The same for the inbox Settings > Shortcuts inbox shows (`scope`):
+    /// only the active dashboard's, the one whose plugin answered, and only
+    /// Pulse's own profile's, the one inbox Pulse reads.
+    func pulseKeepsDeadlines(from scope: ShortcutInboxScope?) -> Bool {
+        guard pulseKeepsInboxDeadlines, let scope, scope.dashboardID == activeDashboardID else { return false }
+        return profilesMatch(scope.profile, Self.pulseHomeProfile)
+    }
+
     /// Opens the chat a card came from.
     /// It opens at the message the card came from, as an artifact's Show
     /// in chat does, whatever the chat would otherwise land on.

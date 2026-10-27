@@ -24,11 +24,10 @@ struct ShortcutInboxSettingsPage: View {
 
     /// Pulse can keep the deadlines it finds in this inbox, and deleting an
     /// event deletes them (0.90.0); Pulse reads only its own profile's. The
-    /// switch is Settings > Pulse's, so the caption names it.
+    /// switch is Settings > Pulse's, so the caption names it. A page still
+    /// showing another dashboard's inbox says nothing.
     private var pulseKeepsDeadlines: Bool {
-        guard appState.pulseKeepsInboxDeadlines,
-              let profile = (scope ?? appState.shortcutInboxScope)?.profile else { return false }
-        return appState.profilesMatch(profile, AppState.pulseHomeProfile)
+        appState.pulseKeepsDeadlines(from: scope ?? appState.shortcutInboxScope)
     }
 
     var body: some View {

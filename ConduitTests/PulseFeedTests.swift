@@ -1261,6 +1261,31 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertFalse(state.pulseKeepsInboxDeadlines)
     }
 
+    /// The page's caption speaks only for an inbox Pulse reads: the active
+    /// dashboard's, in Pulse's own profile. A page still showing another
+    /// dashboard's inbox, or another profile's, says nothing.
+    func testTheShortcutsInboxCaptionIsOnlyForTheInboxPulseReads() throws {
+        let suite = "PulseFeedTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let dashboard = SavedDashboard(id: UUID(), label: "Home", normalizedURL: "http://127.0.0.1:1")
+        let state = AppState(defaults: defaults, loadSavedConnection: false,
+                             dashboardRegistry: SavedDashboardRegistry(activeDashboardID: dashboard.id,
+                                                                       dashboards: [dashboard]),
+                             clearSessionPresentationCache: {})
+        state.setNotifierPluginStateForTesting(.reported(version: "0.90.0", capabilities: [
+            PulseClient.capability, PulseClient.feedCapability, PulseClient.inboxCapability
+        ]))
+        XCTAssertTrue(state.pulseKeepsDeadlines(from: ShortcutInboxScope(dashboardID: dashboard.id, profile: "Default")))
+        XCTAssertFalse(state.pulseKeepsDeadlines(from: ShortcutInboxScope(dashboardID: dashboard.id, profile: "work")))
+        XCTAssertFalse(state.pulseKeepsDeadlines(from: ShortcutInboxScope(dashboardID: UUID(), profile: "default")))
+        XCTAssertFalse(state.pulseKeepsDeadlines(from: nil))
+        state.setNotifierPluginStateForTesting(.reported(version: "0.88.0", capabilities: [
+            PulseClient.capability, PulseClient.feedCapability
+        ]))
+        XCTAssertFalse(state.pulseKeepsDeadlines(from: ShortcutInboxScope(dashboardID: dashboard.id, profile: "default")))
+    }
+
     func testResetLeftOutAndBringUpReachThePlugin() async throws {
         var calls: [(path: String, method: String, body: [String: Any]?)] = []
         var answer = try json(#"{"ok": true, "levels": {}, "lessons": [], "preferences": []}"#)
