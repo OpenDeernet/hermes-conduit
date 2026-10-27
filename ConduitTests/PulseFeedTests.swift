@@ -1499,8 +1499,9 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertTrue(state.explainsPulseCard(looked))
         XCTAssertFalse(state.explainsPulseCard(plain))
         XCTAssertFalse(state.explainsPulseCard(unknown))
-        for label in ["calendar", "phone", "contacts", "maps", "web"] {
+        for label in ["calendar", "phone", "contacts", "maps", "web", "location"] {
             XCTAssertNotNil(PulseCardKind.lookedSource(label), label)
         }
+        XCTAssertEqual(PulseCardKind.lookedSource("location"), AppLocalization.string("where you are"))
     }
 }
