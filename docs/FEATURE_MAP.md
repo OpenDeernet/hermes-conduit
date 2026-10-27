@@ -1469,7 +1469,7 @@ bot editor, saved with the bot)
 - Tests: `ConduitTests/ModelPickerTests.swift`
 
 **Rulings**
-- Every control applies on tap, like Settings; the sheet has no Apply button and stays open (Eric, 2026-10-27, #1333, #PRNUM).
+- Every control applies on tap, like Settings; the sheet has no Apply button and stays open (Eric, 2026-10-27, #1333, #1334).
 - A model Hermes wants confirmed asks on the tap; Cancel leaves the checkmark on the model the session still runs. A failed switch puts it back too and says why under the list.
 - A switch made mid-turn is held by Hermes for the next turn, and the sheet says it switches when the reply finishes.
 - Switching to a model without Ultrafast drops Ultrafast to Fast.
@@ -1478,7 +1478,7 @@ bot editor, saved with the bot)
 **Open gaps**
 - The checked row doesn't follow a model changed elsewhere while the sheet is open.
 
-**Checked:** 2026-10-27, at #PRNUM.
+**Checked:** 2026-10-27, at #1334.
 
 ## Files over the size limit
 
