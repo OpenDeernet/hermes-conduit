@@ -482,8 +482,8 @@ struct ModelPickerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // One switch at a time, and not under a reasoning or speed write.
-        .disabled(switchingRow != nil || isApplyingReasoning || writingSpeed != nil)
+        // One switch at a time, and not under another write.
+        .disabled(switchingRow != nil || isApplyingReasoning || writingSpeed != nil || writingYolo != nil)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -597,7 +597,7 @@ struct ModelPickerView: View {
                     set: { enabled in Task { @MainActor in await applyYolo(enabled) } }
                 ))
                 .tint(.conduitAccent)
-                .disabled(writingYolo != nil)
+                .disabled(writingYolo != nil || switchingRow != nil)
                 Text(yoloHelpText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -864,9 +864,9 @@ struct ModelPickerView: View {
         from previous: ModelPickerSelection,
         confirmed: Bool = false
     ) async {
-        // Not under a speed write either: the Ultrafast fallback reads the
-        // speed the switch lands on.
-        guard switchingRow == nil, !isApplyingReasoning, writingSpeed == nil else { return }
+        // One session write at a time, as Apply used to send them; the
+        // Ultrafast fallback also reads the speed the switch lands on.
+        guard switchingRow == nil, !isApplyingReasoning, writingSpeed == nil, writingYolo == nil else { return }
         // A confirmed retry always re-sends: the runtime may have moved while
         // the alert was up, and the confirmation must reach Hermes.
         guard confirmed || modelPickerShouldSwitch(
@@ -956,7 +956,7 @@ struct ModelPickerView: View {
 
     /// Flipping YOLO writes it at once, for this conversation only.
     private func applyYolo(_ enabled: Bool) async {
-        guard writingYolo == nil, !globalYoloFloor, enabled != appState.runtime.yolo else { return }
+        guard writingYolo == nil, switchingRow == nil, !globalYoloFloor, enabled != appState.runtime.yolo else { return }
         runSettingsError = nil
         writingYolo = enabled
         defer { writingYolo = nil }
