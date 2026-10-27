@@ -20,7 +20,9 @@
 //  today ends when the night starts. From 0.88.0 (`pulse_dates`) Pulse
 //  brings up birthdays and anniversaries every year and looks two weeks
 //  ahead once a day, and What Pulse left out names the look ahead for what
-//  it left out.
+//  it left out. From 0.90.0 (`pulse_inbox`) Pulse memory keeps deadlines
+//  from the Shortcuts inbox: a deadline's card can be done, and Do it
+//  starts a new chat, as it came from none.
 //
 
 import Foundation
@@ -168,7 +170,7 @@ struct PulseCard: Equatable, Identifiable {
     var canBeDone: Bool { (kind == "followup" || isNoticed) && itemID != nil }
 
     /// It can be acted on in the chat the remembered thing came from, or in
-    /// a new one for a deadline from the Shortcuts inbox (0.89.0), which
+    /// a new one for a deadline from the Shortcuts inbox (0.90.0), which
     /// came from no chat.
     var isActionable: Bool {
         (kind == "followup" || (isNoticed && itemID != nil)) && (!chatID.isEmpty || topic == "deadline")
@@ -1014,7 +1016,7 @@ extension AppState {
 
     /// Settings > Shortcuts inbox says Pulse keeps the deadlines it finds
     /// there, and deleting an event deletes them: where Pulse shows, with a
-    /// plugin that does (0.89.0).
+    /// plugin that does (0.90.0).
     var pulseKeepsInboxDeadlines: Bool {
         showsPulseSettings && notifierPlugin.reports(PulseClient.inboxCapability)
     }
@@ -1152,7 +1154,7 @@ extension PulseClient {
     /// Pulse memory keeps deadlines from the Shortcuts inbox, like a trial
     /// ending or a bill due: Settings > Pulse's switch, What Pulse
     /// remembers' Deadlines, and deadline cards with a level of their own
-    /// in What Pulse learned (0.89.0).
+    /// in What Pulse learned (0.90.0).
     static let inboxCapability = "pulse_inbox"
 }
 

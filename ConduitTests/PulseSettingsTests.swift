@@ -232,7 +232,7 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertEqual(state.backfillDays, 90)
         // Narrowed to this profile: the choice stays, so it can be widened.
         XCTAssertTrue(state.offersProfileChoice)
-        // A plugin from before 0.89.0 keeps no deadlines from the Shortcuts inbox.
+        // A plugin from before 0.90.0 keeps no deadlines from the Shortcuts inbox.
         XCTAssertNil(state.inboxDeadlines)
     }
 
@@ -298,7 +298,7 @@ final class PulseSettingsTests: XCTestCase {
             AppLocalization.string("Every year on \("29 February")"), nil, nil, nil
         ])
         XCTAssertEqual(PulseMemoryKind.sorted(["fact", "zzz", "commitment"]), ["commitment", "fact", "zzz"])
-        // A deadline from the Shortcuts inbox (0.89.0) says who it's from and when it was logged, not a chat.
+        // A deadline from the Shortcuts inbox (0.90.0) says who it's from and when it was logged, not a chat.
         let deadline = items[4]
         XCTAssertTrue(deadline.fromInbox)
         XCTAssertEqual(deadline.sender, "Netflix")

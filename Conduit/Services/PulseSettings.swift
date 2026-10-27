@@ -132,7 +132,7 @@ struct PulseState: Equatable {
     var reportProfiles = "this"
     var otherProfiles: [String] = []
     var memory = false
-    /// Memory keeps deadlines from the Shortcuts inbox (0.89.0); nil from an
+    /// Memory keeps deadlines from the Shortcuts inbox (0.90.0); nil from an
     /// older plugin.
     var inboxDeadlines: Bool?
     var memoryCounts: [String: Int] = [:]
@@ -471,7 +471,7 @@ struct PulseMemoryItem: Equatable, Identifiable {
     /// and day, "MM-DD", or "YYYY-MM-DD" with the year it began; "" for the
     /// rest.
     let everyYear: String
-    /// A deadline memory kept from the Shortcuts inbox (0.89.0), from no
+    /// A deadline memory kept from the Shortcuts inbox (0.90.0), from no
     /// chat: who its event is from, and when it was logged.
     let fromInbox: Bool
     let sender: String

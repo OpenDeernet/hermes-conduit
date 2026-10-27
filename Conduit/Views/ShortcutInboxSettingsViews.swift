@@ -22,8 +22,9 @@ struct ShortcutInboxSettingsPage: View {
     @State private var errorMessage: String?
     @State private var showsDeleteAll = false
 
-    /// Pulse keeps the deadlines it finds in this inbox, and deleting an
-    /// event deletes them (0.89.0); Pulse reads only its own profile's.
+    /// Pulse can keep the deadlines it finds in this inbox, and deleting an
+    /// event deletes them (0.90.0); Pulse reads only its own profile's. The
+    /// switch is Settings > Pulse's, so the caption names it.
     private var pulseKeepsDeadlines: Bool {
         guard appState.pulseKeepsInboxDeadlines,
               let profile = (scope ?? appState.shortcutInboxScope)?.profile else { return false }
@@ -37,7 +38,7 @@ struct ShortcutInboxSettingsPage: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if pulseKeepsDeadlines {
-                    Text(AppLocalization.string("Pulse keeps the deadlines it finds here, like a trial ending or a bill due. Deleting an event deletes them too."))
+                    Text(AppLocalization.string("When “Deadlines from Shortcuts” is on in Pulse's settings, Pulse keeps the deadlines it finds here, like a trial ending or a bill due. Deleting an event deletes them too."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

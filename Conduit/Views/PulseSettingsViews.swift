@@ -108,6 +108,8 @@ struct PulseSettingsPage: View {
             noteDraft = nil
             providers = []
             showsRecent = false
+            // Turning deadlines off was asked of the old host; answered now, it would act on the new one.
+            confirmsInboxOff = false
         }
     }
 
@@ -440,7 +442,7 @@ struct PulseSettingsPage: View {
             Text("Pulse keeps short notes on promises, plans and dates, so it can bring them up later. You can remove any of them.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if appState.notifierPlugin.reports(PulseClient.inboxCapability), let deadlines = state.inboxDeadlines {
+            if appState.pulseKeepsInboxDeadlines, let deadlines = state.inboxDeadlines {
                 Toggle("Deadlines from Shortcuts", isOn: Binding(
                     get: { deadlines },
                     set: { on in
@@ -453,6 +455,7 @@ struct PulseSettingsPage: View {
                 ))
                 // Read with memory: off with it, there's nothing to switch.
                 .disabled(working || !state.memory)
+                .accessibilityHint(state.memory ? Text(verbatim: "") : Text(AppLocalization.string("Turn on Pulse's memory first.")))
                 .accessibilityIdentifier("settings.pulse.inbox-deadlines")
                 .confirmationDialog(AppLocalization.string("Turn off deadlines from Shortcuts?"),
                                     isPresented: $confirmsInboxOff, titleVisibility: .visible) {

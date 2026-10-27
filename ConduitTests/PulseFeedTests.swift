@@ -1210,7 +1210,7 @@ final class PulseFeedTests: XCTestCase {
            "quote": "Your free trial ends on 21 October", "chat_id": ""}
         ]}
         """)))
-        state.setNotifierPluginStateForTesting(.reported(version: "0.89.0", capabilities: [
+        state.setNotifierPluginStateForTesting(.reported(version: "0.90.0", capabilities: [
             PulseClient.capability, PulseClient.feedCapability, PulseClient.doneCapability,
             PulseClient.actedCapability, PulseClient.inboxCapability
         ]))
@@ -1228,7 +1228,7 @@ final class PulseFeedTests: XCTestCase {
         // Another remembered item with no chat still has nowhere to act.
         let other = try XCTUnwrap(PulseFeedPage(json: json("""
         {"cards": [{"id": 4, "kind": "noticed", "topic": "promise", "item_id": 5, "level": "screen", "news": "x", "chat_id": ""}]}
-        """)).cards.first)
+        """))?.cards.first)
         XCTAssertFalse(other.isActionable)
         // What learning learns about deadlines is about the Shortcuts inbox.
         XCTAssertEqual(PulsePlace.source("inbox"), AppLocalization.string("Shortcuts inbox"))
@@ -1251,13 +1251,13 @@ final class PulseFeedTests: XCTestCase {
             PulseClient.capability, PulseClient.feedCapability
         ]))
         XCTAssertFalse(state.pulseKeepsInboxDeadlines)
-        state.setNotifierPluginStateForTesting(.reported(version: "0.89.0", capabilities: [
+        state.setNotifierPluginStateForTesting(.reported(version: "0.90.0", capabilities: [
             PulseClient.capability, PulseClient.feedCapability, PulseClient.inboxCapability
         ]))
         XCTAssertTrue(state.pulseKeepsInboxDeadlines)
         XCTAssertEqual(PulseClient.inboxCapability, "pulse_inbox")
         // Without Pulse on the host, nothing to say.
-        state.setNotifierPluginStateForTesting(.reported(version: "0.89.0", capabilities: [PulseClient.inboxCapability]))
+        state.setNotifierPluginStateForTesting(.reported(version: "0.90.0", capabilities: [PulseClient.inboxCapability]))
         XCTAssertFalse(state.pulseKeepsInboxDeadlines)
     }
 

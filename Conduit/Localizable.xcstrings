@@ -367874,88 +367874,6 @@
         }
       }
     },
-    "Pulse keeps the deadlines it finds here, like a trial ending or a bill due. Deleting an event deletes them too." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse behält die Fristen, die es hier findet, etwa ein endendes Probeabo oder eine fällige Rechnung. Wenn du ein Ereignis löschst, werden sie ebenfalls gelöscht."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse guarda las fechas límite que encuentra aquí, como el fin de una prueba gratuita o una factura por pagar. Al eliminar un evento, también se eliminan."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse garde les échéances qu'il trouve ici, comme la fin d'un essai gratuit ou une facture à payer. Supprimer un événement les supprime aussi."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse menyimpan tenggat yang ditemukannya di sini, seperti masa uji coba yang berakhir atau tagihan yang jatuh tempo. Menghapus peristiwa juga menghapus tenggatnya."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse conserva le scadenze che trova qui, come una prova gratuita che termina o una bolletta da pagare. Eliminando un evento, vengono eliminate anche quelle."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulseはここで見つけた期限（無料体験の終了や請求の支払期限など）を保存します。イベントを削除すると、その期限も削除されます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse는 여기서 찾은 기한(무료 체험 종료, 청구서 납부 기한 등)을 저장합니다. 이벤트를 삭제하면 해당 기한도 삭제됩니다."
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse zachowuje terminy, które tu znajdzie, np. koniec okresu próbnego albo termin płatności rachunku. Usunięcie zdarzenia usuwa także je."
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "O Pulse guarda os prazos que encontra aqui, como o fim de um teste grátis ou uma conta a vencer. Apagar um evento também apaga esses prazos."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse сохраняет сроки, которые находит здесь, например окончание пробного периода или срок оплаты счёта. При удалении события они тоже удаляются."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse burada bulduğu, deneme süresinin bitmesi ya da faturanın son ödeme tarihi gibi son tarihleri saklar. Bir olayı silmek onları da siler."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse 会保留在这里找到的截止日期，例如试用期结束或账单到期。删除事件也会删除这些截止日期。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pulse 會保留在這裡找到的截止日期，例如試用期結束或帳單到期。刪除事件也會刪除這些截止日期。"
-          }
-        }
-      }
-    },
     "Hermes and Pulse can no longer read it, and Pulse forgets the deadlines it kept from it. Your automations keep logging new events." : {
       "localizations" : {
         "de" : {
@@ -368034,6 +367952,88 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hermes 和 Pulse 將無法再讀取，Pulse 也會忘記從中保留的截止日期。你的自動化會繼續記錄新事件。"
+          }
+        }
+      }
+    },
+    "When “Deadlines from Shortcuts” is on in Pulse's settings, Pulse keeps the deadlines it finds here, like a trial ending or a bill due. Deleting an event deletes them too." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn „Fristen aus Kurzbefehlen“ in den Einstellungen von Pulse eingeschaltet ist, behält Pulse die Fristen, die es hier findet, etwa ein endendes Probeabo oder eine fällige Rechnung. Wenn du ein Ereignis löschst, werden sie ebenfalls gelöscht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuando «Fechas límite de Atajos» está activado en los ajustes de Pulse, Pulse guarda las fechas límite que encuentra aquí, como el fin de una prueba gratuita o una factura por pagar. Al eliminar un evento, también se eliminan."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quand « Échéances depuis Raccourcis » est activé dans les réglages de Pulse, Pulse garde les échéances qu'il trouve ici, comme la fin d'un essai gratuit ou une facture à payer. Supprimer un événement les supprime aussi."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saat “Tenggat dari Pintasan” aktif di pengaturan Pulse, Pulse menyimpan tenggat yang ditemukannya di sini, seperti masa uji coba yang berakhir atau tagihan yang jatuh tempo. Menghapus peristiwa juga menghapus tenggatnya."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quando “Scadenze da Comandi” è attivo nelle impostazioni di Pulse, Pulse conserva le scadenze che trova qui, come una prova gratuita che termina o una bolletta da pagare. Eliminando un evento, vengono eliminate anche quelle."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulseの設定で「ショートカットからの期限」がオンのとき、Pulseはここで見つけた期限（無料体験の終了や請求の支払期限など）を保存します。イベントを削除すると、その期限も削除されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 설정에서 ‘단축어에서 가져온 기한’이 켜져 있으면 Pulse는 여기서 찾은 기한(무료 체험 종료, 청구서 납부 기한 등)을 저장합니다. 이벤트를 삭제하면 해당 기한도 삭제됩니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gdy opcja „Terminy ze Skrótów” jest włączona w ustawieniach Pulse, Pulse zachowuje terminy, które tu znajdzie, np. koniec okresu próbnego albo termin płatności rachunku. Usunięcie zdarzenia usuwa także je."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quando “Prazos dos Atalhos” está ativado nos ajustes do Pulse, o Pulse guarda os prazos que encontra aqui, como o fim de um teste grátis ou uma conta a vencer. Apagar um evento também apaga esses prazos."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Когда в настройках Pulse включён параметр «Сроки из быстрых команд», Pulse сохраняет сроки, которые находит здесь, например окончание пробного периода или срок оплаты счёта. При удалении события они тоже удаляются."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse ayarlarında “Kestirmelerden son tarihler” açıkken Pulse burada bulduğu, deneme süresinin bitmesi ya da faturanın son ödeme tarihi gibi son tarihleri saklar. Bir olayı silmek onları da siler."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Pulse 的设置中开启“来自快捷指令的截止日期”后，Pulse 会保留在这里找到的截止日期，例如试用期结束或账单到期。删除事件也会删除这些截止日期。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Pulse 的設定中開啟「來自捷徑的截止日期」後，Pulse 會保留在這裡找到的截止日期，例如試用期結束或帳單到期。刪除事件也會刪除這些截止日期。"
           }
         }
       }
