@@ -422,4 +422,34 @@ final class CarPlayTransportRecoveryTests: XCTestCase {
         XCTAssertTrue(resolved === client)
         XCTAssertEqual(checks, 0)
     }
+
+    /// Requests at the same time share one check.
+    func testConcurrentOffScreenRequestsShareOneCheck() async throws {
+        let recorder = ReconnectRecorder()
+        let appState = makeAppState(recorder: recorder)
+        appState.handleScenePhase(.background)
+        appState.setCarPlayVoiceSurfaceActive(true)
+        let client = HermesClient(
+            connection: HermesConnection(baseUrl: "https://example.com", ticket: "test-ticket"),
+            profile: "default"
+        )
+        appState.client = client
+        appState.isConnected = true
+        var checks = 0
+        var held: CheckedContinuation<Bool?, Never>?
+        appState.quietTransportLiveness = { _ in
+            checks += 1
+            return await withCheckedContinuation { held = $0 }
+        }
+
+        let first = Task { @MainActor in try? await appState.clientForVoiceRequest() }
+        for _ in 0..<50 where held == nil { await Task.yield() }
+        let second = Task { @MainActor in try? await appState.clientForVoiceRequest() }
+        for _ in 0..<20 { await Task.yield() }
+        held?.resume(returning: true)
+        let resolved = [await first.value, await second.value]
+
+        XCTAssertEqual(checks, 1)
+        XCTAssertTrue(resolved.allSatisfy { $0 === client })
+    }
 }

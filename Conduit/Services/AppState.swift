@@ -3913,7 +3913,7 @@ final class AppState: ObservableObject {
         isBusy: { [weak self] chat in
             guard let self else { return false }
             if chat.runtimeID == self.activeSessionId { return self.isBusy }
-            guard let client = self.client else { throw HermesError.notConnected }
+            let client = try await self.clientForVoiceRequest()
             let rows = try await client.activeSessions(inProfile: chat.profile)
             return rows.contains { $0.runtimeSessionId == chat.runtimeID && $0.isRunning }
         },
@@ -8403,7 +8403,8 @@ final class AppState: ObservableObject {
 
     private func liveVoiceThreadIsBusy(_ thread: VoiceThreadTarget) async -> Bool {
         if isOpenChat(thread) { return isBusy }
-        guard let client, let rows = try? await client.activeSessions(inProfile: thread.profile) else { return false }
+        guard let client = try? await clientForVoiceRequest(),
+              let rows = try? await client.activeSessions(inProfile: thread.profile) else { return false }
         return rows.contains { row in
             (thread.owns(sessionID: row.runtimeSessionId) || thread.owns(sessionID: row.storedSessionId)) && row.isRunning
         }

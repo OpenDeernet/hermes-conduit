@@ -2278,6 +2278,8 @@ final class HermesClient: ObservableObject {
             try await ping(timeout: keepalivePingTimeout)
             return true
         } catch {
+            // A cancelled check says nothing about the socket.
+            if error is CancellationError || Task.isCancelled { return true }
             guard self.socket === socket, !closedIntentionally else { return false }
             if lastInboundAt > started { return true }
             logger.error("Liveness ping unanswered; closing the socket")
