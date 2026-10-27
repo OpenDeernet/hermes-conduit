@@ -2237,7 +2237,7 @@ docs/OWN_VOICE_SERVER.md (names Tailscale only as a way to reach the speech
 server, never Tailscale SSH)
 
 **Code**
-- Assistant: `Conduit/Services/ConnectionSetupFlow.swift`, `Conduit/Views/ConnectionSetupView.swift`, `Conduit/Views/Login/LoginScreens.swift`
+- Assistant: `Conduit/Services/ConnectionSetupFlow.swift`, `Conduit/Views/ConnectionSetupView.swift`, `Conduit/Views/ConnectionSetupForm.swift`, `Conduit/Views/Login/LoginScreens.swift`
 - Docs: `README.md`
 
 **Rulings**
