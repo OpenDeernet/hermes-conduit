@@ -2817,10 +2817,10 @@ final class CarPlayVoicePhoneAttachTests: XCTestCase {
         }
     }
 
-    /// #1376: a call from Hermes on Local Live in agent mode opens Local
-    /// Live, whose fast model says why Hermes called; Classic's hands-free
-    /// option on the speech server still opens classic voice.
-    func testHermesCallOnLocalLiveOpensItOnlyInAgentMode() async {
+    /// #1376: a call from Hermes on Local Live opens Local Live when its
+    /// answer chose a live opening (agent mode: the fast model says why
+    /// Hermes called); otherwise classic voice, which was queued the news.
+    func testHermesCallOnLocalLiveOpensWhatItsAnswerChose() async {
         for agent in [true, false] {
             let harness = CarPlayVoiceCoordinatorTests.makeSharedHarness()
             addTeardownBlock { [defaults = harness.defaults, suite = harness.defaultsSuiteName] in
@@ -2831,6 +2831,10 @@ final class CarPlayVoicePhoneAttachTests: XCTestCase {
             await harness.controller.startListening()
             harness.appState.setLocalLiveEnabled(true)
             harness.appState.setLocalLiveAgent(agent)
+            XCTAssertEqual(harness.appState.usesLocalLiveAgent(profile: harness.appState.activeProfile), agent)
+            if harness.appState.usesLocalLiveAgent(profile: harness.appState.activeProfile) {
+                harness.appState.pendingHermesCall = HermesCallOpening(kind: .done, title: "Build", result: "Green")
+            }
 
             let opened = await harness.appState.openVoiceConversation(
                 PendingVoiceIntent(profile: nil, startsFreshConversation: false, source: .hermesCall)
@@ -2841,6 +2845,7 @@ final class CarPlayVoicePhoneAttachTests: XCTestCase {
             XCTAssertEqual(harness.appState.showVoiceSheet, !agent)
             harness.appState.closeLocalLiveConversation()
             harness.appState.closeVoiceConversation()
+            harness.appState.pendingHermesCall = nil
         }
     }
 

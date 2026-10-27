@@ -34746,9 +34746,10 @@ final class AppState: ObservableObject {
         }
         // A call from Hermes opens with its news, which Local Live has no
         // model of its own to say outside agent mode: classic voice takes
-        // it. In agent mode its fast model says it (#1376).
-        if intent.source == .hermesCall, liveEngine == .localLive,
-           !usesLocalLiveAgent(profile: targetProfile) {
+        // it. In agent mode its fast model says it (#1376). The call made
+        // that choice when it was answered: a live opening waits in
+        // pendingHermesCall, and a classic one was queued for classic voice.
+        if intent.source == .hermesCall, liveEngine == .localLive, pendingHermesCall == nil {
             liveEngine = nil
         }
         if intent.source == .screenQuestion {
