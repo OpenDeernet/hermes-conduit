@@ -914,7 +914,8 @@ struct V2PulsePage: View {
         if expandedWhy.contains(card.id), appState.explainsPulseCard(card) {
             VStack(alignment: .leading, spacing: 8) {
                 if appState.explainsPulseCardReason(card) {
-                    Text(verbatim: card.why)
+                    // A card back after a Do it that stalled says so in the app's language.
+                    Text(verbatim: card.backText() ?? card.why)
                 }
                 if appState.pulseLooksFirst, let looked = card.lookedText {
                     Text(verbatim: looked)
@@ -1508,6 +1509,7 @@ enum PulseTopicTint {
         case "intention", "interest": return .teal
         case "fact": return .green
         case "deadline": return .orange
+        case "next": return .indigo
         default: return .secondary
         }
     }
