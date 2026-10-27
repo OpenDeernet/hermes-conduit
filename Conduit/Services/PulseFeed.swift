@@ -17,7 +17,10 @@
 //  didn't bring up, with Bring it up. From 0.86.0 (`pulse_hours`) a thumbs
 //  down's Wrong time puts the card away until a better time and keeps its
 //  kind's notifications out of that part of the day, and Not now's later
-//  today ends when the night starts.
+//  today ends when the night starts. From 0.88.0 (`pulse_dates`) Pulse
+//  brings up birthdays and anniversaries every year and looks two weeks
+//  ahead once a day, and What Pulse left out names the look ahead for what
+//  it left out.
 //
 
 import Foundation
@@ -683,8 +686,9 @@ enum PulsePlace {
     }
 }
 
-/// Something the latest reports considered and left out, and why (GET
-/// /pulse/left_out, 0.84.0): What Pulse left out lists it, with Bring it up.
+/// Something the latest reports, or the latest look ahead (0.88.0),
+/// considered and left out, and why (GET /pulse/left_out, 0.84.0): What
+/// Pulse left out lists it, with Bring it up.
 struct PulseLeftOut: Equatable, Identifiable {
     /// Its candidate in the journal, which Bring it up names.
     let id: Int
@@ -702,6 +706,9 @@ struct PulseLeftOut: Equatable, Identifiable {
     let learned: PulsePreference?
     let chatTitle: String
     let createdAt: Date?
+    /// What left it out: "report", or "look_ahead" (0.88.0: the daily look
+    /// two weeks ahead). Before 0.88.0 only reports did, and it's "".
+    let from: String
     /// The card Bring it up made of it; nil until then.
     var cardID: Int?
 
@@ -715,6 +722,7 @@ struct PulseLeftOut: Equatable, Identifiable {
         skip = object["skip"] as? String ?? ""
         chatTitle = object["chat_title"] as? String ?? ""
         createdAt = PulseJSON.date(object["created_at"])
+        from = object["from"] as? String ?? ""
         cardID = PulseJSON.int(object["card_id"])
         learned = PulsePreference(json: object["learned"],
                                   chatPlace: PulsePreference.chatPlace(object["profile"] as? String ?? "",
@@ -726,15 +734,24 @@ struct PulseLeftOut: Equatable, Identifiable {
     /// report's own picking.
     var isKeptOut: Bool { ["quieted", "muted", "off"].contains(decision) }
 
+    /// Left out by the daily look ahead rather than a report.
+    var isLookAhead: Bool { from == "look_ahead" }
+
     /// Why it stayed out, in a line.
     var reason: String {
         switch decision {
         case "quieted": return AppLocalization.string("What you did with cards like this kept it out")
         case "muted": return AppLocalization.string("You said things from this chat aren't relevant")
         case "off": return AppLocalization.string("You turned this kind off")
-        case "over_limit": return AppLocalization.string("Picked, but the report was full")
-        case "not_picked": return AppLocalization.string("Not picked for the report")
-        case "unanswered": return AppLocalization.string("The report passed over it")
+        case "over_limit":
+            return isLookAhead ? AppLocalization.string("Picked, but the look ahead was full")
+                : AppLocalization.string("Picked, but the report was full")
+        case "not_picked":
+            return isLookAhead ? AppLocalization.string("Not picked in the look ahead")
+                : AppLocalization.string("Not picked for the report")
+        case "unanswered":
+            return isLookAhead ? AppLocalization.string("The look ahead passed over it")
+                : AppLocalization.string("The report passed over it")
         case "resting":
             return skip == "rated" ? AppLocalization.string("Resting after your thumbs down")
                 : AppLocalization.string("Resting after you said Not now")
@@ -980,6 +997,12 @@ extension AppState {
         PulseDownReason.offered(knowsHours: notifierPlugin.reports(PulseClient.hoursCapability))
     }
 
+    /// Settings > Calendar & phone > People says Pulse brings up the picked
+    /// people's birthdays: where Pulse shows, with a plugin that does (0.88.0).
+    var pulseBringsUpBirthdays: Bool {
+        showsPulseSettings && notifierPlugin.reports(PulseClient.datesCapability)
+    }
+
     /// Opens the chat a card came from.
     /// It opens at the message the card came from, as an artifact's Show
     /// in chat does, whatever the chat would otherwise land on.
@@ -1106,6 +1129,10 @@ extension PulseClient {
     /// Pulse picks the time: the night in Settings > Pulse, waits while the
     /// user is busy, and a thumbs down's Wrong time (0.86.0).
     static let hoursCapability = "pulse_hours"
+    /// Pulse brings up birthdays and anniversaries every year, the picked
+    /// people's included, and looks two weeks ahead once a day; What Pulse
+    /// left out says what the look ahead left out (0.88.0).
+    static let datesCapability = "pulse_dates"
 }
 
 /// What Not now puts a card off until, as the plugin names it. Wrong time

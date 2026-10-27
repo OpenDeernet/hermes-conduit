@@ -463,6 +463,10 @@ struct PulseMemoryItem: Equatable, Identifiable {
     let mentionedAt: Date?
     let profile: String
     let chatID: String
+    /// A fact about a date that comes back every year (0.88.0): its month
+    /// and day, "MM-DD", or "YYYY-MM-DD" with the year it began; "" for the
+    /// rest.
+    let everyYear: String
 
     init?(json: Any) {
         guard let object = json as? [String: Any],
@@ -478,6 +482,28 @@ struct PulseMemoryItem: Equatable, Identifiable {
         mentionedAt = PulseJSON.date(object["mentioned_at"])
         profile = object["profile"] as? String ?? ""
         chatID = object["chat_id"] as? String ?? ""
+        everyYear = object["every_year"] as? String ?? ""
+    }
+
+    /// "Every year on 3 March" for a fact about a yearly date, in the app's
+    /// language; nil for the rest, or a month and day this build can't read.
+    /// The year isn't shown, so it isn't checked.
+    func everyYearText(locale: Locale = AppLocalization.formattingLocale) -> String? {
+        let parts = everyYear.split(separator: "-").map { Int($0) }
+        guard parts.count == 2 || parts.count == 3, let month = parts[parts.count - 2],
+              let day = parts[parts.count - 1] else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
+        // A leap year, so 29 February is a day too.
+        guard let date = calendar.date(from: DateComponents(year: 2000, month: month, day: day)),
+              calendar.component(.month, from: date) == month,
+              calendar.component(.day, from: date) == day else { return nil }
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = locale
+        formatter.setLocalizedDateFormatFromTemplate("MMMMd")
+        return AppLocalization.string("Every year on \(formatter.string(from: date))")
     }
 }
 

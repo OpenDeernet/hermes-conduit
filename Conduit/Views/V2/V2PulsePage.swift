@@ -1486,9 +1486,10 @@ struct PulseLearnedSheet: View {
     }
 }
 
-/// What Pulse left out (0.84.0): what the latest reports considered and
-/// didn't bring up, and why, what learning or the user's own rules kept out
-/// first, each with Bring it up, which makes it a card on the Pulse screen.
+/// What Pulse left out (0.84.0): what the latest reports, and from 0.88.0
+/// the latest look ahead, considered and didn't bring up, and why, what
+/// learning or the user's own rules kept out first, each with Bring it up,
+/// which makes it a card on the Pulse screen.
 struct PulseLeftOutSheet: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -1506,7 +1507,8 @@ struct PulseLeftOutSheet: View {
             List {
                 if let entries {
                     let kept = entries.filter(\.isKeptOut)
-                    let passed = entries.filter { !$0.isKeptOut }
+                    let reported = entries.filter { !$0.isKeptOut && !$0.isLookAhead }
+                    let lookedAhead = entries.filter { !$0.isKeptOut && $0.isLookAhead }
                     if entries.isEmpty {
                         Section {
                             Text("Nothing left out lately.")
@@ -1521,14 +1523,23 @@ struct PulseLeftOutSheet: View {
                         } header: {
                             Text("Kept out by what you taught Pulse")
                         } footer: {
-                            if passed.isEmpty { footer }
+                            if reported.isEmpty && lookedAhead.isEmpty { footer }
                         }
                     }
-                    if !passed.isEmpty {
+                    if !reported.isEmpty {
                         Section {
-                            ForEach(passed) { entry in row(entry) }
+                            ForEach(reported) { entry in row(entry) }
                         } header: {
                             Text("Left out of the report")
+                        } footer: {
+                            if lookedAhead.isEmpty { footer }
+                        }
+                    }
+                    if !lookedAhead.isEmpty {
+                        Section {
+                            ForEach(lookedAhead) { entry in row(entry) }
+                        } header: {
+                            Text("Left out of the look ahead")
                         } footer: {
                             footer
                         }
@@ -1561,8 +1572,13 @@ struct PulseLeftOutSheet: View {
         .presentationDragIndicator(.visible)
     }
 
+    @ViewBuilder
     private var footer: some View {
-        Text("From the latest reports. Bring it up makes it a card on the Pulse screen, without a notification, and what you do with it teaches Pulse about things like it.")
+        if entries?.contains(where: \.isLookAhead) == true {
+            Text("From the latest reports and look ahead. Bring it up makes it a card on the Pulse screen, without a notification, and what you do with it teaches Pulse about things like it.")
+        } else {
+            Text("From the latest reports. Bring it up makes it a card on the Pulse screen, without a notification, and what you do with it teaches Pulse about things like it.")
+        }
     }
 
     private func row(_ entry: PulseLeftOut) -> some View {

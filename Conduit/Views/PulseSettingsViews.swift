@@ -1050,6 +1050,11 @@ struct PulseMemoryList: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if let yearly = item.everyYearText() {
+                Text(verbatim: yearly)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             if let mentioned = item.mentionedAt {
                 Text(AppLocalization.string("Last mentioned \(mentioned.formatted(.relative(presentation: .named)))"))
                     .font(.caption)
