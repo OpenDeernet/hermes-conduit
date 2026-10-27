@@ -1186,7 +1186,7 @@ def _nightly_only(path: str):
 def cmd_smoke(args) -> int:
     """Validate the curated smoke selection against the discovered inventory.
 
-    PR and main CI runs only these classes (docs/CI.md, CI v5): every other
+    A PR or push run runs only these classes (docs/CI.md, CI v5): every other
     class runs in the nightly workflow (`cmd_hosted`). This subcommand is what
     keeps that selection honest - a class that is renamed, deleted or moved
     between targets fails the plan job instead of silently shrinking PR

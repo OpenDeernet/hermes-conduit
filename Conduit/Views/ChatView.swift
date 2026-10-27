@@ -280,6 +280,8 @@ struct ChatView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             planDock
+            // Predictive guesses (off unless turned on in Settings > Chat).
+            PredictiveRow(store: appState.predictive, appState: appState)
             // Composer + control bar. Equatable: it redraws for what it
             // shows, not for every redraw of this view.
             ComposerBar(appState: appState).equatable()
@@ -540,7 +542,7 @@ struct ChatView: View {
             ChatJumpControls(
                 chrome: scrollEngine.chrome,
                 pendingClarifyMessageID: appState.pendingClarifyMessageID,
-                pendingIsApproval: appState.pendingDecisionIsApproval,
+                pendingKind: appState.pendingDecisionKind,
                 jumpToQuestion: { id in scrollEngine.explicitMessageRequested(id: id) },
                 jumpToLatest: { requestLatest(animated: true) },
                 followingChanged: {
@@ -969,17 +971,41 @@ private final class ChatScrollEventRouter {
     }
 }
 
-/// The jump-to-latest and go-to-your-question button. It observes the
+/// The jump-to-latest and go-to-what-Hermes-waits-on button. It observes the
 /// engine's chrome on its own, so leaving the latest message, or the button
 /// appearing and going, re-renders this button and not the transcript.
 private struct ChatJumpControls: View {
     @ObservedObject var chrome: ChatScrollChrome
     let pendingClarifyMessageID: String?
-    /// The waiting card is an approval: the button says so.
-    let pendingIsApproval: Bool
+    /// What the waiting card is: the button says so.
+    let pendingKind: PendingDecisionKind
     let jumpToQuestion: @MainActor (String) -> Void
     let jumpToLatest: @MainActor () -> Void
     let followingChanged: @MainActor () -> Void
+
+    private var jumpIcon: String {
+        switch pendingKind {
+        case .question: return "questionmark.bubble"
+        case .approval: return "checkmark.shield"
+        case .input: return "key"
+        }
+    }
+
+    private var jumpTitle: String {
+        switch pendingKind {
+        case .question: return AppLocalization.string("Go to your question")
+        case .approval: return AppLocalization.string("Go to the approval")
+        case .input: return AppLocalization.string("Go to the request")
+        }
+    }
+
+    private var jumpAccessibilityLabel: String {
+        switch pendingKind {
+        case .question: return AppLocalization.string("Go to the question that needs your answer")
+        case .approval: return AppLocalization.string("Go to the approval")
+        case .input: return AppLocalization.string("Go to the request that needs your input")
+        }
+    }
 
     var body: some View {
         let inputs = chrome.inputs
@@ -1006,8 +1032,8 @@ private struct ChatJumpControls: View {
                 } label: {
                     if hasPendingClarify {
                         HStack(spacing: 7) {
-                            Image(systemName: pendingIsApproval ? "checkmark.shield" : "questionmark.bubble")
-                            Text(pendingIsApproval ? AppLocalization.string("Go to the approval") : AppLocalization.string("Go to your question"))
+                            Image(systemName: jumpIcon)
+                            Text(jumpTitle)
                                 .lineLimit(2)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -1027,11 +1053,11 @@ private struct ChatJumpControls: View {
                 )
                 .accessibilityLabel(
                     hasPendingClarify
-                        ? (pendingIsApproval ? AppLocalization.string("Go to the approval") : AppLocalization.string("Go to the question that needs your answer"))
+                        ? jumpAccessibilityLabel
                         : AppLocalization.string("Scroll to latest message")
                 )
                 .modifier(OptionalAccessibilityHint(
-                    hint: hasPendingClarify && !pendingIsApproval
+                    hint: hasPendingClarify && pendingKind == .question
                         ? AppLocalization.string("Scrolls to the pending question in the conversation")
                         : nil
                 ))
@@ -1193,6 +1219,17 @@ struct MessageBubble: View, Equatable {
                         message: message,
                         readAloudController: appState.messageReadAloudController,
                         gatewayResolver: gatewayResolver
+                    )
+                }
+            } else if let why = rowState.followUpReasons[message.id] {
+                // A reply Hermes wrote on its own (Predictive follow-ups).
+                VStack(alignment: .leading, spacing: 4) {
+                    PredictiveFollowUpTag(why: why)
+                    AssistantBubble(
+                        message: message,
+                        readAloudController: appState.messageReadAloudController,
+                        gatewayResolver: gatewayResolver,
+                        stepsAbove: stepsAbove
                     )
                 }
             } else {
@@ -3395,15 +3432,22 @@ struct ClarifyCard: View {
     /// Acted on, not observed (`ChatRowState`).
     private var appState: AppState { rowActions.required }
     // Per-question draft state, keyed by the gateway qid: typed custom text
-    // and in-progress multi-select selections. Multi-select intentionally
-    // buffers locally — an RPC fires only on that question's confirm.
+    // and in-progress picks (a multi-select's, or any form field's). Picks
+    // intentionally buffer locally — an RPC fires only on that question's
+    // confirm, or the form's Send.
     @State private var customAnswers: [String: String] = [:]
     @State private var multiSelections: [String: Set<String>] = [:]
+    // A form's choice fields the user answers in their own words
+    // ("Something else…").
+    @State private var ownAnswerFields: Set<String> = []
 
     var body: some View {
         if let clarify = message.clarify {
             let layout = ClarifyCardLayout(questionCount: clarify.questions.count)
             let displayStatus = clarify.presentationStatus
+            // Fields filled in and sent together (`isForm`), while any of
+            // them still waits.
+            let showsForm = clarify.isForm && clarify.hasPendingDecision
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "questionmark.bubble")
@@ -3434,15 +3478,44 @@ struct ClarifyCard: View {
                     MessageTimestampLabel(timestamp: message.timestamp, tone: .supporting)
                 }
 
+                if showsForm {
+                    Text("Fill in what you know, and leave the rest blank.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 ForEach(clarify.questions) { question in
                     ClarifyQuestionRow(
                         question: question,
                         showsTitle: layout.rowsShowTitles,
+                        isFormField: clarify.isForm,
                         customAnswer: bindingForCustomAnswer(question),
                         selection: bindingForSelection(question),
+                        typesOwnAnswer: bindingForOwnAnswer(question),
                         onSend: { answer in send(answer, for: question, in: clarify) },
                         onConfirmMultiSelect: { confirmMultiSelect(for: question, in: clarify) }
                     )
+                }
+
+                if showsForm {
+                    let canSend = canSendForm(clarify)
+                    Button {
+                        sendForm(clarify)
+                    } label: {
+                        HStack {
+                            Text("Send")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Image(systemName: "arrow.up")
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.conduitAccent.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .foregroundStyle(.primary)
+                    }
+                    .disabled(!canSend)
+                    .opacity(canSend ? 1 : 0.45)
+                    .accessibilityHint("Fill in what you know, and leave the rest blank.")
                 }
 
                 if let error = clarify.error, !error.isEmpty {
@@ -3470,11 +3543,52 @@ struct ClarifyCard: View {
         )
     }
 
+    private func bindingForOwnAnswer(_ question: ClarifyQuestion) -> Binding<Bool> {
+        Binding(
+            get: { ownAnswerFields.contains(question.id) },
+            set: { typing in
+                if typing {
+                    ownAnswerFields.insert(question.id)
+                } else {
+                    ownAnswerFields.remove(question.id)
+                }
+            }
+        )
+    }
+
     private func send(_ answer: String, for question: ClarifyQuestion, in clarify: ClarifyActivity) {
         let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, question.isAnswerable else { return }
         // Keep the typed answer available if submission fails.
         Task { await appState.respondToClarify(requestId: clarify.requestId, questionId: question.id, answer: trimmed) }
+    }
+
+    /// What each open field of a form holds, by qid; empty when left blank.
+    private func formAnswers(for clarify: ClarifyActivity) -> [String: String] {
+        var answers: [String: String] = [:]
+        for question in clarify.questions where question.isAnswerable {
+            let typed = question.isFreeText || ownAnswerFields.contains(question.id)
+                ? customAnswers[question.id] ?? ""
+                : ""
+            answers[question.id] = question.formAnswer(picked: multiSelections[question.id] ?? [], typed: typed)
+        }
+        return answers
+    }
+
+    /// A form sends once something in it is filled in, or once Hermes
+    /// already has an answer from it (a retry where only blanks are left),
+    /// and not while it is sending.
+    private func canSendForm(_ clarify: ClarifyActivity) -> Bool {
+        guard clarify.needsAnswer, !clarify.questions.contains(where: { $0.status == .submitting }) else { return false }
+        return formAnswers(for: clarify).values.contains { !$0.isEmpty }
+            || clarify.questions.contains { $0.status == .answered && !$0.isSkipped }
+    }
+
+    private func sendForm(_ clarify: ClarifyActivity) {
+        guard canSendForm(clarify) else { return }
+        // The fields keep what was typed if a question fails to send.
+        let answers = formAnswers(for: clarify)
+        Task { await appState.respondToClarifyForm(requestId: clarify.requestId, answers: answers) }
     }
 
     private func confirmMultiSelect(for question: ClarifyQuestion, in clarify: ClarifyActivity) {
@@ -3510,13 +3624,19 @@ struct ClarifyCard: View {
 /// owns its answer/lock lifecycle — one question submitting or failing never
 /// disables its siblings, and an accepted answer renders locked. In a batch
 /// each row draws its own grouped box and title; a single-question card keeps
-/// the legacy flat layout (the card header already carries the title).
+/// the legacy flat layout (the card header already carries the title). A
+/// form's row is a field instead, sent with the card's one Send.
 struct ClarifyQuestionRow: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     let question: ClarifyQuestion
     var showsTitle: Bool = true
+    /// A form's field (`ClarifyActivity.isForm`): a text box, or a menu of
+    /// the choices, with no send of its own.
+    var isFormField: Bool = false
     @Binding var customAnswer: String
     @Binding var selection: Set<String>
+    /// A form's choice field the user answers in their own words.
+    var typesOwnAnswer: Binding<Bool> = .constant(false)
     let onSend: (String) -> Void
     let onConfirmMultiSelect: () -> Void
 
@@ -3572,9 +3692,12 @@ struct ClarifyQuestionRow: View {
     private var statusIcon: some View {
         switch question.status {
         case .answered:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.green)
+            // A field left blank says Skipped below instead.
+            if !question.isSkipped {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
         case .error:
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.caption)
@@ -3590,7 +3713,12 @@ struct ClarifyQuestionRow: View {
 
     @ViewBuilder
     private var answeredBlock: some View {
-        if let answer = question.resolvedAnswer, !answer.isEmpty {
+        if question.isSkipped {
+            // A form's field left blank: Hermes read it as skipped.
+            Label(AppLocalization.string("Skipped"), systemImage: "forward")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+        } else if let answer = question.resolvedAnswer, !answer.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 Text("YOUR ANSWER")
                     .font(.caption2.weight(.bold))
@@ -3616,11 +3744,126 @@ struct ClarifyQuestionRow: View {
 
     @ViewBuilder
     private var controls: some View {
-        if question.multiSelect {
+        if isFormField {
+            formField
+        } else if question.multiSelect {
             multiSelectControls
         } else {
             singleChoiceControls
         }
+    }
+
+    /// A form's field: a text box for an open question, or a menu of the
+    /// choices that also takes the user's own words. Nothing here sends;
+    /// left alone, the field goes back blank.
+    @ViewBuilder
+    private var formField: some View {
+        if question.isFreeText {
+            formTextField
+        } else {
+            Menu {
+                ForEach(question.choices) { choice in
+                    Button {
+                        pick(choice.value)
+                    } label: {
+                        if selection.contains(choice.value) {
+                            Label(choice.label, systemImage: "checkmark")
+                        } else {
+                            Text(choice.label)
+                        }
+                    }
+                    // Several picks in one go.
+                    .menuActionDismissBehavior(question.multiSelect ? .disabled : .automatic)
+                }
+                Divider()
+                Button {
+                    typeOwnAnswer()
+                } label: {
+                    if typesOwnAnswer.wrappedValue {
+                        Label(AppLocalization.string("Something else…"), systemImage: "checkmark")
+                    } else {
+                        Text(AppLocalization.string("Something else…"))
+                    }
+                }
+                if hasFormPick {
+                    Button(AppLocalization.string("Leave blank")) {
+                        leaveBlank()
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(formMenuTitle)
+                        .font(.body)
+                        .foregroundStyle(hasFormPick ? Color.primary : Color.secondary)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.conduitAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .disabled(!isAnswerable)
+            .accessibilityLabel(question.question)
+            .accessibilityValue(formMenuTitle)
+
+            if typesOwnAnswer.wrappedValue {
+                formTextField
+            }
+        }
+    }
+
+    private var formTextField: some View {
+        TextField(AppLocalization.string("Type your answer…"), text: $customAnswer, axis: .vertical)
+            .lineLimit(1...4)
+            .disabled(!isAnswerable)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            // Named by its question for VoiceOver, like a choice field's menu.
+            .accessibilityLabel(question.question)
+    }
+
+    /// What a form's choice field shows: the picks, or Choose while blank.
+    private var formMenuTitle: String {
+        var parts = question.choices.filter { selection.contains($0.value) }.map(\.label)
+        if typesOwnAnswer.wrappedValue {
+            parts.append(AppLocalization.string("Something else…"))
+        }
+        return parts.isEmpty ? AppLocalization.string("Choose") : parts.joined(separator: ", ")
+    }
+
+    private var hasFormPick: Bool {
+        !selection.isEmpty || typesOwnAnswer.wrappedValue
+    }
+
+    private func pick(_ value: String) {
+        guard isAnswerable else { return }
+        if question.multiSelect {
+            toggle(value)
+        } else {
+            selection = [value]
+            typesOwnAnswer.wrappedValue = false
+        }
+    }
+
+    private func typeOwnAnswer() {
+        guard isAnswerable else { return }
+        if question.multiSelect {
+            typesOwnAnswer.wrappedValue.toggle()
+        } else {
+            // One answer: the user's words take the pick's place.
+            selection = []
+            typesOwnAnswer.wrappedValue = true
+        }
+    }
+
+    private func leaveBlank() {
+        selection = []
+        typesOwnAnswer.wrappedValue = false
+        customAnswer = ""
     }
 
     @ViewBuilder
@@ -4044,9 +4287,10 @@ struct ApprovalCard: View {
     }
 }
 
-/// Masked single-value prompt (sudo password, secret, password-manager
-/// unlock). The typed value lives only in this view's state: it is handed to
-/// AppState once on submit and cleared, never stored on the message.
+/// Private-input prompt: a sudo password, a secret, a password-manager
+/// unlock, a website's login or its one-time code. What the user types lives
+/// only in this view's state: it is handed to AppState once on submit and
+/// cleared, never stored on the message.
 struct InputPromptCard: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     let message: ChatMessage
@@ -4058,6 +4302,9 @@ struct InputPromptCard: View {
     /// it if the row scrolls far away: retyping is the accepted cost of the
     /// value never outliving this card.
     @State private var value = ""
+    /// vault.save_login: the account's email or username (the password is
+    /// `value`). View state only, like `value`.
+    @State private var identifier = ""
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -4087,6 +4334,13 @@ struct InputPromptCard: View {
                     MessageTimestampLabel(timestamp: message.timestamp, tone: .supporting)
                 }
 
+                if let note = explanation(for: prompt) {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 if let detail = detail(for: prompt), !detail.isEmpty {
                     SelectableTextView(
                         text: detail,
@@ -4114,32 +4368,20 @@ struct InputPromptCard: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 case .pending, .submitting, .error:
-                    // No .textContentType(.password): it would offer to save
-                    // a sudo or password-manager master password to the
-                    // system keychain.
-                    SecureField(placeholder(for: prompt.kind), text: $value)
-                        .accessibilityHint(AppLocalization.string("Send gives Hermes this value. Skip lets it continue without one."))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .focused($fieldFocused)
-                        .submitLabel(.send)
-                        .onSubmit { submit(prompt) }
-                        .padding(10)
-                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .disabled(!prompt.isAnswerable)
+                    fields(for: prompt)
 
                     HStack(spacing: 8) {
                         Button {
                             submit(prompt)
                         } label: {
-                            Label(AppLocalization.string("Send"), systemImage: "paperplane.fill")
+                            Label(sendTitle(for: prompt.kind), systemImage: "paperplane.fill")
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(!prompt.isAnswerable || !hasValue)
+                        .disabled(!prompt.isAnswerable || answer(for: prompt) == nil)
 
                         Spacer(minLength: 0)
 
-                        Button(AppLocalization.string("Skip")) {
+                        Button(skipTitle(for: prompt.kind)) {
                             skip(prompt)
                         }
                         .buttonStyle(.bordered)
@@ -4160,17 +4402,91 @@ struct InputPromptCard: View {
                 // Drop the typed value once the request is settled either
                 // way. A failed send (.error) keeps it so the user can retry
                 // without retyping; it never leaves this view's state.
-                if status == .submitted || status == .skipped || status == .expired { value = "" }
+                if status == .submitted || status == .skipped || status == .expired {
+                    value = ""
+                    identifier = ""
+                }
             }
         }
     }
 
+    @ViewBuilder
+    private func fields(for prompt: InputPromptActivity) -> some View {
+        switch prompt.kind {
+        case .vaultSaveLogin:
+            // No .username / .password content types: once the card
+            // settles, iOS would offer to save the site's login to the
+            // keychain under Conduit's own domain.
+            TextField(AppLocalization.string("Email or username"), text: $identifier)
+                .privacySensitive()
+                .accessibilityHint(AppLocalization.string("Save & sign in gives Hermes this login for the site. The model never sees the password."))
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.next)
+                .onSubmit { fieldFocused = true }
+                .inputPromptField()
+                .disabled(!prompt.isAnswerable)
+            SecureField(placeholder(for: prompt.kind), text: $value)
+                .accessibilityHint(AppLocalization.string("Save & sign in gives Hermes this login for the site. The model never sees the password."))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($fieldFocused)
+                .submitLabel(.send)
+                .onSubmit { submit(prompt) }
+                .inputPromptField()
+                .disabled(!prompt.isAnswerable)
+        case .vaultCode:
+            // Shown as typed, like Hermes Desktop: a short code is not worth
+            // masking and a typo must be visible. .oneTimeCode offers the
+            // code a text message or email just brought; letters come first
+            // because an email's code can have them.
+            TextField(placeholder(for: prompt.kind), text: $value)
+                .accessibilityHint(AppLocalization.string("Enter code has Hermes type it into the page. The model never sees it."))
+                .privacySensitive()
+                .textContentType(.oneTimeCode)
+                .keyboardType(.asciiCapable)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($fieldFocused)
+                .submitLabel(.send)
+                .onSubmit { submit(prompt) }
+                .inputPromptField()
+                .disabled(!prompt.isAnswerable)
+        case .sudo, .secret, .vaultUnlock:
+            // No .textContentType(.password): it would offer to save
+            // a sudo or password-manager master password to the
+            // system keychain.
+            SecureField(placeholder(for: prompt.kind), text: $value)
+                .accessibilityHint(AppLocalization.string("Send gives Hermes this value. Skip lets it continue without one."))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($fieldFocused)
+                .submitLabel(.send)
+                .onSubmit { submit(prompt) }
+                .inputPromptField()
+                .disabled(!prompt.isAnswerable)
+        }
+    }
+
     private func submit(_ prompt: InputPromptActivity) {
-        guard prompt.isAnswerable, hasValue else { return }
-        // Sent untrimmed: a password may legitimately contain spaces.
-        let answer = value
+        guard prompt.isAnswerable, let answer = answer(for: prompt) else { return }
         fieldFocused = false
         Task { await appState.respondToInputPrompt(messageId: message.id, value: answer) }
+    }
+
+    /// What Send gives Hermes, or nil while there is nothing to send.
+    private func answer(for prompt: InputPromptActivity) -> String? {
+        switch prompt.kind {
+        case .vaultSaveLogin:
+            return InputPromptActivity.loginAnswer(identifier: identifier, password: value)
+        case .vaultCode:
+            let code = InputPromptActivity.codeAnswer(value)
+            return code.isEmpty ? nil : code
+        case .sudo, .secret, .vaultUnlock:
+            // Sent untrimmed: a password may legitimately contain spaces.
+            return hasValue ? value : nil
+        }
     }
 
     /// Whitespace alone is not an answer (Hermes would store it as the
@@ -4184,6 +4500,7 @@ struct InputPromptCard: View {
     private func skip(_ prompt: InputPromptActivity) {
         guard prompt.isAnswerable else { return }
         value = ""
+        identifier = ""
         fieldFocused = false
         Task { await appState.respondToInputPrompt(messageId: message.id, value: nil) }
     }
@@ -4192,7 +4509,20 @@ struct InputPromptCard: View {
         switch prompt.kind {
         case .sudo: return prompt.command
         case .secret: return prompt.envVar
-        case .vaultUnlock: return nil
+        case .vaultUnlock, .vaultCode: return nil
+        // The exact origin, so the user sees which site gets the login.
+        case .vaultSaveLogin: return prompt.origin
+        }
+    }
+
+    private func explanation(for prompt: InputPromptActivity) -> String? {
+        switch prompt.kind {
+        case .vaultSaveLogin:
+            return AppLocalization.string("Hermes reached this sign-in page and has no login for it. It's saved encrypted where Hermes runs and filled into the page; the model never sees the password.")
+        case .vaultCode:
+            return AppLocalization.string("The site is asking for a one-time code from a text message, email or authenticator app. Hermes types it into the page; the model never sees it.")
+        case .sudo, .secret, .vaultUnlock:
+            return nil
         }
     }
 
@@ -4201,6 +4531,8 @@ struct InputPromptCard: View {
         case .sudo: return "lock.shield"
         case .secret: return "key"
         case .vaultUnlock: return "lock.rectangle.stack"
+        case .vaultSaveLogin: return "person.badge.key"
+        case .vaultCode: return "number"
         }
     }
 
@@ -4209,6 +4541,24 @@ struct InputPromptCard: View {
         case .sudo: return AppLocalization.string("sudo password")
         case .secret: return AppLocalization.string("Secret value")
         case .vaultUnlock: return AppLocalization.string("Master password")
+        case .vaultSaveLogin: return AppLocalization.string("Password")
+        // Not "Code": some languages read that key as program code.
+        case .vaultCode: return AppLocalization.string("Verification code")
+        }
+    }
+
+    private func sendTitle(for kind: InputPromptActivity.Kind) -> String {
+        switch kind {
+        case .vaultSaveLogin: return AppLocalization.string("Save & sign in")
+        case .vaultCode: return AppLocalization.string("Enter code")
+        case .sudo, .secret, .vaultUnlock: return AppLocalization.string("Send")
+        }
+    }
+
+    private func skipTitle(for kind: InputPromptActivity.Kind) -> String {
+        switch kind {
+        case .vaultSaveLogin: return AppLocalization.string("Don't save")
+        case .sudo, .secret, .vaultUnlock, .vaultCode: return AppLocalization.string("Skip")
         }
     }
 
@@ -4230,6 +4580,14 @@ struct InputPromptCard: View {
         case .skipped: return .secondary
         case .expired, .error: return .red
         }
+    }
+}
+
+private extension View {
+    /// The input card's field well.
+    func inputPromptField() -> some View {
+        padding(10)
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
