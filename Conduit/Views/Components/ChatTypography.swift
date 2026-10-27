@@ -418,3 +418,12 @@ extension EnvironmentValues {
         set { self[ChatTextSizeEnvironmentKey.self] = newValue }
     }
 }
+
+extension UIFont {
+    /// The text style's font at `sizeCategory`, the view's environment
+    /// size: a wide window's chat column steps it up (`readableChatColumn`),
+    /// which the app-wide `preferredFont(forTextStyle:)` doesn't see.
+    static func preferredFont(forTextStyle style: UIFont.TextStyle, in sizeCategory: ContentSizeCategory) -> UIFont {
+        preferredFont(forTextStyle: style, compatibleWith: UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(sizeCategory)))
+    }
+}

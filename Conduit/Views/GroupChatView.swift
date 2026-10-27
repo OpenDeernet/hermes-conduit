@@ -507,6 +507,7 @@ struct GroupRoomTitle: View {
 /// One member's pending approval. Rooms answer Run (once) or Reject only:
 /// session and permanent grants aren't offered for a room member's turn.
 struct GroupApprovalCard: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @ObservedObject var appLanguage = AppLanguageStore.shared
     let approval: GroupPendingApproval
     let memberName: String
@@ -554,7 +555,7 @@ struct GroupApprovalCard: View {
             if !approval.command.isEmpty {
                 ApprovalCommandBox(
                     maxHeight: ApprovalCommandBox<EmptyView>.maxLines
-                        * UIFont.preferredFont(forTextStyle: .caption1).lineHeight
+                        * UIFont.preferredFont(forTextStyle: .caption1, in: sizeCategory).lineHeight
                 ) {
                     Text(verbatim: ApprovalDisplayText.revealingHidden(approval.command))
                         .font(.caption.monospaced())
