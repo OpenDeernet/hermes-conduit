@@ -482,8 +482,8 @@ struct ModelPickerView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // One switch at a time, and not under a reasoning write.
-        .disabled(switchingRow != nil || isApplyingReasoning)
+        // One switch at a time, and not under a reasoning or speed write.
+        .disabled(switchingRow != nil || isApplyingReasoning || writingSpeed != nil)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -864,7 +864,9 @@ struct ModelPickerView: View {
         from previous: ModelPickerSelection,
         confirmed: Bool = false
     ) async {
-        guard switchingRow == nil, !isApplyingReasoning else { return }
+        // Not under a speed write either: the Ultrafast fallback reads the
+        // speed the switch lands on.
+        guard switchingRow == nil, !isApplyingReasoning, writingSpeed == nil else { return }
         // A confirmed retry always re-sends: the runtime may have moved while
         // the alert was up, and the confirmation must reach Hermes.
         guard confirmed || modelPickerShouldSwitch(
