@@ -1432,7 +1432,9 @@ final class OfflineChatCacheTests: XCTestCase {
         let live = [session("stored-a"), session("stored-b")]
         let opened = OpenedChats()
         let (appState, store, dashboard) = makeAppState(
-            sessionCatalogLoader: { _ in live },
+            configureDefaults: { defaults in
+                ChatResumeStore(defaults: defaults).setLastSessionID("stored-b", for: "default")
+            },
             lifecycleOperations: connectedLifecycle(
                 catalog: { _ in live },
                 opened: opened,
@@ -1441,15 +1443,10 @@ final class OfflineChatCacheTests: XCTestCase {
                 }
             )
         )
-        let connection = HermesConnection(baseUrl: "https://one.example", ticket: "ticket")
-        appState.connection = connection
-        appState.client = HermesClient(connection: connection, profile: "default")
-        appState.isConnected = true
-        appState.showLogin = false
         addTeardownBlock { appState.client?.disconnect() }
-        await appState.loadSessions()
-        let openedFirst = await appState.openSession("stored-b")
-        XCTAssertTrue(openedFirst)
+        // Connected through the seams, with stored-b on screen.
+        await appState.connect(with: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"))
+        await waitUntil { appState.activeSessionId == "stored-b" && appState.messages.map(\.id) == ["live-stored-b"] }
         seedCopy(store, dashboard: dashboard)
 
         let opening = Task { @MainActor in await appState.openSession("stored-a") }
@@ -1527,7 +1524,9 @@ final class OfflineChatCacheTests: XCTestCase {
         let live = [session("stored-a"), session("stored-b"), session("stored-c")]
         let opened = OpenedChats()
         let (appState, store, dashboard) = makeAppState(
-            sessionCatalogLoader: { _ in live },
+            configureDefaults: { defaults in
+                ChatResumeStore(defaults: defaults).setLastSessionID("stored-b", for: "default")
+            },
             lifecycleOperations: connectedLifecycle(
                 catalog: { _ in live },
                 opened: opened,
@@ -1536,15 +1535,10 @@ final class OfflineChatCacheTests: XCTestCase {
                 }
             )
         )
-        let connection = HermesConnection(baseUrl: "https://one.example", ticket: "ticket")
-        appState.connection = connection
-        appState.client = HermesClient(connection: connection, profile: "default")
-        appState.isConnected = true
-        appState.showLogin = false
         addTeardownBlock { appState.client?.disconnect() }
-        await appState.loadSessions()
-        let openedFirst = await appState.openSession("stored-b")
-        XCTAssertTrue(openedFirst)
+        // Connected through the seams, with stored-b on screen.
+        await appState.connect(with: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"))
+        await waitUntil { appState.activeSessionId == "stored-b" && appState.messages.map(\.id) == ["live-stored-b"] }
         seedCopy(store, dashboard: dashboard)
 
         let opening = Task { @MainActor in await appState.openSession("stored-c") }
