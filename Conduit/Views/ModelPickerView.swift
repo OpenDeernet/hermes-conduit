@@ -306,6 +306,7 @@ struct ModelPickerView: View {
         }
         .onChange(of: modelError) { _, message in announce(message) }
         .onChange(of: runSettingsError) { _, message in announce(message) }
+        .onChange(of: modelNote) { _, message in announce(message) }
         .alert(
             "Switch model?",
             isPresented: Binding(
@@ -906,14 +907,25 @@ struct ModelPickerView: View {
                 await applySpeed(fallback, unlocked: true)
             }
         case .needsConfirmation(let message):
-            selectedModel = previous.model
-            selectedProvider = previous.provider
+            checkRunningModel(previous)
             pendingConfirmation = ModelPickerConfirmation(selection: selection, previous: previous, message: message)
         case .failed(let message):
-            selectedModel = previous.model
-            selectedProvider = previous.provider
+            checkRunningModel(previous)
             modelError = message
         }
+    }
+
+    /// Puts the checkmark back on the model the session runs: the row
+    /// checked before the tap, unless the model changed elsewhere meanwhile.
+    private func checkRunningModel(_ previous: ModelPickerSelection) {
+        let stillRunning = !modelPickerShouldSwitch(
+            previous,
+            lastSwitched: switchedRow,
+            runtimeModel: appState.runtime.model,
+            runtimeProvider: appState.runtime.provider
+        )
+        selectedModel = stillRunning ? previous.model : appState.runtime.model
+        selectedProvider = stillRunning ? previous.provider : appState.runtime.provider
     }
 
     /// Picking a speed writes it at once; a failed write leaves the
