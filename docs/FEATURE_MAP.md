@@ -1387,7 +1387,7 @@ devices)
 - Group rooms land a following transcript at the top of the first new member message, and stop following when it doesn't fit (2026-10-25, #1256).
 - An open group room keeps a bounded tail: it opens on the last 200 events, and polling trims back to 200 once it holds 400 (2026-10-24, #1184).
 - The delegate tail sheet always follows its end: it is a live log, not a reply to read (2026-10-25, #1256).
-- A following chat whose lazy stack laid out no row on screen is built again, as reopening it would (#887, #971). The running turn's live rows and a send waiting on screen count as rows, so the check runs during a turn too: after a settled change, and on a layout pass while live rows show, at most one rebuild every 2 s. Group rooms do the same from their own row frames, checking when the content or window size changes while following (2026-10-27, #1367, issue 1358).
+- A following chat whose lazy stack laid out no row on screen is built again, as reopening it would (#887, #971). The running turn's live rows and a send waiting on screen count as rows, so the check runs during a turn too: after a settled change, on a layout pass while live rows show, and when the rows' frames all go away; at most one rebuild every 2 s, whichever check asked, and a check due sooner waits that out. Group rooms do the same from their own row frames, checking when the content or window size changes while following, or their rows' frames all go away (2026-10-27, #1367, issue 1358).
 
 **Open gaps**
 - Group rooms have no "Load earlier messages", so history above the 200-event tail isn't reachable in the app.

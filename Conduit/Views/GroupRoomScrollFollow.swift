@@ -118,6 +118,9 @@ final class GroupRoomFollowFlag {
     var rebuild: (@MainActor () -> Void)?
     /// Kept here, not in the locator: a rebuild replaces the locator.
     var lastRebuildAt: CFTimeInterval?
+    /// Asks the locator to check for a blank viewport (set by the locator):
+    /// rows that all went away may change no size.
+    var checkForBlankViewport: (@MainActor () -> Void)?
 }
 
 /// Placed behind the room's transcript stack inside its ScrollView. Finds
@@ -135,6 +138,7 @@ struct GroupRoomScrollLocator: UIViewRepresentable {
     func updateUIView(_ view: GroupRoomScrollLocatorView, context: Context) {
         view.flag = flag
         flag.reevaluate = { [weak view] in view?.reevaluate() }
+        flag.checkForBlankViewport = { [weak view] in view?.scheduleBlankCheck() }
         let binding = $isFollowing
         view.onChange = { following in
             // KVO can land mid-update; write the binding after it.
@@ -234,14 +238,16 @@ final class GroupRoomScrollLocatorView: UIView {
 
     /// New rows, a member's reply growing, or the window changing size:
     /// a following transcript checks that something was laid out on screen
-    /// (#887, #1358), one check at a time and not soon after a rebuild.
-    private func scheduleBlankCheck() {
+    /// (#887, #1358), one check at a time, and a rebuild at most every
+    /// blankRebuildInterval: a check due sooner waits it out.
+    func scheduleBlankCheck() {
         guard !blankCheckPending, flag.isFollowing else { return }
-        if let last = flag.lastRebuildAt, CACurrentMediaTime() - last < GroupRoomFollow.blankRebuildInterval {
-            return
+        var delay = GroupRoomFollow.blankCheckDelay
+        if let last = flag.lastRebuildAt {
+            delay = max(delay, GroupRoomFollow.blankRebuildInterval - (CACurrentMediaTime() - last))
         }
         blankCheckPending = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + GroupRoomFollow.blankCheckDelay) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self else { return }
             self.blankCheckPending = false
             self.checkForBlankViewport()

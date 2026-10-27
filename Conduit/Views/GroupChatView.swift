@@ -178,6 +178,9 @@ struct GroupChatView: View {
             .id(transcriptScrollID)
             .onPreferenceChange(GroupRoomRowFramesPreferenceKey.self) { frames in
                 followFlag.rowFrames = frames
+                if frames.isEmpty {
+                    followFlag.checkForBlankViewport?()
+                }
             }
             .scrollDismissesKeyboard(.interactively)
             .modifier(V2SoftTopScrollEdge(isOn: isV2))
