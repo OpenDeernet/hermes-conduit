@@ -138,6 +138,12 @@ enum RoomInviteLimits {
     static func canJoin(picked: Int, places: Int) -> Bool {
         picked >= 1 && picked <= min(places, maxAgents)
     }
+
+    /// The bots picked that the invite no longer lists: a read since
+    /// picking them took them off.
+    static func unlisted(picked: Set<String>, profiles: [String]) -> Set<String> {
+        picked.subtracting(profiles)
+    }
 }
 
 /// What Group Chats and the join card say about an invite.
@@ -341,6 +347,9 @@ enum RoomInviteOpening: Equatable {
     case waiting
     /// A call is on, and it said the invite opens once the call has ended.
     case afterCall
+    /// The dashboard changed while the invites were read: try again, on
+    /// the one in use now.
+    case retry
     /// It can't open; `errorMessage` says why, or nothing will open it.
     case failed
 }
@@ -381,6 +390,13 @@ extension AppState {
     /// An invite by its id, whatever its status.
     func linkedRoomInvite(_ id: String) -> RoomInvite? {
         currentLinkedRoomInvites?.invites.first { $0.id == id }
+    }
+
+    /// The invites were read, and that one isn't among them any more: the
+    /// plugin forgot it, so its card can't answer it.
+    func linkedRoomInviteIsGone(_ id: String) -> Bool {
+        guard let invites = currentLinkedRoomInvites else { return false }
+        return !invites.invites.contains { $0.id == id }
     }
 
     /// Reads the invites. A read that fails keeps what was read last, and
@@ -478,7 +494,8 @@ extension AppState {
             errorMessage = AppLocalization.string("Could not open the invite: \(RoomInvitesClient.message(for: error))")
             return .failed
         }
-        guard !Task.isCancelled, activeDashboardID == reader.dashboardID else { return .waiting }
+        guard !Task.isCancelled else { return .waiting }
+        guard activeDashboardID == reader.dashboardID else { return .retry }
         if groupRoomEpoch == epoch {
             linkedRoomInvites = LinkedRoomInvites(dashboardID: reader.dashboardID, invites: invites)
         }

@@ -214,7 +214,22 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
             completionHandler([.banner, .list, .sound])
             return
         }
-        completionHandler([])
+        // An approval one of your agents waits for in a room someone else
+        // hosts has no chat to show in, so it shows here too, once the
+        // approvals say it's one of theirs (read then, up to 5 s).
+        let userInfo = notification.request.content.userInfo
+        Task { @MainActor in
+            let appState = AppStateRuntimeRegistry.shared.appState
+            if appState.canAnswerRoomApprovals,
+               let target = PushNotificationService.parseNotificationTarget(from: userInfo),
+               target.dashboardID == nil || target.dashboardID == appState.activeDashboardID,
+               case .approval(let sessionKey, _, _) = target.decision,
+               await appState.roomApproval(matching: [sessionKey, target.durableSessionID, target.sessionId].compactMap { $0 }) != nil {
+                completionHandler([.banner, .list, .sound])
+            } else {
+                completionHandler([])
+            }
+        }
     }
 }
 
@@ -437,6 +452,7 @@ struct ConduitApp: App {
             // keeps; one tapped during a call opens when the call has ended.
             .task(id: roomInviteRouteKey) {
                 guard let invite = notifications.pendingRoomInvite else { return }
+                var retries = 0
                 while true {
                     // A refusal the call left on the drawer shell's error
                     // line is done with.
@@ -451,6 +467,14 @@ struct ConduitApp: App {
                             interval: Self.callEndRecheckInterval,
                             isReady: { appState.callWaitCanEnd }
                         ), !Task.isCancelled, notifications.pendingRoomInvite == invite else { return }
+                    case .retry:
+                        // The dashboard changed while the invites were
+                        // read: the one in use now decides, a few times.
+                        retries += 1
+                        guard retries < 3 else {
+                            notifications.clearPendingRoomInvite(invite)
+                            return
+                        }
                     case .opened, .failed:
                         notifications.clearPendingRoomInvite(invite)
                         return

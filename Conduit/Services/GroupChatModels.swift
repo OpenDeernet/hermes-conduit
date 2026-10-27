@@ -982,6 +982,24 @@ enum GroupRoomTurns {
         }
     }
 
+    /// How much of a linked member's failure the room screen shows.
+    static let maxFailureDetailCharacters = 300
+
+    /// Why a member on another Hermes failed its turn, as that member's
+    /// bridge wrote it ("Laifu's Hermes didn't answer."), on one line and
+    /// cut at `maxFailureDetailCharacters`. Nil for your own agents, whose
+    /// error is Hermes' raw one, and for any other kind.
+    static func failureDetail(_ event: GroupEvent, members: [GroupMember]) -> String? {
+        guard event.kind == "turn.failed", member(for: event, members: members)?.isPeer == true,
+              let error = event.payload["error"]?.stringValue else { return nil }
+        let line = error.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard !line.isEmpty else { return nil }
+        return String(line.prefix(maxFailureDetailCharacters))
+    }
+
     enum RoomActivityOutcome: Equatable {
         case settled
         case bounded

@@ -129,7 +129,13 @@ struct RoomInviteSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                if invite.status == "waiting" {
+                if appState.linkedRoomInviteIsGone(inviteID) {
+                    // The plugin forgot it: nothing here can answer it.
+                    Text(AppLocalization.string("This invite isn't on your Hermes any more."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
+                } else if invite.status == "waiting" {
                     bringSection(invite)
                     answerSection(invite)
                 } else {
@@ -185,7 +191,12 @@ struct RoomInviteSheet: View {
         let pickedCount = bots.filter { picked.contains($0.name) }.count
         let placeCount = min(invite.places, RoomInviteLimits.maxAgents)
         Section {
-            if bots.isEmpty {
+            if placeCount == 0, !readingBots {
+                // Why every bot below is disabled, or none is listed.
+                Text(AppLocalization.string("This room has no places left for your bots."))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if bots.isEmpty {
                 if readingBots {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -286,6 +297,13 @@ struct RoomInviteSheet: View {
     }
 
     private func join(_ invite: RoomInvite) {
+        // A read since picking them took some off the invite.
+        let unlisted = RoomInviteLimits.unlisted(picked: picked, profiles: invite.profiles)
+        guard unlisted.isEmpty else {
+            picked.subtract(unlisted)
+            actionError = AppLocalization.string("Some of the bots you picked can't join this room any more.")
+            return
+        }
         let bots = bots(for: invite).filter { picked.contains($0.name) }
         guard let agents = RoomInviteAgent.agents(for: bots, choices: invite.choices.merging(edited) { _, card in card }) else {
             actionError = AppLocalization.string("Two of these bots would claim the same @handle. Rename one bot's title, then try again.")

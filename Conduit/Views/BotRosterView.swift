@@ -26,6 +26,9 @@ struct BotRosterView: View {
     @State private var presentedDraft: RoomDraft?
     /// An invite to a room someone you've linked hosts, with its join card.
     @State private var presentedInvite: RoomInvite?
+    /// An approval one of your agents waits for in a room someone else
+    /// hosts, with its card.
+    @State private var presentedApproval: RoomApproval?
     /// V2's Bots tab: its title bar's "+" asks for a new bot here, and the
     /// in-list create card steps aside.
     private let createRequest: Binding<Bool>?
@@ -161,7 +164,7 @@ struct BotRosterView: View {
 
     private var hasGroupRows: Bool {
         (hostedGroupsAvailable && (!appState.groupRooms.isEmpty || !appState.linkedRoomDraftRows.isEmpty
-            || !appState.linkedRoomInviteRows.isEmpty))
+            || !appState.linkedRoomInviteRows.isEmpty || !appState.linkedRoomApprovalRows.isEmpty))
             || !appState.desktopGroupChats.isEmpty
     }
 
@@ -339,12 +342,17 @@ struct BotRosterView: View {
             RoomInviteSheet(invite: invite)
                 .environmentObject(appState)
         }
+        .sheet(item: $presentedApproval) { approval in
+            RoomApprovalSheet(approval: approval)
+                .environmentObject(appState)
+        }
     }
 
     /// Group Chat rows, below the Bots section: hosted rooms (only when the
     /// gateway advertised the foundation `groups.*` methods — an unsupported
     /// gateway never shows a dead control), the rooms with people you've
-    /// linked that haven't started, and the invites to theirs, plus the
+    /// linked that haven't started, the invites to theirs and the approvals
+    /// your agents wait for in them (first: they wait on you), plus the
     /// group chats Hermes Desktop mirrored to the gateway, which need no
     /// `groups.*` support.
     @State private var showingGroupCreateSheet = false
@@ -369,6 +377,11 @@ struct BotRosterView: View {
                     .listRowInsets(EdgeInsets(top: 3, leading: 16, bottom: 3, trailing: 16))
                 }
                 if hostedGroupsAvailable {
+                    ForEach(appState.linkedRoomApprovalRows) { approval in
+                        RoomApprovalRosterRow(approval: approval) {
+                            presentedApproval = approval
+                        }
+                    }
                     ForEach(appState.groupRooms) { room in
                         GroupRosterRow(room: room)
                     }
