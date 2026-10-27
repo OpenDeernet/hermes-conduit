@@ -2867,8 +2867,8 @@ the persistent sidebar) · Settings' pages · a Chats or Bots list shown alone �
 the call screens (Classic, live calls, live voice consent) · the sign-in
 screens (their own column) · cards and pictures whose kept heights depend on
 the column's width (see Cards drawn in web pages) · the chat's text on a
-wide column (transcript, step rows and cards, the composer, group rooms; the
-list beside it keeps its size) · text: no Settings caption or doc gives a
+wide column (transcript, step rows and cards, timestamps and the reply's
+buttons, the composer, group rooms; the list beside it keeps its size) · text: no Settings caption or doc gives a
 width, and Chat text size's caption is about its slider, which still applies
 on top
 
@@ -2885,7 +2885,7 @@ on top
 **Rulings**
 - Widths follow the window, not the device (2026-10-19, #949).
 - A chat's column is 760 pt until the chat's width passes about 1056 pt, then takes 72% of it, up to 1040 pt: an iPad beside the list keeps 760 pt, a maximized Mac or iPad window gets a wider column, with the list shown or hidden, in V2 and the drawer shell alike (2026-10-26, #1320, Eric: the column was too narrow on a maximized window). This replaces the 2026-10-23 ruling (#1169) that kept 760 pt with the list hidden.
-- A wider chat column shows bigger text rather than longer lines: the column's text goes up one system text size for each size whose lines still hold as many words as the 760 pt column does (none beside the list on an iPad, two with an iPad's list hidden, three on a maximized Mac). Transcript, thinking, step rows, cards, the composer and group rooms step together, on top of the user's Dynamic Type and Chat text size (which group rooms now follow too, size and style, as chats do); it stops at the largest standard size, so an accessibility size stays as set. The list beside the chat and the top bar keep their size: the list's column doesn't widen (Eric, 2026-10-27, #1393: maximized on a Mac the chat looked small in a big empty space).
+- A wider chat column shows bigger text rather than longer lines: the column's text goes up one system text size for each size whose lines still hold as many words as the 760 pt column does (none beside the list on an iPad, two with an iPad's list hidden, three on a maximized Mac). Everything in the column steps together, its chrome (timestamps, the reply's buttons, banners) with its text so they keep their proportions: transcript, thinking, step rows, cards, the composer and group rooms, on top of the user's Dynamic Type and Chat text size (which group rooms now follow too, size and style, as chats do); it stops at the largest standard size, so an accessibility size stays as set. The list beside the chat and the top bar keep their size: the list's column doesn't widen (Eric, 2026-10-27, #1393: maximized on a Mac the chat looked small in a big empty space).
 - Settings (720 pt), a list shown alone (720 pt) and calls (640 pt) keep fixed widths: rows, cards and captions don't read better wider. The sign-in screens keep their own 560 pt column, which follows the text size (2026-10-26, #1320).
 
 **Open gaps**

@@ -184,8 +184,8 @@ extension SidebarLayoutTests {
         // Caches tell the steps apart; no steps keeps today's keys.
         XCTAssertEqual(ChatTextAppearance(size: .default).cacheIdentity, ChatTextSize.default.cacheIdentity)
         XCTAssertNotEqual(stepped.cacheIdentity, ChatTextAppearance(size: .default).cacheIdentity)
-        XCTAssertEqual(ChatTypography.widthRatio(steps: 2), 21.0 / 17, accuracy: 0.001)
-        XCTAssertEqual(ChatTypography.widthRatio(steps: 0), 1)
+        XCTAssertEqual(ChatTypography.widthRatio(stepped), expected.pointSize / UIFont.preferredFont(forTextStyle: .body, compatibleWith: traits).pointSize, accuracy: 0.001)
+        XCTAssertEqual(ChatTypography.widthRatio(ChatTextAppearance(size: .default)), 1)
         // Without given traits, transcript fonts resolve at the column's size.
         XCTAssertEqual(ChatTypography.font(for: .body, appearance: stepped).pointSize, expected.pointSize, accuracy: 0.001)
     }

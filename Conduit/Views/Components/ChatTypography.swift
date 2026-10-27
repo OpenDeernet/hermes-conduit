@@ -26,7 +26,9 @@
 //  Only readable message/transcript content resolves fonts through this
 //  type. Interface chrome — timestamps, identity labels, copy/branch/
 //  read-aloud buttons, navigation, Settings, composer controls, selection
-//  chrome, tool/status cards — keeps its existing typography.
+//  chrome, tool/status cards — keeps its existing typography. (A wide
+//  window's chat column steps both up together: chrome through Dynamic
+//  Type, transcript text through `ChatTextAppearance.widthSteps`.)
 //
 //  Mermaid diagrams render inside WKWebView with their own HTML/CSS and scale
 //  to their width; formulas drawn in a message follow the chat body size.
@@ -246,15 +248,18 @@ enum ChatTypography {
     }
 
     static func dimension(_ value: CGFloat, appearance: ChatTextAppearance) -> CGFloat {
-        dimension(value, chatSize: appearance.size) * widthRatio(steps: appearance.widthSteps)
+        dimension(value, chatSize: appearance.size) * widthRatio(appearance)
     }
 
-    /// About how much a wide window's steps grow body text (as at the
-    /// default size), for geometry that keeps up with it.
-    static func widthRatio(steps: Int) -> CGFloat {
-        guard steps > 0 else { return 1 }
-        let growth = ReadableWidth.chatTextGrowth
-        return growth[min(growth.count, steps) - 1]
+    /// How much a wide window's steps grow body text, from the size they
+    /// started at to `widthCategory`, for geometry that keeps up with it.
+    static func widthRatio(_ appearance: ChatTextAppearance) -> CGFloat {
+        guard appearance.widthSteps > 0, let grown = appearance.widthCategory,
+              let index = standardCategories.firstIndex(of: grown) else { return 1 }
+        let base = standardCategories[max(0, index - appearance.widthSteps)]
+        let baseSize = preferred(.body, UITraitCollection(preferredContentSizeCategory: base)).pointSize
+        let grownSize = preferred(.body, UITraitCollection(preferredContentSizeCategory: grown)).pointSize
+        return baseSize > 0 ? grownSize / baseSize : 1
     }
 
     // MARK: Wide windows
