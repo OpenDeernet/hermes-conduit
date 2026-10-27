@@ -466,6 +466,59 @@ extension VoiceConversationControllerTests {
         XCTAssertEqual(heard, ["send the mail to Sam", "and Alex"])
     }
 
+    /// A draft with no item id is replaced by the next snapshot with none,
+    /// so its completed transcript supersedes it.
+    func testGrokLiveSessionReplacesAnIDlessDraftWithItsCompletedTranscript() async throws {
+        let (session, sockets) = makeGrokSession()
+        var heard: [String] = []
+        session.onEvent = { event in
+            if case .inputTranscription(let text) = event { heard.append(text) }
+        }
+        session.start()
+        await grokSettle()
+        let socket = try XCTUnwrap(sockets().first)
+        socket.deliver(["type": "session.updated"])
+        await grokSettle()
+
+        let event = "conversation.item.input_audio_transcription.completed"
+        socket.deliver(["type": event, "status": "in_progress", "transcript": "Boa noite..."])
+        socket.deliver(["type": event, "status": "completed", "transcript": "Boa noite, tia."])
+        await grokSettle(until: { heard.count == 1 })
+        await grokSettle()
+        session.stop()
+        XCTAssertEqual(heard, ["Boa noite, tia."])
+    }
+
+    /// Item ids belong to the xAI session: a draft the dropped connection
+    /// never completed is kept, and the new session's items start afresh.
+    func testGrokLiveSessionKeepsAHeldDraftWhenTheConnectionIsReplaced() async throws {
+        let (session, sockets) = makeGrokSession()
+        var heard: [String] = []
+        session.onEvent = { event in
+            if case .inputTranscription(let text) = event { heard.append(text) }
+        }
+        session.start()
+        await grokSettle()
+        let first = try XCTUnwrap(sockets().first)
+        first.deliver(["type": "session.updated"])
+        await grokSettle()
+
+        let event = "conversation.item.input_audio_transcription.completed"
+        first.deliver(["type": event, "item_id": "i1", "status": "in_progress", "transcript": "Ontem eu bebi um copo de kefir"])
+        await grokSettle()
+        XCTAssertEqual(heard, [])
+        first.serverClose(nil)
+        await grokSettle(until: { sockets().count == 2 && sockets()[1].sent.first != nil })
+        XCTAssertEqual(heard, ["Ontem eu bebi um copo de kefir"])
+        let second = try XCTUnwrap(sockets().dropFirst().first)
+        second.deliver(["type": "session.updated"])
+        await grokSettle(until: { session.state == .ready })
+        second.deliver(["type": event, "item_id": "i1", "status": "completed", "transcript": "e depois eu trabalhei."])
+        await grokSettle(until: { heard.count == 2 })
+        session.stop()
+        XCTAssertEqual(heard, ["Ontem eu bebi um copo de kefir", "e depois eu trabalhei."])
+    }
+
     /// Without a status, as the Realtime protocol sends it, each item's
     /// transcript goes through once. Without an item id there is nothing to
     /// remember it by, so it goes through whole every time.
