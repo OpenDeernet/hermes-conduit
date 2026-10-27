@@ -749,7 +749,17 @@ final class CarPlayVoiceCoordinator {
         stateObservation = controller.$state
             .sink { [weak self] state in
                 self?.handleControllerState(state)
+                // Once the change has landed (the publisher fires before it).
+                Task { @MainActor [weak self] in self?.followProfileModeAfterClassic() }
             }
+    }
+
+    /// A call from Hermes on Classic's hands-free option ran on classic
+    /// voice; once it ends, the car goes back to the profile's mode.
+    private func followProfileModeAfterClassic() {
+        guard isConnected, observedVoiceMode == .classic, let appState = lastBoundAppState,
+              CarPlayVoiceMode.current(in: appState) != .classic else { return }
+        observeCurrentVoiceMode(appState)
     }
 
     /// Gemini Live and Grok Live mode: CarPlay shows the conversation's phase
