@@ -524,12 +524,12 @@ network (Reconnecting to Hermes)
 - The message: `ConduitWatch/WatchVoiceCall.swift` (WatchCallEnd.noNetwork)
 
 **Rulings**
-- A call none of whose sockets has opened ends on the second socket refused for no network (-1009, or data not allowed or roaming off), saying the Watch couldn't get a network connection and to keep the iPhone nearby with Bluetooth on or join Wi-Fi on the Watch. The first refusal is retried, since the route can come up just after the audio session activates. Once any socket has opened, a drop is the call's to rejoin as before (2026-10-27, #1346, for #1346).
+- A call none of whose sockets has opened ends on the second socket refused for no network (-1009, or data not allowed or roaming off), saying the Watch couldn't get a network connection and to keep the iPhone nearby with Bluetooth on or join Wi-Fi on the Watch. The first refusal is retried, since the route can come up just after the audio session activates. Once any socket has opened, a drop is the call's to rejoin as before (2026-10-27, #1349, for #1346).
 
 **Open gaps**
 - There's no iPhone-carried audio route to fall back on: the first Watch design carried audio through the iPhone and stopped whenever it locked or Conduit was suspended (designs/apple-watch-voice-direct.md).
 
-**Checked:** 2026-10-27, #1346.
+**Checked:** 2026-10-27, #1349.
 
 ## Calls from Hermes
 
