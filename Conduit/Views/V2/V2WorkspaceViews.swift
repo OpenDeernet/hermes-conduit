@@ -156,9 +156,17 @@ struct WorkspaceFolderView: View {
         }
         // Tied to the view: a refresh ends with it.
         .task(id: appState.workspaceChanges) {
-            defer { seenChanges = appState.workspaceChanges }
-            guard let seen = seenChanges, seen != appState.workspaceChanges else { return }
+            // Marked seen only once its refresh ran: a refresh cut short by
+            // the next change leaves that change to the next task.
+            let target = appState.workspaceChanges
+            guard let seen = seenChanges else {
+                seenChanges = target
+                return
+            }
+            guard seen != target else { return }
             await explorer.refresh()
+            guard !Task.isCancelled else { return }
+            seenChanges = target
         }
         .task(id: handlesReveals ? appState.workspaceReveal?.id : nil) {
             guard handlesReveals, let reveal = appState.workspaceReveal else { return }
@@ -424,7 +432,9 @@ struct WorkspaceFolderView: View {
 
     @ViewBuilder
     private var searchResults: some View {
-        if let result = explorer.search {
+        // An answer for an older query waits off screen for the new one.
+        if let result = explorer.search,
+           result.query == query.trimmingCharacters(in: .whitespacesAndNewlines) {
             if result.names.isEmpty, result.matches.isEmpty, let error = explorer.searchError {
                 unavailable(title: Text("Couldn't search this folder"), detail: Text(verbatim: error),
                             symbol: "exclamationmark.triangle")
@@ -804,7 +814,7 @@ struct WorkspaceFolderView: View {
             await explorer.open(root: holder.path, profile: appState.workspaceProfile)
         }
         query = ""
-        let entry = await explorer.reveal(reveal.path, line: reveal.line)
+        let entry = await explorer.reveal(reveal.path)
         // A later tap replaced this one: that one opens.
         guard !Task.isCancelled else { return }
         open(entry, line: reveal.line)
