@@ -83,8 +83,11 @@ struct RoomApprovalsClient {
     static let path = "/api/plugins/conduit_push/rooms/approvals"
     /// The plugin answers within 30 s, its API server's wait.
     static let answerTimeoutMilliseconds = 35_000
-    /// A notification's read: past this, its chat opens as before.
+    /// A tapped notification's read: past this, its chat opens as before.
     static let notificationReadTimeoutMilliseconds = 5_000
+    /// A notification arriving in front: its banner waits on this read,
+    /// so it's kept short; past it, the push stays quiet as before.
+    static let presentationReadTimeoutMilliseconds = 2_000
 
     typealias Request = RoomLinksClient.Request
 
@@ -240,11 +243,14 @@ extension AppState {
     /// decision's session key, the chat's). Nil when the plugin doesn't
     /// list approvals, none matches, or the read fails, so the chat opens
     /// as before.
-    func roomApproval(matching keys: [String]) async -> RoomApproval? {
+    func roomApproval(
+        matching keys: [String],
+        timeoutMilliseconds: Int = RoomApprovalsClient.notificationReadTimeoutMilliseconds
+    ) async -> RoomApproval? {
         let wanted = Set(keys.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
         guard !wanted.isEmpty,
               let approvals = await readLinkedRoomApprovals(
-                  timeoutMilliseconds: RoomApprovalsClient.notificationReadTimeoutMilliseconds) else { return nil }
+                  timeoutMilliseconds: timeoutMilliseconds) else { return nil }
         return approvals.first { approval in
             approval.sessionKey.map { wanted.contains($0.trimmingCharacters(in: .whitespacesAndNewlines)) } ?? false
         }

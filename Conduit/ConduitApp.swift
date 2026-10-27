@@ -216,7 +216,8 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
         }
         // An approval one of your agents waits for in a room someone else
         // hosts has no chat to show in, so it shows here too, once the
-        // approvals say it's one of theirs (read then, up to 5 s).
+        // approvals say it's one of theirs (read then, up to 2 s, since
+        // the banner waits on it).
         let userInfo = notification.request.content.userInfo
         Task { @MainActor in
             let appState = AppStateRuntimeRegistry.shared.appState
@@ -224,7 +225,10 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
                let target = PushNotificationService.parseNotificationTarget(from: userInfo),
                target.dashboardID == nil || target.dashboardID == appState.activeDashboardID,
                case .approval(let sessionKey, _, _) = target.decision,
-               await appState.roomApproval(matching: [sessionKey, target.durableSessionID, target.sessionId].compactMap { $0 }) != nil {
+               await appState.roomApproval(
+                   matching: [sessionKey, target.durableSessionID, target.sessionId].compactMap { $0 },
+                   timeoutMilliseconds: RoomApprovalsClient.presentationReadTimeoutMilliseconds
+               ) != nil {
                 completionHandler([.banner, .list, .sound])
             } else {
                 completionHandler([])
