@@ -26,10 +26,20 @@ struct GroupChatView: View {
     /// Bumped to build the transcript's scroll view again when SwiftUI left
     /// it blank (GroupRoomFollow.isBlank).
     @State private var transcriptScrollID = 0
-    /// A wide window's column steps its text up (`readableChatColumn`); the
-    /// room's messages follow it as a chat's do.
+    /// The chat text size and style, and a wide window's steps
+    /// (`readableChatColumn`): the room's messages draw as a chat's do.
+    @AppStorage(ChatTypography.preferenceKey) private var chatTextSizeRaw = ChatTypography.defaultSize.rawValue
+    @AppStorage(ChatTypography.fontStylePreferenceKey) private var chatFontStyleRaw = ChatFontStyle.standard.rawValue
     @Environment(\.chatWidthTextSteps) private var chatWidthTextSteps
     @Environment(\.sizeCategory) private var columnSizeCategory
+
+    private var chatTextSize: ChatTextAppearance {
+        ChatTextAppearance(
+            size: ChatTypography.resolve(rawValue: chatTextSizeRaw),
+            style: ChatTypography.resolveStyle(rawValue: chatFontStyleRaw)
+        )
+        .widened(steps: chatWidthTextSteps, category: columnSizeCategory)
+    }
 
     var body: some View {
         Group {
@@ -49,7 +59,7 @@ struct GroupChatView: View {
         .animation(.easeInOut(duration: 0.2), value: appState.minimisedLiveVoice)
         // Each bot's color, for its name, bubble, tags and "To" chip.
         .environment(\.groupMemberTints, appState.groupMemberTints(members))
-        .environment(\.chatTextSize, ChatTextAppearance(size: .default).widened(steps: chatWidthTextSteps, category: columnSizeCategory))
+        .environment(\.chatTextSize, chatTextSize)
         .toolbar { toolbarContent }
         // V2's screen hosts this view and owns the room menu and picker.
         .modifier(GroupRoomPicturePicker(request: $choosingPicture, isEnabled: !isV2))

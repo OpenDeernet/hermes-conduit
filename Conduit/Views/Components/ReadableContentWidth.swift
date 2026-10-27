@@ -110,10 +110,9 @@ private struct ReadableContentWidth: ViewModifier {
         return min(ReadableWidth.chatTextSteps(column: column), sizes.count - 1 - index)
     }
 
-    /// Matches `ChatTypography.standardCategories`.
-    private static let standardSizes: [DynamicTypeSize] = [
-        .xSmall, .small, .medium, .large, .xLarge, .xxLarge, .xxxLarge
-    ]
+    /// `ChatTypography.standardCategories`, so the column and its
+    /// transcript step through the same sizes.
+    private static let standardSizes: [DynamicTypeSize] = ChatTypography.standardCategories.compactMap(DynamicTypeSize.init)
 
     private static func boosted(_ size: DynamicTypeSize, by steps: Int) -> DynamicTypeSize {
         guard steps > 0, let index = standardSizes.firstIndex(of: size) else { return size }
