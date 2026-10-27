@@ -822,11 +822,19 @@ struct GroupSystemEventCaption: View {
     let members: [GroupMember]
 
     var body: some View {
-        Text(caption)
-            .font(.caption2)
-            .foregroundStyle(.conduitTertiary)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, 2)
+        VStack(spacing: 1) {
+            Text(caption)
+            // A linked member's failure says why, as its Hermes wrote it.
+            if let detail = GroupRoomTurns.failureDetail(event, members: members) {
+                Text(verbatim: detail)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.conduitTertiary)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 
     /// `turn.*` events are one member's turn, never the whole room: they

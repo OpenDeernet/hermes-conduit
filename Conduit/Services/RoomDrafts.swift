@@ -423,12 +423,21 @@ extension AppState {
 
     /// The drafts, the people to invite and the invites, read once the
     /// host's plugin is first known to make rooms with people you've
-    /// linked: Group Chats may have been read before its status came.
-    func linkedRoomInvitesReported(before couldInvite: Bool) {
-        guard !couldInvite, canInviteLinkedPeople, groupChatPhase == .available, isConnected else { return }
+    /// linked, and the approvals once it's first known to list them: Group
+    /// Chats may have been read before its status came.
+    func linkedRoomInvitesReported(before couldInvite: Bool, approvals couldAnswer: Bool) {
+        guard groupChatPhase == .available, isConnected else { return }
+        let invites = !couldInvite && canInviteLinkedPeople
+        let approvals = !couldAnswer && canAnswerRoomApprovals
+        guard invites || approvals else { return }
         Task {
-            await refreshLinkedRoomDrafts()
-            await refreshLinkedRoomInvites()
+            if invites {
+                await refreshLinkedRoomDrafts()
+                await refreshLinkedRoomInvites()
+            }
+            if approvals {
+                await refreshLinkedRoomApprovals()
+            }
         }
     }
 

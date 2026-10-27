@@ -2177,6 +2177,9 @@ final class AppState: ObservableObject {
     /// An invite to a room whose notification was tapped (RoomInvites.swift):
     /// RootView shows its join card.
     @Published var presentedRoomInvite: RoomInvite?
+    /// An approval in a room hosted elsewhere whose notification was tapped
+    /// (RoomApprovals.swift): RootView shows its card.
+    @Published var presentedRoomApproval: RoomApproval?
     /// Round 6: the classified failure of the most recent failed connection
     /// attempt (saved-credential reconnect, repair activation, or a failed
     /// explicit connect). Typed — never recovered from user-facing strings —
@@ -10685,6 +10688,9 @@ final class AppState: ObservableObject {
     /// The rooms people you've linked invited this Hermes to, which Group
     /// Chats lists with the drafts (RoomInvites.swift).
     @Published var linkedRoomInvites: LinkedRoomInvites?
+    /// What your agents' turns in rooms other people host wait for you to
+    /// approve, which Group Chats lists first (RoomApprovals.swift).
+    @Published var linkedRoomApprovals: LinkedRoomApprovals?
     /// Hermes Desktop's group chats, read from its ui_meta projection on the
     /// `default` profile (refreshed with the bot roster). Read-only here:
     /// Desktop drives their rounds, and `groups.*` cannot address them.
@@ -10867,6 +10873,8 @@ final class AppState: ObservableObject {
         linkedRoomDrafts = nil
         linkedRoomInvites = nil
         presentedRoomInvite = nil
+        linkedRoomApprovals = nil
+        presentedRoomApproval = nil
         desktopGroupChats = []
         groupRoomPictureData = [:]
         groupRoomPictureRevisions = [:]
@@ -11117,6 +11125,7 @@ final class AppState: ObservableObject {
             await refreshGroupRooms()
             await refreshLinkedRoomDrafts()
             await refreshLinkedRoomInvites()
+            await refreshLinkedRoomApprovals()
         } catch is CancellationError {
             return
         } catch {
@@ -22974,6 +22983,24 @@ final class AppState: ObservableObject {
             }
             return .failed
         }
+        // An approval one of your agents waits for in a room someone else
+        // hosts: its notification names the hidden chat the turn runs in,
+        // which approval.respond can't answer for, so its card opens
+        // instead (RoomApprovals.swift). It can't open over a call's screen.
+        if case .approval(let sessionKey, _, _) = target.decision, target.call == nil, canAnswerRoomApprovals {
+            traceStage = "room approval check"
+            let keys = [sessionKey, target.durableSessionID, target.sessionId].compactMap { $0 }
+            if let approval = await roomApproval(matching: keys) {
+                // A newer tap or a reconnect started this route over meanwhile.
+                guard !Task.isCancelled else { return .retry }
+                guard !isVoiceCallInProgress else {
+                    showCallRefusal(AppLocalization.string("This approval opens when the call ends."))
+                    return callOutcome
+                }
+                presentedRoomApproval = approval
+                return .opened
+            }
+        }
         traceStage = "open start"
         let notificationAttemptID = UUID()
         activeNotificationOpenAttemptID = notificationAttemptID
@@ -24844,13 +24871,14 @@ final class AppState: ObservableObject {
               state != .unknown else { return }
         notifierPluginStatusAcceptedGeneration = generation
         let couldInviteLinkedPeople = canInviteLinkedPeople
+        let couldAnswerRoomApprovals = canAnswerRoomApprovals
         // A failed list read keeps what this host's list said before.
         notifierPlugin.hostCopy = state == .predatesCapabilities
             ? hostCopy ?? (notifierPlugin.state == .predatesCapabilities ? notifierPlugin.hostCopy : nil)
             : nil
         notifierPlugin.state = state
         notifierPlugin.runtime = runtime
-        linkedRoomInvitesReported(before: couldInviteLinkedPeople)
+        linkedRoomInvitesReported(before: couldInviteLinkedPeople, approvals: couldAnswerRoomApprovals)
         Task { await refreshLatestNotifierPluginVersion() }
         clearSettledNotifierPluginUpdateOutcome()
         // Calls declined or missed while this host was out of reach.
@@ -24886,10 +24914,11 @@ final class AppState: ObservableObject {
         notifierPluginStatusGeneration += 1
         notifierPluginStatusAcceptedGeneration = notifierPluginStatusGeneration
         let couldInviteLinkedPeople = canInviteLinkedPeople
+        let couldAnswerRoomApprovals = canAnswerRoomApprovals
         notifierPlugin.hostCopy = nil
         notifierPlugin.state = state
         notifierPlugin.runtime = NotifierPluginStatus.runtime(from: json)
-        linkedRoomInvitesReported(before: couldInviteLinkedPeople)
+        linkedRoomInvitesReported(before: couldInviteLinkedPeople, approvals: couldAnswerRoomApprovals)
         clearSettledNotifierPluginUpdateOutcome()
     }
 
