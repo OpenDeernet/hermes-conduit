@@ -35021,10 +35021,64 @@ final class AppState: ObservableObject {
     /// and steers, which go through the composer. True when it waited.
     @discardableResult
     func waitForTransportIfDropped() async -> Bool {
+        await checkQuietTransportOffScreen()
         guard voiceRequestWaitsForTransport else { return false }
         reconnectNowForWaitingVoice("Voice request waiting")
         await awaitTransportForVoiceRequest(timeout: voiceRequestConnectionWait)
         return true
+    }
+
+    /// How long a socket may have been quiet before a request made off
+    /// screen checks it first.
+    static let quietTransportCheckAfter: TimeInterval = PollCadence.keepaliveForeground
+
+    /// The quick check of a quiet connection, or nil when there is nothing
+    /// to check (no open socket, or one that spoke recently). A test seam.
+    var quietTransportLiveness: @MainActor (HermesClient) async -> Bool? = { client in
+        guard client.isConnected, client.quietInterval >= AppState.quietTransportCheckAfter else { return nil }
+        return await client.checkLiveness()
+    }
+
+    private var quietTransportCheckTask: Task<Void, Never>?
+
+    /// A request to Hermes made while Conduit is off screen: in the car, on
+    /// a locked phone, in a Watch call or a call from Hermes. iOS may have
+    /// held Conduit suspended before CarPlay or the call woke it, and a
+    /// socket that died meanwhile still looks open: a GPT-Live call started
+    /// in the car ran (it starts over plain HTTP), but every request it
+    /// handed Hermes waited on the dead socket until it timed out, and the
+    /// call said Hermes wasn't available, while one started on the phone
+    /// worked (#1362). The phone coming on screen pings first and
+    /// reconnects a socket that doesn't answer; so does this, for a socket
+    /// that has been quiet, and the request then waits for the reconnect as
+    /// after any drop. Requests at the same time share one check.
+    func checkQuietTransportOffScreen() async {
+        if let running = quietTransportCheckTask {
+            await running.value
+            return
+        }
+        guard !isSceneActive, isConnected, let client else { return }
+        let check = Task { @MainActor [weak self] in
+            guard let self, await self.quietTransportLiveness(client) == false else { return }
+            self.noteConnectionStep("Connection check before a voice request")
+            // The close reaches handleDisconnect a moment later.
+            await self.awaitConnectionDropped(timeout: .seconds(2))
+        }
+        quietTransportCheckTask = check
+        await check.value
+        quietTransportCheckTask = nil
+    }
+
+    private func awaitConnectionDropped(timeout: Duration) async {
+        guard isConnected else { return }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { @MainActor in
+                for await connected in self.$isConnected.values where !connected { return }
+            }
+            group.addTask { try? await Task.sleep(for: timeout) }
+            await group.next()
+            group.cancelAll()
+        }
     }
 
     /// A drop is under way that a reconnect from here can repair: the socket
