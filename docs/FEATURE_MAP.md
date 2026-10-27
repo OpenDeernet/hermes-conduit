@@ -427,7 +427,8 @@ window, so nobody has to match the chat's title to a row (#1363).
 
 **Siblings:** Chats rows (top-level, a nest's job rows, message-search
 matches, All's rows from another profile) · a project page's rows · the
-Bots list's bot rows (their Bot Chat) and group room rows · Settings in the
+Bots list's bot rows (their Bot Chat) and group room rows · Desktop group
+chats (a sheet, never beside the list, so nothing to mark) · Settings in the
 chat's column and the empty placeholder (nothing marked) · the list hidden,
 and a phone (one column) · the drawer shell's persistent sidebar (V2 off) ·
 the unread dot and the Running and Approve signals on the same rows · text:
