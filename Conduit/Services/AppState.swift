@@ -2820,6 +2820,7 @@ final class AppState: ObservableObject {
             openingPrompt: { [weak self] in self?.liveHermesCall?.openingTurn ?? self?.liveVoiceStyle.openingPrompt },
             provider: provider
         )
+        controller.startsMuted = { [weak self] in self?.hermesCallStartsMuted ?? false }
         // A hands-free goodbye closes the sheet like the Close button.
         controller.onEndConversation = { [weak self] in
             if qwen { self?.closeQwenLiveConversation() } else { self?.closeGeminiLiveConversation() }
@@ -3306,6 +3307,7 @@ final class AppState: ObservableObject {
         )
         // A hands-free goodbye closes the sheet like the Close button.
         controller.onEndConversation = { [weak self] in self?.closeGPTLiveConversation() }
+        controller.startsMuted = { [weak self] in self?.hermesCallStartsMuted ?? false }
         controller.apiCallLimit = { [weak self] in
             guard let self else { return nil }
             return GPTLiveAPICallLimit.duration(self.loadVoiceProfilePreferences(profile: self.activeProfile).gptLiveAPIMaxMinutes)
@@ -3640,6 +3642,7 @@ final class AppState: ObservableObject {
         )
         // A hands-free goodbye closes the sheet like the Close button.
         controller.onEndConversation = { [weak self] in self?.closeGrokLiveConversation() }
+        controller.startsMuted = { [weak self] in self?.hermesCallStartsMuted ?? false }
         controller.traceName = "Grok Live"
         return controller
     }()
@@ -4053,6 +4056,7 @@ final class AppState: ObservableObject {
         )
         // A hands-free goodbye closes the sheet like the Close button.
         controller.onEndConversation = { [weak self] in self?.closeLocalLiveConversation() }
+        controller.startsMuted = { [weak self] in self?.hermesCallStartsMuted ?? false }
         controller.traceName = "Local Live"
         return controller
     }()
@@ -4122,8 +4126,11 @@ final class AppState: ObservableObject {
         if isLocalLiveActive {
             closeLocalLiveConversation()
         } else {
-            // Its work lets go of the call too (#449).
+            // Its work lets go of the call too (#449), and no turn of it
+            // runs on.
             finishHermesCallbacks(engine: .localLive)
+            if localLiveControllerCreated { localLiveTurns.reset() }
+            localLiveOwnChat = nil
             if voiceCallRecorder?.engine == .localLive { finishVoiceCallRecording() }
             // A minimised call that failed has nothing left to show.
             if minimisedLiveVoice == .localLive { minimisedLiveVoice = nil }
@@ -6843,6 +6850,11 @@ final class AppState: ObservableObject {
     private var chatCallTranscriptRequest: UUID?
     /// A call Hermes made (#449) that the live call now connecting answers.
     var pendingHermesCall: HermesCallOpening?
+    /// A call from Hermes muted in CallKit before its live voice was
+    /// running: that voice starts muted, as classic voice does (#558).
+    var hermesCallStartsMuted: Bool {
+        (liveHermesCall != nil || pendingHermesCall != nil) && isNativeHermesCallMuted
+    }
     /// Opens the voice of a call answered in CallKit; the CallKit call's
     /// end cancels it.
     var hermesCallOpenTask: Task<Void, Never>?
