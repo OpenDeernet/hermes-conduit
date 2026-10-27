@@ -479,7 +479,7 @@ saved transcript (see Ending a call and what gets saved)
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-27, #PR.
+**Checked:** 2026-10-27, #1347.
 
 ## The Watch call log
 
