@@ -507,12 +507,12 @@ struct KanbanModelOverrideSheet: View {
 
     /// Search matches across providers, each naming its provider: several
     /// often serve the same model.
-    private var searchMatches: [(provider: KanbanModelProviderOption, model: String)] {
+    private var searchMatches: [KanbanModelSearchMatch] {
         let search = ModelSearchQuery(query)
         return providers.flatMap { provider in
             provider.models
                 .filter { search.matches([$0, provider.slug, provider.displayName]) }
-                .map { (provider: provider, model: $0) }
+                .map { KanbanModelSearchMatch(provider: provider, model: $0) }
         }
     }
 
@@ -532,7 +532,7 @@ struct KanbanModelOverrideSheet: View {
                     Text(verbatim: AppLocalization.string("Nothing matches “\(query.trimmingCharacters(in: .whitespacesAndNewlines))”."))
                         .foregroundStyle(.secondary)
                 }
-                ForEach(Array(matches.enumerated()), id: \.offset) { _, match in
+                ForEach(matches) { match in
                     modelButton(match.model, provider: match.provider, showsProvider: true)
                 }
             }
@@ -641,6 +641,14 @@ struct KanbanModelOverrideSheet: View {
             loadFailed = true
         }
     }
+}
+
+/// One model the override sheet's search found, with its provider.
+private struct KanbanModelSearchMatch: Identifiable {
+    let provider: KanbanModelProviderOption
+    let model: String
+
+    var id: String { "\(provider.slug)\u{1F}\(model)" }
 }
 
 // MARK: - Skills picker

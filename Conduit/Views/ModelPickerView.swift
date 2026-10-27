@@ -425,9 +425,14 @@ struct ModelPickerView: View {
         return .handled
     }
 
-    /// Return picks the highlighted match, as a tap would.
+    /// Return picks the highlighted match, as a tap would, and keeps the
+    /// field focused for the next search. On touch it puts the keyboard away.
     private func pickHighlightedMatch() {
-        guard keyboardDriven else { return }
+        guard keyboardDriven else {
+            searchFocused = false
+            return
+        }
+        searchFocused = true
         let matches = searchMatches
         guard matches.indices.contains(highlightedMatch), !modelRowsLocked else { return }
         pick(matches[highlightedMatch].model, provider: matches[highlightedMatch].provider)
