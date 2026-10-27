@@ -13,6 +13,7 @@ import SwiftUI
 struct ComposerFullEditor<Attachments: View, DictateButton: View, ActionButton: View>: View {
     @Binding var text: String
     let placeholder: String
+    var fieldIdentifier = "composer.fullEditor.field"
     let enabled: Bool
     /// Every change made while the editor has focus, with the new text:
     /// typing, or dictation writing the draft.
@@ -68,6 +69,7 @@ struct ComposerFullEditor<Attachments: View, DictateButton: View, ActionButton: 
                     isFocused: $isFocused,
                     enabled: enabled,
                     accessibilityLabel: placeholder,
+                    accessibilityIdentifier: fieldIdentifier,
                     textInsets: UIEdgeInsets(top: 8, left: 5, bottom: 8, right: 5),
                     canSubmitFromReturn: canSubmitFromReturn,
                     onSubmitFromReturn: onSubmitFromReturn

@@ -110,6 +110,7 @@ class ReturnKeyTextView: UITextView {
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         foldHardwareShift(presses, pressed: false)
+        if presses.contains(where: { Self.isReturnKeyPress($0) }) { returnTakenByKeyCommand = false }
         // Forward the original set: UIKit tracks press lifecycle across the
         // whole sequence, not just the keys this shortcut cares about.
         super.pressesEnded(presses, with: event)
@@ -254,13 +255,7 @@ struct ReturnKeyTextEditor: UIViewRepresentable {
 
     func updateUIView(_ uiView: ReturnKeyTextView, context: Context) {
         context.coordinator.parent = self
-        // A change made elsewhere (dictation, a quote, a mention, a send
-        // clearing the field). One under way in the IME waits for it.
-        if uiView.text != text, uiView.markedTextRange == nil {
-            uiView.text = text
-            uiView.selectedRange = NSRange(location: (text as NSString).length, length: 0)
-            uiView.invalidateIntrinsicContentSize()
-        }
+        context.coordinator.apply(text: text, to: uiView, hasMarkedText: uiView.markedTextRange != nil)
         configure(uiView, context: context)
         if isFocused, !uiView.isFirstResponder, uiView.window != nil {
             DispatchQueue.main.async { uiView.becomeFirstResponder() }
@@ -268,6 +263,12 @@ struct ReturnKeyTextEditor: UIViewRepresentable {
         if !isFocused, uiView.isFirstResponder {
             DispatchQueue.main.async { _ = uiView.resignFirstResponder() }
         }
+    }
+
+    static func dismantleUIView(_ uiView: ReturnKeyTextView, coordinator: Coordinator) {
+        uiView.delegate = nil
+        uiView.onSubmitFromReturn = nil
+        uiView.canSubmitFromReturn = false
     }
 
     private func configure(_ view: ReturnKeyTextView, context: Context) {
@@ -298,11 +299,43 @@ struct ReturnKeyTextEditor: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: ReturnKeyTextEditor
 
+        /// A change made elsewhere while the IME was composing. It lands
+        /// once the composition ends, never replacing it mid-way.
+        private(set) var pendingText: String?
+
         init(_ parent: ReturnKeyTextEditor) {
             self.parent = parent
         }
 
+        /// A change made elsewhere (dictation, a quote, a mention, a send
+        /// clearing the field) goes into the field, the cursor after it.
+        /// Internal, with the IME state passed in, for tests.
+        func apply(text: String, to textView: UITextView, hasMarkedText: Bool) {
+            guard textView.text != text else { return }
+            if hasMarkedText {
+                // The binding also echoes the composition itself; only a
+                // text that isn't the field's is a change made elsewhere.
+                pendingText = text
+                return
+            }
+            pendingText = nil
+            textView.text = text
+            textView.selectedRange = NSRange(location: (text as NSString).length, length: 0)
+            textView.invalidateIntrinsicContentSize()
+        }
+
         func textViewDidChange(_ textView: UITextView) {
+            textDidChange(in: textView, hasMarkedText: textView.markedTextRange != nil)
+        }
+
+        func textDidChange(in textView: UITextView, hasMarkedText: Bool) {
+            if !hasMarkedText, let pending = pendingText {
+                // The composition ended: the change made meanwhile wins.
+                apply(text: pending, to: textView, hasMarkedText: false)
+                parent.text = pending
+                return
+            }
+            if !hasMarkedText { pendingText = nil }
             parent.text = textView.text
             textView.invalidateIntrinsicContentSize()
         }

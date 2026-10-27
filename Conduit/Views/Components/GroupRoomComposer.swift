@@ -229,6 +229,7 @@ struct GroupRoomComposer: View {
             ComposerFullEditor(
                 text: $draft,
                 placeholder: AppLocalization.string("Message the room"),
+                fieldIdentifier: "room.composer.fullEditor.field",
                 enabled: true,
                 onUserEdit: { _ in },
                 onCollapse: { isShowingFullEditor = false },

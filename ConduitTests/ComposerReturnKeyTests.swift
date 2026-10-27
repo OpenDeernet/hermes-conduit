@@ -245,6 +245,58 @@ final class ComposerReturnKeyTests: XCTestCase {
         XCTAssertEqual(command?.wantsPriorityOverSystemBehavior, true)
     }
 
+    // MARK: - Room and full editor field: text sync
+
+    private func editorCoordinator(text: Binding<String>) -> ReturnKeyTextEditor.Coordinator {
+        ReturnKeyTextEditor(
+            text: text,
+            isFocused: .constant(true),
+            accessibilityLabel: "Message",
+            canSubmitFromReturn: false,
+            onSubmitFromReturn: { false }
+        ).makeCoordinator()
+    }
+
+    func testFieldTakesAChangeMadeElsewhereWithTheCursorAfterIt() {
+        var stored = ""
+        let coordinator = editorCoordinator(text: Binding(get: { stored }, set: { stored = $0 }))
+        let field = ReturnKeyTextView()
+        field.text = "Hi"
+
+        coordinator.apply(text: "Hi @bot ", to: field, hasMarkedText: false)
+        XCTAssertEqual(field.text, "Hi @bot ")
+        XCTAssertEqual(field.selectedRange, NSRange(location: 8, length: 0))
+    }
+
+    func testTypingReachesTheBinding() {
+        var stored = ""
+        let coordinator = editorCoordinator(text: Binding(get: { stored }, set: { stored = $0 }))
+        let field = ReturnKeyTextView()
+        field.text = "typed"
+
+        coordinator.textDidChange(in: field, hasMarkedText: false)
+        XCTAssertEqual(stored, "typed")
+    }
+
+    func testChangeMadeDuringCompositionLandsWhenItEnds() {
+        // A quote or dictation write while the IME composes isn't dropped:
+        // it waits, then lands once the composition ends.
+        var stored = "にほ"
+        let coordinator = editorCoordinator(text: Binding(get: { stored }, set: { stored = $0 }))
+        let field = ReturnKeyTextView()
+        field.text = "にほ"
+
+        coordinator.apply(text: "> quote\n", to: field, hasMarkedText: true)
+        XCTAssertEqual(field.text, "にほ")
+        XCTAssertEqual(coordinator.pendingText, "> quote\n")
+
+        field.text = "日本"
+        coordinator.textDidChange(in: field, hasMarkedText: false)
+        XCTAssertEqual(field.text, "> quote\n")
+        XCTAssertEqual(stored, "> quote\n")
+        XCTAssertNil(coordinator.pendingText)
+    }
+
     func testTextViewDefaultsPreserveLegacyReturnBehavior() {
         // Fresh text views (and every existing construction site that does
         // not know about the shortcut) must behave exactly as before.
