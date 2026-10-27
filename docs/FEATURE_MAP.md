@@ -1334,8 +1334,8 @@ Watch and CarPlay (not needed: neither shows a transcript)
 | Opening | Shows while it loads | Kept |
 |---|---|---|
 | A chat or project chat | its saved copy (newest 120 rows) | on the phone, the last 20 chats left per dashboard and profile; the last 8 read or saved also in memory |
-| A Bot Chat | the copy kept when it was left (after a `/new`, the compacted chat as it showed) | in memory, per dashboard and bot, one per bot |
-| A group room | the events it had | in memory, per dashboard and room, until the room leaves the list |
+| A Bot Chat | the copy kept when it was left (after a `/new`, the compacted chat as it showed) | in memory, per dashboard and bot, one per bot, up to 120 rows |
+| A group room | the events it had | in memory, per dashboard and room, up to 400 events, until the room leaves the list |
 | A chat never opened | nothing, as before | not applicable |
 
 **Code**
