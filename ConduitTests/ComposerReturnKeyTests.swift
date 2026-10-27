@@ -216,6 +216,18 @@ final class ComposerReturnKeyTests: XCTestCase {
         XCTAssertFalse(view.returnKeyCommandApplies(hasMarkedText: false))
     }
 
+    func testShiftedKeyCommandNeverSends() {
+        // On a Mac no Shift press may reach the view; the command's own
+        // modifiers keep Shift-Return a newline.
+        let view = ImagePasteTextView()
+        view.returnKeySends = true
+        view.canSubmitFromReturn = true
+        view.onSubmitFromReturn = { true }
+        let shifted = UIKeyCommand(input: "\r", modifierFlags: .shift, action: #selector(ReturnKeyTextView.returnKeyCommandPressed))
+
+        XCTAssertFalse(view.canPerformAction(#selector(ReturnKeyTextView.returnKeyCommandPressed), withSender: shifted))
+    }
+
     func testKeyCommandSendsThroughTheComposer() {
         let view = ImagePasteTextView()
         view.returnKeySends = true
@@ -290,6 +302,23 @@ final class ComposerReturnKeyTests: XCTestCase {
 
         coordinator.apply(text: "Hel", to: field, hasMarkedText: false)
         XCTAssertEqual(field.text, "Hell")
+    }
+
+    func testChangeAlreadyInPlaceWhenCompositionEndsDoesNotLinger() {
+        var stored = ""
+        let coordinator = editorCoordinator(text: Binding(get: { stored }, set: { stored = $0 }))
+        let field = ReturnKeyTextView()
+        field.text = "にほ"
+        coordinator.apply(text: "日本", to: field, hasMarkedText: true)
+
+        field.text = "日本"
+        coordinator.textDidChange(in: field, hasMarkedText: false)
+        XCTAssertNil(coordinator.pendingText)
+
+        field.text = "日本語"
+        coordinator.textDidChange(in: field, hasMarkedText: false)
+        XCTAssertEqual(field.text, "日本語")
+        XCTAssertEqual(stored, "日本語")
     }
 
     func testChangeMadeDuringCompositionLandsWhenItEnds() {

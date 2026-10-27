@@ -339,6 +339,8 @@ struct ReturnKeyTextEditor: UIViewRepresentable {
         func textDidChange(in textView: UITextView, hasMarkedText: Bool) {
             if !hasMarkedText, let pending = pendingText {
                 // The composition ended: the change made meanwhile wins.
+                // Spent first, so one already in place can't linger.
+                pendingText = nil
                 apply(text: pending, to: textView, hasMarkedText: false)
                 parent.text = pending
                 return
