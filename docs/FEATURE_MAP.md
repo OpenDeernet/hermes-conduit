@@ -440,15 +440,15 @@ no Settings caption or doc describes it
 - Tests: `ConduitTests/V2SplitLayoutTests.swift` (testV2SplitListMarksWhatShowsBesideIt)
 
 **Rulings**
-- Split, the row of what shows beside the list gets a rounded accent tint with a fine accent edge, as the persistent sidebar marks its open chat, and VoiceOver says Selected. A shape behind the row, so it reads apart from the gold unread dot and the Running spinner on it (2026-10-27, #TBD).
-- Only on a split window: a phone and a wide window with the list hidden keep their one-column look, the Chats and project rows' faint shade included (Eric, 2026-10-27, #TBD: for larger screens with the sidebar).
-- A group room takes the chat's place without changing the open chat, so beside a room only the room's row is marked; with Settings or the placeholder in the chat's column nothing is (2026-10-27, #TBD).
-- Another profile's row in All is never the open chat, whatever its id (2026-10-27, #TBD).
+- Split, the row of what shows beside the list gets a rounded accent tint with a fine accent edge, as the persistent sidebar marks its open chat, and VoiceOver says Selected. A shape behind the row, so it reads apart from the gold unread dot and the Running spinner on it (2026-10-27, #1371).
+- Only on a split window: a phone and a wide window with the list hidden keep their one-column look, the Chats and project rows' faint shade included (Eric, 2026-10-27, #1371: for larger screens with the sidebar).
+- A group room takes the chat's place without changing the open chat, so beside a room only the room's row is marked; with Settings or the placeholder in the chat's column nothing is (2026-10-27, #1371).
+- Another profile's row in All is never the open chat, whatever its id (2026-10-27, #1371).
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-27, added at #TBD.
+**Checked:** 2026-10-27, added at #1371.
 
 ## Chat open elsewhere
 
