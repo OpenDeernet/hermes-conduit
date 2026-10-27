@@ -188,6 +188,14 @@ extension AppState {
         return approvals.approvals
     }
 
+    /// The approvals were read, and that one isn't among them any more: it
+    /// was answered, or its turn moved on, so its card can't answer it.
+    func linkedRoomApprovalIsGone(_ id: String) -> Bool {
+        guard canAnswerRoomApprovals, let approvals = linkedRoomApprovals,
+              approvals.dashboardID == activeDashboardID else { return false }
+        return !approvals.approvals.contains { $0.id == id }
+    }
+
     /// Reads the approvals. A read that fails keeps what was read last, and
     /// one that a sign-out or another dashboard overtook is dropped, as the
     /// invites' is.

@@ -32,7 +32,7 @@ struct RoomApprovalRosterRow: View {
 }
 
 /// An approval's card: what the agent asks, and Run or Reject. Taken, it
-/// closes; refused, it says why.
+/// closes; refused, it says why. One a read no longer lists says so.
 struct RoomApprovalSheet: View {
     let approval: RoomApproval
     @EnvironmentObject private var appState: AppState
@@ -43,14 +43,27 @@ struct RoomApprovalSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                GroupApprovalCard(
-                    approval: approval.card,
-                    memberName: RoomApprovalText.line(for: approval),
-                    answer: answer,
-                    respond: respond
-                )
-                .padding()
+                if appState.linkedRoomApprovalIsGone(approval.id), answer != .submitting {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(verbatim: RoomApprovalText.line(for: approval))
+                            .font(.subheadline.weight(.semibold))
+                        Text(AppLocalization.string("This approval isn't waiting any more."))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                } else {
+                    GroupApprovalCard(
+                        approval: approval.card,
+                        memberName: RoomApprovalText.line(for: approval),
+                        answer: answer,
+                        respond: respond
+                    )
+                    .padding()
+                }
             }
+            .refreshable { await appState.refreshLinkedRoomApprovals() }
             .navigationTitle(AppLocalization.string("Approval needed"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -230,12 +230,14 @@ extension GroupChatModelsTests {
         await appState.refreshGroupChatSupport()
         XCTAssertEqual(routes.approvalsReads, 2, "Group Chats reads them, as it reads the invites")
 
-        // Answered: its row goes, and the list is read again.
+        // Answered: its row goes, and its card says it isn't waiting.
         let first = appState.linkedRoomApprovalRows[0]
+        XCTAssertFalse(appState.linkedRoomApprovalIsGone(first.id))
         let answered = await appState.answerLinkedRoomApproval(first, choice: "once")
         XCTAssertEqual(answered, .sent)
         XCTAssertEqual(routes.answers.map { $0["choice"] as? String }, ["once"])
         XCTAssertEqual(appState.linkedRoomApprovalRows.map(\.id), ["run_b2/req-2"])
+        XCTAssertTrue(appState.linkedRoomApprovalIsGone(first.id))
         // Refused: the plugin's words, and the list read again drops one
         // answered elsewhere.
         routes.refusesAnswers = true
