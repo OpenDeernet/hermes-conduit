@@ -2244,7 +2244,7 @@ help connecting? assistant and the prompts it hands out
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-27, at #PRNUM.
+**Checked:** 2026-10-27, at #1377.
 
 ## Settings connection page
 
