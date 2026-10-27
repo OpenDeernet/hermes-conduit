@@ -165,6 +165,14 @@ enum RoomDraftText {
         names.formatted(.list(type: .and).locale(AppLocalization.formattingLocale))
     }
 
+    /// When invites run out. They run for a week, so the day comes with
+    /// the time.
+    static func until(_ date: Date) -> String {
+        date.formatted(
+            .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute().locale(AppLocalization.formattingLocale)
+        )
+    }
+
     /// Who it waits for, that it's starting, or why it ended.
     static func line(for draft: RoomDraft) -> String {
         switch draft.status {
@@ -413,12 +421,15 @@ extension AppState {
         }
     }
 
-    /// The drafts and the people to invite, read once the host's plugin is
-    /// first known to make rooms with people you've linked: Group Chats
-    /// may have been read before its status came.
+    /// The drafts, the people to invite and the invites, read once the
+    /// host's plugin is first known to make rooms with people you've
+    /// linked: Group Chats may have been read before its status came.
     func linkedRoomInvitesReported(before couldInvite: Bool) {
         guard !couldInvite, canInviteLinkedPeople, groupChatPhase == .available, isConnected else { return }
-        Task { await refreshLinkedRoomDrafts() }
+        Task {
+            await refreshLinkedRoomDrafts()
+            await refreshLinkedRoomInvites()
+        }
     }
 
     /// A draft that a request just made or answered, in the list it

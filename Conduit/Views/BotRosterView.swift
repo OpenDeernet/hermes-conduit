@@ -24,6 +24,8 @@ struct BotRosterView: View {
     /// A room with people you've linked that hasn't started, shown with who's
     /// invited and how they answered.
     @State private var presentedDraft: RoomDraft?
+    /// An invite to a room someone you've linked hosts, with its join card.
+    @State private var presentedInvite: RoomInvite?
     /// V2's Bots tab: its title bar's "+" asks for a new bot here, and the
     /// in-list create card steps aside.
     private let createRequest: Binding<Bool>?
@@ -158,7 +160,8 @@ struct BotRosterView: View {
     }
 
     private var hasGroupRows: Bool {
-        (hostedGroupsAvailable && (!appState.groupRooms.isEmpty || !appState.linkedRoomDraftRows.isEmpty))
+        (hostedGroupsAvailable && (!appState.groupRooms.isEmpty || !appState.linkedRoomDraftRows.isEmpty
+            || !appState.linkedRoomInviteRows.isEmpty))
             || !appState.desktopGroupChats.isEmpty
     }
 
@@ -332,13 +335,18 @@ struct BotRosterView: View {
             RoomDraftSheet(draft: draft)
                 .environmentObject(appState)
         }
+        .sheet(item: $presentedInvite) { invite in
+            RoomInviteSheet(invite: invite)
+                .environmentObject(appState)
+        }
     }
 
     /// Group Chat rows, below the Bots section: hosted rooms (only when the
     /// gateway advertised the foundation `groups.*` methods — an unsupported
-    /// gateway never shows a dead control) and the rooms with people you've
-    /// linked that haven't started, plus the group chats Hermes Desktop
-    /// mirrored to the gateway, which need no `groups.*` support.
+    /// gateway never shows a dead control), the rooms with people you've
+    /// linked that haven't started, and the invites to theirs, plus the
+    /// group chats Hermes Desktop mirrored to the gateway, which need no
+    /// `groups.*` support.
     @State private var showingGroupCreateSheet = false
 
     @ViewBuilder
@@ -367,6 +375,11 @@ struct BotRosterView: View {
                     ForEach(appState.linkedRoomDraftRows) { draft in
                         RoomDraftRosterRow(draft: draft) {
                             presentedDraft = draft
+                        }
+                    }
+                    ForEach(appState.linkedRoomInviteRows) { invite in
+                        RoomInviteRosterRow(invite: invite) {
+                            presentedInvite = invite
                         }
                     }
                 }

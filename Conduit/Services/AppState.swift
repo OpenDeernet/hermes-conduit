@@ -2174,6 +2174,9 @@ final class AppState: ObservableObject {
     /// (RoomLinks.swift). RootView shows who it's from in a sheet, which
     /// asks before linking.
     @Published var pendingRoomLink: RoomLinkURL?
+    /// An invite to a room whose notification was tapped (RoomInvites.swift):
+    /// RootView shows its join card.
+    @Published var presentedRoomInvite: RoomInvite?
     /// Round 6: the classified failure of the most recent failed connection
     /// attempt (saved-credential reconnect, repair activation, or a failed
     /// explicit connect). Typed — never recovered from user-facing strings —
@@ -10679,6 +10682,9 @@ final class AppState: ObservableObject {
     /// Chats lists until they start, and the people New Group Chat can
     /// invite (RoomDrafts.swift).
     @Published var linkedRoomDrafts: LinkedRoomDrafts?
+    /// The rooms people you've linked invited this Hermes to, which Group
+    /// Chats lists with the drafts (RoomInvites.swift).
+    @Published var linkedRoomInvites: LinkedRoomInvites?
     /// Hermes Desktop's group chats, read from its ui_meta projection on the
     /// `default` profile (refreshed with the bot roster). Read-only here:
     /// Desktop drives their rounds, and `groups.*` cannot address them.
@@ -10859,6 +10865,8 @@ final class AppState: ObservableObject {
         canGeneratePictures = false
         groupRooms = []
         linkedRoomDrafts = nil
+        linkedRoomInvites = nil
+        presentedRoomInvite = nil
         desktopGroupChats = []
         groupRoomPictureData = [:]
         groupRoomPictureRevisions = [:]
@@ -11108,6 +11116,7 @@ final class AppState: ObservableObject {
             groupChatPhase = .available
             await refreshGroupRooms()
             await refreshLinkedRoomDrafts()
+            await refreshLinkedRoomInvites()
         } catch is CancellationError {
             return
         } catch {
@@ -37122,5 +37131,26 @@ extension AppState {
         objectWillChange.send()
         ids.append(roomID)
         defaults.set(Array(ids.suffix(200)), forKey: Self.dismissedRoomDraftsKey)
+    }
+}
+
+// MARK: - Linked Rooms' invites removed from Group Chats
+
+extension AppState {
+    private static let dismissedRoomInvitesKey = "conduit.roomInvites.dismissed.v1"
+
+    /// The invites removed from Group Chats once they started or ended
+    /// (RoomInvites.swift), by their Link and room. One list serves every
+    /// dashboard; it keeps the newest 200.
+    var dismissedRoomInviteIDs: Set<String> {
+        Set(defaults.stringArray(forKey: Self.dismissedRoomInvitesKey) ?? [])
+    }
+
+    func dismissRoomInvite(_ id: String) {
+        var ids = defaults.stringArray(forKey: Self.dismissedRoomInvitesKey) ?? []
+        guard !ids.contains(id) else { return }
+        objectWillChange.send()
+        ids.append(id)
+        defaults.set(Array(ids.suffix(200)), forKey: Self.dismissedRoomInvitesKey)
     }
 }

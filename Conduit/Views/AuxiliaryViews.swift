@@ -3700,6 +3700,10 @@ private struct NotificationsSettingsDetail: View {
                     notificationToggle(AppLocalization.string("Response ready"), detail: AppLocalization.string("An active turn finishes"), keyPath: \.responseReady)
                     notificationToggle(AppLocalization.string("Turn failed"), detail: AppLocalization.string("A turn stops with an error"), keyPath: \.turnFailed)
                     notificationToggle(AppLocalization.string("Background task finished"), detail: AppLocalization.string("A delegated agent completes"), keyPath: \.backgroundTaskFinished)
+                    // Linked Rooms: while the host's plugin keeps invites.
+                    if appState.notifierPlugin.reports(RoomInvitesClient.capability) {
+                        notificationToggle(AppLocalization.string("Room invites"), detail: AppLocalization.string("Someone you've linked with invites you to a room"), keyPath: \.roomInvite)
+                    }
                     notificationToggle(AppLocalization.string("Approval & input sound"), detail: AppLocalization.string("Play a sound when Hermes is waiting on you"), keyPath: \.attentionSound)
                     notificationToggle(AppLocalization.string("Completion sound"), detail: AppLocalization.string("Play a sound when a turn or task finishes"), keyPath: \.completionSound)
                     notificationToggle(AppLocalization.string("Show previews"), detail: AppLocalization.string("Include response text in notifications"), keyPath: \.showPreviews)
