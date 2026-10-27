@@ -259,13 +259,15 @@ struct RoomDraftSheet: View {
 
     /// Every 5 s while the sheet is up, for up to 10 minutes: answers come
     /// in as each person's Hermes reads its invite, and a room that started
-    /// opens once the room list has it. One that ended won't change. Pull
-    /// to read it again.
+    /// opens once the room list has it. One that ended won't change. A tick
+    /// while Conduit is in the background or not connected is skipped, as
+    /// the room's own poll skips them. Pull to read it again.
     private func follow() async {
         for _ in 0..<120 {
             guard !Task.isCancelled, !settled() else { return }
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
+            guard appState.isSceneActive, appState.isConnected else { continue }
             await readAgain()
         }
         _ = settled()

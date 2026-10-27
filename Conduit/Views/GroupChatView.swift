@@ -1516,7 +1516,7 @@ struct GroupCreateSheet: View {
                         )
                         attemptedInputs = inputs
                         let pendingRoomID = roomID
-                        Task {
+                        Task { @MainActor in
                             let created = await appState.createGroupRoom(
                                 name: roomName, bots: bots, roomID: pendingRoomID
                             )
