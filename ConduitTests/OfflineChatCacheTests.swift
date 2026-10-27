@@ -1448,7 +1448,8 @@ final class OfflineChatCacheTests: XCTestCase {
         appState.showLogin = false
         addTeardownBlock { appState.client?.disconnect() }
         await appState.loadSessions()
-        XCTAssertTrue(await appState.openSession("stored-b"))
+        let openedFirst = await appState.openSession("stored-b")
+        XCTAssertTrue(openedFirst)
         seedCopy(store, dashboard: dashboard)
 
         let opening = Task { @MainActor in await appState.openSession("stored-a") }
@@ -1461,7 +1462,8 @@ final class OfflineChatCacheTests: XCTestCase {
         XCTAssertTrue(appState.messages.isEmpty, "The copy never feeds the live transcript")
 
         gate.resume()
-        XCTAssertTrue(await opening.value)
+        let landed = await opening.value
+        XCTAssertTrue(landed)
         XCTAssertNil(appState.offlineChatPresentation)
         XCTAssertEqual(appState.messages.map(\.id), ["live-stored-a"])
     }
@@ -1498,8 +1500,10 @@ final class OfflineChatCacheTests: XCTestCase {
         addTeardownBlock { appState.client?.disconnect() }
         let atlas = botProfile("atlas")
 
-        XCTAssertTrue(await appState.openBotChat(for: atlas))
-        XCTAssertTrue(await appState.openBotChat(for: botProfile("scout")))
+        let openedAtlas = await appState.openBotChat(for: atlas)
+        let openedScout = await appState.openBotChat(for: botProfile("scout"))
+        XCTAssertTrue(openedAtlas)
+        XCTAssertTrue(openedScout)
 
         let suspension = ControlledSuspension()
         gate = suspension
@@ -1510,7 +1514,8 @@ final class OfflineChatCacheTests: XCTestCase {
 
         gate = nil
         suspension.resume()
-        XCTAssertTrue(await reopening.value)
+        let reopened = await reopening.value
+        XCTAssertTrue(reopened)
         XCTAssertNil(appState.offlineChatPresentation)
         XCTAssertEqual(appState.messages.map(\.id), ["atlas-reply-3"])
     }
@@ -1538,7 +1543,8 @@ final class OfflineChatCacheTests: XCTestCase {
         appState.showLogin = false
         addTeardownBlock { appState.client?.disconnect() }
         await appState.loadSessions()
-        XCTAssertTrue(await appState.openSession("stored-b"))
+        let openedFirst = await appState.openSession("stored-b")
+        XCTAssertTrue(openedFirst)
         seedCopy(store, dashboard: dashboard)
 
         let opening = Task { @MainActor in await appState.openSession("stored-c") }
@@ -1547,7 +1553,8 @@ final class OfflineChatCacheTests: XCTestCase {
         XCTAssertTrue(appState.messages.isEmpty)
 
         gate.resume()
-        XCTAssertTrue(await opening.value)
+        let landed = await opening.value
+        XCTAssertTrue(landed)
         XCTAssertEqual(appState.messages.map(\.id), ["live-stored-c"])
     }
 

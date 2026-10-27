@@ -13699,6 +13699,7 @@ final class AppState: ObservableObject {
         // The outgoing dashboard's chat and Chats list as they show now are
         // what the next visit there opens to.
         recordOfflineChatCopy()
+        keepBotChatCopy()
         recordSavedChatList()
         selectDashboardTarget(id)
         rememberDashboardURL(dashboard.normalizedURL)
@@ -23757,6 +23758,9 @@ final class AppState: ObservableObject {
         let previousSessionID = activeSessionId
         let previousTitle = activeSessionTitle
         cacheMessagePresentation()
+        // The chat being left shows as it is now when it's opened again.
+        recordOfflineChatCopy()
+        keepBotChatCopy()
         let newTitle = AppLocalization.string("New conversation")
         activeSessionTitle = newTitle
         let previousTurnState = turnState
