@@ -5,7 +5,7 @@
 //  The Folder tab in Artifacts (#1389): the open chat's working folder, or a
 //  project's, as a tree. Files open in the viewers chats use (Quick Look
 //  for pictures, PDFs and documents) or as text, Markdown drawn, and a text
-//  file can be edited. With the plugin's workspace routes (0.107+) it also
+//  file can be edited. With the plugin's workspace routes (0.109+) it also
 //  searches names and lines inside files, lists recent files, and makes,
 //  renames, moves, duplicates, deletes and uploads files. A file path
 //  tapped in a reply opens here. On a wide window the tab sits in a panel
