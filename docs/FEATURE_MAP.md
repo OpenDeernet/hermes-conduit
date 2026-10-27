@@ -1348,8 +1348,8 @@ the composer's Sending… while a send checks Hermes
 
 **Rulings**
 - Drafts live in memory per (profile, chat), and a sign-out or server switch clears them on purpose; nothing the composer held before the clear goes back in after it: not when it goes away, hands off to another chat or a room, nor when a send that was on its way fails (2026-10-24, #1185).
-- A send's words leave the field when Send is tapped. If it doesn't go, they come back through AppState's restore requests, never through the composer that sent them: leaving the chat mid-send replaces that composer, and words put back into it were lost, so the user had to type them again. The composer on screen puts them in its field when they're its chat's, otherwise in their chat's stored draft. A send that stopped with no error to say so (its chat was left before its message showed) leaves the waiting message's notice: back in the composer, or back in that chat's draft, by name (2026-10-27, #PRNUM, from #1401).
-- Until a send's message shows in the transcript, the composer says "Sending…" in the chat it was sent from: on a slow or dropped connection the checks before it (whether Hermes is still busy, whether the transcript is current, starting the chat) can take seconds, and an emptied field with nothing else read as a message that went nowhere (2026-10-27, #PRNUM, from #1401).
+- A send's words leave the field when Send is tapped. If it doesn't go, they come back through AppState's restore requests, never through the composer that sent them: leaving the chat mid-send replaces that composer, and words put back into it were lost, so the user had to type them again. The composer on screen puts them in its field when they're its chat's, otherwise in their chat's stored draft. A send that stopped with no error to say so (its chat was left before its message showed) leaves the waiting message's notice: back in the composer, or back in that chat's draft, by name (2026-10-27, #1403, from #1401).
+- Until a send's message shows in the transcript, the composer says "Sending…" in the chat it was sent from: on a slow or dropped connection the checks before it (whether Hermes is still busy, whether the transcript is current, starting the chat) can take seconds, and an emptied field with nothing else read as a message that went nowhere (2026-10-27, #1403, from #1401).
 - A waiting message is never sent on its own after it's handed back. When Hermes says its chat is gone, its words go into the composer on screen, unsent, with a notice saying so (2026-10-24, #1185).
 
 **Open gaps**
@@ -1358,7 +1358,7 @@ the composer's Sending… while a send checks Hermes
 - A room's quoted message and its "To" picks aren't kept when the room is left.
 - A room that's disbanded while another dashboard is in use keeps its staged files until that dashboard is opened again or the user signs out.
 
-**Checked:** 2026-10-27, #PRNUM (failed sends' words outlast the composer; Sending… before the message shows); 2026-10-24, at #1185; a failed '/command' put back without its suggestion list over it at #1191 (#891 review).
+**Checked:** 2026-10-27, #1403 (failed sends' words outlast the composer; Sending… before the message shows); 2026-10-24, at #1185; a failed '/command' put back without its suggestion list over it at #1191 (#891 review).
 
 ## A new chat that something waits on
 
