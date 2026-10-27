@@ -304,6 +304,9 @@ struct V2ChatsView: View, Equatable {
     @State private var showArchivedSessions = false
     /// Every pinned reply of the profile (#918).
     @State private var showPinnedReplies = false
+    /// Reorder pinned chats, from a pinned row's menu or the Pinned header
+    /// (issue 1354).
+    @State private var pinnedOrderTarget: PinnedChatsOrderTarget?
     @State private var showProjectCreator = false
     @State private var sessionPendingDeletion: SessionSummary?
     @State private var sessionPendingRename: SessionSummary?
@@ -551,6 +554,10 @@ struct V2ChatsView: View, Equatable {
         }
         .sheet(isPresented: $showPinnedReplies) {
             PinnedRepliesSheet()
+                .environmentObject(appState)
+        }
+        .sheet(item: $pinnedOrderTarget) { target in
+            PinnedChatsOrderSheet(profile: target.profile)
                 .environmentObject(appState)
         }
         .sheet(item: $repairContext) { context in
@@ -1217,14 +1224,16 @@ struct V2ChatsView: View, Equatable {
         )
     }
 
+    /// Pinned in the order the person set (issue 1354), then Recent.
     private func nestedSections(_ displayed: [SessionSummary]) -> (pinned: [SessionNesting.Node], recent: [SessionNesting.Node]) {
-        SessionNesting.sections(
+        let sections = SessionNesting.sections(
             displayed,
             query: searchText,
             statusFilterActive: selection.flattens,
             isPinned: appState.isSessionPinned,
             parentKeyOf: appState.sessionNestingParentKey
         )
+        return (appState.arrangePinnedNodes(sections.pinned), sections.recent)
     }
 
     // MARK: - Sessions list
@@ -1419,10 +1428,17 @@ struct V2ChatsView: View, Equatable {
     ) -> some View {
         Section {
             if !isCollapsed(section) {
-                listRows(V2ChatsListItem.items(nodes, expanded: expanded, scope: rowScope))
+                listRows(
+                    V2ChatsListItem.items(nodes, expanded: expanded, scope: rowScope),
+                    movesPinned: section == .pinned && dragsPinned
+                )
             }
         } header: {
-            collapsibleHeader(section, count: nodes.count)
+            if section == .pinned {
+                pinnedHeader(count: nodes.count)
+            } else {
+                collapsibleHeader(section, count: nodes.count)
+            }
         }
     }
 
@@ -1463,7 +1479,8 @@ struct V2ChatsView: View, Equatable {
     ) -> some View {
         Section {
             if !isProfileCollapsed(profile) {
-                listRows(V2ChatsListItem.items(nodes, expanded: expanded, scope: rowScope))
+                // Its pinned chats lead it, and move among themselves.
+                listRows(V2ChatsListItem.items(nodes, expanded: expanded, scope: rowScope), movesPinned: dragsPinned)
             }
         } header: {
             profileSectionHeader(profile, count: nodes.count)
@@ -1564,6 +1581,27 @@ struct V2ChatsView: View, Equatable {
                 : "Hides the chats in this section."))
         } else {
             sectionHeader(section.title)
+        }
+    }
+
+    /// The Pinned header, whose touch-and-hold menu (and VoiceOver action)
+    /// reorders the profile in use's pinned chats.
+    @ViewBuilder
+    private func pinnedHeader(count: Int) -> some View {
+        if count > 1 {
+            let reorder = { pinnedOrderTarget = PinnedChatsOrderTarget(profile: appState.activeProfile) }
+            collapsibleHeader(.pinned, count: count)
+                .contextMenu {
+                    Button {
+                        Haptics.selection()
+                        DispatchQueue.main.async { reorder() }
+                    } label: {
+                        Label(AppLocalization.string("Reorder pinned chats"), systemImage: "arrow.up.arrow.down")
+                    }
+                }
+                .accessibilityAction(named: Text(AppLocalization.string("Reorder pinned chats")), reorder)
+        } else {
+            collapsibleHeader(.pinned, count: count)
         }
     }
 
@@ -1791,10 +1829,26 @@ struct V2ChatsView: View, Equatable {
     }
 
     /// One List row per item, so the List builds only the rows on screen.
-    private func listRows(_ items: [V2ChatsListItem]) -> some View {
+    /// `movesPinned`: the section's pinned chats move by dragging, a hold
+    /// then a move (issue 1354); a hold that stays still opens the menu,
+    /// and a swipe starts before either.
+    private func listRows(_ items: [V2ChatsListItem], movesPinned: Bool = false) -> some View {
         // Read once, not once per row. A search or a filter looks through
         // project chats whatever the setting, so it names them too.
         let namesProjects = isSearching || !selection.isEmpty || projectChats != .hidden
+        let movable: [Bool] = movesPinned ? items.map { item in
+            guard case .session(let node) = item.kind else { return false }
+            return appState.isSessionPinned(node.session) && !appState.isSavedChatRow(node.session)
+        } : []
+        let movableIDs = Set(zip(items, movable).compactMap { item, canMove in canMove ? item.id : nil })
+        let shown: [SessionSummary] = zip(items, movable).compactMap { item, canMove in
+            guard canMove, case .session(let node) = item.kind else { return nil }
+            return node.session
+        }
+        let move: ((IndexSet, Int) -> Void)? = shown.count > 1 ? { source, destination in
+            guard let offsets = PinnedChatOrder.movableOffsets(fromOffsets: source, toOffset: destination, movable: movable) else { return }
+            appState.movePinnedChats(shown, fromOffsets: offsets.source, toOffset: offsets.destination)
+        } : nil
         return ForEach(items) { item in
             V2ChatsRow(
                 item: item,
@@ -1802,9 +1856,18 @@ struct V2ChatsView: View, Equatable {
                 profileBadge: profileBadge(for:),
                 onRename: { sessionPendingRename = $0 },
                 onDelete: { sessionPendingDeletion = $0 },
+                onReorderPinned: { pinnedOrderTarget = PinnedChatsOrderTarget(profile: appState.rowProfile($0)) },
                 setExpanded: setExpanded
             )
+            .moveDisabled(!movableIDs.contains(item.id))
         }
+        .onMove(perform: move)
+    }
+
+    /// Pinned chats move by dragging while the list shows all of them: not
+    /// during a search or under a filter, whose rows are a lookup.
+    private var dragsPinned: Bool {
+        !isSearching && (showingProjects || selection.isEmpty)
     }
 
     /// "3 jobs · 1 running · 1 to approve": the count names jobs when every
@@ -1859,12 +1922,12 @@ struct V2ChatsView: View, Equatable {
     }
 
     private var projectsList: some View {
-        let pinned = SidebarPinnedSessions.forProjectsView(
+        let pinned = appState.arrangePinned(SidebarPinnedSessions.forProjectsView(
             sourceRows(nil),
             query: searchText,
             isPinned: appState.isSessionPinned,
             matches: sessionMatches
-        )
+        ), session: { $0 })
         return List {
             if barStacked == false {
                 searchField
@@ -1876,10 +1939,10 @@ struct V2ChatsView: View, Equatable {
             if !pinned.isEmpty {
                 Section {
                     if !isCollapsed(.pinned) {
-                        listRows(pinned.map(V2ChatsListItem.leaf))
+                        listRows(pinned.map(V2ChatsListItem.leaf), movesPinned: dragsPinned)
                     }
                 } header: {
-                    collapsibleHeader(.pinned, count: pinned.count)
+                    pinnedHeader(count: pinned.count)
                 }
             }
 
@@ -2077,6 +2140,8 @@ private struct V2ChatsRow: View {
     let profileBadge: (SessionSummary) -> V2ProfileBadge?
     let onRename: (SessionSummary) -> Void
     let onDelete: (SessionSummary) -> Void
+    /// Opens Reorder pinned chats from a pinned row's menu.
+    let onReorderPinned: (SessionSummary) -> Void
     /// Opens or closes the nest with this key.
     let setExpanded: (String, Bool) -> Void
 
@@ -2140,7 +2205,8 @@ private struct V2ChatsRow: View {
             nest: SessionNesting.readToggleInputs(for: node, aggregateIsUnread: signals.isUnread),
             isSavedRow: appState.isSavedChatRow(session),
             onRename: { onRename(session) },
-            onDelete: { onDelete(session) }
+            onDelete: { onDelete(session) },
+            onReorderPinned: { onReorderPinned(session) }
         )
     }
 
@@ -2249,7 +2315,8 @@ extension View {
         isSavedRow: Bool = false,
         onRename: @escaping () -> Void,
         onDelete: @escaping () -> Void,
-        onChanged: @escaping () -> Void = {}
+        onChanged: @escaping () -> Void = {},
+        onReorderPinned: (() -> Void)? = nil
     ) -> some View {
         modifier(V2SessionActions(
             appState: appState,
@@ -2259,7 +2326,8 @@ extension View {
             isSavedRow: isSavedRow,
             onRename: onRename,
             onDelete: onDelete,
-            onChanged: onChanged
+            onChanged: onChanged,
+            onReorderPinned: onReorderPinned
         ))
     }
 }
@@ -2275,6 +2343,7 @@ private struct V2SessionActions: ViewModifier {
     let onRename: () -> Void
     let onDelete: () -> Void
     let onChanged: () -> Void
+    let onReorderPinned: (() -> Void)?
 
     func body(content: Content) -> some View {
         content
@@ -2286,7 +2355,8 @@ private struct V2SessionActions: ViewModifier {
                         nest: nest,
                         onRename: onRename,
                         onDelete: onDelete,
-                        onChanged: onChanged
+                        onChanged: onChanged,
+                        onReorderPinned: onReorderPinned
                     )
                 }
             }
