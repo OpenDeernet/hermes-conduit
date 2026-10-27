@@ -120,7 +120,9 @@ working as it does today.
   for Local Live. Muting the mic on the server also works, but then you
   can't talk over the reply. The Interrupt button still stops it: Conduit
   sends your server a `response.cancel`, so a server that keeps its mic shut
-  while it speaks can listen again right away.
+  while it speaks can listen again right away. On a server that only reads
+  text back, the cancel reaches it after a sentence it already finished
+  from plugin 0.88.
 
 The full API reference (routes, frames and close codes) is in the Conduit
 plugin's README, under "Your own speech server" and "Local Live".

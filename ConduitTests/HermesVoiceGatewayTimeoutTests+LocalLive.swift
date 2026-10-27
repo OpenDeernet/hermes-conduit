@@ -261,6 +261,8 @@ extension HermesVoiceGatewayTimeoutTests {
         socket.deliver(["type": "session.updated"])
         try await passLocalLiveReadiness(socket, session: session)
         XCTAssertFalse(socket.sent.contains { $0["type"] as? String == "response.cancel" }, "nothing goes out before the call is ready")
+        // The check's answer is written after the call went ready.
+        await localLiveSettle(until: { socket.sent.contains { $0["type"] as? String == "conduit.turn.done" } })
 
         // The Interrupt button, then the user speaking again (#1325): a
         // server that shuts its microphone while it speaks opens it first.
