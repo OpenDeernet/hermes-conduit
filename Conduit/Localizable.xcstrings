@@ -366479,6 +366479,580 @@
           }
         }
       }
+    },
+    "Picked, but the look ahead was full" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgewählt, aber die Vorausschau war voll"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegido, pero la previsión estaba llena"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retenu, mais le tour d'horizon était plein"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dipilih, tetapi tinjauan ke depan sudah penuh"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scelto, ma lo sguardo avanti era pieno"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選ばれましたが、先読みがいっぱいでした"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택됐지만 내다보기가 꽉 찼습니다"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wybrane, ale przegląd nadchodzących dni był pełny"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolhido, mas a previsão estava cheia"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выбрано, но обзор на две недели был заполнен"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seçildi ama ileriye bakış doluydu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选中了，但前瞻已满"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選中了，但前瞻已滿"
+          }
+        }
+      }
+    },
+    "Not picked in the look ahead" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht für die Vorausschau ausgewählt"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se eligió para la previsión"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pas retenu pour le tour d'horizon"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak dipilih untuk tinjauan ke depan"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non scelto per lo sguardo avanti"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先読みに選ばれませんでした"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내다보기에 선택되지 않음"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nie wybrano do przeglądu nadchodzących dni"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não escolhido para a previsão"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не выбрано для обзора на две недели"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "İleriye bakış için seçilmedi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有选进前瞻"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有選進前瞻"
+          }
+        }
+      }
+    },
+    "The look ahead passed over it" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Vorausschau hat es übergangen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La previsión lo pasó por alto"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le tour d'horizon l'a laissé de côté"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tinjauan ke depan melewatkannya"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lo sguardo avanti l'ha tralasciato"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先読みでは取り上げられませんでした"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내다보기에서 다루지 않았습니다"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przegląd nadchodzących dni to pominął"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A previsão passou por cima disso"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обзор на две недели это пропустил"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "İleriye bakış bunu atladı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前瞻没有提到它"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前瞻沒有提到它"
+          }
+        }
+      }
+    },
+    "Left out of the look ahead" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In der Vorausschau ausgelassen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fuera de la previsión"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laissé hors du tour d'horizon"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak masuk tinjauan ke depan"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escluso dallo sguardo avanti"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先読みから外れたもの"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내다보기에서 빠진 항목"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pominięte w przeglądzie nadchodzących dni"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deixado fora da previsão"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не вошло в обзор на две недели"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "İleriye bakışa girmeyenler"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未写进前瞻"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未寫進前瞻"
+          }
+        }
+      }
+    },
+    "From the latest reports and look ahead. Bring it up makes it a card on the Pulse screen, without a notification, and what you do with it teaches Pulse about things like it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus den letzten Berichten und der Vorausschau. „Trotzdem zeigen“ macht daraus eine Karte auf dem Pulse-Bildschirm, ohne Mitteilung, und was du damit machst, bringt Pulse etwas über Ähnliches bei."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De los últimos informes y la previsión. «Mostrar igualmente» lo convierte en una tarjeta en la pantalla de Pulse, sin notificación, y lo que hagas con ella le enseña a Pulse sobre cosas parecidas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiré des derniers rapports et du tour d'horizon. « Afficher quand même » en fait une carte sur l'écran Pulse, sans notification, et ce que vous en faites apprend à Pulse à traiter les choses semblables."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dari laporan dan tinjauan ke depan terbaru. “Tampilkan saja” menjadikannya kartu di layar Pulse, tanpa notifikasi, dan apa yang Anda lakukan dengannya mengajari Pulse tentang hal serupa."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dagli ultimi resoconti e dallo sguardo avanti. «Mostra comunque» lo trasforma in una scheda nella schermata Pulse, senza notifica, e ciò che ne fai insegna a Pulse qualcosa sulle cose simili."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新のレポートと先読みから。「表示する」を押すと、通知なしでPulse画面にカードとして表示されます。そのカードへの対応から、Pulseは似たものについて学びます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최신 리포트와 내다보기에서 가져왔습니다. '보여 주기'를 누르면 알림 없이 Pulse 화면에 카드로 표시되고, 그 카드를 어떻게 처리하는지에 따라 Pulse가 비슷한 일에 대해 배웁니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Z ostatnich raportów i przeglądu nadchodzących dni. „Pokaż mimo to” zamienia to w kartę na ekranie Pulse, bez powiadomienia, a to, co z nią zrobisz, uczy Pulse o podobnych sprawach."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dos relatórios mais recentes e da previsão. “Mostrar mesmo assim” transforma isso em um cartão na tela do Pulse, sem notificação, e o que você fizer com ele ensina o Pulse sobre coisas parecidas."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Из последних отчётов и обзора на две недели. «Всё же показать» превращает это в карточку на экране Pulse без уведомления, а то, что вы с ней сделаете, научит Pulse обращаться с похожими вещами."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Son raporlardan ve ileriye bakıştan. “Yine de göster” bunu bildirim olmadan Pulse ekranında bir kart yapar ve onunla ne yaptığınız Pulse'a benzer şeyler hakkında bilgi verir."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自最近的报告和前瞻。“仍然显示”会把它变成 Pulse 屏幕上的一张卡片，不发通知；你怎么处理它，会教 Pulse 如何对待类似的事。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "來自最近的報告和前瞻。「仍然顯示」會把它變成 Pulse 畫面上的一張卡片，不發通知；你怎麼處理它，會教 Pulse 如何對待類似的事。"
+          }
+        }
+      }
+    },
+    "With Pulse on, it brings up their birthdays two weeks ahead, the day before and on the day." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ist Pulse an, erinnert es zwei Wochen vorher, am Vortag und am Tag selbst an ihre Geburtstage."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con Pulse activado, te recuerda sus cumpleaños dos semanas antes, el día anterior y el mismo día."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avec Pulse activé, il vous rappelle leur anniversaire deux semaines avant, la veille et le jour même."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saat Pulse aktif, Pulse mengingatkan ulang tahun mereka dua minggu sebelumnya, sehari sebelumnya, dan pada harinya."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con Pulse attivo, ti ricorda i loro compleanni due settimane prima, il giorno prima e il giorno stesso."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulseがオンなら、誕生日の2週間前、前日、当日にお知らせします。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse가 켜져 있으면 생일 2주 전, 전날, 당일에 알려 줍니다."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gdy Pulse jest włączony, przypomina o ich urodzinach dwa tygodnie wcześniej, dzień wcześniej i w sam dzień."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Com o Pulse ativado, ele lembra os aniversários deles duas semanas antes, na véspera e no dia."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Когда Pulse включён, он напоминает об их днях рождения за две недели, накануне и в сам день."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse açıkken doğum günlerini iki hafta önce, bir gün önce ve gününde hatırlatır."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 开启时，会在他们生日前两周、前一天和当天提醒你。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 開啟時，會在他們生日前兩週、前一天和當天提醒你。"
+          }
+        }
+      }
+    },
+    "Every year on %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jedes Jahr am %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cada año el %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chaque année le %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setiap tahun pada %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ogni anno il %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎年%@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매년 %@"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Co roku %@"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo ano em %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Каждый год %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Her yıl %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每年%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每年%@"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

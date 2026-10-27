@@ -271,13 +271,24 @@ final class PulseSettingsTests: XCTestCase {
           {"id": 7, "kind": "commitment", "text": "Send Sam the deck", "evidence": "I'll send it Friday",
            "explicit": true, "due": "Friday", "due_at": 1761292800, "mentioned_at": 1761033600,
            "profile": "default", "chat_id": "abc"},
+          {"id": 8, "kind": "fact", "text": "Sam's birthday is 3 March.", "evidence": "Sam's birthday is 3 March",
+           "explicit": true, "due": "", "due_at": null, "every_year": "03-03", "occasion": "birthday"},
+          {"id": 9, "kind": "fact", "text": "Dad was born on 29 February.", "evidence": "born on 29 February",
+           "every_year": "1956-02-29", "occasion": "birthday"},
+          {"id": 10, "kind": "fact", "text": "x", "evidence": "y", "every_year": "02-30"},
           {"id": "bad"}]}
         """)
         let items = (response["items"] as? [Any] ?? []).compactMap(PulseMemoryItem.init(json:))
-        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.count, 4)
         XCTAssertEqual(items.first?.id, 7)
         XCTAssertEqual(items.first?.due, "Friday")
         XCTAssertEqual(items.first?.explicit, true)
+        // A fact about a yearly date (0.88.0) says its day; the rest, and a day that isn't one, say nothing.
+        let british = Locale(identifier: "en_GB")
+        XCTAssertEqual(items.map { $0.everyYearText(locale: british) }, [
+            nil, AppLocalization.string("Every year on \("3 March")"),
+            AppLocalization.string("Every year on \("29 February")"), nil
+        ])
         XCTAssertEqual(PulseMemoryKind.sorted(["fact", "zzz", "commitment"]), ["commitment", "fact", "zzz"])
     }
 

@@ -1157,6 +1157,48 @@ final class PulseFeedTests: XCTestCase {
         // One already brought up says which card it became.
         XCTAssertEqual(found[3].cardID, 40)
         XCTAssertNil(found[1].learned)
+        // Before 0.88.0 only reports left things out.
+        XCTAssertFalse(found.contains(where: \.isLookAhead))
+    }
+
+    func testWhatTheLookAheadLeftOutSaysSo() throws {
+        let entries = try XCTUnwrap(json("""
+        {"left_out": [
+          {"id": 1, "kind": "date", "text": "Sam's birthday", "decision": "over_limit", "from": "look_ahead"},
+          {"id": 2, "text": "Pack for Kyoto", "decision": "not_picked", "from": "look_ahead"},
+          {"id": 3, "text": "The party", "decision": "unanswered", "from": "look_ahead"},
+          {"id": 4, "text": "A gift for Sam", "decision": "skipped", "skip": "done", "from": "look_ahead"},
+          {"id": 5, "text": "Book the dentist", "decision": "not_picked", "from": "report"},
+          {"id": 6, "text": "Water the plants", "decision": "unanswered", "from": "report"}]}
+        """)["left_out"] as? [Any])
+
+        let found = entries.compactMap(PulseLeftOut.init(json:))
+        XCTAssertEqual(found.filter(\.isLookAhead).map(\.id), [1, 2, 3, 4])
+        XCTAssertEqual(found.map(\.from), ["look_ahead", "look_ahead", "look_ahead", "look_ahead", "report", "report"])
+        XCTAssertEqual(found.map(\.reason), [
+            AppLocalization.string("Picked, but the look ahead was full"),
+            AppLocalization.string("Not picked in the look ahead"),
+            AppLocalization.string("The look ahead passed over it"),
+            AppLocalization.string("Already done"),
+            AppLocalization.string("Not picked for the report"),
+            AppLocalization.string("The report passed over it")
+        ])
+        XCTAssertEqual(PulseClient.datesCapability, "pulse_dates")
+    }
+
+    func testPeopleSettingsSayPulseBringsUpBirthdaysWithAPluginThatDoes() throws {
+        let state = try appState()
+        state.setNotifierPluginStateForTesting(.reported(version: "0.87.1", capabilities: [
+            PulseClient.capability, PulseClient.feedCapability
+        ]))
+        XCTAssertFalse(state.pulseBringsUpBirthdays)
+        state.setNotifierPluginStateForTesting(.reported(version: "0.88.0", capabilities: [
+            PulseClient.capability, PulseClient.feedCapability, PulseClient.datesCapability
+        ]))
+        XCTAssertTrue(state.pulseBringsUpBirthdays)
+        // Without Pulse on the host, nothing to say.
+        state.setNotifierPluginStateForTesting(.reported(version: "0.88.0", capabilities: [PulseClient.datesCapability]))
+        XCTAssertFalse(state.pulseBringsUpBirthdays)
     }
 
     func testResetLeftOutAndBringUpReachThePlugin() async throws {
