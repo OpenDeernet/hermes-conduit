@@ -138,6 +138,15 @@ struct PulseState: Equatable {
     /// Pulse's turns look things up before they write (0.96.0); nil from an
     /// older plugin.
     var lookFirst: Bool?
+    /// Pulse reads where the user is (0.100.0): off until the user turns it
+    /// on; nil from an older plugin.
+    var whereYouAre: Bool?
+    /// Conduit shares this iPhone's location in the background now, which
+    /// Where you are reads.
+    var whereReady = false
+    /// A private Pulse push says only that Pulse has something (0.104.0):
+    /// on by default; nil from an older plugin.
+    var privatePushes: Bool?
     var memoryCounts: [String: Int] = [:]
     var memoryChunks = 0
     var memoryTokens = 0
@@ -212,6 +221,9 @@ struct PulseState: Equatable {
         memory = PulseJSON.bool(json["memory"]) ?? false
         inboxDeadlines = PulseJSON.bool(json["inbox_deadlines"])
         lookFirst = PulseJSON.bool(json["look_first"])
+        whereYouAre = PulseJSON.bool(json["where"])
+        whereReady = PulseJSON.bool(json["where_ready"]) ?? false
+        privatePushes = PulseJSON.bool(json["private_pushes"])
         memoryCounts = PulseJSON.counts(json["memory_counts"])
         memoryChunks = PulseJSON.int(json["memory_chunks"]) ?? 0
         memoryTokens = PulseJSON.int(json["memory_tokens"]) ?? 0
@@ -458,6 +470,39 @@ struct PulseBackfillEstimate: Equatable {
     }
 }
 
+/// Where a remembered commitment or promise waits to come up (0.100.0):
+/// the place as the chat named it ("Costco", "home"), on getting there or
+/// leaving, and the saved place those words match on the host (nil for
+/// none yet).
+struct PulseMemoryPlace: Equatable {
+    let words: String
+    let leaving: Bool
+    let saved: String?
+
+    init?(json: Any?) {
+        guard let object = json as? [String: Any],
+              let words = (object["words"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !words.isEmpty else { return nil }
+        self.words = words
+        leaving = object["on"] as? String == "leave"
+        let name = (object["saved"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        saved = name.isEmpty ? nil : name
+    }
+
+    /// "When you get to Costco" or "When you leave work", in the app's language.
+    var text: String {
+        leaving ? AppLocalization.string("When you leave \(words)") : AppLocalization.string("When you get to \(words)")
+    }
+
+    /// The saved place the words match, when it isn't named the same way
+    /// ("Saved place: Costco Wholesale"), or that none matches yet; nil
+    /// when the words are the saved place's name.
+    var savedText: String? {
+        guard let saved else { return AppLocalization.string("No saved place has that name yet.") }
+        return saved.localizedCaseInsensitiveCompare(words) == .orderedSame ? nil : AppLocalization.string("Saved place: \(saved)")
+    }
+}
+
 /// One thing Pulse remembers (GET /pulse/memory).
 struct PulseMemoryItem: Equatable, Identifiable {
     let id: Int
@@ -480,6 +525,9 @@ struct PulseMemoryItem: Equatable, Identifiable {
     let fromInbox: Bool
     let sender: String
     let loggedAt: Date?
+    /// A commitment or promise said for a place (0.100.0): it comes up as
+    /// the user gets there or leaves, with Where you are on.
+    let place: PulseMemoryPlace?
 
     init?(json: Any) {
         guard let object = json as? [String: Any],
@@ -499,6 +547,7 @@ struct PulseMemoryItem: Equatable, Identifiable {
         fromInbox = PulseJSON.bool(object["from_inbox"]) ?? false
         sender = object["sender"] as? String ?? ""
         loggedAt = PulseJSON.date(object["logged_at"])
+        place = PulseMemoryPlace(json: object["place"])
     }
 
     /// Where a deadline from the Shortcuts inbox came from: "From Netflix,
@@ -693,7 +742,8 @@ struct PulseClient {
     /// Any of enabled, memory, daily_report, report_profiles, report_times,
     /// brief_time, time_zone, model, nudge, memory_daily_tokens,
     /// followup_daily_tokens, note, quiet_days, quiet_until, night,
-    /// inbox_deadlines and look_first; answers with the new state.
+    /// inbox_deadlines, look_first, where and private_pushes; answers with
+    /// the new state.
     func update(_ changes: [String: Any]) async throws -> PulseState {
         let response = try await request(Self.path, "PUT", changes)
         return try Self.state(from: response)

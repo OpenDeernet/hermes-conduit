@@ -180,7 +180,7 @@ final class PulseSettingsTests: XCTestCase {
          "backfill": {"state": "reading", "from": 1758441600, "to": 1761033600, "days": 30,
                       "narrow": false, "unreadable": ["work"]},
          "backfill_days": 30, "ratings": {"commitment": {"yes": 3, "no": 1}}, "inbox_deadlines": false,
-         "look_first": false}
+         "look_first": false, "where": true, "where_ready": false, "private_pushes": true}
         """)))
 
         XCTAssertTrue(state.enabled)
@@ -204,6 +204,9 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertTrue(state.memory)
         XCTAssertEqual(state.inboxDeadlines, false)
         XCTAssertEqual(state.lookFirst, false)
+        XCTAssertEqual(state.whereYouAre, true)
+        XCTAssertFalse(state.whereReady)
+        XCTAssertEqual(state.privatePushes, true)
         XCTAssertEqual(state.memoryCounts, ["commitment": 2, "fact": 5])
         XCTAssertEqual(state.memoryTokens, 34_000)
         XCTAssertEqual(state.dailyTokens, 200_000)
@@ -235,9 +238,14 @@ final class PulseSettingsTests: XCTestCase {
         // Narrowed to this profile: the choice stays, so it can be widened.
         XCTAssertTrue(state.offersProfileChoice)
         // A plugin from before 0.90.0 keeps no deadlines from the Shortcuts inbox,
-        // and one from before 0.96.0 has Pulse look nothing up.
+        // one from before 0.96.0 has Pulse look nothing up, one from before
+        // 0.100.0 never reads where the user is, and one from before 0.104.0
+        // hides no private reminders.
         XCTAssertNil(state.inboxDeadlines)
         XCTAssertNil(state.lookFirst)
+        XCTAssertNil(state.whereYouAre)
+        XCTAssertFalse(state.whereReady)
+        XCTAssertNil(state.privatePushes)
     }
 
     func testStateReadsPulsesModel() throws {
@@ -315,6 +323,32 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertNil(items[0].loggedText())
         XCTAssertEqual(PulseMemoryKind.title("deadline"), AppLocalization.string("Deadlines"))
         XCTAssertEqual(PulseMemoryKind.sorted(["deadline", "zzz", "watch"]), ["watch", "deadline", "zzz"])
+    }
+
+    func testAMemorySaidForAPlaceSaysWhereItComesUp() throws {
+        let response = try json("""
+        {"ok": true, "items": [
+          {"id": 1, "kind": "commitment", "text": "Pick up batteries", "evidence": "I'll grab batteries at Costco",
+           "place": {"words": "Costco", "on": "arrive", "saved": "Costco"}},
+          {"id": 2, "kind": "promise", "text": "Remind the user to call Mum", "evidence": "remind me when I leave work",
+           "place": {"words": "work", "on": "leave", "saved": "Office"}},
+          {"id": 3, "kind": "commitment", "text": "Return the drill", "evidence": "at Dan's",
+           "place": {"words": "Dan's", "on": "arrive", "saved": null}},
+          {"id": 4, "kind": "commitment", "text": "Send Sam the deck", "evidence": "Friday", "place": null},
+          {"id": 5, "kind": "commitment", "text": "x", "evidence": "y", "place": {"words": " ", "on": "arrive"}}]}
+        """)
+        let items = (response["items"] as? [Any] ?? []).compactMap(PulseMemoryItem.init(json:))
+        XCTAssertEqual(items.map(\.place?.leaving), [false, true, false, nil, nil])
+        XCTAssertEqual(items[0].place?.text, AppLocalization.string("When you get to \("Costco")"))
+        XCTAssertEqual(items[1].place?.text, AppLocalization.string("When you leave \("work")"))
+        // The saved place it matches, unless the words are its name, or that none matches yet.
+        XCTAssertNil(items[0].place?.savedText)
+        XCTAssertEqual(items[1].place?.savedText, AppLocalization.string("Saved place: \("Office")"))
+        XCTAssertEqual(items[2].place?.savedText, AppLocalization.string("No saved place has that name yet."))
+        XCTAssertNil(PulseMemoryPlace(json: ["words": "costco", "on": "arrive", "saved": "Costco"])?.savedText)
+        let spaced = PulseMemoryPlace(json: ["words": " Costco ", "on": "arrive", "saved": "Costco Wholesale "])
+        XCTAssertEqual(spaced?.words, "Costco")
+        XCTAssertEqual(spaced?.saved, "Costco Wholesale")
     }
 
     func testRefusalCodesSurviveTheDashboardError() throws {
