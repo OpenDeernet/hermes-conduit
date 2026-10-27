@@ -23,6 +23,9 @@ struct GroupChatView: View {
     /// The last row before the newest events, so a member message among
     /// them can land at its top (GroupRoomFollow.replyStart).
     @State private var lastSeenEventID: String?
+    /// Bumped to build the transcript's scroll view again when SwiftUI left
+    /// it blank (GroupRoomFollow.isBlank).
+    @State private var transcriptScrollID = 0
 
     var body: some View {
         Group {
@@ -124,6 +127,7 @@ struct GroupChatView: View {
                             members: members,
                             continuesRun: previous.map { GroupEventRow.sameSpeaker($0, event) } ?? false
                         )
+                        .reportsGroupRoomRowFrame(id: event.id)
                     }
                     if let pending = appState.pendingRoomMessage {
                         GroupUserBubble(text: pending.text, members: members, timestamp: nil) {
@@ -154,19 +158,26 @@ struct GroupChatView: View {
                             }
                         }
                         .id("pending-row")
+                        .reportsGroupRoomRowFrame(id: "pending-row")
                     }
                     if let responder = respondingMember {
                         GroupRespondingRow(member: responder)
                             .id("responding-row")
+                            .reportsGroupRoomRowFrame(id: "responding-row")
                     }
                     if rendered.isEmpty && appState.pendingRoomMessage == nil && respondingMember == nil {
                         emptyState
                     }
                 }
+                .coordinateSpace(.named(GroupRoomFollow.coordinateSpaceName))
                 .background { GroupRoomScrollLocator(flag: followFlag, isFollowing: $isFollowingLatest) }
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 18)
+            }
+            .id(transcriptScrollID)
+            .onPreferenceChange(GroupRoomRowFramesPreferenceKey.self) { frames in
+                followFlag.rowFrames = frames
             }
             .scrollDismissesKeyboard(.interactively)
             .modifier(V2SoftTopScrollEdge(isOn: isV2))
@@ -206,6 +217,13 @@ struct GroupChatView: View {
                 lastSeenEventID = visibleEvents.last?.id
                 followLatest()
                 scrollToBottom(proxy)
+                followFlag.lastRowID = { [weak appState = appState] in
+                    guard let appState else { return nil }
+                    if appState.activeRoomResponder != nil { return "responding-row" }
+                    if appState.pendingRoomMessage != nil { return "pending-row" }
+                    return appState.activeRoomReplay.events.last(where: GroupRoomTurns.isVisible)?.id
+                }
+                followFlag.rebuild = { transcriptScrollID &+= 1 }
             }
         }
         .background(Color.clear)
