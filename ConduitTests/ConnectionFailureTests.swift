@@ -7,6 +7,7 @@
 //  and Foundation error codes — never by localized-description text.
 //
 
+import Security
 import XCTest
 @testable import Conduit
 
@@ -212,6 +213,64 @@ final class ConnectionFailureTests: XCTestCase {
             XCTAssertTrue(presentation.message.contains("expired or not yet valid"))
             XCTAssertEqual(presentation.helpDestination, .tls)
         }
+    }
+
+    func testFailedTrustChecksNameTheMostSpecificTLSFailure() {
+        XCTAssertEqual(TLSTrustDiagnosis.failure(forFailedChecks: ["SSLHostname", "AnchorTrusted"]), .tlsHostnameMismatch)
+        XCTAssertEqual(TLSTrustDiagnosis.failure(forFailedChecks: ["ValidityPeriodMaximums", "AnchorTrusted"]), .tlsNotStandardsCompliant)
+        XCTAssertEqual(TLSTrustDiagnosis.failure(forFailedChecks: ["ExtendedKeyUsage"]), .tlsNotStandardsCompliant)
+        XCTAssertEqual(TLSTrustDiagnosis.failure(forFailedChecks: ["TemporalValidity"]), .tlsBadDate)
+        XCTAssertEqual(TLSTrustDiagnosis.failure(forFailedChecks: ["AnchorTrusted"]), .tlsUntrusted)
+        XCTAssertNil(TLSTrustDiagnosis.failure(forFailedChecks: []))
+    }
+
+    func testPeerTrustOnTheErrorNamesAWrongAddress() throws {
+        let trust = try Self.evaluatedTrust(hostname: "192.168.1.28")
+        let error = URLError(.serverCertificateUntrusted, userInfo: [NSURLErrorFailingURLPeerTrustErrorKey: trust])
+        let failure = ConnectionFailureClassifier.classify(error)
+        XCTAssertEqual(failure, .tlsHostnameMismatch)
+        XCTAssertEqual(failure.helpDestination, .tls)
+        XCTAssertEqual(ConnectionFailurePresentation.presenting(failure).title, "Certificate doesn’t match the address")
+    }
+
+    func testPeerTrustWithTheRightNameStaysUntrusted() throws {
+        let trust = try Self.evaluatedTrust(hostname: "hermes.home.arpa")
+        let bridged = NSError(
+            domain: NSURLErrorDomain,
+            code: URLError.serverCertificateUntrusted.rawValue,
+            userInfo: [NSURLErrorFailingURLPeerTrustErrorKey: trust]
+        )
+        XCTAssertEqual(ConnectionFailureClassifier.classify(bridged), .tlsUntrusted)
+    }
+
+    /// A self-signed certificate for hermes.home.arpa (one year, serverAuth),
+    /// evaluated on a day inside its validity, so only the anchor and, for
+    /// another address, the name fail.
+    private static func evaluatedTrust(hostname: String) throws -> SecTrust {
+        let der = try XCTUnwrap(Data(base64Encoded:
+        "MIIDSzCCAjOgAwIBAgIUbQ5H1KF/cv+y+qpxtm1fYzTo6UgwDQYJKoZIhvcNAQELBQAwGzEZMBcG" +
+        "A1UEAwwQaGVybWVzLmhvbWUuYXJwYTAeFw0yNjEwMjcyMjQzMjNaFw0yNzEwMjcyMjQzMjNaMBsx" +
+        "GTAXBgNVBAMMEGhlcm1lcy5ob21lLmFycGEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIB" +
+        "AQCn8FAFlVnkm3yoeUtOPzIaCh5YqNWQGCm/lVqxUoX+SyhmQ/KqAfTo1mCwZLz0fJ5Z7ns5Q3hC" +
+        "b02wNTR4tiMeY5H5fSR3WJv8atumhA+ElG9jdjKevcC0LbNRowPqEQ+o9uH3Xs+RsgEbknOIOohH" +
+        "One9mYMx/UxCoi6YHVtAI72tpqLIqfpCl6GGZhMcLelvZMefw5oaLze4Z3JEOJe+KHMt2XVoYSAy" +
+        "b9CLCDaAoA6MfK0PcxIH8ARwAcCNZkvGPxpM54j35DqCVK/L1ZMVXDv1ZDdUv+LN44iiNLx60UK8" +
+        "jfiV0AGGXhbDd+VMxsEa8NKg/TmmHvy56l3CX28DAgMBAAGjgYYwgYMwHQYDVR0OBBYEFHOE5PWP" +
+        "YymjHn5/sQHHv9fancasMB8GA1UdIwQYMBaAFHOE5PWPYymjHn5/sQHHv9fancasMA8GA1UdEwEB" +
+        "/wQFMAMBAf8wGwYDVR0RBBQwEoIQaGVybWVzLmhvbWUuYXJwYTATBgNVHSUEDDAKBggrBgEFBQcD" +
+        "ATANBgkqhkiG9w0BAQsFAAOCAQEAGjttsf+A0gisH98+TYGYSC6oLO7RyfcqZ4eTEQUfoQH87mhN" +
+        "A8e/DAuo0xrG0bWvDTCKPAPzzVpuaHZmrsdBfQuWtsLHdvyaZg3PgPST8rKoFWoWFzCi5nAbWr/b" +
+        "j18nkumUTjH1Mz8sCbUS8Pq7JIFfUpJNa3a2trao9EpUFlD4LrTF4GUnw8hx/CFuJnUKjA//i9qG" +
+        "li7/gv0skSi3DfG3E0XFZc1d8hs4S2wkyOWBabyFc5UTJZ1muKuxDs6yq7oBkyN/ygGTOox2TlaS" +
+        "7bcXGUqhpE+KZZOnVnR5ZQgKlW8gyT4YFLELv1cf7xA9+3wxNHlB4YM+ep1Jp4Smbg=="
+        ))
+        let certificate = try XCTUnwrap(SecCertificateCreateWithData(nil, der as CFData))
+        var trust: SecTrust?
+        XCTAssertEqual(SecTrustCreateWithCertificates(certificate, SecPolicyCreateSSL(true, hostname as CFString), &trust), errSecSuccess)
+        let evaluated = try XCTUnwrap(trust)
+        SecTrustSetVerifyDate(evaluated, Date(timeIntervalSince1970: 1793145600) as CFDate)
+        XCTAssertFalse(SecTrustEvaluateWithError(evaluated, nil))
+        return evaluated
     }
 
     func testGenericSecureConnectionFailedClassifiesAsGenericTLSPresentation() {
