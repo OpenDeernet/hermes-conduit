@@ -255,8 +255,13 @@ final class GroupRoomScrollLocatorView: UIView {
     }
 
     private func checkForBlankViewport() {
-        guard let scrollView, window != nil, flag.isFollowing, !flag.isLanding,
-              !scrollView.isTracking, !scrollView.isDecelerating else { return }
+        guard let scrollView, window != nil, flag.isFollowing else { return }
+        // A landing, a finger or a fling moving the content: checked again
+        // once it's done, not dropped.
+        if flag.isLanding || scrollView.isTracking || scrollView.isDecelerating {
+            scheduleBlankCheck()
+            return
+        }
         // This view is the stack's background, so its coordinates are the
         // stack's, as the rows' frames are.
         let bounds = convert(scrollView.bounds, from: scrollView)

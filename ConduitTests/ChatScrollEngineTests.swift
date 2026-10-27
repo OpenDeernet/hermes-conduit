@@ -255,6 +255,22 @@ final class ChatScrollEngineTests: XCTestCase {
         XCTAssertEqual(events.filter { $0 == .rebuildTranscript }.count, 1)
     }
 
+    /// A fling moving the content puts the check off, not away.
+    func testABlankCheckDuringAFlingWaitsForItToStop() {
+        let (engine, surface) = makeEngine()
+        engine.liveTailShowing = { true }
+        events = []
+        scheduled = []
+        surface.layOut(contentHeight: 4100)
+        surface.isDecelerating = true
+        scheduled.removeFirst()()
+        XCTAssertFalse(events.contains(.rebuildTranscript))
+        XCTAssertEqual(scheduled.count, 1, "checked again after the fling")
+        surface.isDecelerating = false
+        scheduled.removeFirst()()
+        XCTAssertEqual(events.filter { $0 == .rebuildTranscript }.count, 1)
+    }
+
     /// A stack that dropped its rows may change no size: the live rows'
     /// frames going away checks.
     func testLiveRowsLosingTheirFramesChecksForABlankViewport() {

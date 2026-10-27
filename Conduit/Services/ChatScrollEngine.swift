@@ -1347,8 +1347,13 @@ final class ChatScrollEngine: ObservableObject {
     /// above it unlaid without the screen being blank, and live rows that
     /// aren't laid out either are the same blank screen.
     private func checkForBlankViewport(rebuildsLeft: Int) {
-        guard mode == .following, !isPaused, !isDragging, !latestAnimationInFlight,
-              let surface, !surface.isTracking, !surface.isDecelerating else { return }
+        guard mode == .following, !isPaused, let surface else { return }
+        // A finger, a fling or the jump's animation moving the content:
+        // checked again once it's done, not dropped.
+        if isDragging || latestAnimationInFlight || surface.isTracking || surface.isDecelerating {
+            scheduleBlankViewportCheck(rebuildsLeft: rebuildsLeft)
+            return
+        }
         let live = liveTailShowing()
         // A send waiting in a chat with no message yet is a live tail too.
         let last = targetCache.targets.last
