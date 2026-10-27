@@ -5683,8 +5683,9 @@ final class AppState: ObservableObject {
         )
     }
 
-    /// `presentSavedCopyWhileOpening` for a Bot Chat: its kept copy, while
-    /// it is still the bot's chat (a /new since starts another).
+    /// `presentSavedCopyWhileOpening` for a Bot Chat: its kept copy, when
+    /// the chat being opened is one of the ids it was kept under. It is what
+    /// was on screen when the chat was left, a /new's compaction included.
     private func presentKeptBotChatCopy(bot: String, openedAs sessionID: String, title: String?) {
         guard let dashboardID = activeDashboardID,
               let kept = keptBotChatCopies[Self.keptBotChatCopyKey(dashboardID: dashboardID, bot: bot)],

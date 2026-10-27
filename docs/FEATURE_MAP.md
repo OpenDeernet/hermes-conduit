@@ -1333,8 +1333,8 @@ iPad and Mac windows (the same chat view) · Settings' Data handling caption
 | Opening | Shows while it loads | Kept |
 |---|---|---|
 | A chat or project chat | its saved copy (newest 120 rows) | on the phone, per dashboard and profile; the last 8 read or saved also in memory |
-| A Bot Chat | the copy kept when it was left | in memory, per dashboard and bot, while it's still the bot's chat |
-| A group room | the events it had | in memory, per dashboard and room |
+| A Bot Chat | the copy kept when it was left (after a `/new`, the compacted chat as it showed) | in memory, per dashboard and bot, one per bot |
+| A group room | the events it had | in memory, per dashboard and room, until the room leaves the list |
 | A chat never opened | nothing, as before | not applicable |
 
 **Code**
