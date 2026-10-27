@@ -560,7 +560,8 @@ struct KanbanModelOverrideSheet: View {
     }
 
     private func modelButton(_ model: String, provider: KanbanModelProviderOption, showsProvider: Bool) -> some View {
-        Button {
+        let selected = isSelected(provider.slug, model)
+        return Button {
             value = TaskModelOverride(provider: provider.slug, model: model, reasoningEffort: value.reasoningEffort)
         } label: {
             HStack {
@@ -570,13 +571,15 @@ struct KanbanModelOverrideSheet: View {
                     Text(model)
                 }
                 Spacer()
-                if isSelected(provider.slug, model) {
+                if selected {
                     Image(systemName: "checkmark")
                         .foregroundStyle(.conduitAccent)
+                        .accessibilityHidden(true)
                 }
             }
         }
         .foregroundStyle(.primary)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var customEntrySection: some View {

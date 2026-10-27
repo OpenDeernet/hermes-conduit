@@ -249,6 +249,9 @@ struct ModelPickerView: View {
     /// a match is highlighted and Return picks it. On touch, Return only
     /// puts the keyboard away.
     @State private var keyboardDriven = false
+    /// Whether the search field has had focus since the sheet opened, so
+    /// the focus retry never pulls it back from a user who moved on.
+    @State private var searchWasFocused = false
 
     var body: some View {
         NavigationStack {
@@ -334,10 +337,13 @@ struct ModelPickerView: View {
             guard keyboardDriven else { return }
             searchFocused = true
             try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled, !searchFocused, searchQuery.isEmpty, !editingVisibility else { return }
+            guard !Task.isCancelled, !searchWasFocused, !editingVisibility else { return }
             searchFocused = true
         }
         .onChange(of: searchQuery) { _, _ in highlightedMatch = 0 }
+        .onChange(of: searchFocused) { _, focused in
+            if focused { searchWasFocused = true }
+        }
         // Esc closes the sheet, as the picker's taps already applied.
         .background {
             Button(AppLocalization.string("Close")) { dismiss() }

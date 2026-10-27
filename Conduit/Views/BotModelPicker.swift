@@ -18,7 +18,7 @@ struct BotModelPicker: View {
 
     var body: some View {
         List {
-            if allowsInherit, ModelSearchQuery(query).isEmpty {
+            if allowsInherit {
                 Section {
                     row(
                         title: AppLocalization.string("Same as Main Profile"),
