@@ -2588,7 +2588,7 @@ GPT-Live tokens (plain HTTP that works in the host, so not needed)
 - Other plugin routes that rely on the dashboard process (chat takeover, Desktop views, the turn surface, Hermes calls, chat on screen) still send `?profile=`, so on such a profile they run in the plugin host; not checked one by one.
 - Drop the workaround once Hermes' plugin host carries WebSockets.
 
-**Checked:** 2026-10-27, #PRNUM.
+**Checked:** 2026-10-27, #1344.
 
 ## Feature map rules
 
