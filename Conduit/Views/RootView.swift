@@ -49,6 +49,11 @@ struct RootView: View {
             RoomLinkOpenedSheet(invite: invite)
                 .environmentObject(appState)
         }
+        // An invite to a room whose notification was tapped: its join card.
+        .sheet(item: $appState.presentedRoomInvite) { invite in
+            RoomInviteSheet(invite: invite)
+                .environmentObject(appState)
+        }
         // A draft shared from another app before Conduit listed any chats,
         // with more than one dashboard it could be for (#812). An alert, so
         // it shows the same on iPad, where a dialog would need an anchor.

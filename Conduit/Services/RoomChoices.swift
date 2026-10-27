@@ -4,16 +4,15 @@
 //
 //  An agent's choices for one group room with other people's agents
 //  (designs/cross-owner-agents): what it can do, what it may share, past-chat
-//  search and a private note. The host's notifier plugin keeps them per
-//  profile (room_choices.py) and holds the agent to them (room_rules.py);
-//  Group Info reads and changes them.
+//  search, how it takes part, its turns a day and a private note. The host's
+//  notifier plugin keeps them per profile (room_choices.py) and holds the
+//  agent to them (room_rules.py); Group Info reads and changes them, and an
+//  invite's join card sets them for a room someone else hosts.
 //
 
 import Foundation
 
-/// What the plugin holds an agent to in one room. How it takes part and its
-/// turns a day aren't here: nothing holds an agent to them until the room
-/// bridge does.
+/// What the plugin holds an agent to in one room.
 struct RoomChoices: Equatable {
     /// `talk`, `look`, `data` or `custom`.
     var tools: String
@@ -22,10 +21,32 @@ struct RoomChoices: Equatable {
     /// `helps`, `ask` or `nothing`.
     var share: String
     var searchChats: Bool
+    /// `joins`, `asked` or `listens`. Only a room someone else hosts asks:
+    /// in one you host, your agents always join in, so Group Info doesn't
+    /// show it, nor the turns a day.
+    var takesPart: String = "joins"
+    /// The turns it takes a day in a room someone else hosts
+    /// (room_choices.MIN_DAILY_LIMIT to MAX_DAILY_LIMIT).
+    var dailyLimit: Int = 40
     var note: String
     /// False while the room has none of its own: these are the agent's
     /// defaults, and the first change saves the room a copy.
     var saved: Bool
+
+    /// Every choice, as the plugin takes them: it fills one a body leaves
+    /// out from its plain defaults.
+    var body: [String: Any] {
+        [
+            "tools": tools, "custom_tools": customTools, "share": share, "search_chats": searchChats,
+            "takes_part": takesPart, "daily_limit": dailyLimit, "note": note,
+        ]
+    }
+
+    /// The turns a day the join card offers, with `value` among them when
+    /// it's another (the plugin takes any from 1 to 500).
+    static func dailyLimitSteps(including value: Int) -> [Int] {
+        Array(Set([5, 10, 20, 40, 80, 150, 300, 500, value])).sorted()
+    }
 }
 
 /// The plugin's `GET`/`PUT /rooms/choices`, each request to the agent's own
@@ -79,18 +100,28 @@ struct RoomChoicesClient {
     static func parse(_ response: [String: Any], roomID: String) throws -> RoomChoices {
         guard response["ok"] as? Bool == true,
               response["room_id"] == nil || response["room_id"] as? String == roomID,
-              let choices = response["choices"] as? [String: Any],
-              let tools = choices["tools"] as? String,
-              let share = choices["share"] as? String,
-              let searchChats = choices["search_chats"] as? Bool
+              let object = response["choices"] as? [String: Any],
+              let choices = choices(object, saved: response["saved"] as? Bool ?? true)
         else { throw HermesError.invalidResponse }
+        return choices
+    }
+
+    /// Choices as the plugin shows them (room_choices.RoomChoices.as_dict),
+    /// or nil without the three every plugin sends. How it takes part and
+    /// its turns a day are its defaults from a plugin before them.
+    static func choices(_ object: [String: Any], saved: Bool) -> RoomChoices? {
+        guard let tools = object["tools"] as? String,
+              let share = object["share"] as? String,
+              let searchChats = object["search_chats"] as? Bool else { return nil }
         return RoomChoices(
             tools: tools,
-            customTools: choices["custom_tools"] as? [String] ?? [],
+            customTools: object["custom_tools"] as? [String] ?? [],
             share: share,
             searchChats: searchChats,
-            note: choices["note"] as? String ?? "",
-            saved: response["saved"] as? Bool ?? true
+            takesPart: object["takes_part"] as? String ?? "joins",
+            dailyLimit: object["daily_limit"] as? Int ?? 40,
+            note: object["note"] as? String ?? "",
+            saved: saved
         )
     }
 }

@@ -205,6 +205,15 @@ final class ConduitAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
             completionHandler([.banner, .list, .sound])
             return
         }
+        // An invite to a room waits on the user, so it shows here too, and
+        // Group Chats reads the invites again.
+        if PushNotificationService.isRoomInvitePush(notification.request.content.userInfo) {
+            Task { @MainActor in
+                await AppStateRuntimeRegistry.shared.appState.refreshLinkedRoomInvites()
+            }
+            completionHandler([.banner, .list, .sound])
+            return
+        }
         completionHandler([])
     }
 }
@@ -423,6 +432,31 @@ struct ConduitApp: App {
                     notifications.notificationRouteAwaitsCall(target)
                 }
             }
+            // A tapped invite to a room opens its join card (Linked Rooms)
+            // once Hermes is connected and the plugin has said what it
+            // keeps; one tapped during a call opens when the call has ended.
+            .task(id: roomInviteRouteKey) {
+                guard let invite = notifications.pendingRoomInvite else { return }
+                while true {
+                    // A refusal the call left on the drawer shell's error
+                    // line is done with.
+                    appState.clearCallRefusal()
+                    let outcome = await appState.openRoomInvite(invite)
+                    guard !Task.isCancelled, notifications.pendingRoomInvite == invite else { return }
+                    switch outcome {
+                    case .waiting:
+                        return
+                    case .afterCall:
+                        guard await PushNotificationService.waitForCallToEnd(
+                            interval: Self.callEndRecheckInterval,
+                            isReady: { appState.callWaitCanEnd }
+                        ), !Task.isCancelled, notifications.pendingRoomInvite == invite else { return }
+                    case .opened, .failed:
+                        notifications.clearPendingRoomInvite(invite)
+                        return
+                    }
+                }
+            }
             .task(id: voiceIntentRouteKey) {
                 // Siri's call shows its screen while it waits for Hermes.
                 appState.presentWaitingCallIfNeeded()
@@ -457,6 +491,10 @@ struct ConduitApp: App {
 
     private var notificationRouteKey: String {
         "\(notifications.pendingTarget?.id ?? "none"):\(appState.isConnected):\(notifications.navigationAttempt)"
+    }
+
+    private var roomInviteRouteKey: String {
+        "\(notifications.pendingRoomInvite?.id ?? "none"):\(appState.isConnected):\(appState.notifierPlugin.state != .unknown)"
     }
 
     private var externalLinkRouteKey: String {

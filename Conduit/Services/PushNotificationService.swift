@@ -439,6 +439,10 @@ struct ConduitNotificationPreferences: Codable, Equatable {
     /// feature's audience is exactly the approval-gate crowd; privacy-focused
     /// users can turn just this off.
     var decisionCards = true
+    /// Invites to rooms from people you've linked with (Linked Rooms). The
+    /// relay keeps them off until a Conduit that shows them turns them on:
+    /// an older one would show an invite as a reply.
+    var roomInvite = true
 
     enum CodingKeys: String, CodingKey {
         case enabled
@@ -451,6 +455,7 @@ struct ConduitNotificationPreferences: Codable, Equatable {
         case attentionSound = "attention_sound"
         case showPreviews = "show_previews"
         case decisionCards = "decision_cards"
+        case roomInvite = "room_invite"
     }
 }
 
@@ -473,6 +478,7 @@ extension ConduitNotificationPreferences {
         attentionSound = try container.decodeIfPresent(Bool.self, forKey: .attentionSound) ?? true
         showPreviews = try container.decodeIfPresent(Bool.self, forKey: .showPreviews) ?? false
         decisionCards = try container.decodeIfPresent(Bool.self, forKey: .decisionCards) ?? true
+        roomInvite = try container.decodeIfPresent(Bool.self, forKey: .roomInvite) ?? true
     }
 }
 
@@ -488,6 +494,9 @@ final class PushNotificationService: ObservableObject {
     @Published private(set) var pairingCode: String?
     @Published private(set) var pairingExpiry: String?
     @Published private(set) var pendingTarget: ConduitNotificationTarget?
+    /// A tapped invite to a room (Linked Rooms), waiting for ConduitApp to
+    /// open its join card.
+    @Published private(set) var pendingRoomInvite: RoomInviteTarget?
     @Published private(set) var navigationAttempt = 0
     /// The pending tap's open stopped for a call it would have ended: it
     /// waits, however long the call lasts, and opens once it has ended,
@@ -2123,6 +2132,16 @@ final class PushNotificationService: ObservableObject {
             knownGatewayIDs: NotificationSharedSettings.knownGatewayIDs,
             keysProvisioned: NotificationSharedSettings.keysProvisioned
         )
+        if Self.isRoomInvitePush(userInfo) {
+            // An invite opens its join card, not a chat, under the same
+            // rules: a sealed one from its verified content, once.
+            guard let invite = Self.roomInviteTarget(for: evaluation, userInfo: userInfo) else { return }
+            if case .verified(let verified) = evaluation {
+                guard Self.e2eSeenStore.insert(verified.envelope.replayKey, namespace: "routed") else { return }
+            }
+            pendingRoomInvite = invite
+            return
+        }
         guard var target = Self.target(for: evaluation, userInfo: userInfo) else { return }
         if case .verified(let verified) = evaluation {
             // A sealed message routes once: a replay of it can't open
@@ -2309,13 +2328,30 @@ final class PushNotificationService: ObservableObject {
             let tokenChanged = (deviceToken ?? self.deviceToken).map { $0 != registration.deviceToken } ?? false
             guard tokenChanged || registration.preferences != preferences
                     || registration.voipToken != voipToken || registration.watchVoipToken != ringingWatchVoIPToken
-                    || locationTokenChange(registered: registration.locationToken) != .keep else { return }
+                    || locationTokenChange(registered: registration.locationToken) != .keep
+                    || Self.resendsRoomInvite(relayCapabilities: relayMeta?.capabilities,
+                                              relayKeepsRoomInvite: registration.relayKeepsRoomInvite) else { return }
             try await updateRegistration(deviceToken: deviceToken)
         }
         registrationUpdate = update
         return update
     }
     private var registrationUpdate: Task<Void, Error>?
+
+    /// The relay takes room invites (0.21+) but its last answer didn't keep
+    /// their switch, so it has them off: the preferences go again, once.
+    /// A relay meta refresh queues the update.
+    nonisolated static func resendsRoomInvite(relayCapabilities: [String]?, relayKeepsRoomInvite: Bool?) -> Bool {
+        relayCapabilities?.contains(RoomInvitesClient.capability) == true && relayKeepsRoomInvite != true
+    }
+
+    /// Whether a relay's answer to a registration or an update kept the
+    /// room invites switch, set either way.
+    nonisolated static func relayKeepsRoomInvite(_ data: Data) -> Bool {
+        let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let preferences = (body?["installation"] as? [String: Any])?["preferences"] as? [String: Any]
+        return preferences?["room_invite"] is Bool
+    }
 
     /// A "Hermes wants to talk" notification Conduit posted itself (#449).
     func receiveLocalCallNotification(_ userInfo: [AnyHashable: Any]) {
@@ -2366,6 +2402,12 @@ final class PushNotificationService: ObservableObject {
             // A plain routing push carries no decision at all.
             break
         }
+    }
+
+    /// The tapped invite has opened, or can't: a newer tap stays.
+    func clearPendingRoomInvite(_ invite: RoomInviteTarget) {
+        guard pendingRoomInvite == invite else { return }
+        pendingRoomInvite = nil
     }
 
     func clearPendingTarget(_ target: ConduitNotificationTarget) {
@@ -2565,6 +2607,42 @@ final class PushNotificationService: ObservableObject {
             for: NotificationE2E.evaluate(userInfo, records: records, knownGatewayIDs: knownGatewayIDs, keysProvisioned: keysProvisioned, now: now),
             userInfo: userInfo
         )
+    }
+
+    /// The invite a `room.invite` push opens (Linked Rooms), under the same
+    /// end-to-end rules as a chat's tap.
+    static func parseRoomInviteTarget(
+        from userInfo: [AnyHashable: Any],
+        records: [E2EKeyRecord],
+        knownGatewayIDs: Set<String>,
+        keysProvisioned: Bool,
+        now: Date = Date()
+    ) -> RoomInviteTarget? {
+        roomInviteTarget(
+            for: NotificationE2E.evaluate(userInfo, records: records, knownGatewayIDs: knownGatewayIDs, keysProvisioned: keysProvisioned, now: now),
+            userInfo: userInfo
+        )
+    }
+
+    private static func roomInviteTarget(for evaluation: NotificationE2E.Evaluation, userInfo: [AnyHashable: Any]) -> RoomInviteTarget? {
+        switch evaluation {
+        case .legacy:
+            // The relay keeps the room in body.conduit, with the top-level
+            // copy a routing stub.
+            let direct = userInfo["conduit"] as? [String: Any]
+            let nested = (userInfo["body"] as? [String: Any])?["conduit"] as? [String: Any]
+            return RoomInviteTarget.parse((nested?["room"] is [String: Any] ? nested : direct) ?? [:])
+        case .untrusted:
+            return nil
+        case .verified(let verified):
+            return RoomInviteTarget.parse(verified.routingPayload)
+        }
+    }
+
+    /// The relay's routing stub says it's an invite to a room. Whether it
+    /// opens anything is `parseRoomInviteTarget`'s call.
+    nonisolated static func isRoomInvitePush(_ userInfo: [AnyHashable: Any]) -> Bool {
+        NotificationE2E.routingStub(userInfo)?["type"] as? String == "room.invite"
     }
 
     private static func target(for evaluation: NotificationE2E.Evaluation, userInfo: [AnyHashable: Any]) -> ConduitNotificationTarget? {
@@ -2814,6 +2892,7 @@ final class PushNotificationService: ObservableObject {
         // And the location push token, which goes only to a relay that
         // says it sends locates (`location-push`).
         registration?.locationToken = responseBody.installation.location != false ? locationToken : nil
+        registration?.relayKeepsRoomInvite = Self.relayKeepsRoomInvite(data)
         preferences = registration!.preferences
         persistRegistration()
         // A PushKit token that came while this was on its way goes next
@@ -2858,6 +2937,7 @@ final class PushNotificationService: ObservableObject {
         // way: its answer describes an installation that is gone.
         guard self.registration?.installationID == registration.installationID else { return }
         self.registration?.preferences = sentPreferences
+        self.registration?.relayKeepsRoomInvite = Self.relayKeepsRoomInvite(data)
         if let token = body.deviceToken {
             self.registration?.deviceToken = token
             if token == self.deviceToken { clearTokenUpdateError() }
@@ -2976,6 +3056,10 @@ private struct StoredRegistration: Codable {
     var watchVoipToken: String? = nil
     /// The location push token the relay sends locates to.
     var locationToken: String? = nil
+    /// The relay's last answer kept the room invites switch: a relay before
+    /// 0.21 drops the key, and one registered before Conduit showed invites
+    /// has never had it. Nil for registrations saved before it was recorded.
+    var relayKeepsRoomInvite: Bool? = nil
 }
 
 private struct RegistrationRequest: Encodable {

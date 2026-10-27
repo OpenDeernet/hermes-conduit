@@ -112,7 +112,8 @@ private struct GroupRoomMemberRow: View {
 /// What the plugin holds one of your agents to in a room with other
 /// people's agents: what it can do, what it may share, past-chat search,
 /// and a note it reads on each of its turns there. How it takes part and
-/// its turns a day wait for the room bridge, which holds agents to them.
+/// its turns a day count only in a room someone else hosts, which an
+/// invite's join card sets (RoomInviteViews.swift).
 /// Each change sends only that choice, and the page shows what the plugin
 /// answers, for the dashboard it asked.
 @MainActor

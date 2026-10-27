@@ -102,7 +102,7 @@ struct RoomDraftSheet: View {
                 Section {
                     Text(verbatim: line(for: draft))
                     if draft.status == "waiting", let expiresAt = draft.expiresAt {
-                        Text(AppLocalization.string("Invites work until \(Self.until(expiresAt))"))
+                        Text(AppLocalization.string("Invites work until \(RoomDraftText.until(expiresAt))"))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -163,13 +163,6 @@ struct RoomDraftSheet: View {
     private func line(for draft: RoomDraft) -> String {
         if startRequested, draft.status == "waiting" { return AppLocalization.string("Starting…") }
         return RoomDraftText.line(for: draft)
-    }
-
-    /// Invites run for a week, so the day comes with the time.
-    private static func until(_ date: Date) -> String {
-        date.formatted(
-            .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute().locale(AppLocalization.formattingLocale)
-        )
     }
 
     private func personRow(_ person: RoomDraft.Person) -> some View {
