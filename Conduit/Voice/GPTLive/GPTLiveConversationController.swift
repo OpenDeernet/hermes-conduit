@@ -515,6 +515,7 @@ final class GPTLiveConversationController: ObservableObject {
         session.onAudioPaused = { [weak self] in self?.audioPauseChanged($0) }
         audioPaused = false
         self.session = session
+        if isMicrophoneMuted { session.setMicrophoneEnabled(false) }
         session.start(initialCaptureAuthorization: widgetAuthorization)
     }
 
