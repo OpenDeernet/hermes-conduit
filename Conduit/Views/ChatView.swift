@@ -895,7 +895,8 @@ struct ChatView: View {
             let live = appState.liveTurn
             return appState.isBusy || appState.activeChatRepliesElsewhere
                 || !live.streamingText.isEmpty || live.reasoningSegment != nil
-                || appState.pendingComposerSendOnScreen != nil
+                || (appState.pendingComposerSendOnScreen != nil
+                    && !appState.showsOfflineChatCopy && !appState.showsPendingNewChat)
         }
         scrollEngine.onEvent = { [weak engine = scrollEngine, weak router] event in
             // Requests made while handling a UIKit callback can land in the
