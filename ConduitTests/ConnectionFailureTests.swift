@@ -243,11 +243,31 @@ final class ConnectionFailureTests: XCTestCase {
         XCTAssertEqual(ConnectionFailureClassifier.classify(bridged), .tlsUntrusted)
     }
 
+    func testPeerTrustWithAWeakKeyIsNotStandardsCompliant() throws {
+        let trust = try Self.evaluatedTrust(hostname: "hermes.home.arpa", certificate: Self.weakKeyCertificate)
+        let error = URLError(.serverCertificateUntrusted, userInfo: [NSURLErrorFailingURLPeerTrustErrorKey: trust])
+        XCTAssertEqual(ConnectionFailureClassifier.classify(error), .tlsNotStandardsCompliant)
+    }
+
+    /// The same as `certificate` with a 1024-bit RSA key, below Apple's
+    /// 2048-bit minimum.
+    private static let weakKeyCertificate =
+        "MIICRjCCAa+gAwIBAgIUZX74TVd1dVUBVU4lCZpyoKhJ3TowDQYJKoZIhvcNAQELBQAwGzEZMBcG" +
+        "A1UEAwwQaGVybWVzLmhvbWUuYXJwYTAeFw0yNjEwMjcyMjUzMTlaFw0yNzEwMjcyMjUzMTlaMBsx" +
+        "GTAXBgNVBAMMEGhlcm1lcy5ob21lLmFycGEwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBANs7" +
+        "oerFw5oAfn+LXaXlT8GXUNzWVqliq044ozJ2mEPECUHKRfASsDnXopy1XyY0UZvx5t/lDdz9D/Wc" +
+        "Mu6dJqUNqM/HzZGDT7zXi7xlkSLeBMee37vsM9v68ikOfeSiq2pY8qTgrUNz7S5wKkEd6W6KnuV9" +
+        "ZFv6WMOljJvxaqFLAgMBAAGjgYYwgYMwHQYDVR0OBBYEFNnXDUX3LitLN0bYqHssxM9zXVfrMB8G" +
+        "A1UdIwQYMBaAFNnXDUX3LitLN0bYqHssxM9zXVfrMA8GA1UdEwEB/wQFMAMBAf8wGwYDVR0RBBQw" +
+        "EoIQaGVybWVzLmhvbWUuYXJwYTATBgNVHSUEDDAKBggrBgEFBQcDATANBgkqhkiG9w0BAQsFAAOB" +
+        "gQADryXpuOqwRyPEreaXCNfJJ3gU4StW+5sWSxTu7nnV/TZrvXdmBNxYnN5XKnP7q0/mPgbQ5hM3" +
+        "GJO4sHxTZkr9+w8ZszSX2RrAFQj4sicBKALHuzwELYAt4R2U58RjJAQGkaIsUQ6EDquQelQa6sLG" +
+        "o4qwQkdsPK+H/W3lgNfKxg=="
+
     /// A self-signed certificate for hermes.home.arpa (one year, serverAuth),
     /// evaluated on a day inside its validity, so only the anchor and, for
     /// another address, the name fail.
-    private static func evaluatedTrust(hostname: String) throws -> SecTrust {
-        let der = try XCTUnwrap(Data(base64Encoded:
+    private static let certificate =
         "MIIDSzCCAjOgAwIBAgIUbQ5H1KF/cv+y+qpxtm1fYzTo6UgwDQYJKoZIhvcNAQELBQAwGzEZMBcG" +
         "A1UEAwwQaGVybWVzLmhvbWUuYXJwYTAeFw0yNjEwMjcyMjQzMjNaFw0yNzEwMjcyMjQzMjNaMBsx" +
         "GTAXBgNVBAMMEGhlcm1lcy5ob21lLmFycGEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIB" +
@@ -263,7 +283,9 @@ final class ConnectionFailureTests: XCTestCase {
         "j18nkumUTjH1Mz8sCbUS8Pq7JIFfUpJNa3a2trao9EpUFlD4LrTF4GUnw8hx/CFuJnUKjA//i9qG" +
         "li7/gv0skSi3DfG3E0XFZc1d8hs4S2wkyOWBabyFc5UTJZ1muKuxDs6yq7oBkyN/ygGTOox2TlaS" +
         "7bcXGUqhpE+KZZOnVnR5ZQgKlW8gyT4YFLELv1cf7xA9+3wxNHlB4YM+ep1Jp4Smbg=="
-        ))
+
+    private static func evaluatedTrust(hostname: String, certificate base64: String = certificate) throws -> SecTrust {
+        let der = try XCTUnwrap(Data(base64Encoded: base64))
         let certificate = try XCTUnwrap(SecCertificateCreateWithData(nil, der as CFData))
         var trust: SecTrust?
         XCTAssertEqual(SecTrustCreateWithCertificates(certificate, SecPolicyCreateSSL(true, hostname as CFString), &trust), errSecSuccess)
