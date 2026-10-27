@@ -2582,12 +2582,12 @@ hermes-conduit-website)
 
 **Rulings**
 - No TLS validation override: a certificate iOS refuses is never accepted, on any device (Eric, 2026-10-19, issue #129).
-- A refused certificate names the check iOS failed, read from the peer trust URLSession leaves on the error: the certificate doesn't name the address, it breaks Apple's certificate rules (825 days, serverAuth, key size, SHA-2), its dates, or else its root isn't trusted. The most specific comes first, since trusting the root wouldn't fix the others (2026-10-27, #PRNUM, from issue #129's iPad report).
+- A refused certificate names the check iOS failed, read from the peer trust URLSession leaves on the error: the certificate doesn't name the address, it breaks Apple's certificate rules (825 days, serverAuth, key size, SHA-2), its dates, or else its root isn't trusted. The most specific comes first, since trusting the root wouldn't fix the others (2026-10-27, #1405, from issue #129's iPad report).
 
 **Open gaps**
 - The Watch and the dictation clip retry treat TLS failures only as never sent or not transient; they show no classified copy.
 
-**Checked:** 2026-10-27, #PRNUM.
+**Checked:** 2026-10-27, #1405.
 
 ## Review bots
 
