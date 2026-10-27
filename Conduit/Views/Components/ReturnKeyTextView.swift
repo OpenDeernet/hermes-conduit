@@ -326,6 +326,7 @@ struct ReturnKeyTextEditor: UIViewRepresentable {
                 return
             }
             pendingText = nil
+            lastReportedText = text
             textView.text = text
             textView.selectedRange = NSRange(location: (text as NSString).length, length: 0)
             textView.invalidateIntrinsicContentSize()

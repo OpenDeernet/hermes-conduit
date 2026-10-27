@@ -1409,7 +1409,7 @@ on" (a Bot Chat's `/new` opens no chat, so nothing waits on one)
 
 The optional hardware-keyboard shortcut in Settings > Keyboard: with it on,
 Return sends the composer message and Shift-Return starts a new line. It
-starts on on a Mac and off on iPhone and iPad; the on-screen keyboard's
+is on by default on a Mac and off on iPhone and iPad; the on-screen keyboard's
 Return key always inserts a new line.
 
 **Siblings:** the chat composer's inline field (chats, project chats, Bot
