@@ -370743,6 +370743,88 @@
           }
         }
       }
+    },
+    "This iPhone couldn't get the change from Hermes yet. Conduit tries again the next time it syncs with Hermes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses iPhone konnte die Änderung noch nicht von Hermes abholen. Conduit versucht es erneut, wenn es sich das nächste Mal mit Hermes abgleicht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este iPhone aún no pudo recibir el cambio de Hermes. Conduit lo volverá a intentar la próxima vez que se sincronice con Hermes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet iPhone n'a pas encore pu récupérer la modification auprès de Hermes. Conduit réessaiera la prochaine fois qu'il se synchronisera avec Hermes."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone ini belum dapat mengambil perubahan dari Hermes. Conduit akan mencoba lagi saat berikutnya menyinkronkan dengan Hermes."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo iPhone non è ancora riuscito a ricevere la modifica da Hermes. Conduit riproverà la prossima volta che si sincronizza con Hermes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneはまだHermesから変更を受け取れていません。Conduitは次にHermesと同期するときにもう一度試します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 iPhone이 아직 Hermes에서 변경 사항을 받지 못했어요. Conduit이 다음에 Hermes와 동기화할 때 다시 시도해요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ten iPhone nie mógł jeszcze pobrać zmiany z Hermesa. Conduit spróbuje ponownie przy następnej synchronizacji z Hermesem."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este iPhone ainda não conseguiu receber a alteração do Hermes. O Conduit tenta de novo na próxima vez que sincronizar com o Hermes."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этот iPhone ещё не смог получить изменение от Hermes. Conduit попробует снова при следующей синхронизации с Hermes."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu iPhone değişikliği henüz Hermes'ten alamadı. Conduit, Hermes ile bir sonraki eşitlemede yeniden dener."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 iPhone 还没能从 Hermes 获取这项更改。Conduit 会在下次与 Hermes 同步时再试一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這部 iPhone 還無法從 Hermes 取得這項變更。Conduit 會在下次與 Hermes 同步時再試一次。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

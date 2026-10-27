@@ -1388,6 +1388,20 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertNil(unknown.proposal)
         XCTAssertTrue(unknown.isCleared)
         XCTAssertEqual(PulseProposal.kind, "proposal")
+
+        // Never one of a brief's cards, even one naming a brief: Add and Undo are on its own card.
+        let briefed = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 9, "kind": "brief", "level": "push", "news": "Morning.", "brief": "b1", "created_at": 200},
+          {"id": 8, "kind": "followup", "level": "brief", "news": "Deck", "brief": "b1", "created_at": 120},
+          {"id": 1, "kind": "proposal", "level": "screen", "title": "Add: Dinner", "brief": "b1", "created_at": 210,
+           "proposal": {"id": 4, "kind": "add_event", "line": "Add: Dinner", "state": "waiting"}}
+        ]}
+        """)))
+        let layout = PulseLayout(cards: briefed.cards)
+        XCTAssertEqual(layout.briefs.map(\.id), [9])
+        XCTAssertEqual(layout.briefs.first?.items.map(\.id), [8])
+        XCTAssertEqual(layout.open.map(\.id), [1])
     }
 
     func testSuggestionsReachThePluginAndTheFeedAsksForThem() async throws {

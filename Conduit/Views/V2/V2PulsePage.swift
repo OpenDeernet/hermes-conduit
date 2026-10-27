@@ -1104,8 +1104,10 @@ struct V2PulsePage: View {
     private func proposalStateLabel(_ proposal: PulseProposal) -> some View {
         HStack(spacing: 6) {
             if proposal.isInFlight {
+                // Its text already says Adding… or Removing….
                 ProgressView()
                     .controlSize(.small)
+                    .accessibilityHidden(true)
             } else {
                 Image(systemName: Self.proposalSymbol(proposal.state))
                     .foregroundStyle(Self.proposalTint(proposal.state))
@@ -1417,10 +1419,21 @@ struct V2PulsePage: View {
                 guard appState.activeDashboardID == dashboard else { return }
                 setProposal(answer, on: card.id)
                 errorMessage = nil
-                if let change = undo ? answer.undoID : answer.changeID {
-                    await appState.applyPulseApproval(change)
-                    guard appState.activeDashboardID == dashboard else { return }
-                    await load()
+                guard let change = undo ? answer.undoID : answer.changeID else {
+                    AccessibilityNotification.Announcement(answer.stateText).post()
+                    return
+                }
+                let outcome = await appState.applyPulseApproval(change)
+                guard appState.activeDashboardID == dashboard else { return }
+                await load()
+                guard appState.activeDashboardID == dashboard,
+                      let settled = page?.cards.first(where: { $0.id == card.id })?.proposal else { return }
+                if settled.isInFlight, outcome != .synced, outcome != .off {
+                    // Still Adding… because this phone's pass didn't get the change, not just slow.
+                    showError(AppLocalization.string(
+                        "This iPhone couldn't get the change from Hermes yet. Conduit tries again the next time it syncs with Hermes."))
+                } else {
+                    AccessibilityNotification.Announcement(settled.stateText).post()
                 }
             } catch {
                 guard appState.activeDashboardID == dashboard else { return }

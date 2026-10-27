@@ -385,7 +385,9 @@ struct PulseLayout: Equatable {
     /// Pulse mark or Bring it up opened).
     init(cards: [PulseCard], keeping: Set<Int> = []) {
         var grouped: [String: [PulseCard]] = [:]
-        for card in cards where !card.brief.isEmpty && card.kind != "brief" {
+        // A suggestion is always a card of its own, with its Add and Undo:
+        // the plugin puts one on the screen, never holds it for a brief.
+        for card in cards where !card.brief.isEmpty && card.kind != "brief" && !card.isProposal {
             grouped[card.brief, default: []].append(card)
         }
         var taken: Set<Int> = []
