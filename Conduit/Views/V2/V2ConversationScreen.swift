@@ -83,7 +83,9 @@ struct V2ConversationScreen: View {
 
     var body: some View {
         ZStack {
-            V2Backdrop()
+            // A Bot Chat glows in its bot's color, as its working line does;
+            // a group room keeps the profile in use.
+            V2Backdrop(glowProfile: appState.activeRoomSurface == nil ? appState.conversationIdentityProfile : nil)
             conversation
                 .overlay(alignment: .bottomTrailing) {
                     if appState.activeRoomSurface == nil {
@@ -101,9 +103,9 @@ struct V2ConversationScreen: View {
                     }
                 }
                 // On a wide window the transcript, the composer and the
-                // voice button beside it keep to a readable column; the
-                // backdrop still fills the window.
-                .readableContentWidth(ReadableWidth.chat)
+                // voice button beside it keep to a readable column that
+                // widens with the window; the backdrop still fills it.
+                .readableContentWidth(scaling: ReadableWidth.chat(available:))
         }
         .modifier(V2FadingBarBackdrop())
         .onPreferenceChange(V2ComposerExpandedKey.self) { expanded in
