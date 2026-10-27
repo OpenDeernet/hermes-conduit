@@ -34308,7 +34308,7 @@ final class AppState: ObservableObject {
         let service = HermesVoiceConfigurationService(
             requester: voiceCapabilityRequesterForTesting ?? bridge,
             profile: profile,
-            profileParameter: notifierPlugin.dashboardProfileParameter
+            profileParameter: { [weak self] in self?.notifierPlugin.dashboardProfileParameter ?? "profile" }
         )
         await service.reload()
         guard profile == activeProfile, bridge === dashboardTicketBridge else { return }

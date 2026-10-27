@@ -152,10 +152,12 @@ final class HermesVoiceConfigurationService: ObservableObject {
     /// model address starts with. Nil when the service has no bridge.
     let dashboardBaseURL: String?
     /// The query parameter naming `profile` on Local Live's status and key
-    /// routes (DashboardPath.conduitProfileParameter).
-    let profileParameter: String
+    /// routes (DashboardPath.conduitProfileParameter), read at each request:
+    /// the plugin's capabilities can arrive after Settings opened.
+    let profileParameter: @MainActor () -> String
 
-    init(requester: VoiceConfigurationRequesting, profile: String, dashboardBaseURL: String? = nil, profileParameter: String = "profile") {
+    init(requester: VoiceConfigurationRequesting, profile: String, dashboardBaseURL: String? = nil,
+         profileParameter: @escaping @MainActor () -> String = { "profile" }) {
         self.requester = requester
         self.profile = profile
         self.dashboardBaseURL = dashboardBaseURL
@@ -163,7 +165,7 @@ final class HermesVoiceConfigurationService: ObservableObject {
         snapshot = .unavailable(profile: profile, reason: AppLocalization.string("Voice settings have not been loaded."))
     }
 
-    convenience init(bridge: DashboardTicketBridge, profile: String, profileParameter: String = "profile") {
+    convenience init(bridge: DashboardTicketBridge, profile: String, profileParameter: @escaping @MainActor () -> String = { "profile" }) {
         self.init(requester: bridge, profile: profile, dashboardBaseURL: bridge.baseURL, profileParameter: profileParameter)
     }
 
@@ -513,7 +515,7 @@ final class HermesVoiceConfigurationService: ObservableObject {
 
     /// A route that needs the dashboard process (Local Live's key check).
     private func dashboardProfilePath(_ path: String) -> String {
-        DashboardPath.withProfile(path, profile: profile, parameter: profileParameter)
+        DashboardPath.withProfile(path, profile: profile, parameter: profileParameter())
     }
 
     private func replaceCredential(_ credential: VoiceCredentialStatus) {

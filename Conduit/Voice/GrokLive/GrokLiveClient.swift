@@ -74,10 +74,8 @@ final class GrokLiveClient: GrokLiveConnecting {
 
     func socketRequest() async throws -> URLRequest {
         let ticket = try await mintTicket()
-        return try await makeSocketRequest(Self.socketPath, [
-            URLQueryItem(name: "ticket", value: ticket),
-            URLQueryItem(name: profileParameter(), value: profile()),
-        ])
+        return try await makeSocketRequest(Self.socketPath, [URLQueryItem(name: "ticket", value: ticket)]
+            + DashboardPath.socketProfileItems(profile(), parameter: profileParameter()))
     }
 
     // MARK: Parsing (static for tests)

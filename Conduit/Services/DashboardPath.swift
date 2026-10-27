@@ -16,6 +16,15 @@ enum DashboardPath {
     static let conduitProfileParameter = "conduit_profile"
     static let dashboardProfilesCapability = "dashboard-profiles"
 
+    /// A socket's profile query: `?profile=` as these sockets always sent it,
+    /// or `?conduit_profile=`, which leaves out the dashboard's own profile
+    /// as `withProfile` does.
+    static func socketProfileItems(_ profile: String, parameter: String) -> [URLQueryItem] {
+        guard parameter != "profile" else { return [URLQueryItem(name: parameter, value: profile)] }
+        guard !profile.isEmpty, profile != "default" else { return [] }
+        return [URLQueryItem(name: parameter, value: profile)]
+    }
+
     static func withProfile(_ path: String, profile: String, parameter: String = "profile") -> String {
         guard profile != "default" else { return path }
         return withExplicitProfile(path, profile: profile, parameter: parameter)

@@ -52,7 +52,7 @@ struct VoiceSettingsRoute: View {
     init(
         bridge: DashboardTicketBridge,
         profile: String,
-        profileParameter: String = "profile",
+        profileParameter: @escaping @MainActor () -> String = { "profile" },
         profileName: String? = nil,
         conversationController: VoiceConversationController,
         actions: VoiceSettingsActions,

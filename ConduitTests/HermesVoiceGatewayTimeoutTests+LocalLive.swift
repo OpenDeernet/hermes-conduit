@@ -496,6 +496,13 @@ extension HermesVoiceGatewayTimeoutTests {
                        LocalLiveProtocol.statusPath, "the dashboard's own profile still goes without one")
         XCTAssertEqual(LocalLiveProtocol.profileQueryItems("work", parameter: "conduit_profile"),
                        [URLQueryItem(name: "conduit_profile", value: "work")])
+        // Grok's and the listening socket: as before with ?profile=, and
+        // without the dashboard's own profile with ?conduit_profile=.
+        XCTAssertEqual(DashboardPath.socketProfileItems("default", parameter: "profile"),
+                       [URLQueryItem(name: "profile", value: "default")])
+        XCTAssertEqual(DashboardPath.socketProfileItems("default", parameter: "conduit_profile"), [])
+        XCTAssertEqual(DashboardPath.socketProfileItems("work", parameter: "conduit_profile"),
+                       [URLQueryItem(name: "conduit_profile", value: "work")])
         let speak = try HermesVoiceGateway.speechServerSpeechRequest(
             baseURL: "https://hermes.example", ticket: "t", profile: "work", profileParameter: "conduit_profile", cloudflareAccess: nil)
         let speakItems = URLComponents(url: try XCTUnwrap(speak.url), resolvingAgainstBaseURL: false)?.queryItems ?? []

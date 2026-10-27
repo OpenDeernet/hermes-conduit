@@ -2575,9 +2575,10 @@ takeover (claims are judged by the dashboard's pid) · Desktop views (the
 hook watches the dashboard's gateway) · predictions (they fork the gateway's
 chat) · the plugin update nudge (the `dashboard-profiles` capability) · Local
 Live's reason when it runs in a plugin host · the notifier README and
-CHANGELOG · not needed: Gemini, Qwen and GPT-Live tokens, Hermes calls, chat
-on screen and the other routes kept in the profile's home (plain HTTP and
-files, which work in the host), and the turn surface (sent without a
+CHANGELOG · not needed: Gemini, Qwen and GPT-Live tokens, Grok Live's status,
+the speech server's status and test (they read the profile's settings and dial
+the server over plain HTTP), Hermes calls, chat on screen and the other routes
+kept in the profile's home (plain HTTP and files, which work in the host), and the turn surface (sent without a
 profile, so it already reaches the dashboard)
 
 **Code**
@@ -2587,7 +2588,7 @@ profile, so it already reaches the dashboard)
 
 **Rulings**
 - A workaround until Hermes' plugin host carries WebSockets (asked for on NousResearch/hermes-agent#140051). Conduit sends `?conduit_profile=`, which Hermes doesn't route on, only to a plugin that lists `dashboard-profiles`; an older plugin keeps `?profile=`. The plugin scopes the route to that profile after Hermes' own consent check there, and refuses it on a Hermes Desktop ticket, which acts for one profile only (2026-10-27, Eric, #1336).
-- The dashboard's own profile ("default") still goes without a profile parameter.
+- The dashboard's own profile ("default") goes without `?conduit_profile=`. The Grok Live and listening sockets, which always sent `?profile=default`, still do with `?profile=`.
 
 - Which routes need it: those that read the dashboard process's own state (its gateway's chats, Hermes' websocket auth, Local Live's key registry and calls, the Watch bridges) or open a socket. A route that only reads and writes the profile's home works in the host and keeps `?profile=`.
 

@@ -407,7 +407,8 @@ extension HermesVoiceGateway: SpeechServerTranscriptionGateway {
         let url = try ConnectionURLPolicy.webSocketURL(
             baseURL: baseURL,
             path: SpeechServerTranscription.socketPath,
-            queryItems: [URLQueryItem(name: "ticket", value: ticket), URLQueryItem(name: profileParameter, value: profile)]
+            queryItems: [URLQueryItem(name: "ticket", value: ticket)]
+                + DashboardPath.socketProfileItems(profile, parameter: profileParameter)
         )
         return URLRequest(url: url).applyingProxyHeaders(cloudflare: cloudflareAccess)
     }
