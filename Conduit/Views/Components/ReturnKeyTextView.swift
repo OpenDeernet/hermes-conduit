@@ -121,6 +121,7 @@ class ReturnKeyTextView: UITextView {
         // release tracked Shift state exactly like a normal key-up, or the
         // shortcut would keep believing Shift is held.
         foldHardwareShift(presses, pressed: false)
+        if presses.contains(where: { Self.isReturnKeyPress($0) }) { returnTakenByKeyCommand = false }
         // Forward the original set: UIKit tracks press lifecycle across the
         // whole sequence, not just the keys this shortcut cares about.
         super.pressesCancelled(presses, with: event)
