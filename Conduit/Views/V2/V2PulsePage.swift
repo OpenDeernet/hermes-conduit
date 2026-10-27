@@ -1249,6 +1249,7 @@ enum PulseTopicTint {
         case "watch": return .purple
         case "intention", "interest": return .teal
         case "fact": return .green
+        case "deadline": return .orange
         default: return .secondary
         }
     }

@@ -1201,6 +1201,66 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertFalse(state.pulseBringsUpBirthdays)
     }
 
+    func testADeadlineFromTheShortcutsInboxIsItsOwnCardAndDoItStartsAChat() async throws {
+        let state = try appState()
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"home_chat_id": "pulse_chat", "cards": [
+          {"id": 3, "kind": "noticed", "topic": "deadline", "item_id": 12, "level": "brief",
+           "news": "Netflix free trial ends tomorrow, Wednesday 21 October.", "title": "Netflix free trial ends",
+           "quote": "Your free trial ends on 21 October", "chat_id": ""}
+        ]}
+        """)))
+        state.setNotifierPluginStateForTesting(.reported(version: "0.89.0", capabilities: [
+            PulseClient.capability, PulseClient.feedCapability, PulseClient.doneCapability,
+            PulseClient.actedCapability, PulseClient.inboxCapability
+        ]))
+        state.applyPulseFeed(page)
+        let deadline = try XCTUnwrap(page.cards.first)
+        XCTAssertEqual(deadline.heading, AppLocalization.string("Deadline"))
+        XCTAssertEqual(PulseCardKind.name("deadline"), AppLocalization.string("Deadlines"))
+        // Done closes the deadline, and Do it works on it, though it came from no chat.
+        XCTAssertTrue(deadline.canBeDone && deadline.isActionable)
+        XCTAssertFalse(deadline.isFound)
+        XCTAssertTrue(state.canMarkPulseCardDone(deadline) && state.canActOnPulseCard(deadline))
+        XCTAssertFalse(state.pulseCardHasChat(deadline))
+        XCTAssertEqual(deadline.actionMessage,
+                       "Pulse brought this up: Netflix free trial ends tomorrow, Wednesday 21 October.\n\nHelp me take care of it before then.")
+        // Another remembered item with no chat still has nowhere to act.
+        let other = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [{"id": 4, "kind": "noticed", "topic": "promise", "item_id": 5, "level": "screen", "news": "x", "chat_id": ""}]}
+        """)).cards.first)
+        XCTAssertFalse(other.isActionable)
+        // What learning learns about deadlines is about the Shortcuts inbox.
+        XCTAssertEqual(PulsePlace.source("inbox"), AppLocalization.string("Shortcuts inbox"))
+        XCTAssertEqual(PulsePreference.subject(scope: "place", value: "source:inbox", chatTitle: ""),
+                       AppLocalization.string("Things from “\(AppLocalization.string("Shortcuts inbox"))”"))
+        // Do it starts a chat in Pulse's profile and fills it.
+        state.isConnected = true
+        state.client = HermesClient(connection: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"),
+                                    profile: "default")
+        state.widgetSessionCreatorOverride = { _, _ in ("fresh", "fresh", "default") }
+        let opened = await state.actOnPulseCard(deadline)
+        XCTAssertTrue(opened)
+        XCTAssertEqual(state.activeSessionId, "fresh")
+        XCTAssertEqual(state.composerPrefillText, deadline.actionMessage)
+    }
+
+    func testTheShortcutsInboxSaysPulseKeepsDeadlinesWithAPluginThatDoes() throws {
+        let state = try appState()
+        state.setNotifierPluginStateForTesting(.reported(version: "0.88.0", capabilities: [
+            PulseClient.capability, PulseClient.feedCapability
+        ]))
+        XCTAssertFalse(state.pulseKeepsInboxDeadlines)
+        state.setNotifierPluginStateForTesting(.reported(version: "0.89.0", capabilities: [
+            PulseClient.capability, PulseClient.feedCapability, PulseClient.inboxCapability
+        ]))
+        XCTAssertTrue(state.pulseKeepsInboxDeadlines)
+        XCTAssertEqual(PulseClient.inboxCapability, "pulse_inbox")
+        // Without Pulse on the host, nothing to say.
+        state.setNotifierPluginStateForTesting(.reported(version: "0.89.0", capabilities: [PulseClient.inboxCapability]))
+        XCTAssertFalse(state.pulseKeepsInboxDeadlines)
+    }
+
     func testResetLeftOutAndBringUpReachThePlugin() async throws {
         var calls: [(path: String, method: String, body: [String: Any]?)] = []
         var answer = try json(#"{"ok": true, "levels": {}, "lessons": [], "preferences": []}"#)

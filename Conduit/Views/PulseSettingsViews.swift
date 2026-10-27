@@ -4,10 +4,11 @@
 //
 //  Settings > Pulse (beta), on TestFlight and Xcode builds: Pulse on or
 //  off; when it speaks up (how often, the times it looks through your
-//  chats, the morning brief); what it reads (profiles, memory, older
-//  chats); its model; and behind the scenes, its time zone, token budgets,
-//  a look now and latest checks (PulseSettings.swift). Every change goes to the
-//  plugin and the page shows the state it answers with.
+//  chats, the morning brief); what it reads (profiles, memory, deadlines
+//  from Shortcuts, older chats); its model; and behind the scenes, its
+//  time zone, token budgets, a look now and latest checks
+//  (PulseSettings.swift). Every change goes to the plugin and the page
+//  shows the state it answers with.
 //
 
 import SwiftUI
@@ -36,6 +37,8 @@ struct PulseSettingsPage: View {
     /// The note to Pulse as it's being edited; nil shows the plugin's.
     @State private var noteDraft: String?
     @FocusState private var noteFocused: Bool
+    /// Turning off deadlines from Shortcuts forgets the ones kept, so it asks first.
+    @State private var confirmsInboxOff = false
 
     private var client: PulseClient { appState.pulseClient }
     private var working: Bool { workingID != nil }
@@ -437,6 +440,33 @@ struct PulseSettingsPage: View {
             Text("Pulse keeps short notes on promises, plans and dates, so it can bring them up later. You can remove any of them.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if appState.notifierPlugin.reports(PulseClient.inboxCapability), let deadlines = state.inboxDeadlines {
+                Toggle("Deadlines from Shortcuts", isOn: Binding(
+                    get: { deadlines },
+                    set: { on in
+                        if on {
+                            change(["inbox_deadlines": true]) { $0.inboxDeadlines = true }
+                        } else {
+                            confirmsInboxOff = true
+                        }
+                    }
+                ))
+                // Read with memory: off with it, there's nothing to switch.
+                .disabled(working || !state.memory)
+                .accessibilityIdentifier("settings.pulse.inbox-deadlines")
+                .confirmationDialog(AppLocalization.string("Turn off deadlines from Shortcuts?"),
+                                    isPresented: $confirmsInboxOff, titleVisibility: .visible) {
+                    Button(AppLocalization.string("Turn off"), role: .destructive) {
+                        change(["inbox_deadlines": false]) { $0.inboxDeadlines = false }
+                    }
+                    Button(AppLocalization.string("Cancel"), role: .cancel) {}
+                } message: {
+                    Text("Pulse forgets the deadlines it kept from your Shortcuts inbox.")
+                }
+                Text("With memory on, Pulse also looks for deadlines in what your Shortcuts automations log, like a trial ending or a bill due, and brings each up a week ahead and the day before. Turning this off forgets the ones it kept.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -1039,7 +1069,7 @@ struct PulseMemoryList: View {
             Text(verbatim: item.text)
                 .font(.subheadline)
             if !item.evidence.isEmpty {
-                // The chat's own words.
+                // The chat's own words, or the logged event's.
                 Text(verbatim: "“\(item.evidence)”")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1055,7 +1085,12 @@ struct PulseMemoryList: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if let mentioned = item.mentionedAt {
+            if let logged = item.loggedText() {
+                // A deadline from the Shortcuts inbox: who it's from, not a chat.
+                Text(verbatim: logged)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let mentioned = item.mentionedAt {
                 Text(AppLocalization.string("Last mentioned \(mentioned.formatted(.relative(presentation: .named)))"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
