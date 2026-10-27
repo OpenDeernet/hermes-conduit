@@ -1451,7 +1451,7 @@ voice reply model pickers · the Kanban task composer's catalog
 - The bot model picker says "Could not load models." without Try Again.
 - The Kanban composer shows a failed catalog as "No curated model catalog available", whose manual entry still works.
 
-**Checked:** 2026-10-24, at #1190; a reload that lands under unsaved Fallback models edits keeps them at #1191 (#1016 review).
+**Checked:** 2026-10-27, at #1334 (the model sheet's loading, failed and empty states unchanged under its new error row); 2026-10-24, at #1190; a reload that lands under unsaved Fallback models edits keeps them at #1191 (#1016 review).
 
 ## The Model sheet's settings
 
@@ -1460,8 +1460,9 @@ YOLO: each one applies when it's tapped, with no Apply step.
 
 **Siblings:** the sheet's Model rows, Reasoning pills, Fast mode and YOLO
 toggles · the composer's reasoning chip · typed `/model` (opens the sheet),
-`/fast` and `/yolo` · a bot's model picker (not a sibling: it's a field of the
-bot editor, saved with the bot)
+`/fast` and `/yolo` · a bot's model picker and the Model page's Default,
+Delegate and Fallback model editors (not siblings: they're saved with the bot
+or the profile, not live session settings)
 
 **Code**
 - Sheet: `Conduit/Views/ModelPickerView.swift` (switchModel, runModelPickerSwitch, modelPickerShouldSwitch, applySpeed, applyYolo, applyReasoning)

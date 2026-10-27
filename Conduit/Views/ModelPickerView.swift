@@ -864,8 +864,8 @@ struct ModelPickerView: View {
         from previous: ModelPickerSelection,
         confirmed: Bool = false
     ) async {
-        // One session write at a time, as Apply used to send them; the
-        // Ultrafast fallback also reads the speed the switch lands on.
+        // A switch waits for the other writes and they wait for it; the
+        // Ultrafast fallback reads the speed the switch lands on.
         guard switchingRow == nil, !isApplyingReasoning, writingSpeed == nil, writingYolo == nil else { return }
         // A confirmed retry always re-sends: the runtime may have moved while
         // the alert was up, and the confirmation must reach Hermes.
