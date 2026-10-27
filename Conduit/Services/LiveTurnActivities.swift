@@ -247,6 +247,9 @@ final class LiveTurnActivities {
                 MainActor.assumeIsolated { LiveTurnActivities.shared.sendAllHeld() }
             }
         }
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { LiveTurnActivities.shared.registerUnregistered() }
+        }
     }
 
     /// A prompt is about to be submitted: its chat's events are held until
@@ -569,16 +572,38 @@ final class LiveTurnActivities {
     }
 
     private func register(token: String, for id: String, sessionIDs: Set<String>) async {
-        guard running[id] != nil else { return }
-        let previous = running[id]?.pushToken
+        guard let entry = running[id] else { return }
+        // Finished even if Conduit leaves the screen right after sending:
+        // until the relay has the token, nothing from the host can end the
+        // activity.
+        let endBackground = BackgroundTaskHold.begin("conduit.liveActivity.register")
+        defer { endBackground() }
+        let previous = entry.pushToken
         running[id]?.pushToken = token
         if previous != token { running[id]?.tokenInstallationID = nil }
         if let previous, previous != token {
             await PushNotificationService.shared.unregisterLiveActivity(token: previous)
         }
-        let installationID = await PushNotificationService.shared.registerLiveActivity(token: token, sessionIDs: Array(sessionIDs).sorted())
+        let installationID = await PushNotificationService.shared.registerLiveActivity(
+            token: token,
+            sessionIDs: Array(sessionIDs).sorted(),
+            startedAgo: Date().timeIntervalSince(entry.activity.attributes.startedAt)
+        )
         // Unless a newer token replaced it meanwhile.
         if running[id]?.pushToken == token { running[id]?.tokenInstallationID = installationID }
+    }
+
+    /// Conduit is back on screen: an activity whose registration didn't
+    /// reach the relay (no network, or Conduit was suspended first) tries
+    /// again. One whose turn ended meanwhile is ended by the relay at once.
+    private func registerUnregistered() {
+        for (id, entry) in running {
+            guard let token = entry.pushToken, entry.tokenInstallationID == nil else { continue }
+            let sessionIDs = entry.sessionIDs
+            Task { [weak self] in
+                await self?.register(token: token, for: id, sessionIDs: sessionIDs)
+            }
+        }
     }
 
     private func finish(_ id: String, phase: HermesTurnPhase, dismissal: ActivityUIDismissalPolicy, endKnown: Bool = true) {

@@ -1523,11 +1523,17 @@ final class PushNotificationService: ObservableObject {
     /// took the token, the one case the Conduit plugin can update and end
     /// it by push; nil otherwise.
     @discardableResult
-    func registerLiveActivity(token: String, sessionIDs: [String]) async -> String? {
+    /// `startedAgo` is how long ago the activity started, so the relay can
+    /// end it at once when its turn ended before this registration came.
+    func registerLiveActivity(token: String, sessionIDs: [String], startedAgo: TimeInterval) async -> String? {
         guard let registration, liveActivitiesUnsupportedInstallation != registration.installationID,
               !sessionIDs.isEmpty else { return nil }
         let routeExists = await sendLiveActivity(
-            LiveActivityRegistration(pushToken: token, sessionIDs: Array(sessionIDs.prefix(6))),
+            LiveActivityRegistration(
+                pushToken: token,
+                sessionIDs: Array(sessionIDs.prefix(6)),
+                startedAgo: startedAgo.isFinite ? max(0, startedAgo) : 0
+            ),
             method: "PUT",
             registration: registration
         )
@@ -2945,10 +2951,12 @@ final class PushNotificationService: ObservableObject {
 private struct LiveActivityRegistration: Encodable {
     let pushToken: String
     let sessionIDs: [String]
+    let startedAgo: TimeInterval
 
     enum CodingKeys: String, CodingKey {
         case pushToken = "push_token"
         case sessionIDs = "session_ids"
+        case startedAgo = "started_ago"
     }
 }
 
