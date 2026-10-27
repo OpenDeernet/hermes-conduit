@@ -2,7 +2,7 @@
 //  AppState+GatewayRestart.swift
 //  Conduit
 //
-//  Restart Gateway, from the chat's Gateway sheet and Settings > Connection:
+//  Restart Gateway, from the chat's Gateway sheet and Settings > Gateway:
 //  runs the dashboard's own restart action and follows the gateway until
 //  it is back (GatewayRestart.swift).
 //

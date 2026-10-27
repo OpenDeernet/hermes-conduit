@@ -33,7 +33,6 @@ struct LiveVoiceStyleSettingsModel {
 struct LiveVoiceStyleSettingsSection: View {
     let model: LiveVoiceStyleSettingsModel
     @State private var greets: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var greeting: String
     /// Empty is the model's own tone (a Picker tag can't be nil).
     @State private var tone: String
@@ -93,7 +92,7 @@ struct LiveVoiceStyleSettingsSection: View {
             Toggle("Greet me when a call connects", isOn: Binding(
                 get: { greets },
                 set: { requested in
-                    withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) { greets = requested }
+                    greets = requested
                     save()
                 }
             ))

@@ -317,12 +317,8 @@ enum PinnedReplies {
     }
 
     /// The overview: a section per chat, the chat with the latest pin
-    /// first, each chat's pins newest first. A section holding any of
-    /// `firstPins` (the open chat's) comes before the rest (#1267).
-    static func overview(
-        _ pins: [PinnedReply],
-        firstPins: Set<String> = []
-    ) -> [(sessionID: String, pins: [PinnedReply])] {
+    /// first, each chat's pins newest first.
+    static func overview(_ pins: [PinnedReply]) -> [(sessionID: String, pins: [PinnedReply])] {
         var bySession: [String: [PinnedReply]] = [:]
         var order: [String] = []
         for pin in pins {
@@ -333,10 +329,7 @@ enum PinnedReplies {
             (sessionID: id, pins: bySession[id, default: []].sorted { $0.pinnedAt > $1.pinnedAt })
         }
         return sections.sorted { lhs, rhs in
-            let lhsFirst = lhs.pins.contains { firstPins.contains($0.id) }
-            let rhsFirst = rhs.pins.contains { firstPins.contains($0.id) }
-            if lhsFirst != rhsFirst { return lhsFirst }
-            return (lhs.pins.first?.pinnedAt ?? .distantPast) > (rhs.pins.first?.pinnedAt ?? .distantPast)
+            (lhs.pins.first?.pinnedAt ?? .distantPast) > (rhs.pins.first?.pinnedAt ?? .distantPast)
         }
     }
 }

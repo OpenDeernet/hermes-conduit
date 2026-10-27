@@ -365,7 +365,7 @@ final class MarkdownSelectionHandleContainerView: UIView, UIGestureRecognizerDel
         // actually moved.
         let scrollPosition = coordinator.transcriptScrollPosition()
         if let lastScrollPosition, scrollPosition == lastScrollPosition,
-           lastAnchorCaret != nil, lastFocusCaret != nil {
+           let lastAnchorCaret, let lastFocusCaret {
             return
         }
         lastScrollPosition = scrollPosition
