@@ -470,6 +470,19 @@ struct PulseSettingsPage: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if appState.pulseLooksFirst, let lookFirst = state.lookFirst {
+                Toggle("Look things up first", isOn: Binding(
+                    get: { lookFirst },
+                    set: { on in change(["look_first": on]) { $0.lookFirst = on } }
+                ))
+                .disabled(working)
+                .accessibilityIdentifier("settings.pulse.look-first")
+                Text(verbatim: appState.pulseSuggests
+                    ? AppLocalization.string("Before Pulse writes to you, it can check your calendar, reminders, contacts and alarms, look up places in Maps, and search the web when it follows up on a promise. It never changes anything itself: an event or reminder worth adding comes as a suggestion you add with a tap.")
+                    : AppLocalization.string("Before Pulse writes to you, it can check your calendar, reminders, contacts and alarms, look up places in Maps, and search the web when it follows up on a promise. It never changes anything on your phone."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

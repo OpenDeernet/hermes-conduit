@@ -22,7 +22,11 @@
 //  ahead once a day, and What Pulse left out names the look ahead for what
 //  it left out. From 0.90.0 (`pulse_inbox`) Pulse memory keeps deadlines
 //  from the Shortcuts inbox: a deadline's card can be done, and Do it
-//  starts a new chat, as it came from none.
+//  starts a new chat, as it came from none. From 0.96.0 (`pulse_look`)
+//  Pulse's turns look things up before they write, and a card's Why? says
+//  what its turn looked at. From 0.98.0 (`pulse_proposals`) an event or
+//  reminder a turn would add is a suggestion on a card of its own, with Add
+//  and Not now: the phone that tapped Add applies it without its own card.
 //
 
 import Foundation
@@ -80,6 +84,13 @@ struct PulseCard: Equatable, Identifiable {
     /// The biggest part what Pulse learned played in bringing it up, for
     /// its Why? (0.84.0); nil when learning added next to nothing.
     let learned: PulsePreference?
+    /// What the turn that brought it up looked at first, by source
+    /// (pulse_tools labels: "calendar", "phone", "contacts", "maps", "web";
+    /// 0.96.0), for its Why?. Never the queries.
+    let looked: [String]
+    /// A suggestion's (kind "proposal", 0.98.0): what Add puts on the phone,
+    /// and where it stands.
+    var proposal: PulseProposal?
 
     init?(json: Any) {
         guard let object = json as? [String: Any], let id = PulseJSON.int(object["id"]) else { return nil }
@@ -110,6 +121,8 @@ struct PulseCard: Equatable, Identifiable {
         formattedNews = Self.formatted(news, markdown: kind != "followup")
         learned = PulsePreference(json: object["learned"], chatPlace: PulsePreference.chatPlace(profile, chatID),
                                   chatTitle: chatTitle)
+        looked = PulseJSON.strings(object["looked"])
+        proposal = PulseProposal(json: object["proposal"])
     }
 
     /// Held for the morning brief and not in one yet.
@@ -131,8 +144,14 @@ struct PulseCard: Equatable, Identifiable {
     /// is behind it.
     var isFound: Bool { isNoticed && itemID == nil }
 
-    /// Done or swiped away: it goes under Done and cleared.
-    var isCleared: Bool { doneAt != nil || dismissedAt != nil }
+    /// A suggestion Pulse made instead of changing the phone (0.98.0).
+    var isProposal: Bool { kind == PulseProposal.kind }
+
+    /// Done or swiped away, or a suggestion that's settled (added, or not):
+    /// it goes under Done and cleared.
+    var isCleared: Bool {
+        doneAt != nil || dismissedAt != nil || (isProposal && proposal?.isOpen != true)
+    }
 
     /// Put away by Not now or Wrong time, and not done meanwhile. One Pulse
     /// marks done while it rests (0.87.0) doesn't come back at its time, so
@@ -183,6 +202,15 @@ struct PulseCard: Equatable, Identifiable {
     /// The card's heading: a report item's topic, else its kind.
     var heading: String { isNoticed ? PulseCardKind.topic(topic) : PulseCardKind.title(kind) }
 
+    /// What the turn that brought it up looked at first, as its Why? says
+    /// it (0.96.0); nil when it looked at nothing.
+    var lookedText: String? {
+        let names = looked.compactMap(PulseCardKind.lookedSource)
+        guard !names.isEmpty else { return nil }
+        let list = names.formatted(.list(type: .and).locale(AppLocalization.formattingLocale))
+        return AppLocalization.string("Before writing this, Pulse looked at \(list).")
+    }
+
     /// What Do it leaves in that chat's composer: the reminder, and an ask
     /// that fits what the card is about, for the user to send or change.
     /// Something the user meant to do gets taken care of; what Hermes said
@@ -214,6 +242,93 @@ struct PulseCard: Equatable, Identifiable {
         guard markdown else { return AttributedString(news) }
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         return (try? AttributedString(markdown: news, options: options)) ?? AttributedString(news)
+    }
+}
+
+/// A suggestion Pulse made instead of changing the phone (0.98.0,
+/// `pulse_proposals`): an event or reminder its turn would have added, kept
+/// for the user's Add. Its card follows the phone change Add asked for.
+struct PulseProposal: Equatable {
+    /// A suggestion card's kind.
+    static let kind = "proposal"
+
+    enum State: String {
+        /// Waiting for Add or Not now.
+        case waiting
+        /// Add asked the phone for it, and the phone hasn't said yet.
+        case adding
+        case added
+        /// Added, then changed on the phone.
+        case changed
+        /// The phone couldn't add it (`note` says why).
+        case failed
+        /// Not now, or the phone's own card said no.
+        case notAdded = "not_added"
+        /// Its time passed before Add, or its turn ended without its message.
+        case expired
+        /// Undo asked the phone to take it off.
+        case removing
+        case removed
+    }
+
+    let id: Int
+    /// "add_event" or "add_reminder".
+    let kind: String
+    /// What it adds and where, written by the plugin from the change itself
+    /// ("Add to Personal: Dinner at Nopa, Sat 25 Oct, 19:00 to 21:00").
+    let line: String
+    var state: State
+    /// The phone's reason, when it couldn't add it or changed it.
+    var note: String
+    let expiresAt: Date?
+    /// The phone change Add asked for, and Undo's: the phone that tapped
+    /// applies it without its own card (AppState.applyPulseApproval).
+    var changeID: String?
+    var undoID: String?
+
+    /// Nil for a state this app doesn't know: the card shows no buttons.
+    init?(json: Any?) {
+        guard let object = json as? [String: Any], let id = PulseJSON.int(object["id"]),
+              let state = (object["state"] as? String).flatMap(State.init(rawValue:)) else { return nil }
+        self.id = id
+        self.state = state
+        kind = object["kind"] as? String ?? ""
+        line = object["line"] as? String ?? ""
+        note = object["note"] as? String ?? ""
+        expiresAt = PulseJSON.date(object["expires_at"])
+        changeID = (object["change_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        undoID = (object["undo_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    var isEvent: Bool { kind == "add_event" }
+
+    /// Still to settle: waiting for Add, or on its way to the phone.
+    var isOpen: Bool { state == .waiting || state == .adding }
+
+    /// Undo takes it off the phone again.
+    var canUndo: Bool { state == .added || state == .changed }
+
+    /// On its way to or off the phone.
+    var isInFlight: Bool { state == .adding || state == .removing }
+
+    /// Where it stands, as its card says it once Add was tapped (or it
+    /// settled without it).
+    var stateText: String {
+        switch state {
+        case .waiting: return ""
+        case .adding: return AppLocalization.string("Adding…")
+        case .added:
+            return isEvent ? AppLocalization.string("Added to your calendar")
+                : AppLocalization.string("Added to your reminders")
+        case .changed: return AppLocalization.string("Added, then changed on your phone")
+        case .failed: return AppLocalization.string("Couldn't add it")
+        case .notAdded: return AppLocalization.string("Not added")
+        case .expired: return AppLocalization.string("Expired")
+        case .removing: return AppLocalization.string("Removing…")
+        case .removed:
+            return isEvent ? AppLocalization.string("Removed from your calendar")
+                : AppLocalization.string("Removed from your reminders")
+        }
     }
 }
 
@@ -359,7 +474,21 @@ enum PulseCardKind {
         case "report": return AppLocalization.string("Reports")
         case "brief": return AppLocalization.string("Morning brief")
         case "noticed": return AppLocalization.string("Noticed")
+        case PulseProposal.kind: return AppLocalization.string("Suggestion")
         default: return kind
+        }
+    }
+
+    /// What a Pulse turn looked at (pulse_tools labels, 0.96.0), as Why?
+    /// names it; nil for a source this app doesn't know.
+    static func lookedSource(_ label: String) -> String? {
+        switch label {
+        case "calendar": return AppLocalization.string("your calendar")
+        case "phone": return AppLocalization.string("your phone")
+        case "contacts": return AppLocalization.string("your contacts")
+        case "maps": return AppLocalization.string("Maps")
+        case "web": return AppLocalization.string("the web")
+        default: return nil
         }
     }
 
@@ -780,15 +909,43 @@ struct PulseLeftOut: Equatable, Identifiable {
 }
 
 extension PulseClient {
-    func feed() async throws -> PulseFeedPage {
-        let response = try await request("\(Self.path)/feed", "GET", nil)
+    /// `proposals`: the screen shows suggestion cards (0.98.0); without it
+    /// the plugin leaves them out and doesn't count them unseen.
+    func feed(proposals: Bool = false) async throws -> PulseFeedPage {
+        let response = try await request("\(Self.path)/feed" + (proposals ? "?proposals=1" : ""), "GET", nil)
         guard let page = PulseFeedPage(json: response) else { throw HermesError.invalidResponse }
         return page
     }
 
-    /// Marks these cards seen, or every card for nil.
-    func markSeen(_ ids: [Int]?) async throws {
-        _ = try await request("\(Self.path)/feed/seen", "POST", ["ids": ids.map { $0 as Any } ?? NSNull()])
+    /// Add on a suggestion (0.98.0): the plugin asks the phone for the
+    /// change from what it kept. The suggestion, with the change's id.
+    func addProposal(_ id: Int) async throws -> PulseProposal {
+        try await proposal(id, "add")
+    }
+
+    /// Not now on a suggestion: it won't be added, and its card goes.
+    func dismissProposal(_ id: Int) async throws -> PulseProposal {
+        try await proposal(id, "dismiss")
+    }
+
+    /// Undo on an added suggestion: the plugin asks the phone to delete it.
+    /// The suggestion, with the delete's id.
+    func undoProposal(_ id: Int) async throws -> PulseProposal {
+        try await proposal(id, "undo")
+    }
+
+    private func proposal(_ id: Int, _ action: String) async throws -> PulseProposal {
+        let response = try await request("\(Self.path)/proposals/\(id)/\(action)", "POST", [:])
+        guard let proposal = PulseProposal(json: response["proposal"]) else { throw HermesError.invalidResponse }
+        return proposal
+    }
+
+    /// Marks these cards seen, or for nil every card the feed shows:
+    /// suggestion cards only with `proposals` (0.98.0), as `feed`.
+    func markSeen(_ ids: [Int]?, proposals: Bool = false) async throws {
+        var body: [String: Any] = ["ids": ids.map { $0 as Any } ?? NSNull()]
+        if proposals { body["proposals"] = true }
+        _ = try await request("\(Self.path)/feed/seen", "POST", body)
     }
 
     /// The lessons the rating made, and for Wrong time, when the card
@@ -910,7 +1067,9 @@ extension AppState {
             return
         }
         let dashboard = activeDashboardID
-        guard let page = try? await pulseClient.feed(), activeDashboardID == dashboard else { return }
+        guard let page = try? await pulseClient.feed(proposals: pulseSuggests), activeDashboardID == dashboard else {
+            return
+        }
         applyPulseFeed(page)
     }
 
@@ -978,10 +1137,12 @@ extension AppState {
             || card.isFound && card.hasReminder && notifierPlugin.reports(PulseClient.foundActionsCapability)
     }
 
-    /// Why? on this card: its reason, or what Pulse learned played in it,
-    /// which goes with the rest of what learning shows (0.84.0).
+    /// Why? on this card: its reason, what Pulse learned played in it,
+    /// which goes with the rest of what learning shows (0.84.0), or what its
+    /// turn looked at first (0.96.0).
     func explainsPulseCard(_ card: PulseCard) -> Bool {
         explainsPulseCardReason(card) || (pulseExplainsLearning && card.learned != nil)
+            || (pulseLooksFirst && card.lookedText != nil)
     }
 
     /// A follow-up's reason, or any other card's once the plugin gives each
@@ -994,6 +1155,14 @@ extension AppState {
     /// What Pulse learned lists what learning holds with Reset, and What
     /// Pulse left out shows (0.84.0).
     var pulseExplainsLearning: Bool { notifierPlugin.reports(PulseClient.explainsCapability) }
+
+    /// Pulse's turns look things up before they write (0.96.0): Settings >
+    /// Pulse's switch, and Why? says what a card's turn looked at.
+    var pulseLooksFirst: Bool { notifierPlugin.reports(PulseClient.lookCapability) }
+
+    /// An event or reminder a Pulse turn would add comes as a suggestion
+    /// card with Add (0.98.0): the feed brings them to an app that asks.
+    var pulseSuggests: Bool { notifierPlugin.reports(PulseClient.proposalsCapability) }
 
     /// A thumbs down on this card asks why: a follow-up's, or a report
     /// card's once the plugin acts on its reasons (0.81.1). Before, a report
@@ -1164,6 +1333,14 @@ extension PulseClient {
     /// remembers' Deadlines, and deadline cards with a level of their own
     /// in What Pulse learned (0.90.0).
     static let inboxCapability = "pulse_inbox"
+    /// Pulse's report, brief and follow-up turns look things up before they
+    /// write (calendar, phone and contacts reads, Maps between named places,
+    /// web search on a follow-up), switched in Settings > Pulse, and each
+    /// card says what its turn looked at (0.96.0).
+    static let lookCapability = "pulse_look"
+    /// An event or reminder a Pulse turn would add is a suggestion on a card
+    /// of its own, with Add, Not now and Undo (0.98.0).
+    static let proposalsCapability = "pulse_proposals"
 }
 
 /// What Not now puts a card off until, as the plugin names it. Wrong time

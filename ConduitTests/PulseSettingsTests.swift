@@ -179,7 +179,8 @@ final class PulseSettingsTests: XCTestCase {
          "memory_chunks": 12, "memory_tokens": 34000, "daily_tokens": 200000, "tokens_today": 1500,
          "backfill": {"state": "reading", "from": 1758441600, "to": 1761033600, "days": 30,
                       "narrow": false, "unreadable": ["work"]},
-         "backfill_days": 30, "ratings": {"commitment": {"yes": 3, "no": 1}}, "inbox_deadlines": false}
+         "backfill_days": 30, "ratings": {"commitment": {"yes": 3, "no": 1}}, "inbox_deadlines": false,
+         "look_first": false}
         """)))
 
         XCTAssertTrue(state.enabled)
@@ -202,6 +203,7 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertTrue(state.offersProfileChoice)
         XCTAssertTrue(state.memory)
         XCTAssertEqual(state.inboxDeadlines, false)
+        XCTAssertEqual(state.lookFirst, false)
         XCTAssertEqual(state.memoryCounts, ["commitment": 2, "fact": 5])
         XCTAssertEqual(state.memoryTokens, 34_000)
         XCTAssertEqual(state.dailyTokens, 200_000)
@@ -232,8 +234,10 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertEqual(state.backfillDays, 90)
         // Narrowed to this profile: the choice stays, so it can be widened.
         XCTAssertTrue(state.offersProfileChoice)
-        // A plugin from before 0.90.0 keeps no deadlines from the Shortcuts inbox.
+        // A plugin from before 0.90.0 keeps no deadlines from the Shortcuts inbox,
+        // and one from before 0.96.0 has Pulse look nothing up.
         XCTAssertNil(state.inboxDeadlines)
+        XCTAssertNil(state.lookFirst)
     }
 
     func testStateReadsPulsesModel() throws {
@@ -331,14 +335,25 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertNil(PulseRefusal(error: DashboardTicketBridgeError.http(status: 409, detail: "session_busy")))
         XCTAssertNil(PulseRefusal(error: DashboardTicketBridgeError.http(status: 500, detail: #"{"code":"pulse_off"}"#)))
 
-        // Every code the plugin sends has its own sentence.
+        // Every code the plugin sends has its own sentence, a suggestion's too (0.98.0).
         let codes = ["reading", "paused", "already_read", "memory_off", "pulse_off", "no_home_chat",
-                     "unreadable", "not_running", "nothing_to_cancel", "changed", "invalid"]
+                     "unreadable", "not_running", "nothing_to_cancel", "changed", "invalid",
+                     "already_added", "dismissed", "expired", "not_found", "not_added", "already_undone",
+                     "unknown_event"]
         let fallback = PulseRefusal(code: "something_new").message
         for code in codes {
             XCTAssertNotEqual(PulseRefusal(code: code).message, fallback, code)
         }
         XCTAssertEqual(Set(codes.map { PulseRefusal(code: $0).message }).count, codes.count)
+        // Undo before the phone said what it added: the same for a reminder.
+        XCTAssertEqual(PulseRefusal(code: "unknown_reminder").message, PulseRefusal(code: "unknown_event").message)
+        // The phone's side refusing Add says why, in its own words, unless the app words the code.
+        let phone = try XCTUnwrap(DashboardTicketBridgeError.structuredDetail(
+            ["code": "read_only", "note": "That calendar is read-only"] as [String: Any]))
+        let refused = try XCTUnwrap(PulseRefusal(error: DashboardTicketBridgeError.http(status: 409, detail: phone)))
+        XCTAssertEqual(refused, PulseRefusal(code: "read_only", note: "That calendar is read-only"))
+        XCTAssertEqual(refused.message, "That calendar is read-only")
+        XCTAssertEqual(PulseRefusal(code: "expired", note: "ignored").message, PulseRefusal(code: "expired").message)
     }
 
     func testReportTimes() throws {

@@ -135,6 +135,9 @@ struct PulseState: Equatable {
     /// Memory keeps deadlines from the Shortcuts inbox (0.90.0); nil from an
     /// older plugin.
     var inboxDeadlines: Bool?
+    /// Pulse's turns look things up before they write (0.96.0); nil from an
+    /// older plugin.
+    var lookFirst: Bool?
     var memoryCounts: [String: Int] = [:]
     var memoryChunks = 0
     var memoryTokens = 0
@@ -208,6 +211,7 @@ struct PulseState: Equatable {
         otherProfiles = PulseJSON.strings(json["other_profiles"])
         memory = PulseJSON.bool(json["memory"]) ?? false
         inboxDeadlines = PulseJSON.bool(json["inbox_deadlines"])
+        lookFirst = PulseJSON.bool(json["look_first"])
         memoryCounts = PulseJSON.counts(json["memory_counts"])
         memoryChunks = PulseJSON.int(json["memory_chunks"]) ?? 0
         memoryTokens = PulseJSON.int(json["memory_tokens"]) ?? 0
@@ -608,6 +612,9 @@ enum PulseReportTime {
 /// read from the code the plugin sends.
 struct PulseRefusal: Equatable {
     let code: String
+    /// The phone's reason, for an Add or Undo on a suggestion the phone's
+    /// side refused (0.98.0): shown for a code this app doesn't word.
+    var note = ""
 
     init?(error: Error) {
         guard let bridgeError = error as? DashboardTicketBridgeError,
@@ -617,10 +624,12 @@ struct PulseRefusal: Equatable {
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let code = object["code"] as? String, !code.isEmpty else { return nil }
         self.code = code
+        note = object["note"] as? String ?? ""
     }
 
-    init(code: String) {
+    init(code: String, note: String = "") {
         self.code = code
+        self.note = note
     }
 
     var message: String {
@@ -636,7 +645,16 @@ struct PulseRefusal: Equatable {
         case "nothing_to_cancel": return AppLocalization.string("There's nothing to cancel.")
         case "changed": return AppLocalization.string("Pulse changed in the meantime. Try again.")
         case "invalid": return AppLocalization.string("Pulse didn't accept that value.")
-        default: return AppLocalization.string("Pulse didn't take that step.")
+        // A suggestion's Add, Not now or Undo (0.98.0).
+        case "already_added": return AppLocalization.string("This suggestion was already added.")
+        case "dismissed": return AppLocalization.string("This suggestion was set aside with Not now.")
+        case "expired": return AppLocalization.string("This suggestion has expired.")
+        case "not_found": return AppLocalization.string("Pulse no longer has this suggestion.")
+        case "not_added": return AppLocalization.string("There's nothing on your phone to remove.")
+        case "already_undone": return AppLocalization.string("Undo was already tapped for this suggestion.")
+        case "unknown_event", "unknown_reminder":
+            return AppLocalization.string("Your phone hasn't told Hermes about it yet. Try again in a moment.")
+        default: return note.isEmpty ? AppLocalization.string("Pulse didn't take that step.") : note
         }
     }
 
@@ -674,8 +692,8 @@ struct PulseClient {
 
     /// Any of enabled, memory, daily_report, report_profiles, report_times,
     /// brief_time, time_zone, model, nudge, memory_daily_tokens,
-    /// followup_daily_tokens, note, quiet_days, quiet_until, night and
-    /// inbox_deadlines; answers with the new state.
+    /// followup_daily_tokens, note, quiet_days, quiet_until, night,
+    /// inbox_deadlines and look_first; answers with the new state.
     func update(_ changes: [String: Any]) async throws -> PulseState {
         let response = try await request(Self.path, "PUT", changes)
         return try Self.state(from: response)
