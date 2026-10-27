@@ -135,7 +135,7 @@ struct RoomInviteSheet: View {
                 } else {
                     if !invite.joined.isEmpty {
                         Section(AppLocalization.string("Your bots")) {
-                            ForEach(Array(invite.joined.enumerated()), id: \.offset) { _, agent in
+                            ForEach(invite.joined, id: \.profile) { agent in
                                 Text(verbatim: agent.displayName)
                             }
                         }

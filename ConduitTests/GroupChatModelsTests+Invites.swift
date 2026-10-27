@@ -363,7 +363,7 @@ extension GroupChatModelsTests {
         let operations = GroupChatLifecycleOperations(
             capabilities: { _ in
                 GroupCapabilities(protocolVersion: 2, driverReady: true, authorityGatewayID: "gw-a", features: [],
-                                  methods: ["groups.list", "groups.create", "groups.state", "groups.send", "groups.log"],
+                                  methods: ["groups.list", "groups.create", "groups.state", "groups.send", "groups.log", "groups.disband"],
                                   maxLogLimit: 500)
             },
             list: { _ in ([], nil) },
