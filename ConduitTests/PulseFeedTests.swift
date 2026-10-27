@@ -1245,6 +1245,42 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertEqual(state.composerPrefillText, deadline.actionMessage)
     }
 
+    func testANextStepIsItsOwnCardWithALevelOfItsOwn() throws {
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 5, "kind": "noticed", "topic": "next", "level": "brief", "item_id": null,
+           "news": "Book the hotel for the 12th to the 15th.", "title": "Book the hotel", "chat_id": "trip",
+           "why": "You booked the flights in Trip plan this morning; nothing shows a hotel."}
+        ], "levels": {"followup": "push", "deadline": "brief", "next": "brief"}}
+        """)))
+        let next = try XCTUnwrap(page.cards.first)
+        XCTAssertEqual(next.heading, AppLocalization.string("Next step"))
+        XCTAssertEqual(PulseCardKind.name("next"), AppLocalization.string("Next steps"))
+        // Pulse's own idea, held for the morning brief by default.
+        XCTAssertTrue(next.isFound && next.isHeld)
+        XCTAssertEqual(page.levels["next"], .brief)
+        XCTAssertEqual(next.actionMessage,
+                       "Pulse reminded me: Book the hotel for the 12th to the 15th.\n\nLet's take care of it now.")
+        XCTAssertNil(next.backText())
+    }
+
+    func testACardBackAfterAStalledDoItSaysWhenDoItWasTapped() throws {
+        let card = { (back: String) throws -> PulseCard in
+            try XCTUnwrap(PulseCard(json: self.json("""
+            {"id": 7, "kind": "followup", "level": "brief", "news": "x",
+             "why": "You tapped Do it yesterday but didn't send it.", "back": "\(back)", "back_acted_at": 1800000000}
+            """)))
+        }
+        let now = Date(timeIntervalSince1970: 1_800_000_000 + 86_400)
+        XCTAssertEqual(try card("unsent").backActedAt, Date(timeIntervalSince1970: 1_800_000_000))
+        XCTAssertEqual(try card("unsent").backText(now: now), "You tapped Do it yesterday but didn't send it.")
+        XCTAssertEqual(try card("not_done").backText(now: now), "You tapped Do it yesterday, and it isn't done yet.")
+        // One that never came back, or from a plugin before 0.107.0, keeps the plugin's why.
+        XCTAssertNil(try card("").backText(now: now))
+        XCTAssertNil(try card("later").backText(now: now))
+        XCTAssertNil(try XCTUnwrap(PulseCard(json: json(#"{"id": 8, "kind": "followup", "why": "x"}"#))).backText(now: now))
+    }
+
     func testTheShortcutsInboxSaysPulseKeepsDeadlinesWithAPluginThatDoes() throws {
         let state = try appState()
         state.setNotifierPluginStateForTesting(.reported(version: "0.88.0", capabilities: [

@@ -27,6 +27,10 @@
 //  what its turn looked at. From 0.98.0 (`pulse_proposals`) an event or
 //  reminder a turn would add is a suggestion on a card of its own, with Add
 //  and Not now: the phone that tapped Add applies it without its own card.
+//  From 0.106.0 (`pulse_next`) a report can bring up a next step, after
+//  something got done or an event ended, with a level of its own in What
+//  Pulse learned. From 0.107.0 a card whose Do it stalled comes back once,
+//  and its Why? says when Do it was tapped.
 //
 
 import Foundation
@@ -58,6 +62,12 @@ struct PulseCard: Equatable, Identifiable {
     let itemID: Int?
     /// What a report item is about ("date", "promise"…) on a "noticed" card.
     let topic: String
+    /// Why it came back after a Do it that stalled (0.107.0): "unsent" (nothing
+    /// was sent from the chat) or "not_done" (Pulse's checks found it not
+    /// done); "" for a card that never came back.
+    let back: String
+    /// When that Do it was tapped.
+    let backActedAt: Date?
     /// The morning brief it went out in (0.68.0): the brief's own card and
     /// the held cards it brought share it, and show together.
     let brief: String
@@ -110,6 +120,8 @@ struct PulseCard: Equatable, Identifiable {
         briefedAt = PulseJSON.date(object["briefed_at"])
         itemID = PulseJSON.int(object["item_id"])
         topic = object["topic"] as? String ?? ""
+        back = object["back"] as? String ?? ""
+        backActedAt = PulseJSON.date(object["back_acted_at"])
         brief = object["brief"] as? String ?? ""
         dismissedAt = PulseJSON.date(object["dismissed_at"])
         restUntil = PulseJSON.date(object["rest_until"])
@@ -202,6 +214,22 @@ struct PulseCard: Equatable, Identifiable {
     /// The card's heading: a report item's topic, else its kind.
     var heading: String { isNoticed ? PulseCardKind.topic(topic) : PulseCardKind.title(kind) }
 
+    /// Why a card came back after a Do it that stalled, in the app's
+    /// language, for its Why? in place of the plugin's English (0.107.0);
+    /// nil for one that never came back, or a reason this build doesn't know.
+    func backText(now: Date = Date()) -> String? {
+        guard let backActedAt else { return nil }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.dateTimeStyle = .named
+        formatter.locale = AppLocalization.formattingLocale
+        let when = formatter.localizedString(for: backActedAt, relativeTo: now)
+        switch back {
+        case "unsent": return AppLocalization.string("You tapped Do it \(when) but didn't send it.")
+        case "not_done": return AppLocalization.string("You tapped Do it \(when), and it isn't done yet.")
+        default: return nil
+        }
+    }
+
     /// What the turn that brought it up looked at first, as its Why? says
     /// it (0.96.0); nil when it looked at nothing.
     var lookedText: String? {
@@ -215,7 +243,8 @@ struct PulseCard: Equatable, Identifiable {
     /// that fits what the card is about, for the user to send or change.
     /// Something the user meant to do gets taken care of; what Hermes said
     /// it would do (a follow-up, a promise) gets a go-ahead; a date ahead,
-    /// getting ready; a deadline, taking care of it before then; something
+    /// getting ready; a deadline, taking care of it before then; a next
+    /// step (0.106.0), taking care of it like a plan; something
     /// watched, where it stands; an interest, more about it; anything else,
     /// a look.
     var actionMessage: String {
@@ -223,7 +252,7 @@ struct PulseCard: Equatable, Identifiable {
         switch kind == "followup" ? "promise" : topic {
         case "promise":
             return AppLocalization.string("Pulse reminded me: \(reminder)\n\nGo ahead with it now.")
-        case "commitment", "reminder", "intention", "follow-up":
+        case "commitment", "reminder", "intention", "follow-up", "next":
             return AppLocalization.string("Pulse reminded me: \(reminder)\n\nLet's take care of it now.")
         case "date":
             return AppLocalization.string("Pulse brought this up: \(reminder)\n\nHelp me get ready for it.")
@@ -508,6 +537,7 @@ enum PulseCardKind {
         case "interest": return AppLocalization.string("Interest")
         case "fact": return AppLocalization.string("Worth knowing")
         case "deadline": return AppLocalization.string("Deadline")
+        case "next": return AppLocalization.string("Next step")
         default: return AppLocalization.string("Noticed")
         }
     }
@@ -518,6 +548,7 @@ enum PulseCardKind {
         switch kind {
         case "followup", "report", "brief", "noticed": return title(kind)
         case "deadline": return AppLocalization.string("Deadlines")
+        case "next": return AppLocalization.string("Next steps")
         default: return topic(kind)
         }
     }
