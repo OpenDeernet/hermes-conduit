@@ -16,7 +16,13 @@
 //  What Pulse left out lists what the reports didn't bring up, with Bring
 //  it up. From 0.86.0 a thumbs down's Wrong time puts the card away as Not
 //  now does, until a better time, and Not now's later today ends when the
-//  night starts.
+//  night starts. From 0.90.0 a deadline Pulse memory kept from the
+//  Shortcuts inbox has its own card, tinted orange, and Do it starts a new
+//  chat for it. From 0.96.0 a card's Why? says what Pulse looked at before
+//  writing it. From 0.98.0 an event or reminder Pulse would add is a
+//  suggestion on its own card, with Add and Not now, then how it went, and
+//  Undo once it's on the phone; this phone applies what it tapped without
+//  its own change card.
 //  Pulse's own chat, where its hidden turns run, isn't shown: the cards are
 //  the way to answer it.
 //
@@ -115,6 +121,11 @@ struct V2PulsePage: View {
     /// Do it opened their chat but Pulse wasn't told; kept across refreshes
     /// until the card is done.
     @State private var untoldCards: Set<Int> = []
+    /// Suggestions Add or Undo was tapped on: they stay where they are while
+    /// the page is up, to show how it went.
+    @State private var keptCards: Set<Int> = []
+    /// The added suggestion Undo asks about before it comes off the phone.
+    @State private var undoCard: PulseCard?
 
     private var client: PulseClient { appState.pulseClient }
 
@@ -212,6 +223,17 @@ struct V2PulsePage: View {
         } message: { _ in
             Text("It comes back as new then, unless it got done meanwhile.")
         }
+        .confirmationDialog(
+            undoCard?.proposal?.isEvent == false ? AppLocalization.string("Remove it from your reminders?")
+                : AppLocalization.string("Remove it from your calendar?"),
+            isPresented: Binding(get: { undoCard != nil }, set: { if !$0 { undoCard = nil } }),
+            titleVisibility: .visible,
+            presenting: undoCard
+        ) { card in
+            Button(AppLocalization.string("Remove"), role: .destructive) { undoProposal(card) }
+        } message: { card in
+            Text(verbatim: card.proposal?.line ?? card.title)
+        }
         .task(id: PulseRefreshKey(dashboard: appState.activeDashboardID, active: isShown && scenePhase == .active,
                                   served: appState.notifierPlugin.reports(PulseClient.feedCapability))) {
             guard isShown, scenePhase == .active else { return }
@@ -234,6 +256,8 @@ struct V2PulsePage: View {
             isShown = false
             reasonCard = nil
             restCard = nil
+            undoCard = nil
+            keptCards = []
             newCards = nil
             focusedCard = nil
             voiceOverCard = nil
@@ -244,6 +268,8 @@ struct V2PulsePage: View {
         .onChange(of: appState.activeDashboardID) { _, _ in
             reasonCard = nil
             restCard = nil
+            undoCard = nil
+            keptCards = []
             errorMessage = nil
             // Another dashboard: its own cards.
             page = nil
@@ -308,7 +334,7 @@ struct V2PulsePage: View {
     }
 
     private func cardList(_ page: PulseFeedPage) -> some View {
-        let layout = PulseLayout(cards: page.cards, keeping: focusedCard.map { [$0] } ?? [])
+        let layout = PulseLayout(cards: page.cards, keeping: keptCards.union(focusedCard.map { [$0] } ?? []))
         let fresh = layout.open.filter { newCards?.contains($0.id) == true }
         let earlier = layout.open.filter { newCards?.contains($0.id) != true }
         // A brief's new cards count too, though they show in its block; one
@@ -418,8 +444,20 @@ struct V2PulsePage: View {
 
     /// Not now: off the list, nothing learned. A plugin before 0.68.0 can't
     /// take it; one from 0.78.3 asks until when, and the card comes back then.
+    /// On a suggestion it's for good: it won't be added.
     @ViewBuilder private func notNowButton(_ card: PulseCard) -> some View {
-        if card.dismissedAt == nil, card.doneAt == nil, canDismiss {
+        if card.isProposal {
+            if card.proposal?.state == .waiting {
+                Button {
+                    guard !isBusy(card) else { return }
+                    Haptics.light()
+                    dismissProposal(card)
+                } label: {
+                    Label(AppLocalization.string("Not now"), systemImage: "clock")
+                }
+                .tint(.gray)
+            }
+        } else if card.dismissedAt == nil, card.doneAt == nil, canDismiss {
             Button {
                 // One request per card: not while its Done is still out.
                 guard !isBusy(card) else { return }
@@ -782,11 +820,19 @@ struct V2PulsePage: View {
     private func cardView(_ card: PulseCard) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             topicLine(card)
-            Text(card.formattedNews)
-                .font(.body)
-                .strikethrough(card.doneAt != nil)
-                .foregroundStyle(card.isCleared ? Color.secondary : Color.primary)
-                .fixedSize(horizontal: false, vertical: true)
+            if card.isProposal {
+                // What Add puts on the phone, in the plugin's words from the change itself.
+                Text(verbatim: card.proposal?.line ?? card.title)
+                    .font(.body)
+                    .foregroundStyle(card.isCleared ? Color.secondary : Color.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(card.formattedNews)
+                    .font(.body)
+                    .strikethrough(card.doneAt != nil)
+                    .foregroundStyle(card.isCleared ? Color.secondary : Color.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if !card.quote.isEmpty, !card.isCleared {
                 Text(verbatim: "“\(card.quote)”")
                     .font(.footnote)
@@ -862,12 +908,16 @@ struct V2PulsePage: View {
     }
 
     /// Why Pulse brought the card up, once "Why?" is tapped: its reason,
-    /// and what Pulse learned played in it (0.84.0).
+    /// what Pulse looked at first (0.96.0), and what Pulse learned played in
+    /// it (0.84.0).
     @ViewBuilder private func whyNote(_ card: PulseCard) -> some View {
         if expandedWhy.contains(card.id), appState.explainsPulseCard(card) {
             VStack(alignment: .leading, spacing: 8) {
                 if appState.explainsPulseCardReason(card) {
                     Text(verbatim: card.why)
+                }
+                if appState.pulseLooksFirst, let looked = card.lookedText {
+                    Text(verbatim: looked)
                 }
                 if appState.pulseExplainsLearning, let learned = card.learned {
                     PulseLearnedLine(preference: learned)
@@ -900,9 +950,11 @@ struct V2PulsePage: View {
     }
 
     /// Do it and Done on the left, the thumbs on the right; for a cleared
-    /// card, what happened to it and Undo.
+    /// card, what happened to it and Undo. A suggestion has its own.
     @ViewBuilder private func actionRow(_ card: PulseCard) -> some View {
-        if card.isCleared {
+        if card.isProposal {
+            proposalRow(card)
+        } else if card.isCleared {
             HStack(spacing: 8) {
                 clearedLabel(card)
                 Spacer(minLength: 0)
@@ -965,6 +1017,124 @@ struct V2PulsePage: View {
             .accessibilityLabel(Text(AppLocalization.string("Undo Done")))
             .accessibilityHint(Text(card.undoDoneHint))
             .accessibilityIdentifier("pulse.card.undo-done")
+        }
+    }
+
+    // MARK: Suggestions
+
+    /// A suggestion's row (0.98.0): Add and Not now while it waits, then
+    /// where it stands, with Undo once it's on the phone.
+    @ViewBuilder private func proposalRow(_ card: PulseCard) -> some View {
+        if let proposal = card.proposal {
+            if proposal.state == .waiting {
+                HStack(spacing: 8) {
+                    addButton(card, proposal)
+                    Button {
+                        Haptics.light()
+                        dismissProposal(card)
+                    } label: {
+                        Text(AppLocalization.string("Not now"))
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(.gray)
+                    .disabled(isBusy(card))
+                    .accessibilityHint(Text(AppLocalization.string("Pulse won't add it")))
+                    .accessibilityIdentifier("pulse.card.proposal-not-now")
+                    Spacer(minLength: 0)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        proposalStateLabel(proposal)
+                        Spacer(minLength: 0)
+                        if proposal.canUndo {
+                            Button {
+                                Haptics.selection()
+                                undoCard = card
+                            } label: {
+                                Text(AppLocalization.string("Undo"))
+                                    .font(.footnote.weight(.medium))
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(isBusy(card))
+                            .accessibilityHint(Text(proposal.isEvent
+                                ? AppLocalization.string("Removes it from your calendar")
+                                : AppLocalization.string("Removes it from your reminders")))
+                            .accessibilityIdentifier("pulse.card.proposal-undo")
+                        }
+                    }
+                    if !proposal.note.isEmpty, proposal.state == .failed || proposal.state == .changed {
+                        Text(verbatim: proposal.note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private func addButton(_ card: PulseCard, _ proposal: PulseProposal) -> some View {
+        Button {
+            Haptics.selection()
+            addProposal(card)
+        } label: {
+            // The icon's colour is set outright, as Do it's is.
+            Label {
+                Text(AppLocalization.string("Add"))
+            } icon: {
+                Image(systemName: proposal.isEvent ? "calendar.badge.plus" : "plus.circle")
+                    .foregroundStyle(.white)
+            }
+            .labelStyle(.titleAndIcon)
+            .font(.footnote.weight(.semibold))
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .tint(.conduitAccent)
+        .accessibilityHint(Text(proposal.isEvent ? AppLocalization.string("Adds it to your calendar")
+                                                 : AppLocalization.string("Adds it to your reminders")))
+        .disabled(isBusy(card))
+        .accessibilityIdentifier("pulse.card.proposal-add")
+    }
+
+    /// Where a suggestion stands, once it's no longer waiting.
+    private func proposalStateLabel(_ proposal: PulseProposal) -> some View {
+        HStack(spacing: 6) {
+            if proposal.isInFlight {
+                // Its text already says Adding… or Removing….
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: Self.proposalSymbol(proposal.state))
+                    .foregroundStyle(Self.proposalTint(proposal.state))
+                    .accessibilityHidden(true)
+            }
+            Text(verbatim: proposal.stateText)
+                .foregroundStyle(proposal.canUndo ? Color.green : Color.secondary)
+        }
+        .font(.footnote.weight(.semibold))
+        .accessibilityElement(children: .combine)
+    }
+
+    private static func proposalSymbol(_ state: PulseProposal.State) -> String {
+        switch state {
+        case .added, .changed: return "checkmark.circle.fill"
+        case .failed: return "exclamationmark.circle"
+        case .expired: return "clock"
+        case .removed: return "arrow.uturn.backward.circle"
+        default: return "xmark.circle"
+        }
+    }
+
+    private static func proposalTint(_ state: PulseProposal.State) -> Color {
+        switch state {
+        case .added, .changed: return .green
+        case .failed: return .orange
+        default: return .secondary
         }
     }
 
@@ -1067,7 +1237,7 @@ struct V2PulsePage: View {
     private func load() async {
         let dashboard = appState.activeDashboardID
         do {
-            let loaded = try await client.feed()
+            let loaded = try await client.feed(proposals: appState.pulseSuggests)
             guard appState.activeDashboardID == dashboard else { return }
             page = loaded
             if newCards == nil, isShown {
@@ -1078,7 +1248,7 @@ struct V2PulsePage: View {
             learnedNote = nil
             appState.applyPulseFeed(loaded)
             if let request = appState.pulseOpenRequest, isShown { focus(request) }
-            if isShown, loaded.unseen > 0, (try? await client.markSeen(nil)) != nil,
+            if isShown, loaded.unseen > 0, (try? await client.markSeen(nil, proposals: appState.pulseSuggests)) != nil,
                appState.activeDashboardID == dashboard {
                 appState.pulseUnseen = 0
             }
@@ -1222,6 +1392,94 @@ struct V2PulsePage: View {
                 showError(PulseRefusal.message(for: error))
             }
         }
+    }
+
+    /// Add on a suggestion (0.98.0): the plugin asks the phone for it from
+    /// what it kept, and this phone applies it without its own change card
+    /// (AppState.applyPulseApproval); the card then shows how it went.
+    private func addProposal(_ card: PulseCard) {
+        changeProposal(card, undo: false)
+    }
+
+    /// Undo on an added suggestion, once the dialog said Remove: the plugin
+    /// asks the phone to delete it, which this phone does as it did the add.
+    private func undoProposal(_ card: PulseCard) {
+        changeProposal(card, undo: true)
+    }
+
+    private func changeProposal(_ card: PulseCard, undo: Bool) {
+        guard let proposal = card.proposal else { return }
+        finishingCards.insert(card.id)
+        keptCards.insert(card.id)
+        let dashboard = appState.activeDashboardID
+        Task {
+            defer { finishingCards.remove(card.id) }
+            do {
+                let answer = try await (undo ? client.undoProposal(proposal.id) : client.addProposal(proposal.id))
+                guard appState.activeDashboardID == dashboard else { return }
+                setProposal(answer, on: card.id)
+                errorMessage = nil
+                guard let change = undo ? answer.undoID : answer.changeID else {
+                    AccessibilityNotification.Announcement(answer.stateText).post()
+                    return
+                }
+                let outcome = await appState.applyPulseApproval(change)
+                guard appState.activeDashboardID == dashboard else { return }
+                await load()
+                guard appState.activeDashboardID == dashboard,
+                      let settled = page?.cards.first(where: { $0.id == card.id })?.proposal else { return }
+                if !settled.isInFlight {
+                    AccessibilityNotification.Announcement(settled.stateText).post()
+                } else if outcome == .off {
+                    // This phone never gets it: the device sharing the calendar does.
+                    showError(AppLocalization.string(
+                        "This iPhone doesn't share its calendar with Hermes, so the change waits for a device that does."))
+                } else if outcome != .synced {
+                    // Still Adding… because this phone's pass didn't get the change, not just slow.
+                    showError(AppLocalization.string(
+                        "This iPhone couldn't get the change from Hermes yet. Conduit tries again the next time it syncs with Hermes."))
+                }
+                // Synced and still Adding…: the label says so, and the next load settles it.
+            } catch {
+                guard appState.activeDashboardID == dashboard else { return }
+                showError(PulseRefusal.message(for: error))
+                // Where it stands now: added from another device, expired, …
+                await load()
+            }
+        }
+    }
+
+    /// Not now on a suggestion: it won't be added, for good, and the card
+    /// goes to Done and cleared.
+    private func dismissProposal(_ card: PulseCard) {
+        guard let proposal = card.proposal else { return }
+        finishingCards.insert(card.id)
+        let dashboard = appState.activeDashboardID
+        Task {
+            defer { finishingCards.remove(card.id) }
+            do {
+                let answer = try await client.dismissProposal(proposal.id)
+                guard appState.activeDashboardID == dashboard else { return }
+                withAnimation(.snappy) {
+                    setProposal(answer, on: card.id)
+                    if let index = page?.cards.firstIndex(where: { $0.id == card.id }) {
+                        page?.cards[index].dismissedAt = Date()
+                    }
+                    if focusedCard == card.id { focusedCard = nil; voiceOverCard = nil }
+                }
+                AccessibilityNotification.Announcement(answer.stateText).post()
+                errorMessage = nil
+            } catch {
+                guard appState.activeDashboardID == dashboard else { return }
+                showError(PulseRefusal.message(for: error))
+                await load()
+            }
+        }
+    }
+
+    private func setProposal(_ proposal: PulseProposal, on card: Int) {
+        guard let index = page?.cards.firstIndex(where: { $0.id == card }) else { return }
+        page?.cards[index].proposal = proposal
     }
 }
 

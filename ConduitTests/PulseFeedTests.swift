@@ -1329,4 +1329,178 @@ final class PulseFeedTests: XCTestCase {
             XCTFail("an answer without a card")
         } catch {}
     }
+
+    // MARK: Look first, then ask (0.96.0, 0.98.0)
+
+    func testASuggestionIsItsOwnCardAndSaysWhereItStands() throws {
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 1, "kind": "proposal", "level": "screen", "title": "Add to Personal: Dinner at Nopa, Sat 25 Oct, 19:00 to 21:00",
+           "why": "Pulse suggested this in its report.", "chat_id": "pulse",
+           "proposal": {"id": 4, "kind": "add_event", "line": "Add to Personal: Dinner at Nopa, Sat 25 Oct, 19:00 to 21:00",
+                        "state": "waiting", "expires_at": 1761400000}},
+          {"id": 2, "kind": "proposal", "level": "screen", "title": "Add to Errands: Call the bank",
+           "proposal": {"id": 5, "kind": "add_reminder", "line": "Add to Errands: Call the bank", "state": "adding",
+                        "change_id": "ch_add"}},
+          {"id": 3, "kind": "proposal", "level": "screen", "title": "x",
+           "proposal": {"id": 6, "kind": "add_event", "line": "x", "state": "added", "change_id": "ch_a"}},
+          {"id": 4, "kind": "proposal", "level": "screen", "title": "x",
+           "proposal": {"id": 7, "kind": "add_event", "line": "x", "state": "failed", "note": "No access to Calendar",
+                        "change_id": "ch_f"}},
+          {"id": 5, "kind": "proposal", "level": "screen", "title": "x", "dismissed_at": 1761000000,
+           "proposal": {"id": 8, "kind": "add_event", "line": "x", "state": "not_added"}},
+          {"id": 6, "kind": "proposal", "level": "screen", "title": "x",
+           "proposal": {"id": 9, "kind": "add_reminder", "line": "x", "state": "removing", "change_id": "ch_r",
+                        "undo_id": "ch_u"}},
+          {"id": 7, "kind": "proposal", "level": "screen", "title": "Add: Something",
+           "proposal": {"id": 10, "kind": "add_event", "line": "x", "state": "something_new"}}
+        ]}
+        """)))
+        let waiting = page.cards[0], adding = page.cards[1], added = page.cards[2], failed = page.cards[3]
+        let notAdded = page.cards[4], removing = page.cards[5], unknown = page.cards[6]
+        XCTAssertTrue(page.cards.allSatisfy(\.isProposal))
+        XCTAssertEqual(waiting.heading, AppLocalization.string("Suggestion"))
+        XCTAssertEqual(waiting.proposal?.id, 4)
+        XCTAssertEqual(waiting.proposal?.line, "Add to Personal: Dinner at Nopa, Sat 25 Oct, 19:00 to 21:00")
+        XCTAssertEqual(waiting.proposal?.expiresAt, Date(timeIntervalSince1970: 1_761_400_000))
+        XCTAssertNil(waiting.proposal?.changeID)
+        XCTAssertTrue(waiting.proposal?.isEvent == true)
+        XCTAssertFalse(adding.proposal?.isEvent == true)
+        // Nothing to rate, mark done or act on in a chat: Add and Not now are its buttons.
+        XCTAssertFalse(waiting.isRatable || waiting.canBeDone || waiting.isActionable)
+        // Waiting and on its way it's open; settled, added or not, it's cleared.
+        XCTAssertFalse(waiting.isCleared)
+        XCTAssertFalse(adding.isCleared)
+        XCTAssertTrue(added.isCleared && failed.isCleared && notAdded.isCleared && removing.isCleared)
+        XCTAssertEqual(adding.proposal?.changeID, "ch_add")
+        XCTAssertEqual(removing.proposal?.undoID, "ch_u")
+        XCTAssertTrue(adding.proposal?.isInFlight == true && removing.proposal?.isInFlight == true)
+        // Undo once it's on the phone, not before or after.
+        XCTAssertEqual(page.cards.compactMap(\.proposal).filter(\.canUndo).map(\.id), [6])
+        XCTAssertEqual(added.proposal?.stateText, AppLocalization.string("Added to your calendar"))
+        XCTAssertEqual(adding.proposal?.stateText, AppLocalization.string("Adding…"))
+        XCTAssertEqual(failed.proposal?.stateText, AppLocalization.string("Couldn't add it"))
+        XCTAssertEqual(failed.proposal?.note, "No access to Calendar")
+        XCTAssertEqual(removing.proposal?.stateText, AppLocalization.string("Removing…"))
+        XCTAssertEqual(PulseProposal(json: ["id": 1, "kind": "add_reminder", "state": "removed"])?.stateText,
+                       AppLocalization.string("Removed from your reminders"))
+        // A state this app doesn't know: no buttons, and out of the way.
+        XCTAssertNil(unknown.proposal)
+        XCTAssertTrue(unknown.isCleared)
+        XCTAssertEqual(PulseProposal.kind, "proposal")
+
+        // Never one of a brief's cards, even one naming a brief: Add and Undo are on its own card.
+        let briefed = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 9, "kind": "brief", "level": "push", "news": "Morning.", "brief": "b1", "created_at": 200},
+          {"id": 8, "kind": "followup", "level": "brief", "news": "Deck", "brief": "b1", "created_at": 120},
+          {"id": 1, "kind": "proposal", "level": "screen", "title": "Add: Dinner", "brief": "b1", "created_at": 210,
+           "proposal": {"id": 4, "kind": "add_event", "line": "Add: Dinner", "state": "waiting"}}
+        ]}
+        """)))
+        let layout = PulseLayout(cards: briefed.cards)
+        XCTAssertEqual(layout.briefs.map(\.id), [9])
+        XCTAssertEqual(layout.briefs.first?.items.map(\.id), [8])
+        XCTAssertEqual(layout.open.map(\.id), [1])
+    }
+
+    func testSuggestionsReachThePluginAndTheFeedAsksForThem() async throws {
+        var calls: [(path: String, method: String, body: [String: Any]?)] = []
+        var answer = try json(#"{"ok": true, "cards": [], "unseen": 0}"#)
+        let client = PulseClient { path, method, body in
+            calls.append((path, method, body))
+            return answer
+        }
+        _ = try await client.feed(proposals: true)
+        _ = try await client.feed()
+        answer = try json(#"{"ok": true, "proposal": {"id": 4, "kind": "add_event", "line": "Add: Dinner", "state": "adding", "change_id": "ch_1"}}"#)
+        let adding = try await client.addProposal(4)
+        XCTAssertEqual(adding.state, .adding)
+        XCTAssertEqual(adding.changeID, "ch_1")
+        answer = try json(#"{"ok": true, "proposal": {"id": 4, "kind": "add_event", "line": "Add: Dinner", "state": "removing", "change_id": "ch_1", "undo_id": "ch_2"}}"#)
+        let removing = try await client.undoProposal(4)
+        XCTAssertEqual(removing.undoID, "ch_2")
+        answer = try json(#"{"ok": true, "proposal": {"id": 5, "kind": "add_reminder", "line": "Add: Milk", "state": "not_added"}}"#)
+        let dismissed = try await client.dismissProposal(5)
+        XCTAssertEqual(dismissed.state, .notAdded)
+
+        XCTAssertEqual(calls.map(\.path), [
+            "\(PulseClient.path)/feed?proposals=1", "\(PulseClient.path)/feed",
+            "\(PulseClient.path)/proposals/4/add", "\(PulseClient.path)/proposals/4/undo",
+            "\(PulseClient.path)/proposals/5/dismiss"
+        ])
+        XCTAssertEqual(calls.map(\.method), ["GET", "GET", "POST", "POST", "POST"])
+
+        // Seen for every card takes the suggestion cards only when the screen shows them.
+        calls = []
+        answer = try json(#"{"ok": true, "seen": 2}"#)
+        try await client.markSeen(nil, proposals: true)
+        try await client.markSeen(nil)
+        XCTAssertEqual(calls.map(\.path), ["\(PulseClient.path)/feed/seen", "\(PulseClient.path)/feed/seen"])
+        XCTAssertNotNil(calls[0].body?["ids"] as? NSNull)
+        XCTAssertEqual(calls[0].body?["proposals"] as? Bool, true)
+        XCTAssertNil(calls[1].body?["proposals"])
+
+        // An answer without the suggestion is no answer.
+        answer = try json(#"{"ok": true}"#)
+        do {
+            _ = try await client.addProposal(4)
+            XCTFail("an answer without a proposal")
+        } catch {}
+    }
+
+    func testLookUpsAndSuggestionsGoWithAPluginThatHasThem() throws {
+        let state = try appState()
+        state.setNotifierPluginStateForTesting(.reported(version: "0.90.0", capabilities: [
+            PulseClient.capability, PulseClient.feedCapability
+        ]))
+        XCTAssertFalse(state.pulseLooksFirst)
+        XCTAssertFalse(state.pulseSuggests)
+        // The look-ups came first (0.96.0); suggestions with them (0.98.0).
+        state.setNotifierPluginStateForTesting(.reported(version: "0.96.0", capabilities: [
+            PulseClient.capability, PulseClient.feedCapability, PulseClient.lookCapability
+        ]))
+        XCTAssertTrue(state.pulseLooksFirst)
+        XCTAssertFalse(state.pulseSuggests)
+        state.setNotifierPluginStateForTesting(.reported(version: "0.98.0", capabilities: [
+            PulseClient.capability, PulseClient.feedCapability, PulseClient.lookCapability,
+            PulseClient.proposalsCapability
+        ]))
+        XCTAssertTrue(state.pulseSuggests)
+        XCTAssertEqual(PulseClient.lookCapability, "pulse_look")
+        XCTAssertEqual(PulseClient.proposalsCapability, "pulse_proposals")
+    }
+
+    func testWhySaysWhatPulseLookedAtFirst() throws {
+        let state = try appState()
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 1, "kind": "noticed", "topic": "date", "level": "screen", "news": "Dinner at Nopa at 19:00",
+           "why": "", "looked": ["calendar", "maps", "something_new"]},
+          {"id": 2, "kind": "noticed", "topic": "date", "level": "screen", "news": "Dentist Friday", "why": ""},
+          {"id": 3, "kind": "noticed", "topic": "date", "level": "screen", "news": "x", "looked": ["something_new"]}
+        ]}
+        """)))
+        let looked = page.cards[0], plain = page.cards[1], unknown = page.cards[2]
+        XCTAssertEqual(looked.looked, ["calendar", "maps", "something_new"])
+        let names = [AppLocalization.string("your calendar"), AppLocalization.string("Maps")]
+        let list = names.formatted(.list(type: .and).locale(AppLocalization.formattingLocale))
+        XCTAssertEqual(looked.lookedText, AppLocalization.string("Before writing this, Pulse looked at \(list)."))
+        XCTAssertNil(plain.lookedText)
+        XCTAssertNil(unknown.lookedText)
+        // Why? shows it once the plugin looks things up.
+        state.setNotifierPluginStateForTesting(.reported(version: "0.90.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.cardWhyCapability
+        ]))
+        XCTAssertFalse(state.explainsPulseCard(looked))
+        state.setNotifierPluginStateForTesting(.reported(version: "0.96.0", capabilities: [
+            PulseClient.feedCapability, PulseClient.cardWhyCapability, PulseClient.lookCapability
+        ]))
+        XCTAssertTrue(state.explainsPulseCard(looked))
+        XCTAssertFalse(state.explainsPulseCard(plain))
+        XCTAssertFalse(state.explainsPulseCard(unknown))
+        for label in ["calendar", "phone", "contacts", "maps", "web"] {
+            XCTAssertNotNil(PulseCardKind.lookedSource(label), label)
+        }
+    }
 }
