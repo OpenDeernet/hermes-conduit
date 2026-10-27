@@ -625,6 +625,8 @@ final class WatchDirectCallModel: ObservableObject {
         // As the iPhone's Interrupt button: playback stops now, and the
         // rest of this turn is dropped until Gemini ends or interrupts it.
         audio.stopPlayback()
+        // Local Live's server is told, so its microphone opens again (#1325).
+        session?.cancelResponse()
         suppressingModelTurn = true
         modelTurnActive = false
         lastModelTurnEndedAt = now
@@ -1979,7 +1981,11 @@ final class WatchDirectCallModel: ObservableObject {
             switch route {
             case .relay(let instructions, let profile):
                 arguments["instructions"] = instructions
-                if let profile { arguments["profile"] = profile }
+                if let profile {
+                    arguments["profile"] = profile
+                    // Another profile's work never goes to the call's chat.
+                    arguments["joins_call"] = false
+                }
             case .viaPhone(let name), .unknown(let name):
                 // jobRelay sends these to the iPhone; this is a backstop.
                 let unknown = route == .unknown(name)

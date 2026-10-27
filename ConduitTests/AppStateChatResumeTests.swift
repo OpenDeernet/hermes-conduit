@@ -259,6 +259,35 @@ final class AppStateChatResumeTests: XCTestCase {
         XCTAssertEqual(harness.appState.activeSessionId, "stored-newest")
     }
 
+    /// "Self-improvement updates" off hides the review rows a chat already
+    /// has, not only new ones; anything else Hermes reads as showing them.
+    func testReviewRowsFollowTheSelfImprovementSetting() {
+        XCTAssertFalse(ProfileDisplayPreferences.showsReviews("off"))
+        XCTAssertFalse(ProfileDisplayPreferences.showsReviews(" Off "))
+        XCTAssertFalse(ProfileDisplayPreferences.showsReviews(false))
+        for shown: Any? in [nil, "on", "default", "verbose", true] {
+            XCTAssertTrue(ProfileDisplayPreferences.showsReviews(shown), "\(String(describing: shown))")
+        }
+
+        let activity = ReviewActivity(summary: "Memory updated", details: nil, fullSessionId: nil)
+        var cache = ChatMessageScrollTargetCache()
+        cache.update(for: [
+            ChatMessage(id: "u1", role: .user, content: "hi", timestamp: "1"),
+            ChatMessage(id: "r1", role: .system, content: "Memory updated", timestamp: "2", review: activity),
+            // Saved before reviews were tagged: told by its text, as the row draws it.
+            ChatMessage(id: "r2", role: .system, content: "💾 Self-improvement review: Memory updated", timestamp: "3"),
+            ChatMessage(id: "u2", role: .user, content: "💾 Self-improvement review: quoted", timestamp: "4"),
+        ])
+        let disclosure = ChatRowDisclosure()
+        var preferences = ProfileDisplayPreferences()
+        func drawn() -> [String] {
+            cache.targets.filter { $0.drawsRow(preferences: preferences, isBusy: false, disclosure: disclosure) }.map(\.id)
+        }
+        XCTAssertEqual(drawn(), ["u1", "r1", "r2", "u2"])
+        preferences.showReviews = false
+        XCTAssertEqual(drawn(), ["u1", "u2"])
+    }
+
     /// Self-improvement reviews arrive only as `review.summary` stream events
     /// keyed by the RUNTIME session id, and with Hermes' default notification
     /// mode every one reads "Memory updated". Each review must keep its own
@@ -1115,6 +1144,61 @@ final class AppStateChatResumeTests: XCTestCase {
         XCTAssertEqual(scheduler.scheduledCount, 1, "Only the failed create remains retryable")
     }
 
+    func testAutomaticReturnRetiresASavedKanbanWorker() async {
+        // Hermes refuses a Kanban worker for good (4132): the saved target is
+        // retired like a deleted chat instead of being retried on every return.
+        let scheduler = ControlledReconnectScheduler()
+        var requests: [String] = []
+        let harness = makeHarness(
+            reconnectScheduler: scheduler.schedule(after:operation:),
+            lifecycleOperations: ChatResumeLifecycleOperations(
+                loadCatalog: { _, _ in [] },
+                openSession: { _, sessionID, _ in
+                    requests.append(sessionID)
+                    throw RpcError(code: 4132, message: "Session worker is a Kanban worker transcript.")
+                }
+            )
+        )
+        installComposerClient(in: harness)
+        harness.store.setLastSessionID("worker", for: "default")
+
+        await harness.appState.syncSession(
+            purpose: .automaticReturn,
+            using: nil,
+            automaticWorkToken: nil
+        )
+
+        XCTAssertEqual(requests, ["worker"])
+        XCTAssertNil(harness.store.lastSessionID(for: "default"))
+        XCTAssertEqual(scheduler.scheduledCount, 1, "Only the failed create remains retryable")
+    }
+
+    func testAutomaticReturnDoesNotRetryAKanbanWorkerByItsStoredID() async {
+        // Hermes refuses a worker under any of its ids, so the stored-id
+        // retry a missing runtime id gets would only be refused again.
+        var requests: [String] = []
+        let row = session("runtime-w", storedID: "stored-w")
+        let harness = makeHarness(
+            lifecycleOperations: ChatResumeLifecycleOperations(
+                loadCatalog: { _, _ in [row] },
+                openSession: { _, sessionID, _ in
+                    requests.append(sessionID)
+                    throw RpcError(code: 4132, message: "Session is a Kanban worker transcript.")
+                }
+            )
+        )
+        installComposerClient(in: harness)
+        harness.store.setLastSessionID("runtime-w", for: "default")
+
+        await harness.appState.syncSession(
+            purpose: .automaticReturn,
+            using: nil,
+            automaticWorkToken: nil
+        )
+
+        XCTAssertEqual(requests.count, 1, "One refusal is final: \(requests)")
+    }
+
     func testTranscriptRpc4007DoesNotRetireMissingSavedSession() async {
         let scheduler = ControlledReconnectScheduler()
         var requests: [String] = []
@@ -1433,6 +1517,28 @@ final class AppStateChatResumeTests: XCTestCase {
         harness.appState.recordChatViewport(.latest, for: newerKey)
         harness.appState.flushChatResumeViewport()
         XCTAssertEqual(harness.store.snapshot(for: newerKey), .latest)
+    }
+
+    func testOpeningAKanbanWorkerPointsAtTheBoard() async {
+        let harness = makeHarness(
+            lifecycleOperations: ChatResumeLifecycleOperations(
+                openSession: { _, _, _ in
+                    throw RpcError(code: 4132, message: "Session worker is a Kanban worker transcript.")
+                },
+                refreshContext: { _, _ in }
+            )
+        )
+        harness.appState.client = HermesClient(
+            connection: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"), profile: "default")
+        harness.appState.isConnected = true
+        harness.appState.sessions = [session("worker")]
+
+        _ = await harness.appState.openSession("worker")
+
+        XCTAssertEqual(
+            harness.appState.errorMessage,
+            "This chat is a Kanban task's worker, so only the board can run it. Open the task on the Kanban board and check its Worker Log."
+        )
     }
 
     func testNewChatThatFailsKeepsTheOpenChatsTitle() async {
@@ -5745,6 +5851,34 @@ final class AppStateChatResumeTests: XCTestCase {
         XCTAssertNil(harness.appState.activeSessionId)
         XCTAssertTrue(harness.appState.sessions.isEmpty)
         XCTAssertEqual(harness.cacheClearSpy.count, 1)
+    }
+
+    func testReconnectStopsWaitingForAPredictiveFollowUp() {
+        let harness = makeHarness()
+        XCTAssertFalse(harness.appState.prepareChatResumeForConnection(to: "https://one.example"))
+        harness.appState.activeSessionId = "s1"
+        harness.appState.predictiveFollowUpTurn = ("s1", "Worth a check.", nil)
+        harness.appState.predictiveFollowUpQueued = true
+        harness.appState.predictiveFollowUpTurnsAhead = 2
+        harness.appState.predictiveFollowUpQueuedAt = Date()
+        harness.appState.predictiveFollowUpSending = true
+        harness.appState.predictiveFollowUpAheadEnded = true
+        harness.appState.predictiveFollowUpUnreadMessages = [7]
+        let send = harness.appState.predictiveFollowUpSend
+
+        XCTAssertFalse(harness.appState.prepareChatResumeForConnection(to: "https://one.example"))
+        XCTAssertNotEqual(harness.appState.predictiveFollowUpSend, send, "a send still on its way is not applied")
+        XCTAssertFalse(harness.appState.predictiveFollowUpSending)
+        XCTAssertFalse(harness.appState.predictiveFollowUpAheadEnded)
+        XCTAssertTrue(harness.appState.predictiveFollowUpUnreadMessages.isEmpty)
+        XCTAssertNil(harness.appState.predictiveFollowUpTurn)
+        XCTAssertFalse(harness.appState.predictiveFollowUpQueued)
+        XCTAssertEqual(harness.appState.predictiveFollowUpTurnsAhead, 0)
+        XCTAssertNil(harness.appState.predictiveFollowUpQueuedAt)
+
+        harness.appState.messages = [ChatMessage(id: "a1", role: .assistant, content: "Done.", timestamp: "now")]
+        harness.appState.predictiveTurnSettled(sessionId: "s1")
+        XCTAssertTrue(harness.appState.predictive.followUpReasons.isEmpty, "no reply is tagged after the reconnect")
     }
 
     func testMissingSavedSessionDirectSyncRestoresSavedViewport() async throws {
