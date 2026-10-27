@@ -78,9 +78,8 @@ final class ConnectionSetupUITests: XCTestCase {
         // stalled the app on a hosted nightly (2026-10-27): from the test
         // screen on, every action waited out XCTest's two 60 s idle waits
         // ("App animations complete notification not received") until the
-        // test hit its 10 minute allowance. Inferred from the logs: no other
-        // test of this class or ConnectionRepairUITests leaves a focused
-        // password field, and none of them stalled.
+        // test hit its 10 minute allowance. Inferred from the logs: the
+        // Repair and Settings tests dismiss it here and never stalled.
         dismissKeyboard(app)
         tapVisible(app.buttons["setup.next"], in: app)
         XCTAssertTrue(app.buttons["setup.test.run"].waitForExistence(timeout: 5))
