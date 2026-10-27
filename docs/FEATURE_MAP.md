@@ -1983,7 +1983,7 @@ widget's and the Share extension's) · README.md
 - The classic drawer reorders only from the sheet: its nested rows are one block each, which a List drag can't move cleanly.
 - Not yet tried on a device: whether the system's lift from a held row and the touch-and-hold menu share the hold as planned.
 
-**Checked:** 2026-10-27, #PRNUM.
+**Checked:** 2026-10-27, #1373.
 
 ## Plan card
 
