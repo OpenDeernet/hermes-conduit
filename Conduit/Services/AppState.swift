@@ -24060,11 +24060,21 @@ final class AppState: ObservableObject {
     /// it. One whose reply was lost after its chat was left may have gone,
     /// so it isn't announced as unsent.
     func composerSubmissionStoppedQuietly(_ context: ComposerSubmissionContext) -> Bool {
-        if let index = composerSubmissionsOfUnknownDelivery.firstIndex(of: context) {
-            composerSubmissionsOfUnknownDelivery.remove(at: index)
-            return false
-        }
+        if takeComposerSubmissionOfUnknownDelivery(context) { return false }
         return !isCurrentComposerSubmission(context)
+    }
+
+    /// The failed send may have reached Hermes: its reply was lost after
+    /// its chat was left. Asked once per failed send.
+    func takeComposerSubmissionOfUnknownDelivery(_ context: ComposerSubmissionContext) -> Bool {
+        guard let index = composerSubmissionsOfUnknownDelivery.firstIndex(of: context) else { return false }
+        composerSubmissionsOfUnknownDelivery.remove(at: index)
+        return true
+    }
+
+    /// A dashboard left or signed out of: nobody asks about its sends again.
+    func forgetComposerSubmissionsOfUnknownDelivery() {
+        composerSubmissionsOfUnknownDelivery.removeAll()
     }
 
     private func isCurrentComposerSubmission(_ context: ComposerSubmissionContext) -> Bool {
@@ -24416,7 +24426,8 @@ final class AppState: ObservableObject {
         let marker = ComposerSendCheck(
             sessionID: context.sessionID,
             viewportTransitionGeneration: context.viewportTransitionGeneration,
-            startsChat: startsChat
+            startsChat: startsChat,
+            earlierNewChat: newChatOpenedSessionID
         )
         composerSendChecks.append(marker)
         defer { composerSendChecks.removeAll { $0.id == marker.id } }
@@ -24427,7 +24438,9 @@ final class AppState: ObservableObject {
     var composerSendIsChecking: Bool {
         composerSendChecks.contains { check in
             if check.startsChat, isStartingNewChat {
-                return activeSessionId == nil || activeSessionId == newChatOpenedSessionID
+                // The chat this check starts, never one an earlier New Chat made.
+                return activeSessionId == nil
+                    || (activeSessionId == newChatOpenedSessionID && activeSessionId != check.earlierNewChat)
             }
             return check.sessionID == activeSessionId
                 && check.viewportTransitionGeneration == chatViewportTransitionGeneration
