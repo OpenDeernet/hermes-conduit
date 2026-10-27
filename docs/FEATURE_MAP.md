@@ -2612,7 +2612,7 @@ captions, the join card's captions, Settings captions, the invite's share messag
 - Agents that aren't Hermes (an A2A member) are left out.
 - An acceptor's Hermes that stays off for more than 7 days while its confirm waits at the mailbox leaves the inviter's side linked until its owner unlinks it (the notifier README says so).
 - Changing the tools rooms may use says the agent stops answering in rooms already started, but not in which.
-- An invite opened from another app while a sheet is already up (classic Settings, say) can't show over it, as a sign-in code link can't: open it again once the sheet is closed.
+- An invite opened from another app while a sheet is already up (classic Settings, say) can't show over it, as a sign-in code link can't: open it again once the sheet is closed. The same goes for an invite's or an approval's card opened by tapping its notification: the tap is used up, so its row in Group Chats is the way back (#1396).
 
 **Checked:** 2026-10-27, #1396 (your agents' approvals in rooms hosted elsewhere: their rows, card, notification tap and banner; a linked member's failed turn says why; #1387's review notes on the join card); #1387 (the invite list, the join card and the invite push's app side), with notifier #425; #1381 (the invite push and quiet room turns); #1368 (New Group Chat with linked people and its waiting room), with notifier #387, #390, #396, #397, #398, #401, #406, #409, #411, #416 and #419.
 
