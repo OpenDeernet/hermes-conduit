@@ -314,6 +314,7 @@ final class GrokLiveSession: GeminiLiveSessionControlling {
     }
 
     private func fail(_ message: String) {
+        finishPendingInput()
         closeConnection()
         state = .failed(message)
     }

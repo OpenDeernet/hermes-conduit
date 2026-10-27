@@ -464,7 +464,7 @@ saved transcript (see Ending a call and what gets saved)
 
 **Code**
 - Gemini and Qwen: `Shared/GeminiLive/GeminiLiveProtocol.swift` (inputTranscription), `Shared/GeminiLive/QwenLiveSocket.swift` (maps Qwen's one completed transcript per item)
-- Grok: `Shared/GrokLive/GrokLiveProtocol.swift` (InputTranscriptStage), `Shared/GrokLive/GrokLiveSession.swift` (pendingInput, finishInput); the Watch runs the same session (`ConduitWatch/WatchDirectCallModel.swift`)
+- Grok: `Shared/GrokLive/GrokLiveProtocol.swift` (InputTranscriptStage), `Shared/GrokLive/GrokLiveSession.swift` (pendingInput, finishInput); the phone's calls, CarPlay and calls from Hermes build it in `Conduit/Services/AppState.swift`, and the Watch runs the same session (`ConduitWatch/WatchDirectCallModel.swift`)
 - Local Live: `Shared/LocalLive/LocalLiveSession.swift`, decoding with Grok's protocol
 - GPT-Live: `Conduit/Voice/GPTLive/GPTLiveProtocol.swift` (inputTranscript deltas, the turn assembler)
 - Classic: `Conduit/Voice/SpeechServerTranscription.swift`
@@ -473,7 +473,7 @@ saved transcript (see Ending a call and what gets saved)
 
 **Rulings**
 - What the controller gets is appended, never replaced, so a mode hands on either deltas (Gemini, GPT-Live) or each utterance once, whole (Qwen, Grok, Local Live).
-- Grok: xAI sends `conversation.item.input_audio_transcription.completed` several times per item, drafts with `status` `in_progress` that rewrite each other, then one `completed`, before the reply's transcript. Only the completed one is kept; drafts are never appended. An item that never gets one keeps its newest draft when the next item starts, the connection is replaced or the call ends. A snapshot with no status goes through once per item, as the Realtime protocol sends it (2026-10-27, #1324).
+- Grok: xAI sends `conversation.item.input_audio_transcription.completed` several times per item, drafts with `status` `in_progress` that rewrite each other, then one `completed`, before the reply's transcript. Only the completed one is kept; drafts are never appended. An item that never gets one keeps its newest draft when the next item starts, the connection is replaced, or the call ends or fails. A snapshot with no status goes through once per item, as the Realtime protocol sends it; with no item id either, every time. A draft with no item id is replaced by the next snapshot with none (2026-10-27, #1347, for #1324).
 - Local Live drops a snapshot its server marks `in_progress` and keeps the rest (2026-10-27, #1324).
 
 **Open gaps**
