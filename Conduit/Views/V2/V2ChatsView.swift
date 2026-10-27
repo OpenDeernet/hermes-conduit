@@ -1947,12 +1947,15 @@ struct V2ChatsView: View, Equatable {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if appState.isProjectEditable(project) {
-                Button(role: .destructive) {
+                // Not a destructive role: that removes the row before the
+                // confirmation is answered, and on a Mac it can blank the list (#1364).
+                Button {
                     Haptics.warning()
                     projectPendingDeletion = project
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
+                .tint(.red)
                 .disabled(appState.isProjectMutationInFlight)
                 Button {
                     Haptics.selection()
@@ -2332,12 +2335,15 @@ private struct V2SessionActions: ViewModifier {
                     .tint(.orange)
                     .disabled(appState.isSessionMutationInFlight(session))
 
-                    Button(role: .destructive) {
+                    // Not a destructive role: that removes the row before the
+                    // confirmation is answered, and on a Mac it can blank the list (#1364).
+                    Button {
                         Haptics.warning()
                         onDelete()
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
+                    .tint(.red)
                     .disabled(appState.isSessionMutationInFlight(session))
                 }
             }
