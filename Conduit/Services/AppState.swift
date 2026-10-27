@@ -3782,6 +3782,12 @@ final class AppState: ObservableObject {
         loadVoiceProfilePreferences(profile: activeProfile).localLiveAgent
     }
 
+    /// The same for `profile`, which a call from Hermes and the voice start
+    /// it asks for both read, so they pick the same voice.
+    func usesLocalLiveAgent(profile: String) -> Bool {
+        loadVoiceProfilePreferences(profile: profile).localLiveAgent
+    }
+
     func setLocalLiveAgent(_ agent: Bool) {
         var preferences = loadVoiceProfilePreferences(profile: activeProfile)
         guard preferences.localLiveAgent != agent else { return }
@@ -34742,7 +34748,7 @@ final class AppState: ObservableObject {
         // model of its own to say outside agent mode: classic voice takes
         // it. In agent mode its fast model says it (#1376).
         if intent.source == .hermesCall, liveEngine == .localLive,
-           !loadVoiceProfilePreferences(profile: targetProfile).localLiveAgent {
+           !usesLocalLiveAgent(profile: targetProfile) {
             liveEngine = nil
         }
         if intent.source == .screenQuestion {
