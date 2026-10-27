@@ -35736,7 +35736,10 @@ final class AppState: ObservableObject {
     private func readAloudGateway(isCurrentFor profile: String) -> Bool {
         guard let gateway = messageReadAloudController.gateway,
               let bridge = dashboardTicketBridge else { return false }
+        // A gateway built before the plugin listed dashboard-profiles names the wrong parameter.
+        let parameter = (gateway as? HermesVoiceGateway)?.profileParameter ?? notifierPlugin.dashboardProfileParameter
         return gateway.profile == profile && readAloudGatewayBridge === bridge
+            && parameter == notifierPlugin.dashboardProfileParameter
     }
 
     /// `speakingAs`: a room bot's profile, so Hermes reads its message with
