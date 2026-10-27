@@ -60,7 +60,8 @@ struct PulseCard: Equatable, Identifiable {
     /// (0.78.3), nil for one swiped away for good.
     var restUntil: Date?
     /// When it was marked done: by the user on the Pulse screen, or by
-    /// Pulse after Do it, once the chat showed it got done.
+    /// Pulse once a chat showed it got done, after Do it or (0.87.0)
+    /// wherever it was done.
     var doneAt: Date?
     /// "user" or "pulse".
     var doneBy: String
@@ -127,6 +128,31 @@ struct PulseCard: Equatable, Identifiable {
 
     /// Done or swiped away: it goes under Done and cleared.
     var isCleared: Bool { doneAt != nil || dismissedAt != nil }
+
+    /// Put away by Not now or Wrong time, and not done meanwhile. One Pulse
+    /// marks done while it rests (0.87.0) doesn't come back at its time, so
+    /// it shows as done, and Undo leaves it put away.
+    var isResting: Bool { dismissedAt != nil && doneAt == nil }
+
+    /// A cleared card's label: what put it away and when it comes back, or,
+    /// done (while it rested too), who saw it done.
+    var clearedTitle: String {
+        guard isResting else {
+            return doneBy == "pulse" ? AppLocalization.string("Done, seen in the chat") : AppLocalization.string("Done")
+        }
+        let away = isAwayForWrongTime ? PulseDownReason.wrongTime.title : AppLocalization.string("Not now")
+        guard let restUntil else { return away }
+        return away + " · " + PulseRest.backText(restUntil)
+    }
+
+    /// What Undo of Done does, for VoiceOver: a card put away stays away;
+    /// one about something Pulse remembers has that thing checked on again;
+    /// any other is back on the list.
+    var undoDoneHint: String {
+        if dismissedAt != nil { return AppLocalization.string("Keeps the card put away") }
+        return itemID != nil ? AppLocalization.string("Pulse checks on it again")
+            : AppLocalization.string("Puts the card back on the list")
+    }
 
     /// Follow-ups and report items take ratings; a whole report or a brief
     /// is Hermes' own reply.

@@ -1044,6 +1044,40 @@ final class PulseFeedTests: XCTestCase {
         XCTAssertTrue(page.cards.allSatisfy(\.isCleared))
     }
 
+    func testACardPulseMarksDoneWhileItRestsShowsAsDone() throws {
+        // Marked done while it's put off, it won't come back at its time: its cleared row says
+        // Done, not when it comes back, and Undo there leaves it put off.
+        let page = try XCTUnwrap(PulseFeedPage(json: json("""
+        {"cards": [
+          {"id": 1, "kind": "followup", "level": "screen", "news": "Call the bank", "item_id": 7, "created_at": 30,
+           "dismissed_at": 60, "rest_until": 90, "done_at": 70, "done_by": "pulse"},
+          {"id": 2, "kind": "followup", "level": "screen", "news": "Book the car", "item_id": 8, "created_at": 30,
+           "dismissed_at": 60, "rest_until": 90},
+          {"id": 3, "kind": "followup", "level": "screen", "news": "Pay the rent", "item_id": 9, "created_at": 30,
+           "done_at": 70, "done_by": "user"},
+          {"id": 4, "kind": "noticed", "topic": "date", "level": "screen", "news": "Concert", "created_at": 30,
+           "done_at": 70, "done_by": "pulse"}
+        ]}
+        """)))
+        let cards = page.cards
+        XCTAssertEqual(cards.map(\.isResting), [false, true, false, false])
+        XCTAssertTrue(cards.allSatisfy(\.isCleared))
+        // In whatever language the test host's app is in.
+        XCTAssertEqual(cards.map(\.clearedTitle), [
+            AppLocalization.string("Done, seen in the chat"),
+            AppLocalization.string("Not now") + " · " + PulseRest.backText(Date(timeIntervalSince1970: 90)),
+            AppLocalization.string("Done"),
+            AppLocalization.string("Done, seen in the chat"),
+        ])
+        // Undo on the done ones (the one only put off has Put back): the one put off stays put
+        // off, a remembered thing is checked on again, and a found item is back on the list.
+        XCTAssertEqual(cards.filter { $0.doneAt != nil }.map(\.undoDoneHint), [
+            AppLocalization.string("Keeps the card put away"),
+            AppLocalization.string("Pulse checks on it again"),
+            AppLocalization.string("Puts the card back on the list"),
+        ])
+    }
+
     func testTheClearedRowSaysWhenAPutOffCardComesBack() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
