@@ -49,7 +49,9 @@ class ReturnKeyTextView: UITextView {
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(returnKeyCommandPressed) {
             // Declining hands Return back to the text system: a newline,
-            // or the IME confirming its candidate.
+            // or the IME confirming its candidate. A Shift the key command
+            // carries counts even when no Shift press reached this view.
+            if (sender as? UIKeyCommand)?.modifierFlags.contains(.shift) == true { return false }
             return returnKeyCommandApplies
         }
         return super.canPerformAction(action, withSender: sender)
@@ -303,6 +305,10 @@ struct ReturnKeyTextEditor: UIViewRepresentable {
         /// A change made elsewhere while the IME was composing. It lands
         /// once the composition ends, never replacing it mid-way.
         private(set) var pendingText: String?
+        /// The text the field last reported. A binding equal to it is that
+        /// report's echo, possibly behind typing still in flight, never a
+        /// change made elsewhere (#333).
+        private var lastReportedText: String?
 
         init(_ parent: ReturnKeyTextEditor) {
             self.parent = parent
@@ -312,7 +318,7 @@ struct ReturnKeyTextEditor: UIViewRepresentable {
         /// clearing the field) goes into the field, the cursor after it.
         /// Internal, with the IME state passed in, for tests.
         func apply(text: String, to textView: UITextView, hasMarkedText: Bool) {
-            guard textView.text != text else { return }
+            guard textView.text != text, text != lastReportedText else { return }
             if hasMarkedText {
                 // The binding also echoes the composition itself; only a
                 // text that isn't the field's is a change made elsewhere.
@@ -337,6 +343,7 @@ struct ReturnKeyTextEditor: UIViewRepresentable {
                 return
             }
             if !hasMarkedText { pendingText = nil }
+            lastReportedText = textView.text
             parent.text = textView.text
             textView.invalidateIntrinsicContentSize()
         }

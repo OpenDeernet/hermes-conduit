@@ -278,6 +278,20 @@ final class ComposerReturnKeyTests: XCTestCase {
         XCTAssertEqual(stored, "typed")
     }
 
+    func testLaggingBindingNeverRewritesTyping() {
+        // The binding still holds the field's last report while a newer
+        // keystroke is in flight: that's an echo, not a change to apply.
+        var stored = ""
+        let coordinator = editorCoordinator(text: Binding(get: { stored }, set: { stored = $0 }))
+        let field = ReturnKeyTextView()
+        field.text = "Hel"
+        coordinator.textDidChange(in: field, hasMarkedText: false)
+        field.text = "Hell"
+
+        coordinator.apply(text: "Hel", to: field, hasMarkedText: false)
+        XCTAssertEqual(field.text, "Hell")
+    }
+
     func testChangeMadeDuringCompositionLandsWhenItEnds() {
         // A quote or dictation write while the IME composes isn't dropped:
         // it waits, then lands once the composition ends.
