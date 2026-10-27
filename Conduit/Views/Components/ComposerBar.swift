@@ -610,7 +610,7 @@ struct ComposerBar: View, Equatable {
                 compressingNotice
             }
 
-            if appState.composerSendIsChecking {
+            if updates.inputs.isCheckingSend {
                 sendingNotice
             }
 
@@ -856,7 +856,7 @@ struct ComposerBar: View, Equatable {
         let isDictating = dictation.isDictating || dictation.isStarting || dictation.isTranscribing
         let turnControl = Self.turnControlExpandsComposer(action: action, restsWhenIdle: restsWhenIdle)
         let hasNotice = showsStateNotice || appState.composerNotice != nil || appState.isCompressingActiveSession
-            || appState.composerSendIsChecking
+            || updates.inputs.isCheckingSend
             || appState.activeChatTakeover != nil || composerErrorMessage != nil
             || !dictationClips.offered(for: dictationClipIdentity, delivering: appState.dictationClipsOnTheirWay).isEmpty
         let pickerUp = showAttachmentMenu || showDocumentPicker || showCamera

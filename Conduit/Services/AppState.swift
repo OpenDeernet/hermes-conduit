@@ -28079,7 +28079,11 @@ final class AppState: ObservableObject {
             await recoverComposerSubmission(using: submissionContext)
             return false
         } catch {
-            guard isCurrentOrAliasedComposerSubmission(submissionContext) else { return false }
+            guard isCurrentOrAliasedComposerSubmission(submissionContext) else {
+                // Its chat was left; the redirect may only have lost its reply.
+                if Self.isAmbiguousPromptDelivery(error) { composerSubmissionsOfUnknownDelivery.append(submissionContext) }
+                return false
+            }
             errorMessage = AppLocalization.string("Could not redirect the active response: \(UserFacingError.message(for: error))")
             await recoverComposerSubmission(using: submissionContext)
             return false

@@ -4047,6 +4047,44 @@ final class AppStateForegroundLifecycleTests: XCTestCase {
         )
     }
 
+    /// #1401: a send whose reply was lost after its chat was left may have
+    /// reached Hermes, so it isn't announced as unsent; one Hermes refused
+    /// outright is.
+    func testLeftChatSendWithLostReplyIsNotCalledUnsent() async {
+        for (lostReply, expectedQuiet) in [(true, false), (false, true)] {
+            let submitGate = LifecycleSuspension()
+            let harness = makeHarness(
+                lifecycleOperations: ChatResumeLifecycleOperations(
+                    sendPrompt: { _, _, _ in
+                        await submitGate.suspend()
+                        if lostReply { throw URLError(.networkConnectionLost) }
+                        throw RpcError(code: 4001, message: "refused")
+                    },
+                    probeActiveSessions: { _ in [] }
+                )
+            )
+            installDisconnectedClient(into: harness)
+            harness.appState.sessions = [session("stored-a"), session("stored-b")]
+            harness.appState.activeSessionId = "stored-a"
+            let context = harness.appState.composerSubmissionContext()
+
+            let submission = Task { @MainActor in
+                await harness.appState.submitComposer(text: "Still there?", context: context)
+            }
+            await submitGate.waitUntilSuspended()
+            harness.appState.activeSessionId = "stored-b"
+            submitGate.resume()
+            let submitted = await submission.value
+
+            XCTAssertFalse(submitted)
+            XCTAssertEqual(
+                harness.appState.composerSubmissionStoppedQuietly(context), expectedQuiet,
+                lostReply ? "A lost reply may mean Hermes has it" : "A refusal is a send that didn't go"
+            )
+            XCTAssertTrue(harness.appState.composerSubmissionStoppedQuietly(context), "Asked once per failed send")
+        }
+    }
+
     func testQueuedPromptOutcomeAdoptsAuthoritativeRunningState() async {
         var submitCount = 0
         let harness = makeHarness(
