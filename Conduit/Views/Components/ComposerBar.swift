@@ -856,6 +856,7 @@ struct ComposerBar: View, Equatable {
         let isDictating = dictation.isDictating || dictation.isStarting || dictation.isTranscribing
         let turnControl = Self.turnControlExpandsComposer(action: action, restsWhenIdle: restsWhenIdle)
         let hasNotice = showsStateNotice || appState.composerNotice != nil || appState.isCompressingActiveSession
+            || appState.composerSendIsChecking
             || appState.activeChatTakeover != nil || composerErrorMessage != nil
             || !dictationClips.offered(for: dictationClipIdentity, delivering: appState.dictationClipsOnTheirWay).isEmpty
         let pickerUp = showAttachmentMenu || showDocumentPicker || showCamera
@@ -1169,6 +1170,7 @@ struct ComposerBar: View, Equatable {
         HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
+                .accessibilityHidden(true)
             Text(AppLocalization.string("Sending…"))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -1178,6 +1180,7 @@ struct ComposerBar: View, Equatable {
         .padding(.top, 10)
         .padding(.bottom, 2)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
         .accessibilityIdentifier("composer.sending")
     }
 

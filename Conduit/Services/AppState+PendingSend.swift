@@ -225,12 +225,14 @@ extension AppState {
             focuses: false,
             pending: nil
         ))
-        guard stoppedQuietly else { return }
-        let onScreen = dashboardID == activeDashboardID
-            && composerDraftKeysAreSameChat(key, durableComposerDraftKeyOnScreen)
-        composerNotice = onScreen
+        // Another dashboard or profile on screen: its composer's notices
+        // are about its own chats.
+        guard stoppedQuietly, dashboardID == activeDashboardID, key.profile == activeProfile else { return }
+        let named = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? AppLocalization.string("New chat") : title
+        composerNotice = composerDraftKeysAreSameChat(key, durableComposerDraftKeyOnScreen)
             ? AppLocalization.string("Your message wasn't sent. It's back in the composer.")
-            : AppLocalization.string("Your message to “\(title)” wasn't sent. It's back in that chat's draft.")
+            : AppLocalization.string("Your message to “\(named)” wasn't sent. It's back in that chat's draft.")
     }
 
     /// The composer put the words back: the waiting message's file goes too.

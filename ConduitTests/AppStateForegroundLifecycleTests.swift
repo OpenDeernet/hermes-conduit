@@ -4022,19 +4022,24 @@ final class AppStateForegroundLifecycleTests: XCTestCase {
         XCTAssertEqual(submitCount, 0)
 
         let key = ComposerDraftKey(profile: harness.appState.activeProfile, sessionID: "stored-a")
-        let dashboardID = UUID()
+        let words = ComposerDraft(text: "Still there?", attachments: [])
+        // From another dashboard: the words go back, and this one's
+        // composer says nothing about them.
+        let otherDashboard = UUID()
         harness.appState.returnFailedComposerSubmission(
-            ComposerDraft(text: "Still there?", attachments: []),
-            key: key,
-            dashboardID: dashboardID,
-            title: "Trip plans",
-            stoppedQuietly: true
+            words, key: key, dashboardID: otherDashboard, title: "Trip plans", stoppedQuietly: true
         )
         let request = harness.appState.composerRestoreRequests.last
         XCTAssertEqual(request?.key, key)
-        XCTAssertEqual(request?.dashboardID, dashboardID)
+        XCTAssertEqual(request?.dashboardID, otherDashboard)
         XCTAssertEqual(request?.draft.text, "Still there?")
         XCTAssertEqual(request?.focuses, false)
+        XCTAssertNil(harness.appState.composerNotice)
+
+        guard let dashboardID = harness.appState.activeDashboardID else { return }
+        harness.appState.returnFailedComposerSubmission(
+            words, key: key, dashboardID: dashboardID, title: "Trip plans", stoppedQuietly: true
+        )
         XCTAssertEqual(
             harness.appState.composerNotice,
             AppLocalization.string("Your message to “\("Trip plans")” wasn't sent. It's back in that chat's draft."),
