@@ -279,6 +279,9 @@ struct GroupChatLifecycleOperations {
     var stop: (@MainActor (HermesClient, String) async throws -> Int)?
     var approve: (@MainActor (HermesClient, String, GroupPendingApproval, String) async throws -> Bool)?
     var disband: (@MainActor (HermesClient, String) async throws -> Void)?
+    /// The plugin's rooms routes (the drafts and the Links), in place of
+    /// the dashboard bridge.
+    var roomRoute: RoomLinksClient.Request?
 
     static let live = GroupChatLifecycleOperations()
 }
@@ -10780,6 +10783,18 @@ final class AppState: ObservableObject {
     private(set) var groupRoomEpoch = 0
     private var groupRoomPollTask: Task<Void, Never>?
 
+    /// A rooms route of the plugin (the drafts, the Links): the injectable
+    /// seam first (tests), then the dashboard bridge.
+    func roomRouteJSON(path: String, method: String, body: [String: Any]?, timeoutMilliseconds: Int?)
+        async throws -> [String: Any] {
+        if let route = groupChatOperations.roomRoute { return try await route(path, method, body, timeoutMilliseconds) }
+        guard let bridge = dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
+        if let timeoutMilliseconds {
+            return try await bridge.requestJSON(path: path, method: method, body: body, timeoutMilliseconds: timeoutMilliseconds)
+        }
+        return try await bridge.requestJSON(path: path, method: method, body: body)
+    }
+
     // Group Chat RPC routing: the injectable seam first (tests), then the
     // production client call.
     private func groupsCapabilities(_ client: HermesClient) async throws -> GroupCapabilities {
@@ -11067,11 +11082,13 @@ final class AppState: ObservableObject {
     }
 
     /// Probe `groups.capabilities` and, when the foundation methods are
-    /// advertised, refresh the room list. Called alongside the bot roster
-    /// refresh; a gateway that lacks the method is a supported outcome, not
-    /// an error. The response is epoch- AND dashboard-fenced: an in-flight
-    /// probe must never resurrect the outgoing server's phase on the new
-    /// dashboard's surface.
+    /// advertised, refresh the room list, then the drafts of rooms with
+    /// people you've linked (not with each room list read, which a room's
+    /// send and poll make). Called alongside the bot roster refresh; a
+    /// gateway that lacks the method is a supported outcome, not an error.
+    /// The response is epoch- AND dashboard-fenced: an in-flight probe must
+    /// never resurrect the outgoing server's phase on the new dashboard's
+    /// surface.
     func refreshGroupChatSupport() async {
         guard let client, isConnected else {
             groupChatPhase = .idle
@@ -11090,6 +11107,7 @@ final class AppState: ObservableObject {
             }
             groupChatPhase = .available
             await refreshGroupRooms()
+            await refreshLinkedRoomDrafts()
         } catch is CancellationError {
             return
         } catch {
@@ -11119,7 +11137,6 @@ final class AppState: ObservableObject {
                 pruneRoomStores(liveRoomIDs: Set(groupRooms.map(\.roomID)))
             }
             await refreshGroupRoomPictures()
-            await refreshLinkedRoomDrafts()
         } catch is CancellationError {
             return
         } catch {
@@ -24817,12 +24834,14 @@ final class AppState: ObservableObject {
         guard bridge === dashboardTicketBridge, generation > notifierPluginStatusAcceptedGeneration,
               state != .unknown else { return }
         notifierPluginStatusAcceptedGeneration = generation
+        let couldInviteLinkedPeople = canInviteLinkedPeople
         // A failed list read keeps what this host's list said before.
         notifierPlugin.hostCopy = state == .predatesCapabilities
             ? hostCopy ?? (notifierPlugin.state == .predatesCapabilities ? notifierPlugin.hostCopy : nil)
             : nil
         notifierPlugin.state = state
         notifierPlugin.runtime = runtime
+        linkedRoomInvitesReported(before: couldInviteLinkedPeople)
         Task { await refreshLatestNotifierPluginVersion() }
         clearSettledNotifierPluginUpdateOutcome()
         // Calls declined or missed while this host was out of reach.
@@ -24857,9 +24876,11 @@ final class AppState: ObservableObject {
         guard state != .unknown else { return }
         notifierPluginStatusGeneration += 1
         notifierPluginStatusAcceptedGeneration = notifierPluginStatusGeneration
+        let couldInviteLinkedPeople = canInviteLinkedPeople
         notifierPlugin.hostCopy = nil
         notifierPlugin.state = state
         notifierPlugin.runtime = NotifierPluginStatus.runtime(from: json)
+        linkedRoomInvitesReported(before: couldInviteLinkedPeople)
         clearSettledNotifierPluginUpdateOutcome()
     }
 

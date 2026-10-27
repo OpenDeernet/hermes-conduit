@@ -123,6 +123,10 @@ struct RoomDraftSheet: View {
                 }
                 actions(draft)
             }
+            .refreshable {
+                await readAgain()
+                _ = settled()
+            }
             .navigationTitle(draft.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -210,7 +214,7 @@ struct RoomDraftSheet: View {
         busy = true
         actionError = nil
         let client = appState.roomDraftsClient
-        Task {
+        Task { @MainActor in
             defer { busy = false }
             do {
                 let started = try await client.start(roomID)
@@ -231,7 +235,7 @@ struct RoomDraftSheet: View {
         busy = true
         actionError = nil
         let client = appState.roomDraftsClient
-        Task {
+        Task { @MainActor in
             defer { busy = false }
             do {
                 let withdrawn = try await client.withdraw(roomID)
@@ -253,21 +257,35 @@ struct RoomDraftSheet: View {
         }
     }
 
-    /// Every 5 s while the sheet is up: answers come in as each person's
-    /// Hermes reads its invite, and a room that started opens once the
-    /// room list has it.
+    /// Every 5 s while the sheet is up, for up to 10 minutes: answers come
+    /// in as each person's Hermes reads its invite, and a room that started
+    /// opens once the room list has it. One that ended won't change. Pull
+    /// to read it again.
     private func follow() async {
-        while !Task.isCancelled {
-            if draft.status == "started", let room = appState.groupRooms.first(where: { $0.roomID == roomID }) {
-                open(room)
-                return
-            }
+        for _ in 0..<120 {
+            guard !Task.isCancelled, !settled() else { return }
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
-            await appState.refreshLinkedRoomDrafts(readingPeople: false)
-            if draft.status == "started" {
-                await appState.refreshGroupRooms()
-            }
+            await readAgain()
+        }
+        _ = settled()
+    }
+
+    /// Opens a room that started once the room list has it. True when
+    /// there's nothing left to wait for: it opened, or the draft ended.
+    private func settled() -> Bool {
+        let draft = self.draft
+        if draft.status == "started", let room = appState.groupRooms.first(where: { $0.roomID == roomID }) {
+            open(room)
+            return true
+        }
+        return draft.status == "ended"
+    }
+
+    private func readAgain() async {
+        await appState.refreshLinkedRoomDrafts(readingPeople: false)
+        if draft.status == "started" {
+            await appState.refreshGroupRooms()
         }
     }
 
@@ -276,7 +294,7 @@ struct RoomDraftSheet: View {
         opening = true
         appState.dismissSidebarDrawer()
         // Not in the sheet's task, which ends with the sheet.
-        Task { await appState.openGroupRoom(room) }
+        Task { @MainActor in await appState.openGroupRoom(room) }
         dismiss()
     }
 }

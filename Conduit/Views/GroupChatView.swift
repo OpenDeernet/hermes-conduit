@@ -1377,7 +1377,7 @@ struct GroupCreateSheet: View {
     @State private var attemptedInputs: GroupCreateAttempt.Inputs?
     /// The picks of a draft that was made while its invites were still
     /// going out: Create again would invite everyone twice.
-    @State private var sendingDraft: String?
+    @State private var sendingDraft: DraftPicks?
     @State private var isCreating = false
 
     /// `preselected`: bots already picked, as from a bot's Groups menu.
@@ -1402,10 +1402,18 @@ struct GroupCreateSheet: View {
         people.filter { selectedPeople.contains($0.id) }
     }
 
-    private var draftPicks: String {
-        let bots = pickedBots.map(\.name).sorted()
-        let links = pickedPeople.map(\.id).sorted()
-        return ([name.trimmingCharacters(in: .whitespacesAndNewlines)] + bots + ["|"] + links).joined(separator: "\n")
+    private struct DraftPicks: Equatable {
+        let name: String
+        let bots: [String]
+        let links: [String]
+    }
+
+    private var draftPicks: DraftPicks {
+        DraftPicks(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            bots: pickedBots.map(\.name).sorted(),
+            links: pickedPeople.map(\.id).sorted()
+        )
     }
 
     private var canCreate: Bool {
@@ -1485,7 +1493,7 @@ struct GroupCreateSheet: View {
                         let links = pickedPeople.map(\.id)
                         guard links.isEmpty else {
                             let picks = draftPicks
-                            Task {
+                            Task { @MainActor in
                                 let outcome = await appState.createLinkedRoomDraft(name: roomName, bots: bots, links: links)
                                 isCreating = false
                                 switch outcome {

@@ -451,4 +451,202 @@ extension GroupChatModelsTests {
         XCTAssertEqual(RoomDraftsClient.createRefusal(for: timedOut),
                        AppLocalization.string("Your Hermes is still sending the invites. The room shows under Group Chats once it has."))
     }
+
+    // MARK: - When the drafts are read
+
+    /// An AppState on defaults of its own, connected to a gateway that
+    /// hosts Group Chats (one room), whose plugin's rooms routes are
+    /// `routes`.
+    @MainActor
+    private func draftsAppState(_ routes: DraftsRoutes) -> AppState {
+        let suite = "GroupChatModelsTests.drafts.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let room = draftsRoom()
+        let methods: Set<String> = [
+            "groups.list", "groups.create", "groups.state", "groups.send", "groups.log", "groups.disband", "groups.stop",
+        ]
+        let operations = GroupChatLifecycleOperations(
+            capabilities: { _ in
+                GroupCapabilities(protocolVersion: 2, driverReady: true, authorityGatewayID: "gw-a", features: [],
+                                  methods: methods, maxLogLimit: 500)
+            },
+            list: { _ in ([room], nil) },
+            state: { _, _ in (room, nil) },
+            log: { _, _, sinceSeq, _ in
+                GroupLogPage(events: [], cursor: sinceSeq, latestSeq: 0, hasMore: false,
+                             authorityGatewayID: "gw-a", authorityEpoch: 1)
+            },
+            send: { _, roomID, _, _, _ in
+                let event = GroupDecoders.event(AnyCodable.from([
+                    "room_id": roomID,
+                    "seq": 1,
+                    "event_id": "srv-1",
+                    "kind": "message.user",
+                    "actor": ["kind": "user", "id": "human"],
+                    "payload": ["text": "hello", "thread_id": "main"],
+                    "created_at": 1.0,
+                ]))!
+                return GroupSendResult(event: event, accepted: true, driverStarted: false)
+            },
+            roomRoute: { path, method, body, timeout in try await routes.answer(path, method, body, timeout) }
+        )
+        return AppState(
+            defaults: defaults,
+            loadSavedConnection: false,
+            clearSessionPresentationCache: {},
+            chatResumeLifecycleOperations: .live,
+            groupChatOperations: operations,
+            sessionPresentationCache: SessionPresentationCache(defaults: defaults)
+        )
+    }
+
+    @MainActor
+    private func draftsConnect(_ appState: AppState) {
+        appState.client = HermesClient(
+            connection: HermesConnection(baseUrl: "https://groups.example", ticket: "groups-test"),
+            profile: "default"
+        )
+        appState.isConnected = true
+        _ = appState.adoptDashboard(forNormalizedURL: "https://groups.example")
+    }
+
+    private func draftsRoom() -> GroupRoom {
+        GroupRoom(
+            roomID: "room-1",
+            name: "Planning",
+            members: [
+                GroupMember(memberID: "researcher", profile: "researcher", handle: "research-buddy",
+                            displayName: "Research Buddy", target: nil, extra: [:]),
+            ],
+            authorityGatewayID: "gw-a",
+            authorityEpoch: 1,
+            revision: 1,
+            createdAt: 0,
+            updatedAt: 0,
+            disbandedAt: nil,
+            latestSeq: 0
+        )
+    }
+
+    /// The plugin's answer once it makes rooms with people you've linked.
+    private var draftsPluginReport: [String: Any] {
+        ["ok": true, "version": "0.99.0", "capabilities": [RoomDraftsClient.capability]]
+    }
+
+    /// Waits until `condition` holds, failing after a few seconds.
+    @MainActor
+    private func draftsWait(
+        _ what: String, until condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line
+    ) async {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !condition(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(condition(), "timed out: \(what)", file: file, line: line)
+    }
+
+    /// A room's send and its polls read the room list, and the drafts
+    /// aren't read with it: Group Chats reads them, so a send never waits
+    /// on them.
+    @MainActor
+    func testOpeningAndSendingInARoomDontReadTheDrafts() async {
+        let routes = DraftsRoutes(drafts: [draftsDraft("conduit-1")])
+        let appState = draftsAppState(routes)
+        draftsConnect(appState)
+        appState.applyNotifierPluginReport(draftsPluginReport)
+        await appState.refreshGroupChatSupport()
+        XCTAssertEqual(routes.draftsReads, 1, "Group Chats reads them")
+        XCTAssertEqual(appState.linkedRoomDraftRows.map(\.id), ["conduit-1"])
+
+        await appState.openGroupRoom(draftsRoom())
+        let sent = await appState.sendGroupRoomMessage("hello")
+        XCTAssertTrue(sent)
+        XCTAssertNil(appState.pendingRoomMessage, "it went")
+        XCTAssertEqual(routes.draftsReads, 1, "the send's room list read doesn't read them")
+        appState.closeGroupRoom()
+    }
+
+    /// Group Chats can be read before the plugin's status comes: the drafts
+    /// are read once it says it makes them.
+    @MainActor
+    func testDraftsAreReadOnceThePluginSaysItMakesThem() async {
+        let routes = DraftsRoutes(drafts: [draftsDraft("conduit-1")])
+        let appState = draftsAppState(routes)
+        draftsConnect(appState)
+        await appState.refreshGroupChatSupport()
+        XCTAssertEqual(appState.groupChatPhase, .available)
+        XCTAssertEqual(routes.draftsReads, 0, "not before the plugin says it makes them")
+
+        appState.applyNotifierPluginReport(draftsPluginReport)
+        await draftsWait("the drafts read", until: { appState.linkedRoomDraftRows.map(\.id) == ["conduit-1"] })
+        XCTAssertEqual(routes.draftsReads, 1)
+    }
+
+    /// A read from before a sign-out answers after the sign-in on the same
+    /// dashboard, whose own read failed: it's dropped, as the room list's
+    /// is, and shows nothing of the signed-out session.
+    @MainActor
+    func testADraftsReadFromBeforeASignOutIsDropped() async {
+        let backend = InMemoryKeychainBackend()
+        KeychainHelper.useBackendForTesting(backend)
+        defer { KeychainHelper.useBackendForTesting(KeychainHelper.SystemKeychainBackend()) }
+        let routes = DraftsRoutes(drafts: [draftsDraft("conduit-1")])
+        routes.holdsFirstRead = true
+        routes.laterReadsFail = true
+        let appState = draftsAppState(routes)
+        draftsConnect(appState)
+        appState.applyNotifierPluginReport(draftsPluginReport)
+        let before = Task { @MainActor in await appState.refreshGroupChatSupport() }
+        await draftsWait("the first read", until: { routes.holding })
+
+        appState.disconnect()
+        draftsConnect(appState)
+        appState.applyNotifierPluginReport(draftsPluginReport)
+        await appState.refreshGroupChatSupport()
+        XCTAssertEqual(routes.draftsReads, 2, "the sign-in's own read, which failed")
+
+        routes.answerHeldRead()
+        await before.value
+        XCTAssertEqual(appState.groupChatPhase, .available)
+        XCTAssertEqual(appState.linkedRoomDraftRows.map(\.id), [])
+    }
+}
+
+/// The plugin's rooms routes behind an AppState: drafts reads are counted,
+/// the first can wait until the test answers it, and Links reads fail.
+@MainActor
+private final class DraftsRoutes {
+    let drafts: [[String: Any]]
+    /// The first drafts read waits until `answerHeldRead()`.
+    var holdsFirstRead = false
+    /// Drafts reads after the first fail.
+    var laterReadsFail = false
+    private(set) var draftsReads = 0
+    private(set) var holding = false
+    private var released = false
+
+    init(drafts: [[String: Any]]) {
+        self.drafts = drafts
+    }
+
+    func answer(_ path: String, _ method: String, _ body: [String: Any]?, _ timeout: Int?) async throws -> [String: Any] {
+        guard path == RoomDraftsClient.path, method == "GET" else { throw URLError(.fileDoesNotExist) }
+        draftsReads += 1
+        if draftsReads == 1, holdsFirstRead {
+            holding = true
+            while !released, !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            holding = false
+        } else if draftsReads > 1, laterReadsFail {
+            throw URLError(.timedOut)
+        }
+        let starts: [String: Any] = ["available": true, "reason": NSNull()]
+        return ["ok": true, "drafts": drafts, "starts": starts]
+    }
+
+    func answerHeldRead() {
+        released = true
+    }
 }

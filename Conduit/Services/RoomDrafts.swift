@@ -355,12 +355,8 @@ extension AppState {
         let dashboard = activeDashboardID
         let parameter = notifierPlugin.roomDashboardProfileParameter
         return RoomDraftsClient(dashboardID: dashboard, profileParameter: parameter) { [weak self] path, method, body, timeout in
-            guard let self, self.activeDashboardID == dashboard,
-                  let bridge = self.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
-            if let timeout {
-                return try await bridge.requestJSON(path: path, method: method, body: body, timeoutMilliseconds: timeout)
-            }
-            return try await bridge.requestJSON(path: path, method: method, body: body)
+            guard let self, self.activeDashboardID == dashboard else { throw DashboardTicketBridgeError.notReady }
+            return try await self.roomRouteJSON(path: path, method: method, body: body, timeoutMilliseconds: timeout)
         }
     }
 
@@ -397,9 +393,11 @@ extension AppState {
 
     /// Reads the drafts, with your Links unless `readingPeople` is false
     /// (a draft's sheet, which reads them every few seconds). A read that
-    /// fails keeps what was read last.
+    /// fails keeps what was read last, and one that a sign-out or another
+    /// dashboard overtook is dropped, as the room list's is.
     func refreshLinkedRoomDrafts(readingPeople: Bool = true) async {
         guard canInviteLinkedPeople, groupChatPhase == .available, isConnected else { return }
+        let epoch = groupRoomEpoch
         let client = roomDraftsClient
         let links = roomLinksClient
         do {
@@ -408,11 +406,19 @@ extension AppState {
             if readingPeople || people == nil, let read = try? await links.list() {
                 people = read.links.filter { $0.status == "linked" }
             }
-            guard activeDashboardID == client.dashboardID else { return }
+            guard groupRoomEpoch == epoch, activeDashboardID == client.dashboardID else { return }
             linkedRoomDrafts = LinkedRoomDrafts(dashboardID: client.dashboardID, list: list, people: people ?? [])
         } catch {
             // The rows stay as they were: a stale row is safer than none.
         }
+    }
+
+    /// The drafts and the people to invite, read once the host's plugin is
+    /// first known to make rooms with people you've linked: Group Chats
+    /// may have been read before its status came.
+    func linkedRoomInvitesReported(before couldInvite: Bool) {
+        guard !couldInvite, canInviteLinkedPeople, groupChatPhase == .available, isConnected else { return }
+        Task { await refreshLinkedRoomDrafts() }
     }
 
     /// A draft that a request just made or answered, in the list it
