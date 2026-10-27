@@ -2607,7 +2607,7 @@ captions, the join card's captions, Settings captions, the invite's share messag
 - On main, Disband's warning says every member's session ends, which holds for rooms of your own agents; the `linked-rooms` branch's says that in a room with other people's agents theirs stay on their hosts.
 - On main a cut-off member shows only as a failed turn (reason code unknown: Hermes has none for it); the `linked-rooms` branch's room screen reads its route status. Deleting an ended room hosted elsewhere from the Chats list comes with the branch's Chats list.
 - On main, approvals for your agents in rooms hosted elsewhere are answered on your own Hermes with `hermes conduit-push rooms approvals`, `approve` and `deny`, or by a call from Hermes about one; the `linked-rooms` branch has their rows and card. The Watch and CarPlay don't list them.
-- The approval rows are read when Group Chats is, not while it's on screen: one answered on another device stays until the next read, and answering it then says it was answered already and drops it.
+- The approval rows are read when Group Chats is, not while it's on screen: one answered on another device stays until the next read, and answering it then says it was answered already and drops it. A read already under way when an answer lands can bring the answered row back the same way, until the next read.
 - Agents that aren't Hermes (an A2A member) are left out.
 - An acceptor's Hermes that stays off for more than 7 days while its confirm waits at the mailbox leaves the inviter's side linked until its owner unlinks it (the notifier README says so).
 - Changing the tools rooms may use says the agent stops answering in rooms already started, but not in which.

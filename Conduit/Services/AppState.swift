@@ -22991,6 +22991,8 @@ final class AppState: ObservableObject {
             traceStage = "room approval check"
             let keys = [sessionKey, target.durableSessionID, target.sessionId].compactMap { $0 }
             if let approval = await roomApproval(matching: keys) {
+                // A newer tap or a reconnect started this route over meanwhile.
+                guard !Task.isCancelled else { return .retry }
                 guard !isVoiceCallInProgress else {
                     showCallRefusal(AppLocalization.string("This approval opens when the call ends."))
                     return callOutcome
