@@ -251,6 +251,8 @@ enum TLSTrustDiagnosis {
             return nil
         }
         let object = value as CFTypeRef
+        // A CF type can't be checked with `as?` (it always succeeds), so the
+        // type ID is the check and the cast after it can't fail.
         guard CFGetTypeID(object) == SecTrustGetTypeID() else { return nil }
         return failure(for: object as! SecTrust)
     }

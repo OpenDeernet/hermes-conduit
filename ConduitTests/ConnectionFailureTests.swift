@@ -243,6 +243,12 @@ final class ConnectionFailureTests: XCTestCase {
         XCTAssertEqual(ConnectionFailureClassifier.classify(bridged), .tlsUntrusted)
     }
 
+    func testPeerTrustAfterTheCertificateExpiredIsADateProblem() throws {
+        let trust = try Self.evaluatedTrust(hostname: "hermes.home.arpa", on: Date(timeIntervalSince1970: 1830000000))
+        let error = URLError(.serverCertificateUntrusted, userInfo: [NSURLErrorFailingURLPeerTrustErrorKey: trust])
+        XCTAssertEqual(ConnectionFailureClassifier.classify(error), .tlsBadDate)
+    }
+
     func testPeerTrustWithAWeakKeyIsNotStandardsCompliant() throws {
         let trust = try Self.evaluatedTrust(hostname: "hermes.home.arpa", certificate: Self.weakKeyCertificate)
         let error = URLError(.serverCertificateUntrusted, userInfo: [NSURLErrorFailingURLPeerTrustErrorKey: trust])
@@ -284,13 +290,16 @@ final class ConnectionFailureTests: XCTestCase {
         "li7/gv0skSi3DfG3E0XFZc1d8hs4S2wkyOWBabyFc5UTJZ1muKuxDs6yq7oBkyN/ygGTOox2TlaS" +
         "7bcXGUqhpE+KZZOnVnR5ZQgKlW8gyT4YFLELv1cf7xA9+3wxNHlB4YM+ep1Jp4Smbg=="
 
-    private static func evaluatedTrust(hostname: String, certificate base64: String = certificate) throws -> SecTrust {
+    private static func evaluatedTrust(
+        hostname: String, certificate base64: String = certificate,
+        on day: Date = Date(timeIntervalSince1970: 1793145600)
+    ) throws -> SecTrust {
         let der = try XCTUnwrap(Data(base64Encoded: base64))
         let certificate = try XCTUnwrap(SecCertificateCreateWithData(nil, der as CFData))
         var trust: SecTrust?
         XCTAssertEqual(SecTrustCreateWithCertificates(certificate, SecPolicyCreateSSL(true, hostname as CFString), &trust), errSecSuccess)
         let evaluated = try XCTUnwrap(trust)
-        SecTrustSetVerifyDate(evaluated, Date(timeIntervalSince1970: 1793145600) as CFDate)
+        SecTrustSetVerifyDate(evaluated, day as CFDate)
         XCTAssertFalse(SecTrustEvaluateWithError(evaluated, nil))
         return evaluated
     }

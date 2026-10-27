@@ -2578,7 +2578,7 @@ hermes-conduit-website)
 - Classification and copy: `Conduit/Services/ConnectionFailure.swift` (ConnectionFailureClassifier, TLSTrustDiagnosis, userTitle, userMessage, helpDestination)
 - Where it lands: `Conduit/Services/ConnectionSetupFlow.swift` (repairPath), `Conduit/Services/ConnectionSetupTest.swift` (ConnectionSetupTestRecoveryPlan)
 - Shown: `Conduit/Views/ConnectionSetupForm.swift`, `Conduit/Views/ConnectionSetupView.swift` (the troubleshooting checks), `Conduit/Voice/Wake/PendingVoiceLaunchPolicy.swift`
-- Tests: `ConduitTests/ConnectionFailureTests.swift`, `ConduitTests/ConnectionSetupTestTests.swift`
+- Tests: `ConduitTests/ConnectionFailureTests.swift`, `ConduitTests/ConnectionSetupTestTests.swift`, `ConduitTests/ConnectionRepairTests.swift`
 
 **Rulings**
 - No TLS validation override: a certificate iOS refuses is never accepted, on any device (Eric, 2026-10-19, issue #129).
