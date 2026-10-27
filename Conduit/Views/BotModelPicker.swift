@@ -60,7 +60,7 @@ struct BotModelPicker: View {
                     .frame(maxWidth: .infinity)
             }
         }
-        .searchable(text: $query, prompt: Text("Search providers or models"))
+        .searchable(text: $query, prompt: Text(AppLocalization.string("Search providers or models")))
         .navigationTitle(AppLocalization.string("Model"))
         .navigationBarTitleDisplayMode(.inline)
         .task {

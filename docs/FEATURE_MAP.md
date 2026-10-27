@@ -1730,7 +1730,7 @@ voice reply model pickers · the Kanban task composer's catalog
 - The bot model picker says "Could not load models." without Try Again.
 - The Kanban composer shows a failed catalog as "No curated model catalog available", whose manual entry still works.
 
-**Checked:** 2026-10-27, at #1334 (the model sheet's loading, failed and empty states unchanged under its new error row); 2026-10-24, at #1190; a reload that lands under unsaved Fallback models edits keeps them at #1191 (#1016 review).
+**Checked:** 2026-10-27, at #1395 (search matches show only once the catalog is in; loading, failed and empty states unchanged, the Kanban composer's included); at #1334 (the model sheet's loading, failed and empty states unchanged under its new error row); 2026-10-24, at #1190; a reload that lands under unsaved Fallback models edits keeps them at #1191 (#1016 review).
 
 ## The Model sheet's settings
 
@@ -1769,9 +1769,11 @@ same model and the pick switches to that provider's route.
 
 **Siblings:** the model sheet (iPhone, iPad and Mac) · a bot's model
 picker · the Kanban task's model override · the model sheet's Edit
-(visibility) search · the Model page's Default, Delegate and Fallback model
-editors and the voice job and voice reply model pickers (not needed: the
-provider is picked first, or the menu row already reads "model · provider")
+(visibility) search (not needed: its matches sit under their provider's name)
+· the Model page's Default, Delegate and Fallback model editors and the voice
+job and voice reply model pickers (not needed: the provider is picked first,
+or the menu row already reads "model · provider") · Text (not needed: no
+README, docs or Settings caption describes the pickers)
 
 **Code**
 - Matching and the result row: `Conduit/Views/ModelSearch.swift` (ModelSearchQuery, modelSearchMatches, modelSearchHighlight, modelSearchFocusesOnOpen, ModelSearchResultText)

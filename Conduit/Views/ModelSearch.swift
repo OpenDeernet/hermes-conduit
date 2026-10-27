@@ -58,18 +58,11 @@ func modelSearchHighlight(_ index: Int, moving step: Int, count: Int) -> Int {
 /// Whether a picker's search field takes focus when it opens: on a Mac or
 /// with a hardware keyboard, where typing comes first. A touch-only phone
 /// keeps its keyboard down, since the sheet is often opened for reasoning.
-func modelSearchFocusesOnOpen(onMac: Bool, hardwareKeyboard: Bool) -> Bool {
+func modelSearchFocusesOnOpen(
+    onMac: Bool = ProcessInfo.processInfo.isiOSAppOnMac,
+    hardwareKeyboard: Bool = GCKeyboard.coalesced != nil
+) -> Bool {
     onMac || hardwareKeyboard
-}
-
-extension ModelSearchQuery {
-    /// `modelSearchFocusesOnOpen` for this device.
-    static var focusesOnOpen: Bool {
-        modelSearchFocusesOnOpen(
-            onMac: ProcessInfo.processInfo.isiOSAppOnMac,
-            hardwareKeyboard: GCKeyboard.coalesced != nil
-        )
-    }
 }
 
 /// A search result's text: the model, then the provider serving it.

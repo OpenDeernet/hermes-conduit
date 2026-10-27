@@ -330,7 +330,7 @@ struct ModelPickerView: View {
             // On a Mac or with a hardware keyboard, typing a model's name
             // comes first. Asked again once the sheet settles, since a focus
             // request made while it slides in can be dropped.
-            keyboardDriven = ModelSearchQuery.focusesOnOpen
+            keyboardDriven = modelSearchFocusesOnOpen()
             guard keyboardDriven else { return }
             searchFocused = true
             try? await Task.sleep(for: .milliseconds(400))
@@ -391,7 +391,7 @@ struct ModelPickerView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            TextField("Search providers or models", text: $searchQuery)
+            TextField(AppLocalization.string("Search providers or models"), text: $searchQuery)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
@@ -421,7 +421,15 @@ struct ModelPickerView: View {
 
     private func moveHighlight(_ step: Int) -> KeyPress.Result {
         guard keyboardDriven, searching else { return .ignored }
-        highlightedMatch = modelSearchHighlight(highlightedMatch, moving: step, count: searchMatches.count)
+        let matches = searchMatches
+        highlightedMatch = modelSearchHighlight(highlightedMatch, moving: step, count: matches.count)
+        // The highlight is only drawn, so VoiceOver hears which match
+        // Return will pick.
+        if matches.indices.contains(highlightedMatch) {
+            let match = matches[highlightedMatch]
+            let spoken: String = "\(match.model.id), \(match.provider.title)"
+            AccessibilityNotification.Announcement(spoken).post()
+        }
         return .handled
     }
 

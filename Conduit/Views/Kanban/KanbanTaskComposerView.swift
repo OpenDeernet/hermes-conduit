@@ -481,7 +481,7 @@ struct KanbanModelOverrideSheet: View {
                     customEntrySection
                 }
             }
-            .searchable(text: $query, prompt: Text("Search providers or models"))
+            .searchable(text: $query, prompt: Text(AppLocalization.string("Search providers or models")))
             .navigationTitle("Model override")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -509,6 +509,7 @@ struct KanbanModelOverrideSheet: View {
     /// often serve the same model.
     private var searchMatches: [KanbanModelSearchMatch] {
         let search = ModelSearchQuery(query)
+        guard !search.isEmpty else { return [] }
         return providers.flatMap { provider in
             provider.models
                 .filter { search.matches([$0, provider.slug, provider.displayName]) }
