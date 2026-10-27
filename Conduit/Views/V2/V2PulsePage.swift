@@ -1428,13 +1428,18 @@ struct V2PulsePage: View {
                 await load()
                 guard appState.activeDashboardID == dashboard,
                       let settled = page?.cards.first(where: { $0.id == card.id })?.proposal else { return }
-                if settled.isInFlight, outcome != .synced, outcome != .off {
+                if !settled.isInFlight {
+                    AccessibilityNotification.Announcement(settled.stateText).post()
+                } else if outcome == .off {
+                    // This phone never gets it: the device sharing the calendar does.
+                    showError(AppLocalization.string(
+                        "This iPhone doesn't share its calendar with Hermes, so the change waits for a device that does."))
+                } else if outcome != .synced {
                     // Still Adding… because this phone's pass didn't get the change, not just slow.
                     showError(AppLocalization.string(
                         "This iPhone couldn't get the change from Hermes yet. Conduit tries again the next time it syncs with Hermes."))
-                } else {
-                    AccessibilityNotification.Announcement(settled.stateText).post()
                 }
+                // Synced and still Adding…: the label says so, and the next load settles it.
             } catch {
                 guard appState.activeDashboardID == dashboard else { return }
                 showError(PulseRefusal.message(for: error))

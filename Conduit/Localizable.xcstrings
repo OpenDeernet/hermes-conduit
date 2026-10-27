@@ -370825,6 +370825,88 @@
           }
         }
       }
+    },
+    "This iPhone doesn't share its calendar with Hermes, so the change waits for a device that does." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses iPhone teilt seinen Kalender nicht mit Hermes, daher wartet die Änderung auf ein Gerät, das ihn teilt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este iPhone no comparte su calendario con Hermes, así que el cambio espera a un dispositivo que sí lo comparta."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet iPhone ne partage pas son calendrier avec Hermes : la modification attend un appareil qui le partage."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone ini tidak membagikan kalendernya dengan Hermes, jadi perubahan ini menunggu perangkat yang membagikannya."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo iPhone non condivide il suo calendario con Hermes, quindi la modifica attende un dispositivo che lo condivida."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneはカレンダーをHermesと共有していないため、変更は共有しているデバイスを待ちます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 iPhone은 캘린더를 Hermes와 공유하지 않아서, 변경 사항은 공유하는 기기를 기다려요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ten iPhone nie udostępnia swojego kalendarza Hermesowi, więc zmiana czeka na urządzenie, które to robi."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este iPhone não compartilha o calendário com o Hermes, então a alteração espera um dispositivo que compartilhe."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этот iPhone не делится календарём с Hermes, поэтому изменение ждёт устройство, которое делится."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu iPhone takvimini Hermes ile paylaşmıyor, bu yüzden değişiklik paylaşan bir cihazı bekliyor."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 iPhone 没有与 Hermes 共享日历，因此这项更改会等待一台共享日历的设备。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這部 iPhone 沒有與 Hermes 分享行事曆，因此這項變更會等待一部有分享行事曆的裝置。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
