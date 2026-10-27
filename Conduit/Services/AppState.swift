@@ -2252,7 +2252,10 @@ final class AppState: ObservableObject {
     @Published var composerRestoreRequests: [ComposerRestoreRequest] = []
     /// A composer send still checking Hermes before its message shows: the
     /// composer says it's sending meanwhile (#1401).
-    @Published private(set) var composerSendCheck: ComposerSendCheck?
+    @Published private(set) var composerSendChecks: [ComposerSendCheck] = []
+    /// Sends whose chat was left while their reply was lost: Hermes may
+    /// have them, so their words come back without an "unsent" notice.
+    private var composerSubmissionsOfUnknownDelivery: [ComposerSubmissionContext] = []
     /// Why a waiting message went back to a draft, until it's dismissed or
     /// the composer is used.
     @Published var composerNotice: String? {
@@ -24052,10 +24055,16 @@ final class AppState: ObservableObject {
         )
     }
 
-    /// The composer's send still belongs to the chat on screen: a failed
-    /// one that doesn't has said nothing about it.
-    func composerSubmissionIsCurrent(_ context: ComposerSubmissionContext) -> Bool {
-        isCurrentComposerSubmission(context)
+    /// A failed send that said nothing: its chat was left (or the
+    /// connection changed) before Hermes refused it, and Hermes didn't get
+    /// it. One whose reply was lost after its chat was left may have gone,
+    /// so it isn't announced as unsent.
+    func composerSubmissionStoppedQuietly(_ context: ComposerSubmissionContext) -> Bool {
+        if let index = composerSubmissionsOfUnknownDelivery.firstIndex(of: context) {
+            composerSubmissionsOfUnknownDelivery.remove(at: index)
+            return false
+        }
+        return !isCurrentComposerSubmission(context)
     }
 
     private func isCurrentComposerSubmission(_ context: ComposerSubmissionContext) -> Bool {
@@ -24214,7 +24223,7 @@ final class AppState: ObservableObject {
         // behind it: the first message starts one, as New Chat would, and
         // goes into it rather than nowhere.
         if composerSubmissionStartsChat(text: text, attachments: attachments, context: submissionContext) {
-            guard let started = await checkingBeforeSend(submissionContext, {
+            guard let started = await checkingBeforeSend(submissionContext, startsChat: true, {
                 await startChatForComposerSubmission()
             }) else { return false }
             submissionContext = started
@@ -24397,26 +24406,32 @@ final class AppState: ObservableObject {
     /// dropped connection it can take seconds, and the field is empty by
     /// then: without a word from the composer the message looked as if it
     /// went nowhere, and leaving the chat to retry dropped it (#1401).
+    /// `startsChat`: the check is starting the chat from the empty canvas,
+    /// which opens a new viewport of its own on the way.
     private func checkingBeforeSend<T>(
         _ context: ComposerSubmissionContext,
+        startsChat: Bool = false,
         _ check: () async -> T
     ) async -> T {
         let marker = ComposerSendCheck(
             sessionID: context.sessionID,
-            viewportTransitionGeneration: context.viewportTransitionGeneration
+            viewportTransitionGeneration: context.viewportTransitionGeneration,
+            startsChat: startsChat
         )
-        composerSendCheck = marker
-        defer {
-            if composerSendCheck?.id == marker.id { composerSendCheck = nil }
-        }
+        composerSendChecks.append(marker)
+        defer { composerSendChecks.removeAll { $0.id == marker.id } }
         return await check()
     }
 
     /// The chat on screen has a send still checking Hermes.
     var composerSendIsChecking: Bool {
-        guard let check = composerSendCheck else { return false }
-        return check.sessionID == activeSessionId
-            && check.viewportTransitionGeneration == chatViewportTransitionGeneration
+        composerSendChecks.contains { check in
+            if check.startsChat, isStartingNewChat {
+                return activeSessionId == nil || activeSessionId == newChatOpenedSessionID
+            }
+            return check.sessionID == activeSessionId
+                && check.viewportTransitionGeneration == chatViewportTransitionGeneration
+        }
     }
 
     /// A typed message while a turn runs, by `mode`: into the turn, as a
@@ -25792,7 +25807,11 @@ final class AppState: ObservableObject {
                 await recoverComposerSubmission(using: submissionContext)
                 return false
             }
-            guard isCurrentComposerSubmission(submissionContext) else { return false }
+            guard isCurrentComposerSubmission(submissionContext) else {
+                // Its chat was left; the reply may only have been lost.
+                if Self.isAmbiguousPromptDelivery(error) { composerSubmissionsOfUnknownDelivery.append(submissionContext) }
+                return false
+            }
             if Self.isAmbiguousPromptDelivery(error) {
                 lifecycleLog.notice(
                     "prompt.submit ambiguous (\(error.localizedDescription, privacy: .private)); querying authoritative state session=\(sessionId, privacy: .private(mask: .hash))"
@@ -27949,7 +27968,12 @@ final class AppState: ObservableObject {
             // A spoken steer that fails is dropped by Voice; there is no
             // composer draft to recover or banner to show.
             guard surfacesFailure,
-                  isCurrentOrAliasedComposerSubmission(submissionContext) else { return false }
+                  isCurrentOrAliasedComposerSubmission(submissionContext) else {
+                if surfacesFailure, Self.isAmbiguousPromptDelivery(error) {
+                    composerSubmissionsOfUnknownDelivery.append(submissionContext)
+                }
+                return false
+            }
             errorMessage = UserFacingError.message(for: error)
             await recoverComposerSubmission(using: submissionContext)
             return false

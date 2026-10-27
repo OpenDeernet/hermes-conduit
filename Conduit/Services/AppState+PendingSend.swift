@@ -35,6 +35,8 @@ struct ComposerSendCheck: Equatable, Identifiable {
     let id = UUID()
     let sessionID: String?
     let viewportTransitionGeneration: UInt64
+    /// Starting the chat from the empty canvas.
+    let startsChat: Bool
 }
 
 /// The chat the composer types into right now.

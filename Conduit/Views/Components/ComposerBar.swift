@@ -1640,7 +1640,7 @@ struct ComposerBar: View, Equatable {
                     for: submittedDraftKey,
                     dashboardID: submittedDashboardID,
                     chatTitle: submittedChatTitle,
-                    stoppedQuietly: !appState.composerSubmissionIsCurrent(submissionContext),
+                    stoppedQuietly: appState.composerSubmissionStoppedQuietly(submissionContext),
                     clearCount: submittedClearCount
                 )
                 Haptics.error()
