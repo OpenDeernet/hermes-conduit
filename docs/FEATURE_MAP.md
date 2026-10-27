@@ -1563,15 +1563,15 @@ CHANGELOG
 
 **Rulings**
 - Only a phase, a tool category from a fixed list, a tool count and a context percentage cross the relay; the chat's title stays on the phone (#605, notifier #111).
-- A turn's end reaches its card three ways: the stream while Conduit runs, the plugin through the relay, and the live registry once Conduit is back. The relay keeps an end reported before the phone registered the card, and ends a card registered later if it started before that end, never the chat's next turn's (2026-10-27, issue #1361, #NNNN).
-- A turn that a compaction moves to a new session id reports and ends under the id the card was registered with (2026-10-27, #NNNN).
-- The card's registration runs as a background task, so it finishes when Conduit leaves the screen right after sending, and one that didn't reach the relay is sent again when Conduit is next on screen (2026-10-27, #NNNN).
+- A turn's end reaches its card three ways: the stream while Conduit runs, the plugin through the relay, and the live registry once Conduit is back. The relay keeps an end reported before the phone registered the card, and ends a card registered later if it started before that end, never the chat's next turn's (2026-10-27, issue #1361, #1374).
+- A turn that a compaction moves to a new session id reports and ends under the id the card was registered with (2026-10-27, #1374).
+- The card's registration runs as a background task, so it finishes when Conduit leaves the screen right after sending, and one that didn't reach the relay is sent again when Conduit is next on screen (2026-10-27, #1374).
 
 **Open gaps**
 - The relay keeps registrations and unwatched ends in memory: a relay restart during a turn leaves its card to Conduit's next time on screen, or to iOS's 8 hours.
 - The live registry check reads the profile and dashboard on screen, so a card from another one ends only by push.
 
-**Checked:** 2026-10-27, #NNNN.
+**Checked:** 2026-10-27, #1374.
 
 ## Large code blocks in messages
 
