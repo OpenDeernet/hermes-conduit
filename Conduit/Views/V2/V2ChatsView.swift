@@ -279,6 +279,7 @@ struct V2ChatsView: View, Equatable {
     private let appState: AppState
     @StateObject private var updates: V2ShownUpdates
     @Environment(\.v2Shell) private var shell
+    @Environment(\.v2OpenBeside) private var openBeside
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var searchText = ""
@@ -435,6 +436,11 @@ struct V2ChatsView: View, Equatable {
     /// list beside it.
     private var listInView: Bool { appState.showSidebar || shell.isSplit }
 
+    /// The list, or a project's page pushed over it, shows on the selected
+    /// tab: their rows' Running and Needs approval follow the live
+    /// registry. Split, a project's page stays beside the open chat.
+    private var showsLiveRows: Bool { shell.isTabActive && shell.showsChatRows && listInView }
+
     /// Projects belong to one profile, so All shows chats only.
     private var showingProjects: Bool { sessionPresentationRaw == "projects" && !appState.isAllProfilesChatsOn }
 
@@ -580,12 +586,12 @@ struct V2ChatsView: View, Equatable {
             await appState.loadSessionCatalogIfNeeded()
         }
         // Running and Needs approval follow the gateway's live registry
-        // while the list is on screen; a hidden tab or a conversation
-        // pushed over the list stops polling. The poll slows down while
-        // nothing on the list changes (PollCadence). Split, the list stays
-        // on screen beside the open chat.
-        .task(id: "\(appState.activeProfile)|\(isShown)|\(listInView)") {
-            guard isShown, listInView else { return }
+        // while the list or a project's page is on screen; a hidden tab or
+        // a conversation pushed over them stops polling. The poll slows
+        // down while nothing on the list changes (PollCadence). Split, the
+        // list column stays on screen beside the open chat (#1353).
+        .task(id: "\(appState.activeProfile)|\(showsLiveRows)") {
+            guard showsLiveRows else { return }
             await appState.runChatListPolling()
         }
         // All reads every profile's chats on its own, slower poll.
@@ -1652,8 +1658,11 @@ struct V2ChatsView: View, Equatable {
                 snippet: row.hit.snippet,
                 isUnread: row.session.map { appState.isSessionUnread($0) } ?? false,
                 isStarred: row.session.map { appState.isSessionStarred($0) } ?? false,
-                isSelected: row.openID == appState.activeSessionId && row.hit.profile == nil
-                    && !(row.session.map(appState.isOtherProfileRow) ?? false)
+                selection: .chat(
+                    isActive: row.openID == appState.activeSessionId && row.hit.profile == nil
+                        && !(row.session.map(appState.isOtherProfileRow) ?? false),
+                    beside: openBeside
+                )
             )
         }
         .buttonStyle(.plain)
@@ -1947,12 +1956,15 @@ struct V2ChatsView: View, Equatable {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if appState.isProjectEditable(project) {
-                Button(role: .destructive) {
+                // Not a destructive role: that removes the row before the
+                // confirmation is answered, and on a Mac it can blank the list (#1364).
+                Button {
                     Haptics.warning()
                     projectPendingDeletion = project
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
+                .tint(.red)
                 .disabled(appState.isProjectMutationInFlight)
                 Button {
                     Haptics.selection()
@@ -2070,6 +2082,7 @@ private struct V2ChatsRow: View {
     @EnvironmentObject private var updates: V2ShownUpdates
     private var appState: AppState { updates.appState }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.v2OpenBeside) private var openBeside
     let item: V2ChatsListItem
     /// The project a listed project chat sits in, named before its preview.
     let projectTitle: String?
@@ -2125,7 +2138,7 @@ private struct V2ChatsRow: View {
                 status: appState.v2RowStatus(for: session),
                 isUnread: signals.isUnread,
                 isStarred: appState.isSessionStarred(session),
-                isSelected: session.id == appState.activeSessionId && !appState.isOtherProfileRow(session),
+                selection: selection(session),
                 icon: appState.sessionCategory(for: session),
                 hasNestBelow: hasChildren,
                 profileBadge: profileBadge(session)
@@ -2133,6 +2146,7 @@ private struct V2ChatsRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint(AppLocalization.string("Swipe or touch and hold for conversation actions."))
+        .v2SelectedTrait(selection(session))
         .v2ListRow(divider: !hasChildren, dividerInset: V2SessionRow.iconTextInset)
         .sessionActions(
             appState: appState,
@@ -2185,6 +2199,7 @@ private struct V2ChatsRow: View {
         let status = appState.v2RowStatus(for: session)
         let isUnread = appState.isSessionUnread(session)
         let isStarred = appState.isSessionStarred(session)
+        let rowSelection = selection(session, faintAlone: false)
         return Button {
             Haptics.light()
             appState.dismissSidebarDrawer()
@@ -2215,6 +2230,7 @@ private struct V2ChatsRow: View {
             }
             .padding(.trailing, 16)
             .frame(minHeight: 36)
+            .v2RowSelection(rowSelection)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -2230,6 +2246,18 @@ private struct V2ChatsRow: View {
         ].compactMap { $0 }.joined(separator: ", ")))
         .accessibilityHint(AppLocalization.string("Swipe or touch and hold for conversation actions."))
         .accessibilityAddTraits(.isButton)
+        .v2SelectedTrait(rowSelection)
+    }
+
+    /// The open chat's mark: a phone's faint shade, or beside the chat on a
+    /// split window the highlight. Another profile's row in All is never
+    /// the open chat, whatever its id.
+    private func selection(_ session: SessionSummary, faintAlone: Bool = true) -> V2RowSelection {
+        .chat(
+            isActive: session.id == appState.activeSessionId && !appState.isOtherProfileRow(session),
+            beside: openBeside,
+            faintAlone: faintAlone
+        )
     }
 }
 
@@ -2332,12 +2360,15 @@ private struct V2SessionActions: ViewModifier {
                     .tint(.orange)
                     .disabled(appState.isSessionMutationInFlight(session))
 
-                    Button(role: .destructive) {
+                    // Not a destructive role: that removes the row before the
+                    // confirmation is answered, and on a Mac it can blank the list (#1364).
+                    Button {
                         Haptics.warning()
                         onDelete()
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
+                    .tint(.red)
                     .disabled(appState.isSessionMutationInFlight(session))
                 }
             }

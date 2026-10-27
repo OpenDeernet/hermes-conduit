@@ -108,6 +108,9 @@ struct V2ShellContext: Equatable {
         var canSplit = false
         /// Split, with a chat open beside this tab's list.
         var hasChatBeside = false
+        /// The tab's list column shows chat rows: its list or a project's
+        /// page is on top (`V2SplitLayout.showsChatRows`).
+        var showsChatRows = true
         /// That chat shows its own voice button (a group room has none),
         /// so the list column leaves voice to it.
         var hasChatVoiceBeside = false
@@ -151,6 +154,11 @@ struct V2ShellContext: Equatable {
     var hasChatBeside: Bool {
         get { values.hasChatBeside }
         set { values.hasChatBeside = newValue }
+    }
+
+    var showsChatRows: Bool {
+        get { values.showsChatRows }
+        set { values.showsChatRows = newValue }
     }
 
     var hasChatVoiceBeside: Bool {
@@ -580,10 +588,13 @@ struct V2Shell: View {
                     let chatBeside = split && chatShown && path(of: tab).contains(.conversation)
                     let chatVoiceBeside = chatShown && V2SplitLayout.hasChatVoiceBeside(split: split, path: path(of: tab), inRoom: appState.activeRoomSurface != nil)
                     tabRoot(tab, split: split, canSplit: canSplit)
+                        // Split, the list marks what shows beside it.
+                        .environment(\.v2OpenBeside, split ? V2SplitLayout.openBeside(chatBeside: chatBeside, roomID: appState.activeRoomSurface?.room.roomID) : nil)
                         .transformEnvironment(\.v2Shell) {
                             $0.isTabActive = isSelected
                             $0.isRootCovered = rootCovered
                             $0.hasChatBeside = chatBeside
+                            $0.showsChatRows = V2SplitLayout.showsChatRows(split: split, path: path(of: tab))
                             $0.hasChatVoiceBeside = chatVoiceBeside
                         }
                         // The opened tab shows at once and the one left
@@ -968,6 +979,24 @@ enum V2SplitLayout {
         }
     }
 
+    /// Whether the tab's list column shows chat rows: the list, or a
+    /// project's page, on top of its stack. Split, a chat beside the column
+    /// doesn't cover it; one column, the chat covers whatever is under it.
+    static func showsChatRows(split: Bool, path: [V2Route]) -> Bool {
+        switch (split ? listRoutes(path) : path).last {
+        case nil, .project?: return true
+        case .conversation?, .artifacts?: return false
+        }
+    }
+
+    /// What the list marks as open beside it: a group room takes the
+    /// chat's place without changing the open chat, so its row is marked
+    /// rather than the chat's.
+    static func openBeside(chatBeside: Bool, roomID: String?) -> V2OpenBeside {
+        guard chatBeside else { return .nothing }
+        return roomID.map(V2OpenBeside.room) ?? .chat
+    }
+
     static func listRoutes(_ path: [V2Route]) -> [V2Route] {
         path.filter { $0 != .conversation }
     }
@@ -975,6 +1004,91 @@ enum V2SplitLayout {
     static func tabRoutes(listing routes: [V2Route], keepsConversation: Bool) -> [V2Route] {
         let list = listRoutes(routes)
         return keepsConversation ? list + [.conversation] : list
+    }
+}
+
+/// What a split window's chat column shows, for the list beside it to
+/// mark (#1363). The environment holds nil off a split window, where the
+/// list never shows beside what it opened.
+enum V2OpenBeside: Equatable {
+    /// The placeholder, or Settings in the chat's column.
+    case nothing
+    /// The open chat (`activeSessionId`), a Bot Chat included.
+    case chat
+    /// A group room, by its id.
+    case room(String)
+}
+
+private struct V2OpenBesideKey: EnvironmentKey {
+    static let defaultValue: V2OpenBeside? = nil
+}
+
+extension EnvironmentValues {
+    var v2OpenBeside: V2OpenBeside? {
+        get { self[V2OpenBesideKey.self] }
+        set { self[V2OpenBesideKey.self] = newValue }
+    }
+}
+
+/// How a list row marks the conversation it opens.
+enum V2RowSelection: Equatable {
+    case none
+    /// One column: the faint shade a phone's Chats row has long kept for
+    /// the open chat.
+    case faint
+    /// Beside the open chat on a split window: picked out at a glance, so
+    /// nobody has to match the chat's title to the list (#1363).
+    case open
+
+    /// A chat's row. `isActive`: it is the open chat. `faintAlone`: a row
+    /// that keeps the faint shade in one column (Chats and project rows;
+    /// a bot's row never had one).
+    static func chat(isActive: Bool, beside: V2OpenBeside?, faintAlone: Bool = true) -> V2RowSelection {
+        guard let beside else { return isActive && faintAlone ? .faint : .none }
+        return isActive && beside == .chat ? .open : .none
+    }
+
+    /// A group room's row, marked only while the room shows beside it.
+    static func room(_ roomID: String, beside: V2OpenBeside?) -> V2RowSelection {
+        beside == .room(roomID) ? .open : .none
+    }
+}
+
+/// The open conversation's row beside the list: a rounded accent tint with
+/// a fine accent edge, as the persistent sidebar marks it. A shape behind
+/// the row, so it never reads as the gold unread dot or the Running
+/// spinner on it.
+struct V2OpenRowHighlight: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(Color.conduitAccent.opacity(0.13))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.conduitAccent.opacity(0.32), lineWidth: 1)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .accessibilityHidden(true)
+    }
+}
+
+extension View {
+    /// A list row's background for its selection. The row adds VoiceOver's
+    /// Selected to its own element (`v2SelectedTrait`).
+    func v2RowSelection(_ selection: V2RowSelection) -> some View {
+        background {
+            switch selection {
+            case .open: V2OpenRowHighlight()
+            case .faint: Color.primary.opacity(0.05)
+            case .none: EmptyView()
+            }
+        }
+    }
+
+    /// Selected, for VoiceOver, on the open conversation's row beside the
+    /// list. After the row's own accessibility element.
+    func v2SelectedTrait(_ selection: V2RowSelection) -> some View {
+        accessibilityAddTraits(selection == .open ? .isSelected : [])
     }
 }
 
