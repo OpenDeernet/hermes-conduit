@@ -1458,7 +1458,7 @@ background · a failed sync's retry · the backoff itself
 - Reconnects: `Conduit/Services/AppState.swift` (handleDisconnect, scheduleReconnect, scheduleReconnectAfterFailedSync, networkPathChanged, reconnectNowForWaitingVoice, recoverTransportForCarPlayIfNeeded, handleCarPlaySceneWillEnterForeground, checkQuietTransportOffScreen, clientForVoiceRequest)
 - A call's requests: `Conduit/Services/AppState.swift` (voiceBackgroundJobSupervisor's backend), `Conduit/Services/AppState+SpokenApprovals.swift` (respondToApprovalByVoice, respondToClarifyByVoice)
 - Network path: `Conduit/Services/PowerPolicy.swift` (pathSatisfied), `Conduit/Services/HermesClient.swift` (networkPathChanged, the ping of an open socket, checkLiveness)
-- Tests: `ConduitTests/ReconnectBackoffTests.swift`, `ConduitTests/CarPlayTransportRecoveryTests.swift`
+- Tests: `ConduitTests/ReconnectBackoffTests.swift`, `ConduitTests/CarPlayTransportRecoveryTests.swift`, `ConduitTests/HermesClientTests.swift` (the liveness check)
 
 **Rulings**
 - A reconnect that skips the backoff needs a usable network path: without one no attempt can work, and the path coming back reconnects at once anyway. A drop mid-reply and someone waiting by voice both check it (#1060; #846 follow-up, #1191).
