@@ -341,6 +341,8 @@ struct ModelPickerView: View {
             searchFocused = true
         }
         .onChange(of: searchQuery) { _, _ in highlightedMatch = 0 }
+        // Edit can hide the highlighted match.
+        .onChange(of: editingVisibility) { _, _ in highlightedMatch = 0 }
         .onChange(of: searchFocused) { _, focused in
             if focused { searchWasFocused = true }
         }
