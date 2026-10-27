@@ -4192,7 +4192,8 @@ final class AppState: ObservableObject {
                 return (created.sessionId, created.storedSessionId)
             },
             setTitle: { [weak self] sessionID, title in
-                try? await self?.client?.setSessionTitle(sessionID, title: title)
+                guard let client = try? await self?.clientForVoiceRequest() else { return }
+                try? await client.setSessionTitle(sessionID, title: title)
             },
             submit: { [weak self] sessionID, text in
                 guard let self else { throw HermesError.notConnected }
@@ -4200,7 +4201,8 @@ final class AppState: ObservableObject {
                 _ = try await client.sendPrompt(sessionID, text: text)
             },
             cancel: { [weak self] sessionID in
-                guard let client = self?.client else { throw HermesError.notConnected }
+                guard let self else { throw HermesError.notConnected }
+                let client = try await self.clientForVoiceRequest()
                 try await client.cancel(sessionID)
             },
             liveSessions: { [weak self] targetProfile in

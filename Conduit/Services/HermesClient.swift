@@ -2263,15 +2263,19 @@ final class HermesClient: ObservableObject {
     /// How long the gateway has sent nothing on this socket.
     var quietInterval: TimeInterval { Date().timeIntervalSince(lastInboundAt) }
 
-    /// `healthCheck` for a socket that may have died unseen while iOS held
+    /// One ping for a socket that may have died unseen while iOS held
     /// Conduit suspended (#1362): one that doesn't answer is closed, as the
-    /// keepalive closes one, so the ordinary reconnect takes over. True when
-    /// it answered, or anything else came from the gateway meanwhile.
+    /// keepalive closes one, so the ordinary reconnect takes over. It waits
+    /// as long as a keepalive ping, since off screen a relayed path can be
+    /// slow without being dead. True when it answered, or anything else came
+    /// from the gateway meanwhile; skipped, as `healthCheck` is, while a
+    /// large frame is still being written.
     func checkLiveness() async -> Bool {
         guard let socket, isConnected else { return false }
+        guard requestsBeingWritten.isEmpty else { return true }
         let started = Date()
         do {
-            try await healthCheck()
+            try await ping(timeout: keepalivePingTimeout)
             return true
         } catch {
             guard self.socket === socket, !closedIntentionally else { return false }
