@@ -279,6 +279,9 @@ struct GroupChatLifecycleOperations {
     var stop: (@MainActor (HermesClient, String) async throws -> Int)?
     var approve: (@MainActor (HermesClient, String, GroupPendingApproval, String) async throws -> Bool)?
     var disband: (@MainActor (HermesClient, String) async throws -> Void)?
+    /// The plugin's rooms routes (the drafts and the Links), in place of
+    /// the dashboard bridge.
+    var roomRoute: RoomLinksClient.Request?
 
     static let live = GroupChatLifecycleOperations()
 }
@@ -10672,6 +10675,10 @@ final class AppState: ObservableObject {
     @Published private(set) var groupChatPhase: GroupChatPhase = .idle
     @Published private(set) var groupCapabilities: GroupCapabilities?
     @Published private(set) var groupRooms: [GroupRoom] = []
+    /// The rooms this Hermes hosts with people you've linked that Group
+    /// Chats lists until they start, and the people New Group Chat can
+    /// invite (RoomDrafts.swift).
+    @Published var linkedRoomDrafts: LinkedRoomDrafts?
     /// Hermes Desktop's group chats, read from its ui_meta projection on the
     /// `default` profile (refreshed with the bot roster). Read-only here:
     /// Desktop drives their rounds, and `groups.*` cannot address them.
@@ -10776,6 +10783,18 @@ final class AppState: ObservableObject {
     private(set) var groupRoomEpoch = 0
     private var groupRoomPollTask: Task<Void, Never>?
 
+    /// A rooms route of the plugin (the drafts, the Links): the injectable
+    /// seam first (tests), then the dashboard bridge.
+    func roomRouteJSON(path: String, method: String, body: [String: Any]?, timeoutMilliseconds: Int?)
+        async throws -> [String: Any] {
+        if let route = groupChatOperations.roomRoute { return try await route(path, method, body, timeoutMilliseconds) }
+        guard let bridge = dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
+        if let timeoutMilliseconds {
+            return try await bridge.requestJSON(path: path, method: method, body: body, timeoutMilliseconds: timeoutMilliseconds)
+        }
+        return try await bridge.requestJSON(path: path, method: method, body: body)
+    }
+
     // Group Chat RPC routing: the injectable seam first (tests), then the
     // production client call.
     private func groupsCapabilities(_ client: HermesClient) async throws -> GroupCapabilities {
@@ -10839,6 +10858,7 @@ final class AppState: ObservableObject {
         // Whether the gateway can make pictures is the outgoing one's answer.
         canGeneratePictures = false
         groupRooms = []
+        linkedRoomDrafts = nil
         desktopGroupChats = []
         groupRoomPictureData = [:]
         groupRoomPictureRevisions = [:]
@@ -11062,11 +11082,13 @@ final class AppState: ObservableObject {
     }
 
     /// Probe `groups.capabilities` and, when the foundation methods are
-    /// advertised, refresh the room list. Called alongside the bot roster
-    /// refresh; a gateway that lacks the method is a supported outcome, not
-    /// an error. The response is epoch- AND dashboard-fenced: an in-flight
-    /// probe must never resurrect the outgoing server's phase on the new
-    /// dashboard's surface.
+    /// advertised, refresh the room list, then the drafts of rooms with
+    /// people you've linked (not with each room list read, which a room's
+    /// send and poll make). Called alongside the bot roster refresh; a
+    /// gateway that lacks the method is a supported outcome, not an error.
+    /// The response is epoch- AND dashboard-fenced: an in-flight probe must
+    /// never resurrect the outgoing server's phase on the new dashboard's
+    /// surface.
     func refreshGroupChatSupport() async {
         guard let client, isConnected else {
             groupChatPhase = .idle
@@ -11085,6 +11107,7 @@ final class AppState: ObservableObject {
             }
             groupChatPhase = .available
             await refreshGroupRooms()
+            await refreshLinkedRoomDrafts()
         } catch is CancellationError {
             return
         } catch {
@@ -11568,29 +11591,19 @@ final class AppState: ObservableObject {
         // The create sheet renders the shared errorMessage: clear the last
         // attempt's (or an unrelated surface's) failure before this one.
         errorMessage = nil
-        // `@user` is the room's human handoff: a member claiming it would be
-        // styled as the human, never as the agent.
-        var usedHandles = Set<String>(["all", "everyone", "user"])
-        var members: [[String: Any]] = []
-        for bot in bots {
-            var handle = BotMentions.mentionTag(for: bot)
-            if usedHandles.contains(handle.lowercased()) {
-                handle = BotMentions.handle(for: bot)
-            }
-            guard BotMentions.isValidMentionToken(handle),
-                  !usedHandles.contains(handle.lowercased()) else {
-                errorMessage = AppLocalization.string(
-                    "Two of these bots would claim the same @handle. Rename one bot's title, then try again."
-                )
-                return false
-            }
-            usedHandles.insert(handle.lowercased())
-            members.append([
+        guard let handles = BotMentions.roomHandles(for: bots) else {
+            errorMessage = AppLocalization.string(
+                "Two of these bots would claim the same @handle. Rename one bot's title, then try again."
+            )
+            return false
+        }
+        let members: [[String: Any]] = zip(bots, handles).map { bot, handle in
+            [
                 "member_id": bot.name,
                 "profile": bot.name,
                 "handle": handle,
                 "display_name": bot.displayLabel,
-            ])
+            ]
         }
         do {
             let room = try await groupsCreate(client, roomID: roomID, name: trimmedName, members: members)
@@ -24821,12 +24834,14 @@ final class AppState: ObservableObject {
         guard bridge === dashboardTicketBridge, generation > notifierPluginStatusAcceptedGeneration,
               state != .unknown else { return }
         notifierPluginStatusAcceptedGeneration = generation
+        let couldInviteLinkedPeople = canInviteLinkedPeople
         // A failed list read keeps what this host's list said before.
         notifierPlugin.hostCopy = state == .predatesCapabilities
             ? hostCopy ?? (notifierPlugin.state == .predatesCapabilities ? notifierPlugin.hostCopy : nil)
             : nil
         notifierPlugin.state = state
         notifierPlugin.runtime = runtime
+        linkedRoomInvitesReported(before: couldInviteLinkedPeople)
         Task { await refreshLatestNotifierPluginVersion() }
         clearSettledNotifierPluginUpdateOutcome()
         // Calls declined or missed while this host was out of reach.
@@ -24861,9 +24876,11 @@ final class AppState: ObservableObject {
         guard state != .unknown else { return }
         notifierPluginStatusGeneration += 1
         notifierPluginStatusAcceptedGeneration = notifierPluginStatusGeneration
+        let couldInviteLinkedPeople = canInviteLinkedPeople
         notifierPlugin.hostCopy = nil
         notifierPlugin.state = state
         notifierPlugin.runtime = NotifierPluginStatus.runtime(from: json)
+        linkedRoomInvitesReported(before: couldInviteLinkedPeople)
         clearSettledNotifierPluginUpdateOutcome()
     }
 
@@ -37084,5 +37101,26 @@ extension AppState {
             showSessionMutationNotice(SessionRenameOperation.failureMessage(error))
             return false
         }
+    }
+}
+
+// MARK: - Linked Rooms' drafts removed from Group Chats
+
+extension AppState {
+    private static let dismissedRoomDraftsKey = "conduit.roomDrafts.dismissed.v1"
+
+    /// The ended drafts removed from Group Chats (RoomDrafts.swift). Room
+    /// ids are unique, so one list serves every dashboard; it keeps the
+    /// newest 200.
+    var dismissedRoomDraftIDs: Set<String> {
+        Set(defaults.stringArray(forKey: Self.dismissedRoomDraftsKey) ?? [])
+    }
+
+    func dismissRoomDraft(_ roomID: String) {
+        var ids = defaults.stringArray(forKey: Self.dismissedRoomDraftsKey) ?? []
+        guard !ids.contains(roomID) else { return }
+        objectWillChange.send()
+        ids.append(roomID)
+        defaults.set(Array(ids.suffix(200)), forKey: Self.dismissedRoomDraftsKey)
     }
 }

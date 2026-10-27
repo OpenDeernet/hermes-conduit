@@ -332,12 +332,8 @@ extension AppState {
     var roomLinksClient: RoomLinksClient {
         let dashboard = activeDashboardID
         return RoomLinksClient(dashboardID: dashboard) { [weak self] path, method, body, timeout in
-            guard let self, self.activeDashboardID == dashboard,
-                  let bridge = self.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
-            if let timeout {
-                return try await bridge.requestJSON(path: path, method: method, body: body, timeoutMilliseconds: timeout)
-            }
-            return try await bridge.requestJSON(path: path, method: method, body: body)
+            guard let self, self.activeDashboardID == dashboard else { throw DashboardTicketBridgeError.notReady }
+            return try await self.roomRouteJSON(path: path, method: method, body: body, timeoutMilliseconds: timeout)
         }
     }
 }

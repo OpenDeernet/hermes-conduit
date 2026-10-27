@@ -110,21 +110,26 @@ struct RoomSetupClient {
 
     /// The dashboard the requests go to (nil in tests).
     var dashboardID: UUID?
+    /// What names the profile: `profile`, or `conduit_profile` on a plugin
+    /// that takes it here (`room-dashboard-profiles`), where a profile the
+    /// dashboard didn't start with is set up, gateway restart and all.
+    var profileParameter: String
     let request: Request
 
-    init(dashboardID: UUID? = nil, request: @escaping Request) {
+    init(dashboardID: UUID? = nil, profileParameter: String = "profile", request: @escaping Request) {
         self.dashboardID = dashboardID
+        self.profileParameter = profileParameter
         self.request = request
     }
 
     func state(profile: String) async throws -> RoomSetupState {
-        try Self.parseState(try await request(DashboardPath.withProfile(Self.path, profile: profile), "GET", nil))
+        try Self.parseState(try await request(scopedPath(profile), "GET", nil))
     }
 
     /// Sets the profile up with `ceiling`, or the one it has when nil;
     /// `interrupt` restarts the gateway even while chats run on it.
     func setUp(profile: String, ceiling: [String]?, interrupt: Bool = false) async throws -> RoomSetupResult {
-        let path = DashboardPath.withProfile(Self.path, profile: profile)
+        let path = scopedPath(profile)
         var body: [String: Any] = ["interrupt": interrupt]
         if let ceiling { body["ceiling"] = ceiling }
         let response = try await request(path, "POST", body)
@@ -179,6 +184,10 @@ struct RoomSetupClient {
         )
     }
 
+    private func scopedPath(_ profile: String) -> String {
+        DashboardPath.withProfile(Self.path, profile: profile, parameter: profileParameter)
+    }
+
     /// A non-empty string, or nil.
     private static func text(_ value: Any?) -> String? {
         guard let text = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
@@ -196,7 +205,8 @@ extension AppState {
     /// Requests stay with the dashboard they were made for.
     var roomSetupClient: RoomSetupClient {
         let dashboard = activeDashboardID
-        return RoomSetupClient(dashboardID: dashboard) { [weak self] path, method, body in
+        let parameter = notifierPlugin.roomDashboardProfileParameter
+        return RoomSetupClient(dashboardID: dashboard, profileParameter: parameter) { [weak self] path, method, body in
             guard let self, self.activeDashboardID == dashboard,
                   let bridge = self.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
             return try await bridge.requestJSON(path: path, method: method, body: body)
