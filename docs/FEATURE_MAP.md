@@ -2773,14 +2773,14 @@ and the widget's pickers (no status), and no Settings caption or doc names it
 
 **Rulings**
 - The open chat's own turn decides its Running once known; Needs approval from the registry outranks it (#454).
-- The dashboard's registry lists every profile's live chats (checked on Hermes 0.22.5, with or without a `profile` param), so another profile's row in All reads it too. A chat left running for one in another profile keeps Running, as one in the same profile does (2026-10-27, #PRNUM, issue #1353).
-- The registry is read while the list or a project's page is on screen. Beside the open chat on a wide window both stay on screen, so the poll keeps running there; one column, a chat pushed over them stops it (2026-10-27, #PRNUM, issue #1353).
+- The dashboard's registry lists every profile's live chats (checked on Hermes 0.22.5, with or without a `profile` param), so another profile's row in All reads it too. A chat left running for one in another profile keeps Running, as one in the same profile does (2026-10-27, #1369, issue #1353).
+- The registry is read while the list or a project's page is on screen. Beside the open chat on a wide window both stay on screen, so the poll keeps running there; one column, a chat pushed over them stops it (2026-10-27, #1369, issue #1353).
 
 **Open gaps**
 - Rows carry no profile, so a running chat in one profile lights a row of another with the same stored id (a profile copied with its chats) while that turn runs.
 - After a send, the registry can read the turn as not started yet, and the next read comes 4 s later: a chat left within those seconds goes without Running until then.
 
-**Checked:** 2026-10-27, #PRNUM.
+**Checked:** 2026-10-27, #1369.
 
 ## Feature map rules
 
