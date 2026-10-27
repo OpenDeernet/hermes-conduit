@@ -366890,84 +366890,84 @@
         }
       }
     },
-    "With Pulse on, it brings up their birthdays two weeks ahead, the day before and on the day." : {
+    "With Pulse and its memory on, it brings up their birthdays two weeks ahead, the day before and on the day." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ist Pulse an, erinnert es zwei Wochen vorher, am Vortag und am Tag selbst an ihre Geburtstage."
+            "value" : "Sind Pulse und sein Gedächtnis an, erinnert es zwei Wochen vorher, am Vortag und am Tag selbst an ihre Geburtstage."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Con Pulse activado, te recuerda sus cumpleaños dos semanas antes, el día anterior y el mismo día."
+            "value" : "Con Pulse y su memoria activados, te recuerda sus cumpleaños dos semanas antes, el día anterior y el mismo día."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Avec Pulse activé, il vous rappelle leur anniversaire deux semaines avant, la veille et le jour même."
+            "value" : "Avec Pulse et sa mémoire activés, il vous rappelle leur anniversaire deux semaines avant, la veille et le jour même."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Saat Pulse aktif, Pulse mengingatkan ulang tahun mereka dua minggu sebelumnya, sehari sebelumnya, dan pada harinya."
+            "value" : "Saat Pulse dan memorinya aktif, Pulse mengingatkan ulang tahun mereka dua minggu sebelumnya, sehari sebelumnya, dan pada harinya."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Con Pulse attivo, ti ricorda i loro compleanni due settimane prima, il giorno prima e il giorno stesso."
+            "value" : "Con Pulse e la sua memoria attivi, ti ricorda i loro compleanni due settimane prima, il giorno prima e il giorno stesso."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pulseがオンなら、誕生日の2週間前、前日、当日にお知らせします。"
+            "value" : "Pulseとそのメモリがオンなら、誕生日の2週間前、前日、当日にお知らせします。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pulse가 켜져 있으면 생일 2주 전, 전날, 당일에 알려 줍니다."
+            "value" : "Pulse와 메모리가 켜져 있으면 생일 2주 전, 전날, 당일에 알려 줍니다."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gdy Pulse jest włączony, przypomina o ich urodzinach dwa tygodnie wcześniej, dzień wcześniej i w sam dzień."
+            "value" : "Gdy Pulse i jego pamięć są włączone, przypomina o ich urodzinach dwa tygodnie wcześniej, dzień wcześniej i w sam dzień."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Com o Pulse ativado, ele lembra os aniversários deles duas semanas antes, na véspera e no dia."
+            "value" : "Com o Pulse e a memória dele ativados, ele lembra os aniversários deles duas semanas antes, na véspera e no dia."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Когда Pulse включён, он напоминает об их днях рождения за две недели, накануне и в сам день."
+            "value" : "Когда Pulse и его память включены, он напоминает об их днях рождения за две недели, накануне и в сам день."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pulse açıkken doğum günlerini iki hafta önce, bir gün önce ve gününde hatırlatır."
+            "value" : "Pulse ve belleği açıkken doğum günlerini iki hafta önce, bir gün önce ve gününde hatırlatır."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pulse 开启时，会在他们生日前两周、前一天和当天提醒你。"
+            "value" : "Pulse 及其记忆开启时，会在他们生日前两周、前一天和当天提醒你。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pulse 開啟時，會在他們生日前兩週、前一天和當天提醒你。"
+            "value" : "Pulse 及其記憶開啟時，會在他們生日前兩週、前一天和當天提醒你。"
           }
         }
       }

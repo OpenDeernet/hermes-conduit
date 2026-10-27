@@ -297,7 +297,7 @@ struct PhoneSettingsPage: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if appState.pulseBringsUpBirthdays {
-                Text("With Pulse on, it brings up their birthdays two weeks ahead, the day before and on the day.")
+                Text("With Pulse and its memory on, it brings up their birthdays two weeks ahead, the day before and on the day.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

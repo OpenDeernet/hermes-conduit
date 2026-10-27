@@ -486,7 +486,8 @@ struct PulseMemoryItem: Equatable, Identifiable {
     }
 
     /// "Every year on 3 March" for a fact about a yearly date, in the app's
-    /// language; nil for the rest, or a day this build can't read.
+    /// language; nil for the rest, or a month and day this build can't read.
+    /// The year isn't shown, so it isn't checked.
     func everyYearText(locale: Locale = AppLocalization.formattingLocale) -> String? {
         let parts = everyYear.split(separator: "-").map { Int($0) }
         guard parts.count == 2 || parts.count == 3, let month = parts[parts.count - 2],
