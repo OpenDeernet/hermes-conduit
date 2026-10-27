@@ -82,11 +82,10 @@ enum CarPlayVoiceMode: Equatable {
         if appState.isQwenLiveEnabled { return .qwenLive }
         if appState.isGPTLiveEnabled { return .gptLive }
         if appState.isGrokLiveEnabled { return .grokLive }
-        if appState.isLocalLiveEnabled {
-            // A call from Hermes on the hands-free option opens classic
-            // voice, which says why Hermes called: the car follows it.
-            if appState.isLocalLiveAgent || !appState.voiceConversationController.hasLiveVoiceSession { return .localLive }
-        }
+        // A call from Hermes on the hands-free option opens classic voice,
+        // which says why Hermes called: the car follows it until it ends,
+        // even if agent mode is turned on meanwhile.
+        if appState.isLocalLiveEnabled, !appState.voiceConversationController.hasLiveVoiceSession { return .localLive }
         return .classic
     }
 
