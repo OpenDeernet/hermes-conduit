@@ -184,6 +184,67 @@ final class ComposerReturnKeyTests: XCTestCase {
         XCTAssertEqual(submitCount, 0)
     }
 
+    // MARK: - Return key command (the route on a Mac)
+
+    func testKeyCommandIsPlainReturnWithPriorityOverTheTextSystem() {
+        // On a Mac the text view's own Return handling runs before
+        // pressesBegan; only a priority key command gets there first.
+        let command = ImagePasteTextView().keyCommands?.first { $0.input == "\r" }
+        XCTAssertNotNil(command)
+        XCTAssertEqual(command?.modifierFlags, [])
+        XCTAssertEqual(command?.wantsPriorityOverSystemBehavior, true)
+    }
+
+    func testKeyCommandTakesReturnOnlyWhenTheComposerWouldSend() {
+        let view = ImagePasteTextView()
+        view.onSubmitFromReturn = { true }
+        view.canSubmitFromReturn = true
+
+        view.returnKeySends = false
+        XCTAssertFalse(view.returnKeyCommandApplies(hasMarkedText: false))
+
+        view.returnKeySends = true
+        XCTAssertTrue(view.returnKeyCommandApplies(hasMarkedText: false))
+        // The IME's Return confirms its candidate.
+        XCTAssertFalse(view.returnKeyCommandApplies(hasMarkedText: true))
+
+        view.canSubmitFromReturn = false
+        XCTAssertFalse(view.returnKeyCommandApplies(hasMarkedText: false))
+
+        view.canSubmitFromReturn = true
+        view.onSubmitFromReturn = nil
+        XCTAssertFalse(view.returnKeyCommandApplies(hasMarkedText: false))
+    }
+
+    func testKeyCommandSendsThroughTheComposer() {
+        let view = ImagePasteTextView()
+        view.returnKeySends = true
+        view.canSubmitFromReturn = true
+        var submitCount = 0
+        view.onSubmitFromReturn = { submitCount += 1; return true }
+
+        view.returnKeyCommandPressed()
+        XCTAssertEqual(submitCount, 1)
+        XCTAssertEqual(view.text, "")
+    }
+
+    func testDeclinedKeyCommandStillInsertsTheNewline() {
+        let view = ImagePasteTextView()
+        view.returnKeySends = true
+        view.canSubmitFromReturn = true
+        view.onSubmitFromReturn = { false }
+
+        view.returnKeyCommandPressed()
+        XCTAssertEqual(view.text, "\n")
+    }
+
+    func testRoomAndFullEditorFieldsTakeTheShortcut() {
+        // A group room's field and the full editor use the same text view,
+        // so the same Return key command reaches them.
+        let command = ReturnKeyTextView().keyCommands?.first { $0.input == "\r" }
+        XCTAssertEqual(command?.wantsPriorityOverSystemBehavior, true)
+    }
+
     func testTextViewDefaultsPreserveLegacyReturnBehavior() {
         // Fresh text views (and every existing construction site that does
         // not know about the shortcut) must behave exactly as before.
