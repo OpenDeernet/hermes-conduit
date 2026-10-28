@@ -374,7 +374,9 @@ extension AppState {
         let client = roomCopiesClient
         guard let copies = try? await client.copies(),
               groupRoomEpoch == epoch, activeDashboardID == client.dashboardID else { return nil }
-        linkedRoomCopies = LinkedRoomCopies(dashboardID: client.dashboardID, copies: copies)
+        let read = LinkedRoomCopies(dashboardID: client.dashboardID, copies: copies)
+        // The room screen reads them each quiet tick: unchanged, nothing is published.
+        if read != linkedRoomCopies { linkedRoomCopies = read }
         return copies
     }
 
@@ -397,6 +399,8 @@ extension AppState {
         guard canDeleteRoomCopies else { return .refused(RoomCopyText.deleteRefusal(for: HermesError.invalidResponse)) }
         let client = roomCopiesClient
         let inviteID = copy.id
+        // Your agents that left are only on its invite.
+        if linkedRoomInvite(inviteID) == nil { await refreshLinkedRoomInvites() }
         let invite = linkedRoomInvite(inviteID)
         var profiles: [String] = []
         for profile in copy.yours.map(\.profile) + (invite?.joined.map(\.profile) ?? []) + (invite?.gone.map(\.profile) ?? [])
@@ -415,9 +419,9 @@ extension AppState {
             copies.copies.removeAll { $0.id == copy.id }
             linkedRoomCopies = copies
         }
-        guard activeDashboardID == client.dashboardID else { return .deleted }
         // Its invite, ended, would take its row back.
         dismissRoomInvite(inviteID)
+        guard activeDashboardID == client.dashboardID else { return .deleted }
         if activeRoomSurface?.copy?.id == copy.id {
             closeGroupRoom()
         }

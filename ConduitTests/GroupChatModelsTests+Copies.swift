@@ -376,6 +376,28 @@ extension GroupChatModelsTests {
     }
 
     @MainActor
+    func testDeletingALeftCopyReadsItsInviteForTheAgentsThatLeft() async throws {
+        let routes = CopiesRoutes(copies: [copiesCopy(status: "left", yours: [])])
+        let appState = copiesAppState(routes)
+        copiesConnect(appState)
+        appState.applyNotifierPluginReport(copiesPluginReport)
+        await appState.refreshGroupChatSupport()
+        let copy = try XCTUnwrap(appState.linkedRoomCopyRows.first)
+        // The invite comes after the last read: only it says who left.
+        routes.invites = [
+            ["room_id": "conduit-9", "link": "lk1a2b3c4d5e6f", "name": "Zoo trip", "status": "left", "from": "Furina",
+             "gone": [["profile": "research", "handle": "kuro", "display_name": "Kuro", "reason": "left"]]],
+        ]
+
+        let result = await appState.deleteLinkedRoomCopy(copy)
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(routes.deletes, [
+            "/api/plugins/conduit_push/rooms/sessions?room_id=conduit-9&profile=research",
+            "/api/plugins/conduit_push/rooms/copies?room_id=conduit-9",
+        ])
+    }
+
+    @MainActor
     func testACopyStillGoingCantBeDeleted() async throws {
         let routes = CopiesRoutes(copies: [copiesCopy()])
         let appState = copiesAppState(routes)

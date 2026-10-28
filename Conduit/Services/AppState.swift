@@ -10913,10 +10913,16 @@ final class AppState: ObservableObject {
         "\(dashboardID.uuidString)|\(roomID)"
     }
 
+    /// A room's key, by its Link too for a copy: room ids are only unique
+    /// per host.
+    private static func roomKey(for surface: GroupRoomSurface) -> String {
+        roomKey(dashboardID: surface.dashboardID, roomID: surface.copy?.id ?? surface.room.roomID)
+    }
+
     /// Move the open room's pending send (if any) into the parked store.
     private func parkActiveRoomSend() {
         guard let surface = activeRoomSurface else { return }
-        let key = Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)
+        let key = Self.roomKey(for: surface)
         if groupRoomOutbox.pending != nil {
             parkedRoomOutboxes[key] = groupRoomOutbox
         } else {
@@ -10950,7 +10956,7 @@ final class AppState: ObservableObject {
     /// is parked for it, and its draft goes too — it can never be reopened.
     private func closeGoneRoomSurface() {
         if let surface = activeRoomSurface {
-            let key = Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)
+            let key = Self.roomKey(for: surface)
             parkedRoomOutboxes.removeValue(forKey: key)
             groupRoomDrafts.removeValue(forKey: key)
             dropRoomAttachments { $0 == key }
@@ -11051,14 +11057,14 @@ final class AppState: ObservableObject {
     /// The open room's unsent composer text.
     func activeRoomDraft() -> String {
         guard let surface = activeRoomSurface else { return "" }
-        return groupRoomDrafts[Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)] ?? ""
+        return groupRoomDrafts[Self.roomKey(for: surface)] ?? ""
     }
 
     /// Keep the open room's composer text so leaving and reopening the room
     /// restores it. Empty text drops the entry.
     func saveActiveRoomDraft(_ text: String) {
         guard let surface = activeRoomSurface else { return }
-        let key = Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)
+        let key = Self.roomKey(for: surface)
         if text.isEmpty {
             groupRoomDrafts.removeValue(forKey: key)
         } else {
@@ -11069,7 +11075,7 @@ final class AppState: ObservableObject {
     /// The files staged in the open room's composer.
     func activeRoomAttachments() -> [Attachment] {
         guard let surface = activeRoomSurface else { return [] }
-        return groupRoomAttachments[Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)] ?? []
+        return groupRoomAttachments[Self.roomKey(for: surface)] ?? []
     }
 
     /// Keep the open room's staged files with its text, so leaving and
@@ -11077,7 +11083,7 @@ final class AppState: ObservableObject {
     /// copy of a file it removes or sends.
     func saveActiveRoomAttachments(_ attachments: [Attachment]) {
         guard let surface = activeRoomSurface else { return }
-        let key = Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)
+        let key = Self.roomKey(for: surface)
         if attachments.isEmpty {
             groupRoomAttachments.removeValue(forKey: key)
         } else {
@@ -11393,7 +11399,7 @@ final class AppState: ObservableObject {
             "conduit-\(UUID().uuidString.lowercased())"
         }
         pendingRoomMessage = groupRoomOutbox.pending
-        let sendKey = Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)
+        let sendKey = Self.roomKey(for: surface)
         activeRoomSendInFlight = true
         let sendToken = UUID()
         inFlightRoomSendTokens[sendKey] = sendToken
@@ -11405,7 +11411,7 @@ final class AppState: ObservableObject {
             if inFlightRoomSendTokens[sendKey] == sendToken {
                 inFlightRoomSendTokens.removeValue(forKey: sendKey)
                 if let open = activeRoomSurface,
-                   Self.roomKey(dashboardID: open.dashboardID, roomID: open.room.roomID) == sendKey {
+                   Self.roomKey(for: open) == sendKey {
                     activeRoomSendInFlight = false
                 }
             }
@@ -11432,7 +11438,7 @@ final class AppState: ObservableObject {
                         groupRoomOutbox.accept(eventID: logical.eventID)
                         pendingRoomMessage = groupRoomOutbox.pending
                     } else {
-                        let key = Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)
+                        let key = Self.roomKey(for: surface)
                         parkedRoomOutboxes[key]?.accept(eventID: logical.eventID)
                         if parkedRoomOutboxes[key]?.pending == nil {
                             parkedRoomOutboxes.removeValue(forKey: key)
@@ -11646,7 +11652,7 @@ final class AppState: ObservableObject {
         roomSendErrorMessage = nil
         parkActiveRoomSend()
         activeRoomSendInFlight = false
-        if activeRoomSurface?.room.roomID != copy.roomID { roomQuoteRequest = nil }
+        roomQuoteRequest = nil
         activeRoomSurface = GroupRoomSurface(dashboardID: dashboardID, room: copy.room, copy: copy)
         activeRoomReplay = GroupRoomReplay(roomID: copy.roomID)
         activeRoomDriverStatus = copy.state

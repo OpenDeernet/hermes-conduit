@@ -214,7 +214,9 @@ extension AppState {
         let client = roomApprovalsClient
         guard let approvals = try? await client.approvals(timeoutMilliseconds: timeoutMilliseconds),
               groupRoomEpoch == epoch, activeDashboardID == client.dashboardID else { return nil }
-        linkedRoomApprovals = LinkedRoomApprovals(dashboardID: client.dashboardID, approvals: approvals)
+        let read = LinkedRoomApprovals(dashboardID: client.dashboardID, approvals: approvals)
+        // A copy's room screen reads them each tick: unchanged, nothing is published.
+        if read != linkedRoomApprovals { linkedRoomApprovals = read }
         return approvals
     }
 
