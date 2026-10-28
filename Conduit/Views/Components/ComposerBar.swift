@@ -461,8 +461,7 @@ struct ComposerBar: View, Equatable {
             applyQuoteRequest(request)
         }
         .onChange(of: updates.inputs.dropRequest) { _, request in
-            guard let request else { return }
-            appState.consumeComposerDropRequest(request.id)
+            guard let request, appState.consumeComposerDropRequest(request.id) else { return }
             handleDroppedFiles(request.providers)
         }
         .onChange(of: updates.inputs.predictiveRequest) { _, request in

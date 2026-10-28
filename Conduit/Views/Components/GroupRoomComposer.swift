@@ -171,8 +171,7 @@ struct GroupRoomComposer: View {
             applyQuoteRequest(request)
         }
         .onChange(of: appState.roomDropRequest) { _, request in
-            guard let request else { return }
-            appState.consumeRoomDropRequest(request.id)
+            guard let request, appState.consumeRoomDropRequest(request.id) else { return }
             importDroppedFiles(request.providers)
         }
         // A dictation Retry added words to this room's kept draft, which

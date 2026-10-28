@@ -10344,9 +10344,12 @@ final class AppState: ObservableObject {
         composerDropRequest = AttachmentDropRequest(providers: (composerDropRequest?.providers ?? []) + providers)
     }
 
-    func consumeComposerDropRequest(_ id: UUID) {
-        guard composerDropRequest?.id == id else { return }
+    /// Whether the request was still the pending one: a drop that came
+    /// on top of it replaced it with both, so its composer stages that.
+    func consumeComposerDropRequest(_ id: UUID) -> Bool {
+        guard composerDropRequest?.id == id else { return false }
         composerDropRequest = nil
+        return true
     }
 
     /// Files dropped on the open group room go to its composer.
@@ -10356,9 +10359,12 @@ final class AppState: ObservableObject {
         roomDropRequest = AttachmentDropRequest(providers: (roomDropRequest?.providers ?? []) + providers)
     }
 
-    func consumeRoomDropRequest(_ id: UUID) {
-        guard roomDropRequest?.id == id else { return }
+    /// Whether the request was still the pending one: a drop that came
+    /// on top of it replaced it with both, so its composer stages that.
+    func consumeRoomDropRequest(_ id: UUID) -> Bool {
+        guard roomDropRequest?.id == id else { return false }
         roomDropRequest = nil
+        return true
     }
 
     /// The composer took the quote: drop it, so the quoted text is not kept
