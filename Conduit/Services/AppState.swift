@@ -680,6 +680,7 @@ final class AppState: ObservableObject {
             refreshActiveChatScrollSessionIdentity()
             if oldValue != activeProfile {
                 composerNotice = nil
+                restoreDisplayPreferences()
                 dismissChatTakeover()
                 agentSettings.leave(scope: agentSettingsScope)
                 presentedScreens.leave()
@@ -910,6 +911,8 @@ final class AppState: ObservableObject {
     @Published private(set) var pinnedSessionIDs: [String] = []
     /// Starred chats, per profile, on this phone only (#757).
     @Published private(set) var sessionStars = SessionStars()
+    /// The Pinned section's order, per profile (issue 1354).
+    @Published private(set) var pinnedChatOrder = PinnedChatOrder()
     /// Replies pinned to the top of their chat, per profile (#918). Kept on
     /// this device only (AppState+PinnedReplies).
     @Published var pinnedRepliesByProfile: [String: [PinnedReply]] = [:]
@@ -1059,8 +1062,8 @@ final class AppState: ObservableObject {
     let chatCards = ChatCardsModel()
     /// Cached once per transcript mutation so view updates do not rescan the full history.
     @Published private(set) var pendingClarifyMessageID: String?
-    /// Whether that card is an approval rather than a question.
-    @Published private(set) var pendingDecisionIsApproval = false
+    /// What that card is, for the jump button's words.
+    @Published private(set) var pendingDecisionKind = PendingDecisionKind.question
     @Published var messages: [ChatMessage] = [] {
         didSet {
             chatTranscriptRevision &+= 1
@@ -1068,9 +1071,10 @@ final class AppState: ObservableObject {
             if pendingClarifyMessageID != pendingClarify {
                 pendingClarifyMessageID = pendingClarify
             }
-            let isApproval = pendingClarify.map { id in messages.last { $0.id == id }?.approval != nil } ?? false
-            if pendingDecisionIsApproval != isApproval {
-                pendingDecisionIsApproval = isApproval
+            let kind = pendingClarify.flatMap { id in messages.last { $0.id == id } }
+                .map(PendingDecisionKind.init(message:)) ?? .question
+            if pendingDecisionKind != kind {
+                pendingDecisionKind = kind
             }
             advanceChatViewportExpectedTranscriptRevisionIfNeeded()
             // A real transcript replaces the read-only offline copy wholesale;
@@ -1106,6 +1110,8 @@ final class AppState: ObservableObject {
     /// A chat tapped in the saved list: it opens once the live list lands,
     /// ahead of the automatic resume.
     private var chatPickedFromSavedList: SavedChatListPick?
+    /// The Bot Chats left this run, by dashboard and bot (`keepBotChatCopy`).
+    private var keptBotChatCopies: [String: KeptBotChatCopy] = [:]
     /// The scope whose list in memory came from Hermes after the saved files
     /// were last wiped, and so may be saved.
     private var savableChatListScope: WidgetWorkspaceID?
@@ -1350,7 +1356,11 @@ final class AppState: ObservableObject {
     }
     private var persistedOrderingFrontier = PersistedOrderingFrontier()
     @Published private(set) var busyInputMode: BusyInputMode = .steer
-    @Published private(set) var displayPreferences = ProfileDisplayPreferences()
+    @Published private(set) var displayPreferences = ProfileDisplayPreferences() {
+        // Kept on the device too, so the saved chats draw as Settings says
+        // before the host answers (offline from launch).
+        didSet { if displayPreferences != oldValue { rememberDisplayPreferences() } }
+    }
     /// The profile's `timezone` config value ("" = the server's local time)
     /// and the profile it was read for. Hermes runs cron schedules in it.
     @Published private(set) var profileTimeZoneSetting: (profile: String, value: String)?
@@ -1389,6 +1399,19 @@ final class AppState: ObservableObject {
     /// inserted the outgoing bubble, even if the user previously browsed up.
     @Published private(set) var chatScrollRequest = 0
     @Published private(set) var chatScrollToTopRequest = 0
+    /// Bumped once an unread chat's open has its transcript in: ChatView
+    /// lands it at the start of its latest reply (#365), taking it once
+    /// (takeChatReplyStartLanding), also when it mounts after the bump.
+    @Published private(set) var chatReplyStartLandingRequest = 0
+    private var chatReplyStartLandingTaken = 0
+
+    /// Whether a landing is owed that ChatView hasn't taken yet; taking it
+    /// clears it.
+    func takeChatReplyStartLanding() -> Bool {
+        guard chatReplyStartLandingTaken != chatReplyStartLandingRequest else { return false }
+        chatReplyStartLandingTaken = chatReplyStartLandingRequest
+        return true
+    }
 
     /// Profile changes and network refreshes are asynchronous. Keep a final
     /// ownership boundary at the published catalog so a stale row can never
@@ -2029,15 +2052,12 @@ final class AppState: ObservableObject {
     /// A card with an event this recent may belong to an agent the gateway
     /// roster hasn't registered yet, so the roster check leaves it alone.
     static let delegateAgentRosterGrace: TimeInterval = 30
-    @Published private(set) var workspaceRoot = ""
-    @Published private(set) var workspaceEntries: [String: [WorkspaceEntry]] = [:]
-    @Published private(set) var expandedWorkspacePaths: Set<String> = []
-    @Published private(set) var workspaceLoadingPath: String?
-    @Published private(set) var workspaceError: String?
-    @Published private(set) var workspacePreview: WorkspaceFilePreview?
-    @Published private(set) var workspaceSelectedFile: WorkspaceEntry?
-    @Published private(set) var workspaceFileError: String?
-    @Published private(set) var workspaceFileLoading = false
+    /// A file path tapped in a reply, for the open chat's Folder tab to
+    /// show (AppState+Workspace.swift).
+    @Published var workspaceReveal: WorkspaceReveal?
+    /// Counts the tools Hermes finished that may have changed files, so an
+    /// open Folder tab reads its folders again.
+    @Published var workspaceChanges = 0
     @Published private(set) var gatewayDiagnostics: GatewayDiagnostics?
     @Published private(set) var gatewayDiagnosticsLoading = false
     /// Restart Gateway's progress and outcome, and the dashboard it belongs
@@ -2186,124 +2206,6 @@ final class AppState: ObservableObject {
     var phoneScreenIsAway: @MainActor () -> Bool = {
         !PhoneScenePresence.isInForeground
     }
-    /// The Pulse screen (PulseFeed.swift): its unseen cards for the
-    /// button's badge, the chats' messages that have a card (chat id, then
-    /// Hermes' message id, to card id), a request to show it, and Pulse's
-    /// own chat, which the screen stands in for.
-    @Published var pulseUnseen = 0
-    @Published var pulseSources: [String: [Int: Int]] = [:]
-    @Published var pulseOpenRequest: PulseOpenRequest?
-    @Published var pulseHomeChatID: String?
-    /// Pulse's chat per dashboard as the last feed named it, kept across
-    /// launches: until the feed is read again after a launch or a
-    /// reconnect, the Pulse button and the hidden chat go by it. Views read
-    /// it through `pulseHomeChat`, so every change goes through
-    /// `storePulseHomes`, which tells them.
-    private(set) lazy var pulseRememberedHomes: [String: String] =
-        defaults.dictionary(forKey: Self.pulseHomesKey) as? [String: String] ?? [:]
-    static let pulseHomesKey = "conduit.pulse.homeChats"
-
-    func rememberPulseHome(_ chat: String?) {
-        guard let key = activeDashboardID?.uuidString, pulseRememberedHomes[key] != chat else { return }
-        var homes = pulseRememberedHomes
-        homes[key] = chat
-        storePulseHomes(homes)
-    }
-
-    /// A removed dashboard's Pulse chat goes with it.
-    func forgetPulseHome(of dashboardID: UUID) {
-        var homes = pulseRememberedHomes
-        guard homes.removeValue(forKey: dashboardID.uuidString) != nil else { return }
-        storePulseHomes(homes)
-    }
-
-    /// Do it's New Chat, for a Pulse item from no chat (PulseFeed.swift):
-    /// only when New Chat can start one at once, never one that waits. The
-    /// chat is the one this call's own create opened, as createNewSession
-    /// returns it, while it's still the one open: another create landing
-    /// meanwhile (a call's chat, Ask Hermes About, a widget) opens a chat
-    /// that isn't this one's. The Pulse screen stays up until it opened, so
-    /// a chat that didn't start leaves it there to say why. Nil when none
-    /// started.
-    func startPulseNewChat() async -> String? {
-        guard canStartNewChatNow, !isStartingNewChat, !showsPendingNewChat else { return nil }
-        guard let created = await createNewSessionMarkingStart(), activeSessionId == created else { return nil }
-        dismissSidebarDrawer()
-        return created
-    }
-
-    /// Do it's switch to Pulse's profile, for a new chat there: whether it
-    /// finished with that profile on screen. False when a newer navigation
-    /// took the screen meanwhile, which a new chat mustn't replace.
-    func switchProfileForPulse() async -> Bool {
-        await switchProfile(to: Self.pulseHomeProfile, reusing: nil)
-    }
-
-    private func storePulseHomes(_ homes: [String: String]) {
-        objectWillChange.send()
-        pulseRememberedHomes = homes
-        defaults.set(homes, forKey: Self.pulseHomesKey)
-    }
-
-    /// Morning briefs folded on the Pulse screen, per dashboard: each
-    /// brief's card id with the cards in it still open when it was folded,
-    /// each with when it came (PulseLayout.Brief.isFolded), kept across
-    /// launches, so a brief read and folded stays out of the way until it's
-    /// opened again or a card in it comes back open. `pulseFoldedBriefsKept`
-    /// briefs of each: the one just folded, and the others with the highest
-    /// ids, which are the newest: the host numbers cards in the order it
-    /// makes them.
-    private(set) lazy var pulseFoldedBriefs: [String: [String: [String: Double]]] =
-        defaults.dictionary(forKey: Self.pulseFoldedBriefsKey) as? [String: [String: [String: Double]]] ?? [:]
-    static let pulseFoldedBriefsKey = "conduit.pulse.foldedBriefs"
-    static let pulseFoldedBriefsKept = 30
-
-    /// The cards `brief` had open when it was folded, by id, each with when
-    /// it came; nil while it isn't folded.
-    func pulseBriefFold(_ brief: Int) -> [Int: Double]? {
-        guard let key = activeDashboardID?.uuidString,
-              let open = pulseFoldedBriefs[key]?[String(brief)] else { return nil }
-        let cards = open.compactMap { card, at in Int(card).map { ($0, at) } }
-        return Dictionary(cards, uniquingKeysWith: { first, _ in first })
-    }
-
-    /// Folds `brief` with `open`, the cards in it still open then
-    /// (PulseLayout.Brief.openCards), or opens it again (nil).
-    func foldPulseBrief(_ brief: Int, open: [Int: Double]?) {
-        guard let key = activeDashboardID?.uuidString else { return }
-        var briefs = pulseFoldedBriefs[key] ?? [:]
-        let noted = open.map { cards in Dictionary(uniqueKeysWithValues: cards.map { (String($0.key), $0.value) }) }
-        guard briefs[String(brief)] != noted else { return }
-        briefs[String(brief)] = noted
-        // An older brief folded now stays folded: the oldest other fold goes.
-        let others = briefs.keys.compactMap { Int($0) }.filter { $0 != brief }.sorted()
-        let kept = Set(others.suffix(Self.pulseFoldedBriefsKept - 1)).union([brief])
-        briefs = briefs.filter { id, _ in Int(id).map { kept.contains($0) } ?? false }
-        var all = pulseFoldedBriefs
-        all[key] = briefs.isEmpty ? nil : briefs
-        storePulseFoldedBriefs(all)
-    }
-
-    /// `card`, in `brief`, put back open with Undo or Put back: the fold no
-    /// longer counts it as open when it was folded, so a folded brief opens
-    /// to show it, and folds again once it's handled.
-    func unfoldPulseCard(_ card: Int, in brief: Int) {
-        guard var open = pulseBriefFold(brief), open.removeValue(forKey: card) != nil else { return }
-        foldPulseBrief(brief, open: open)
-    }
-
-    /// A removed dashboard's folded briefs go with it.
-    private func forgetPulseFoldedBriefs(of dashboardID: UUID) {
-        var all = pulseFoldedBriefs
-        guard all.removeValue(forKey: dashboardID.uuidString) != nil else { return }
-        storePulseFoldedBriefs(all)
-    }
-
-    private func storePulseFoldedBriefs(_ all: [String: [String: [String: Double]]]) {
-        objectWillChange.send()
-        pulseFoldedBriefs = all
-        defaults.set(all, forKey: Self.pulseFoldedBriefsKey)
-    }
     @Published private(set) var composerPrefillText = ""
     @Published private(set) var composerPrefillToken = UUID()
     /// The draft the prefill is for, until ComposerBar puts it in. A new
@@ -2317,6 +2219,19 @@ final class AppState: ObservableObject {
     /// The same for the open group room's composer, kept apart so a chat's
     /// composer never takes a quote meant for a room.
     @Published private(set) var roomQuoteRequest: ComposerQuoteRequest?
+    /// Files dropped on the open chat (#1408), waiting for its composer to
+    /// stage them, and the same for the open room's composer.
+    @Published private(set) var composerDropRequest: AttachmentDropRequest?
+    @Published private(set) var roomDropRequest: AttachmentDropRequest?
+    /// Words added to a room's kept draft from outside its composer (a
+    /// dictation Retry). The open room's composer adds them to its field.
+    @Published private(set) var roomDraftAppend: RoomDraftAppend?
+    struct RoomDraftAppend: Equatable {
+        let id = UUID()
+        let dashboardID: UUID
+        let roomID: String
+        let words: String
+    }
     /// A bot to add to the room composer's "To" row (its picture tapped, or
     /// its message replied to). The room composer applies and consumes it.
     @Published private(set) var roomRecipientRequest: RoomRecipientRequest?
@@ -2338,6 +2253,12 @@ final class AppState: ObservableObject {
     /// Words the composer puts back: a waiting message taken back to edit,
     /// or one its chat never took. ComposerBar applies each, then consumes it.
     @Published var composerRestoreRequests: [ComposerRestoreRequest] = []
+    /// A composer send still checking Hermes before its message shows: the
+    /// composer says it's sending meanwhile (#1401).
+    @Published private(set) var composerSendChecks: [ComposerSendCheck] = []
+    /// Sends whose chat was left while their reply was lost: Hermes may
+    /// have them, so their words come back without an "unsent" notice.
+    private var composerSubmissionsOfUnknownDelivery: [ComposerSubmissionContext] = []
     /// Why a waiting message went back to a draft, until it's dismissed or
     /// the composer is used.
     @Published var composerNotice: String? {
@@ -2425,6 +2346,52 @@ final class AppState: ObservableObject {
     var stepSummaryEarlyAnswers: [String: String] = [:]
     /// Runs asked about and not answered yet, with when they were asked.
     @Published var stepSummaryRequested: [ChatStepSummaries.Run: Date] = [:]
+    /// The suggestion row's guesses (AppState+Predictive.swift).
+    let predictive = PredictiveStore()
+    /// What the row asks the composer to do: send, edit or insert a guess.
+    @Published private(set) var predictiveComposerRequest: PredictiveComposerRequest?
+    /// The reply suggested replies were last asked for (asked once each).
+    var predictiveRepliesAsked: PredictiveStore.Anchor?
+    /// The draft last asked about, and the wait for the next pause.
+    var predictiveDraftAsked: (sessionID: String, draft: String)?
+    var predictivePauseTask: Task<Void, Never>?
+    /// The follow-up checks for the reply on screen, and the next one.
+    var predictiveFollowUp = PredictiveFollowUpState()
+    var predictiveFollowUpTask: Task<Void, Never>?
+    /// The hidden turn sent for Hermes to follow up, until it settles.
+    /// `after` is the chat's last row when it was sent: only a reply
+    /// after it is the follow-up's.
+    var predictiveFollowUpTurn: (sessionID: String, why: String, after: String?)?
+    /// Advanced by forgetPredictiveState: an answer asked before it is
+    /// dropped, whatever is on screen when it comes.
+    var predictiveGeneration = 0
+    /// The hidden turn was queued behind a turn already running (another
+    /// client's): the next turn to end is that one, not the follow-up.
+    var predictiveFollowUpQueued = false
+    /// The hidden prompt is on its way and Hermes hasn't said how it took
+    /// it: a turn ending meanwhile is the one ahead, not the follow-up.
+    var predictiveFollowUpSending = false
+    /// A turn ended while the hidden prompt was on its way: when it comes
+    /// back queued, it was queued behind that one.
+    var predictiveFollowUpAheadEnded = false
+    /// Turns of messages sent before the hidden prompt was queued that
+    /// ran ahead of it, so a reply Conduit never sees end is stopped
+    /// waiting for.
+    var predictiveFollowUpTurnsAhead = 0
+    /// When the hidden prompt was sent, if Hermes queued it: only a message
+    /// sent before then can run ahead of it.
+    var predictiveFollowUpQueuedAt: Date?
+    /// Row ids of messages other clients sent while the follow-up waits;
+    /// a reply ending before one is read can't be told apart.
+    var predictiveFollowUpUnreadMessages: Set<Int> = []
+    /// Bumped by each follow-up sent and each stop: a send that returns
+    /// after either leaves the follow-up waiting now as it is.
+    var predictiveFollowUpSend = 0
+    /// When the last reply settled here, so a follow-up check can say how
+    /// long ago without reading timestamps.
+    var predictiveReplyEnded: (anchor: PredictiveStore.Anchor, at: Date)?
+    /// Test seam: answers `POST /predict` in place of the dashboard.
+    var predictiveSender: (([String: Any]) async throws -> [String: Any])?
     /// Whose catalog `toolCatalog` is (dashboard and profile), and the
     /// catalogs Hermes already sent this run, or is sending now.
     private var toolCatalogOwner: String?
@@ -2873,6 +2840,7 @@ final class AppState: ObservableObject {
             openingPrompt: { [weak self] in self?.liveHermesCall?.openingTurn ?? self?.liveVoiceStyle.openingPrompt },
             provider: provider
         )
+        controller.startsMuted = { [weak self] in self?.hermesCallStartsMuted ?? false }
         // A hands-free goodbye closes the sheet like the Close button.
         controller.onEndConversation = { [weak self] in
             if qwen { self?.closeQwenLiveConversation() } else { self?.closeGeminiLiveConversation() }
@@ -3359,6 +3327,7 @@ final class AppState: ObservableObject {
         )
         // A hands-free goodbye closes the sheet like the Close button.
         controller.onEndConversation = { [weak self] in self?.closeGPTLiveConversation() }
+        controller.startsMuted = { [weak self] in self?.hermesCallStartsMuted ?? false }
         controller.apiCallLimit = { [weak self] in
             guard let self else { return nil }
             return GPTLiveAPICallLimit.duration(self.loadVoiceProfilePreferences(profile: self.activeProfile).gptLiveAPIMaxMinutes)
@@ -3582,6 +3551,8 @@ final class AppState: ObservableObject {
     /// at call time.
     lazy var grokLiveClient = GrokLiveClient(profile: { [weak self] in
         self?.activeProfile ?? "default"
+    }, profileParameter: { [weak self] in
+        self?.notifierPlugin.dashboardProfileParameter ?? "profile"
     }, request: { [weak self] path, method, body, timeout in
         guard let bridge = self?.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
         return try await bridge.requestJSON(path: path, method: method, body: body, timeoutMilliseconds: timeout)
@@ -3627,7 +3598,8 @@ final class AppState: ObservableObject {
                     search: search,
                     memory: memory,
                     personality: self?.grokLivePersonality,
-                    answerLength: self?.liveVoiceStyle.answerLength ?? .standard
+                    answerLength: self?.liveVoiceStyle.answerLength ?? .standard,
+                    acknowledgesOnceStarted: true
                 )
                 instructions += GrokLiveProtocol.grokInstructions(now: Date(), timeZone: .current)
                 instructions += self?.liveVoiceResumeContext?.instructionBlock ?? ""
@@ -3690,6 +3662,7 @@ final class AppState: ObservableObject {
         )
         // A hands-free goodbye closes the sheet like the Close button.
         controller.onEndConversation = { [weak self] in self?.closeGrokLiveConversation() }
+        controller.startsMuted = { [weak self] in self?.hermesCallStartsMuted ?? false }
         controller.traceName = "Grok Live"
         return controller
     }()
@@ -3832,6 +3805,12 @@ final class AppState: ObservableObject {
         loadVoiceProfilePreferences(profile: activeProfile).localLiveAgent
     }
 
+    /// The same for `profile`, which a call from Hermes and the voice start
+    /// it asks for both read, so they pick the same voice.
+    func usesLocalLiveAgent(profile: String) -> Bool {
+        loadVoiceProfilePreferences(profile: profile).localLiveAgent
+    }
+
     func setLocalLiveAgent(_ agent: Bool) {
         var preferences = loadVoiceProfilePreferences(profile: activeProfile)
         guard preferences.localLiveAgent != agent else { return }
@@ -3855,7 +3834,8 @@ final class AppState: ObservableObject {
         let supervisor = voiceBackgroundJobSupervisor
         var instructions: String = GeminiLiveConversationController.instructions(
             search: localLiveWebLookUps ? .hermes : .none,
-            answerLength: liveVoiceStyle.answerLength
+            answerLength: liveVoiceStyle.answerLength,
+            acknowledgesOnceStarted: true
         )
         instructions += LocalLiveProtocol.agentInstructions
         instructions += GrokLiveProtocol.clockInstructions(now: Date(), timeZone: .current)
@@ -3906,6 +3886,8 @@ final class AppState: ObservableObject {
     /// at call time.
     lazy var localLiveClient = LocalLiveClient(profile: { [weak self] in
         self?.activeProfile ?? "default"
+    }, profileParameter: { [weak self] in
+        self?.notifierPlugin.dashboardProfileParameter ?? "profile"
     }, dashboardBaseURL: { [weak self] in
         self?.connection?.baseUrl
     }, request: { [weak self] path, method, body, timeout in
@@ -3960,7 +3942,7 @@ final class AppState: ObservableObject {
         isBusy: { [weak self] chat in
             guard let self else { return false }
             if chat.runtimeID == self.activeSessionId { return self.isBusy }
-            guard let client = self.client else { throw HermesError.notConnected }
+            let client = try await self.clientForVoiceRequest()
             let rows = try await client.activeSessions(inProfile: chat.profile)
             return rows.contains { $0.runtimeSessionId == chat.runtimeID && $0.isRunning }
         },
@@ -4094,6 +4076,7 @@ final class AppState: ObservableObject {
         )
         // A hands-free goodbye closes the sheet like the Close button.
         controller.onEndConversation = { [weak self] in self?.closeLocalLiveConversation() }
+        controller.startsMuted = { [weak self] in self?.hermesCallStartsMuted ?? false }
         controller.traceName = "Local Live"
         return controller
     }()
@@ -4129,6 +4112,49 @@ final class AppState: ObservableObject {
             }
         }
         return true
+    }
+
+    /// Starts Local Live for the CarPlay surface. CarPlay presents it, so no
+    /// phone sheet opens; the other voice modes and read aloud stop first,
+    /// as on the phone.
+    func startLocalLiveForCarPlay(attachingTo thread: VoiceThreadTarget? = nil) async {
+        guard isConnected else { return }
+        messageReadAloudController.stop()
+        if showVoiceSheet || voiceConversationController.hasLiveVoiceSession { closeVoiceConversation() }
+        stopQwenLiveConversation()
+        stopGeminiLiveConversation()
+        stopGPTLiveConversation()
+        stopGrokLiveConversation()
+        guard !localLiveController.isActive else { return }
+        // A call started from CarPlay's chat list is attached to that chat,
+        // as one started from a chat on the phone is.
+        if let thread {
+            voiceBackgroundJobSupervisor.attachLiveThread(thread)
+        } else {
+            voiceBackgroundJobSupervisor.detachLiveThread()
+        }
+        localLiveTurns.reset()
+        localLiveOwnChat = nil
+        beginVoiceCallRecording(engine: .localLive)
+        await localLiveController.start()
+    }
+
+    /// CarPlay went away. A Local Live call only CarPlay was presenting
+    /// ends; one the phone's sheet or minimised bar shows keeps going.
+    func releaseCarPlayLocalLive() {
+        guard !(isSceneActive && (showLocalLiveSheet || minimisedLiveVoice == .localLive)) else { return }
+        if isLocalLiveActive {
+            closeLocalLiveConversation()
+        } else {
+            // Its work lets go of the call too (#449), and no turn of it
+            // runs on.
+            finishHermesCallbacks(engine: .localLive)
+            if localLiveControllerCreated { localLiveTurns.reset() }
+            localLiveOwnChat = nil
+            if voiceCallRecorder?.engine == .localLive { finishVoiceCallRecording() }
+            // A minimised call that failed has nothing left to show.
+            if minimisedLiveVoice == .localLive { minimisedLiveVoice = nil }
+        }
     }
 
     func closeLocalLiveConversation() {
@@ -4239,7 +4265,8 @@ final class AppState: ObservableObject {
                 return (created.sessionId, created.storedSessionId)
             },
             setTitle: { [weak self] sessionID, title in
-                try? await self?.client?.setSessionTitle(sessionID, title: title)
+                guard let client = try? await self?.clientForVoiceRequest() else { return }
+                try? await client.setSessionTitle(sessionID, title: title)
             },
             submit: { [weak self] sessionID, text in
                 guard let self else { throw HermesError.notConnected }
@@ -4247,7 +4274,8 @@ final class AppState: ObservableObject {
                 _ = try await client.sendPrompt(sessionID, text: text)
             },
             cancel: { [weak self] sessionID in
-                guard let client = self?.client else { throw HermesError.notConnected }
+                guard let self else { throw HermesError.notConnected }
+                let client = try await self.clientForVoiceRequest()
                 try await client.cancel(sessionID)
             },
             liveSessions: { [weak self] targetProfile in
@@ -4370,6 +4398,9 @@ final class AppState: ObservableObject {
             recorder.screen(card)
             self.checkpointVoiceCall(recorder)
         }
+        supervisor.onCallChatAdopted = { [weak self] thread in
+            self?.keepVoiceCallWithAdoptedChat(thread)
+        }
         supervisor.onThreadTurnStarted = { [weak self] job, thread in
             guard let self, let recorder = self.voiceCallRecorder else { return }
             self.captureVoiceCall()
@@ -4472,7 +4503,7 @@ final class AppState: ObservableObject {
     /// never hot-start the microphone when SwiftUI recreates the sheet's
     /// view identity. Lifecycle suspension and every destructive Voice
     /// boundary disarm it.
-    internal(set) var voiceSheetShouldAutoListen = false
+    var voiceSheetShouldAutoListen = false
 
     func consumeVoiceSheetAutoListen() -> Bool {
         guard voiceSheetShouldAutoListen else { return false }
@@ -4511,7 +4542,7 @@ final class AppState: ObservableObject {
     /// user's mute, while a Close arriving after a profile flip (the sheet's
     /// deferred `onDismiss`) must not write the outgoing profile's mute into
     /// the now-active profile's blob.
-    internal(set) var voiceControllerSessionProfile: String?
+    var voiceControllerSessionProfile: String?
 
     // MARK: - Wake phrase (#174)
 
@@ -4787,6 +4818,11 @@ final class AppState: ObservableObject {
     /// that its requested session no longer exists. Callers use this to
     /// retire a saved automatic-return target instead of retrying it forever.
     private var reconciliationSessionWasNotFound = false
+    /// Set when the resume RPC refused a Kanban worker's transcript (4132).
+    /// Hermes never reopens one as a chat, so it also counts as not found:
+    /// a saved automatic-return target is retired and a notification isn't
+    /// retried. This flag keeps its own message from being reworded.
+    private var reconciliationWasKanbanWorker = false
     /// Catalog rows `session.resume` answered 4007 for during an automatic
     /// resume, per dashboard and profile, for this app run. The catalog can
     /// keep listing a conversation the gateway no longer resumes; without
@@ -5222,16 +5258,7 @@ final class AppState: ObservableObject {
     /// presentation cache's queued disk writes have landed. Main actor only:
     /// both callbacks that end the task arrive on the main queue.
     private func holdBackgroundTaskUntilPresentationCacheWritesLand() {
-        var taskID = UIBackgroundTaskIdentifier.invalid
-        let end = {
-            guard taskID != .invalid else { return }
-            UIApplication.shared.endBackgroundTask(taskID)
-            taskID = .invalid
-        }
-        taskID = UIApplication.shared.beginBackgroundTask(
-            withName: "conduit.sessionPresentationCache.flush",
-            expirationHandler: end
-        )
+        let end = BackgroundTaskHold.begin("conduit.sessionPresentationCache.flush")
         sessionPresentationCache.notifyWhenPendingWritesLand(end)
     }
 
@@ -5243,6 +5270,7 @@ final class AppState: ObservableObject {
         lastPresentationCacheFlushDate = Date()
         cacheMessagePresentation(for: sessionIDs)
         recordOfflineChatCopy()
+        keepBotChatCopy()
     }
 
     // MARK: - Offline chat cache (#99)
@@ -5281,7 +5309,10 @@ final class AppState: ObservableObject {
               turnState != .synchronizing,
               !messages.isEmpty,
               let dashboardID = activeDashboardID,
-              let identities = offlineChatIdentities() else { return }
+              let identities = offlineChatIdentities(),
+              // A Bot Chat keeps no copy on the phone, even when a stray row
+              // of it is in the workspace's list (`keepBotChatCopy` keeps it).
+              botStoreProfile(forSessionIDs: Array(identities)) == nil else { return }
         offlineChatCache.record(
             dashboardID: dashboardID,
             profile: activeProfile,
@@ -5603,6 +5634,97 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// A chat opened while connected shows its saved copy until its own
+    /// transcript lands, as a chat picked in the saved list does, so going
+    /// back to a chat never shows it blank first (#1352). A chat with no
+    /// copy opens as before, and so does one already picked in the saved
+    /// list (its copy is up).
+    private func presentSavedCopyWhileOpening(_ session: SessionSummary, openedAs sessionID: String) {
+        guard let dashboardID = activeDashboardID else { return }
+        var ids = Set(session.nestingIDs)
+        ids.insert(sessionID)
+        // A Bot Chat's row can turn up in the workspace's list (a stray from
+        // older server data): its copy is the one kept in memory, never a file.
+        guard botStoreProfile(forSessionIDs: Array(ids)) == nil else { return }
+        if let picked = offlineChatPresentation?.picked, !picked.sessionIDs.isDisjoint(with: ids) { return }
+        let durableID = session.storedSessionId ?? session.id
+        guard let saved = offlineChatCache.loadTranscript(durableID, dashboardID: dashboardID, profile: activeProfile) else {
+            return
+        }
+        offlineChatPresentation = OfflineChatPresentation(
+            dashboardID: dashboardID,
+            profile: activeProfile,
+            snapshot: OfflineChatSnapshot(lastSessionID: nil, sessions: [], transcripts: []),
+            displayedTranscript: saved,
+            picked: OfflineChatPresentation.PickedChat(title: session.title, sessionIDs: ids, durableSessionID: durableID)
+        )
+    }
+
+    /// A Bot Chat has no row of its own, so it keeps no copy on the phone:
+    /// the one on screen is kept in memory when it's left, by dashboard and
+    /// bot, to show while it opens again (#1352).
+    private struct KeptBotChatCopy {
+        let sessionIDs: Set<String>
+        let transcript: OfflineCachedTranscript
+    }
+
+    private static func keptBotChatCopyKey(dashboardID: UUID, bot: String) -> String {
+        "\(dashboardID.uuidString)|\(bot)"
+    }
+
+    /// Keeps the Bot Chat on screen, as `recordOfflineChatCopy` saves any
+    /// other chat: connected, authoritative rows only.
+    private func keepBotChatCopy() {
+        guard isConnected,
+              offlineChatPresentation == nil,
+              turnState != .synchronizing,
+              let dashboardID = activeDashboardID,
+              let sessionID = activeSessionId,
+              let identities = offlineChatIdentities(),
+              let bot = botStoreProfile(forSessionIDs: Array(identities.union([sessionID]))) else { return }
+        let rows = messages.compactMap(OfflineCachedMessage.init)
+            .suffix(OfflineChatCacheStore.maxMessagesPerTranscript)
+        guard !rows.isEmpty else { return }
+        keptBotChatCopies[Self.keptBotChatCopyKey(dashboardID: dashboardID, bot: bot)] = KeptBotChatCopy(
+            sessionIDs: identities.union([sessionID]),
+            transcript: OfflineCachedTranscript(
+                sessionID: sessionID,
+                title: activeSessionTitle,
+                savedAt: Date(),
+                messages: Array(rows)
+            )
+        )
+    }
+
+    /// `presentSavedCopyWhileOpening` for a Bot Chat: its kept copy, when
+    /// the chat being opened is one of the ids it was kept under. It is what
+    /// was on screen when the chat was left, a /new's compaction included.
+    private func presentKeptBotChatCopy(bot: String, openedAs sessionID: String, title: String?) {
+        guard let dashboardID = activeDashboardID,
+              let kept = keptBotChatCopies[Self.keptBotChatCopyKey(dashboardID: dashboardID, bot: bot)],
+              kept.sessionIDs.contains(sessionID) else { return }
+        // Under the id it opens as, the Bot Chat's own: the one it was kept
+        // under was that run's runtime id, and words typed while it opens
+        // must keep to a draft the chat finds again.
+        let transcript = OfflineCachedTranscript(
+            sessionID: sessionID,
+            title: kept.transcript.title,
+            savedAt: kept.transcript.savedAt,
+            messages: kept.transcript.messages
+        )
+        offlineChatPresentation = OfflineChatPresentation(
+            dashboardID: dashboardID,
+            profile: activeProfile,
+            snapshot: OfflineChatSnapshot(lastSessionID: nil, sessions: [], transcripts: []),
+            displayedTranscript: transcript,
+            picked: OfflineChatPresentation.PickedChat(
+                title: title ?? kept.transcript.title,
+                sessionIDs: kept.sessionIDs.union([sessionID]),
+                durableSessionID: sessionID
+            )
+        )
+    }
+
     /// The chat picked in the saved list for this scope, as the id to open it
     /// by: its live row's when the live list has it, else its saved durable
     /// id. Forgotten once taken; a pick from another scope is dropped.
@@ -5661,8 +5783,10 @@ final class AppState: ObservableObject {
     private func wipeOfflineChatCache(dashboardID: UUID?) {
         if let dashboardID {
             offlineChatCache.removeDashboard(dashboardID)
+            keptBotChatCopies = keptBotChatCopies.filter { !$0.key.hasPrefix("\(dashboardID.uuidString)|") }
         } else {
             offlineChatCache.removeAll()
+            keptBotChatCopies.removeAll()
         }
         // Chat pictures kept on the phone go with the chats. Their files are
         // named by a hash, so they cannot be told apart by server.
@@ -5673,6 +5797,9 @@ final class AppState: ObservableObject {
         if dashboardID == nil || dashboardID == activeDashboardID { clearPinnedReplies() }
         // So do the summaries describing its runs of steps.
         forgetStepSummaries(scopePrefix: dashboardID.map { "\(Self.dashboardPreferenceBucket($0))." })
+        // And the open dashboard's predictions: guesses, the draft they
+        // read, hidden follow-ups and the checks still waiting.
+        if dashboardID == nil || dashboardID == activeDashboardID { forgetPredictiveState() }
         leaveSavedChats(dashboardID: dashboardID)
     }
 
@@ -5706,6 +5833,7 @@ final class AppState: ObservableObject {
         // on other dashboards. Keep their files rather than rewriting only
         // the messages currently loaded in memory.
         offlineChatCache.removeSavedChats()
+        keptBotChatCopies.removeAll()
         TranscriptImageCache.purge()
         TranscriptPictureMemory.forgetAll()
         // The summaries describing runs of steps go with the chats.
@@ -6102,6 +6230,47 @@ final class AppState: ObservableObject {
         cacheMessagePresentation()
     }
 
+    /// An unattached call took its first job's chat as its own (#1250): the
+    /// call is kept with that chat, as one started there is, so the chat
+    /// gets its call marker and Resume Call goes back to it. The chat is the
+    /// call's now, not one of its jobs. Called again once the chat's stored
+    /// id turns up.
+    private func keepVoiceCallWithAdoptedChat(_ thread: VoiceThreadTarget) {
+        let ids = [thread.runtimeSessionID, thread.storedSessionID].compactMap { $0 }.filter { !$0.isEmpty }
+        if var remembered = voiceJobSessionIDsByProfile[activeProfile], remembered.contains(where: { ids.contains($0) }) {
+            remembered.removeAll { ids.contains($0) }
+            voiceJobSessionIDsByProfile[activeProfile] = remembered
+            persistVoiceJobSessions()
+        }
+        guard let recorder = voiceCallRecorder else { return }
+        captureVoiceCall()
+        // Its line in the saved call says where the request went now.
+        if let job = voiceBackgroundJobSupervisor.jobs.first(where: { $0.id == voiceBackgroundJobSupervisor.callChatJobID }) {
+            let line = Self.voiceThreadTurnNote(job, thread: thread)
+            for sessionID in [job.storedSessionID, job.runtimeSessionID, nil] {
+                recorder.replaceNote(Self.voiceJobStartedNote(title: job.title, sessionID: sessionID), with: line)
+            }
+            // Once the chat's stored id is learned, the line links to it.
+            var earlier = thread
+            earlier.storedSessionID = nil
+            let runtimeLine = Self.voiceThreadTurnNote(job, thread: earlier)
+            if runtimeLine != line { recorder.replaceNote(runtimeLine, with: line) }
+        }
+        recorder.jobSessionIDs.removeAll { ids.contains($0) }
+        let key = voiceHistoryKey(profile: recorder.profile)
+        for id in ids { voiceSessionTagsByKey[key]?[id] = nil }
+        if voiceCallAttachment?.callID == recorder.callID {
+            voiceCallAttachment?.thread = thread
+        } else {
+            voiceCallAttachment = VoiceCallAttachment(
+                thread: thread, callID: recorder.callID,
+                startedAt: voiceBackgroundJobSupervisor.liveCallStartedAt ?? Date(),
+                resumed: recorder.sessionID != nil
+            )
+        }
+        checkpointVoiceCall(recorder)
+    }
+
     /// The chat's durable id: a chat new at the call's start may only have
     /// its stored id later.
     private func storedChatID(for thread: VoiceThreadTarget, profile: String) -> String? {
@@ -6190,6 +6359,19 @@ final class AppState: ObservableObject {
         let initialRegistry = preloadedRegistry
             ?? SavedDashboardMigrator.loadRegistry(defaults: defaults)
         self.savedDashboardRegistry = initialRegistry
+        // A phone that was signed in before keeps project chats out of
+        // Chats, as it had them (#1317). The defaults also say so when the
+        // registry is empty. A locked phone that can't read the registry at
+        // all decides on a later launch.
+        if defaults.string(forKey: ProjectChatsInChats.deviceDefaultKey) == nil,
+           preloadedRegistry != nil || SavedDashboardRegistryStore.load() != nil {
+            ProjectChatsInChats.settleDefault(
+                in: defaults,
+                existingInstall: !initialRegistry.dashboards.isEmpty
+                    || defaults.string(forKey: Self.chatResumeServerIdentityKey) != nil
+                    || defaults.string(forKey: "conduit.dashboardURL") != nil
+            )
+        }
         self.profileAppearanceStore = profileAppearanceStore ?? ProfileAppearanceStore(defaults: defaults)
         self.sessionPresentationCache = sessionPresentationCache
         self.offlineChatCache = offlineChatCache ?? Self.makeDefaultOfflineChatCache()
@@ -6239,6 +6421,8 @@ final class AppState: ObservableObject {
         activeProfile = defaults.string(forKey: activeProfileKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"
         if activeProfile.isEmpty { activeProfile = "default" }
+        displayPreferences = storedDisplayPreferences(dashboardID: initialDashboardID, profile: activeProfile)
+            ?? ProfileDisplayPreferences()
         // The global key is what cold launch opens (the resume state and
         // tests key off it). Mirror it into the active dashboard's entry so
         // the two can never disagree after launch; this also seeds the entry
@@ -6252,6 +6436,7 @@ final class AppState: ObservableObject {
             pinnedSessionIDsByProfile = stored
         }
         sessionStars = SessionStars(defaults: defaults)
+        pinnedChatOrder = PinnedChatOrder(defaults: defaults)
         allProfilesChatsSettings = AllProfilesChatsSettings(defaults: defaults)
         if let data = defaults.data(forKey: pinnedRepliesByProfileKey),
            let stored = try? JSONDecoder().decode([String: [PinnedReply]].self, from: data) {
@@ -6596,6 +6781,8 @@ final class AppState: ObservableObject {
     }
 
     private func storePins(_ pins: [String], profile: String) {
+        let unpinned = Set(pinnedSessionIDsByProfile[profile] ?? []).subtracting(pins)
+        if !unpinned.isEmpty { dropFromPinnedChatOrder(unpinned, profile: profile) }
         pinnedSessionIDsByProfile[profile] = pins
         if profile == activeProfile { pinnedSessionIDs = pins }
         persistPinnedSessions()
@@ -6786,6 +6973,11 @@ final class AppState: ObservableObject {
     private var chatCallTranscriptRequest: UUID?
     /// A call Hermes made (#449) that the live call now connecting answers.
     var pendingHermesCall: HermesCallOpening?
+    /// A call from Hermes muted in CallKit before its live voice was
+    /// running: that voice starts muted, as classic voice does (#558).
+    var hermesCallStartsMuted: Bool {
+        (liveHermesCall != nil || pendingHermesCall != nil) && isNativeHermesCallMuted
+    }
     /// Opens the voice of a call answered in CallKit; the CallKit call's
     /// end cancels it.
     var hermesCallOpenTask: Task<Void, Never>?
@@ -6812,7 +7004,7 @@ final class AppState: ObservableObject {
     @Published var isNativeHermesCallActive = false
     /// That call was answered here (not only ringing): see
     /// `isNativeCallVoiceSurfaceActive`.
-    @Published internal(set) var isNativeHermesCallAnswered = false
+    @Published var isNativeHermesCallAnswered = false
     /// Whether Conduit's phone screen is up, for a classic call's restart
     /// after an interruption (#1145). Test seam.
     var hermesCallPhoneOnScreen: @MainActor () -> Bool = { PhoneScenePresence.isInForeground }
@@ -6820,7 +7012,7 @@ final class AppState: ObservableObject {
     var hermesCallVoiceRunning: @MainActor () -> Bool = { HermesNativeCalls.shared.isCallVoiceRunning }
     /// The call's CallKit mute: a classic voice the call opens while muted
     /// doesn't start listening on its own.
-    internal(set) var isNativeHermesCallMuted = false
+    var isNativeHermesCallMuted = false
     /// A profile's call settings on the host (AppState+HermesCalls), for
     /// the dashboard and profile in `hermesCallsStatusKey`.
     @Published var hermesCallsStatus: HermesCallsStatus?
@@ -6962,7 +7154,8 @@ final class AppState: ObservableObject {
                 search: grokLiveSearchSource,
                 memory: grokLiveMemoryEnabled ? placeholderMemory : nil,
                 personality: grokLivePersonalityEnabled ? placeholderPersona : nil,
-                answerLength: style.answerLength
+                answerLength: style.answerLength,
+                acknowledgesOnceStarted: true
             ) + GrokLiveProtocol.grokInstructions(now: Date(), timeZone: .current)
         } else if isQwenLiveEnabled {
             mode = "Qwen Live"
@@ -7437,17 +7630,7 @@ final class AppState: ObservableObject {
     /// Main actor only: the expiration handler and the closing save's
     /// `defer` both run on the main queue, so the one-shot `end` never races.
     func beginVoiceTranscriptBackgroundTask(named name: String = "conduit.voiceTranscript.save") -> () -> Void {
-        var taskID = UIBackgroundTaskIdentifier.invalid
-        let end = {
-            guard taskID != .invalid else { return }
-            UIApplication.shared.endBackgroundTask(taskID)
-            taskID = .invalid
-        }
-        taskID = UIApplication.shared.beginBackgroundTask(
-            withName: name,
-            expirationHandler: end
-        )
-        return end
+        BackgroundTaskHold.begin(name)
     }
 
     /// Recounts the active dashboard and profile's queued calls. A running
@@ -7522,8 +7705,7 @@ final class AppState: ObservableObject {
             let firstLine = detail.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
             var detail = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
             if detail.count > 200 { detail = String(detail.prefix(200)) + "…" }
-            // A coded refusal is for the screen that asked; here it's just the error.
-            return detail.isEmpty || DashboardTicketBridgeError.isStructuredDetail(detail)
+            return detail.isEmpty
                 ? AppLocalization.string("Hermes answered with error \(String(status)).")
                 : AppLocalization.string("Hermes answered: \(detail)")
         default:
@@ -7763,6 +7945,8 @@ final class AppState: ObservableObject {
             openLinkedBotChat(profile)
         case .settings(let page):
             settingsLinkRequest = page
+        case .file(let path):
+            revealWorkspaceFile(path)
         }
     }
 
@@ -7906,7 +8090,10 @@ final class AppState: ObservableObject {
             let opened = await self.requestOpenSession(target ?? fallback ?? id) { [weak self] in
                 // A failed resume says "session not found"; the link's own
                 // words say what's missing. Other refusals keep their text.
-                guard let self, self.errorMessage == nil || self.reconciliationSessionWasNotFound else { return }
+                guard let self,
+                      self.errorMessage == nil
+                        || (self.reconciliationSessionWasNotFound && !self.reconciliationWasKanbanWorker)
+                else { return }
                 self.errorMessage = unavailable
             }.value
             // From outside a chat (a Live Activity, another app) the chat
@@ -8397,7 +8584,8 @@ final class AppState: ObservableObject {
 
     private func liveVoiceThreadIsBusy(_ thread: VoiceThreadTarget) async -> Bool {
         if isOpenChat(thread) { return isBusy }
-        guard let client, let rows = try? await client.activeSessions(inProfile: thread.profile) else { return false }
+        guard let client = try? await clientForVoiceRequest(),
+              let rows = try? await client.activeSessions(inProfile: thread.profile) else { return false }
         return rows.contains { row in
             (thread.owns(sessionID: row.runtimeSessionId) || thread.owns(sessionID: row.storedSessionId)) && row.isRunning
         }
@@ -9031,6 +9219,25 @@ final class AppState: ObservableObject {
         publishWidgetSnapshot()
     }
 
+    /// Saves a profile's Pinned order (issue 1354): the chats' pin ids,
+    /// top first.
+    func setPinnedChatOrder(_ ids: [String], profile: String) {
+        var order = pinnedChatOrder
+        order.set(ids, profile: profile)
+        guard order != pinnedChatOrder else { return }
+        pinnedChatOrder = order
+        order.save(to: defaults)
+    }
+
+    /// An unpinned chat leaves the order, so pinning it again puts it on top.
+    private func dropFromPinnedChatOrder(_ ids: Set<String>, profile: String) {
+        var order = pinnedChatOrder
+        order.drop(ids, profile: profile)
+        guard order != pinnedChatOrder else { return }
+        pinnedChatOrder = order
+        order.save(to: defaults)
+    }
+
     // MARK: - Stars (#757)
 
     func isSessionStarred(_ session: SessionSummary) -> Bool {
@@ -9063,13 +9270,15 @@ final class AppState: ObservableObject {
     /// The open chat's own turn state is authoritative for "working"; the
     /// registry snapshot can lag it by a poll.
     func sessionLiveStatus(_ session: SessionSummary) -> SessionLiveStatus? {
-        // The registry is the profile in use's: another profile's row in
-        // All has no live status.
-        guard !isOtherProfileRow(session) else { return nil }
         // A snapshot from before a disconnect may be long stale.
         let registry = isConnected && liveSessionStatusProfile == activeProfile
             ? liveSessionStatusIndex.status(for: session)
             : nil
+        // The dashboard's registry lists the live chats of every profile it
+        // serves, so another profile's row in All reads it too: a chat left
+        // running for one in another profile keeps its Running (#1353).
+        // Never the open chat, which is the profile in use's.
+        guard !isOtherProfileRow(session) else { return registry }
         if sessionMatchesActiveSession(session) {
             if registry == .needsInput { return .needsInput }
             // Once the open chat's own turn state is known it is fresher
@@ -9160,7 +9369,9 @@ final class AppState: ObservableObject {
         if let cursor = desktopViewsCursor[profile] { path += "?since=\(cursor)" }
         let response: [String: Any]
         do {
-            response = try await bridge.requestJSON(path: dashboardPath(path, profile: profile))
+            // The hook watching Desktop runs in the dashboard process (#1336).
+            response = try await bridge.requestJSON(
+                path: DashboardPath.withProfile(path, profile: profile, parameter: notifierPlugin.dashboardProfileParameter))
         } catch {
             // The next tick past the interval asks again; one line per host.
             if !desktopViewsFailureLogged {
@@ -9384,6 +9595,7 @@ final class AppState: ObservableObject {
         pinnedSessionIDs.removeAll { ids.contains($0) }
         pinnedSessionIDsByProfile[profile] = pinnedSessionIDs
         persistPinnedSessions()
+        dropFromPinnedChatOrder(ids, profile: profile)
         let pinID = pinID(for: session)
         if !unpinOnHost, sessionPinSync.clearPhoneOnly(pinID: pinID, profile: profile) {
             // Deleted: nothing left for the mark to protect.
@@ -10176,6 +10388,40 @@ final class AppState: ObservableObject {
         composerQuoteRequest = ComposerQuoteRequest(content: .reply(reference))
     }
 
+    /// A guess from the suggestion row for the composer to send, edit or
+    /// insert (Predictive.swift).
+    func requestPredictiveComposer(_ action: PredictiveComposerRequest.Action, text: String) {
+        // The row's guesses are for the reply it shows, in the open chat.
+        guard let shown = predictive.screen, shown.sessionID == activeSessionId else { return }
+        predictiveComposerRequest = PredictiveComposerRequest(
+            action: action, text: text, draft: predictive.draft, sessionID: shown.sessionID,
+            draftKey: ComposerBar.composerDraftKey(for: shown.sessionID, profile: activeProfile)
+        )
+    }
+
+    /// The composer took the guess.
+    func consumePredictiveComposerRequest(_ id: UUID) {
+        guard predictiveComposerRequest?.id == id else { return }
+        predictiveComposerRequest = nil
+    }
+
+    /// Sign-out or removal of the open dashboard: nothing Predictive knew
+    /// of its chats stays for the next account.
+    func forgetPredictiveState() {
+        predictiveGeneration &+= 1
+        predictivePauseTask?.cancel()
+        predictivePauseTask = nil
+        predictiveFollowUpTask?.cancel()
+        predictiveFollowUpTask = nil
+        predictiveRepliesAsked = nil
+        predictiveDraftAsked = nil
+        predictiveFollowUp = PredictiveFollowUpState()
+        stopWaitingForPredictiveFollowUp()
+        predictiveReplyEnded = nil
+        predictiveComposerRequest = nil
+        predictive.forgetAll()
+    }
+
     /// Puts `text` in the open chat's composer, replacing the draft, and
     /// focuses it.
     func prefillComposer(_ text: String) {
@@ -10188,6 +10434,45 @@ final class AppState: ObservableObject {
     func consumeComposerPrefill(_ token: UUID) {
         guard composerPrefillToken == token else { return }
         composerPrefillDraftKey = nil
+    }
+
+    /// Files dropped on the open chat go to its composer, which stages them
+    /// as attachments for the user to send.
+    func dropIntoComposer(_ providers: [NSItemProvider]) {
+        guard !providers.isEmpty else { return }
+        let owner = composerDraftKeyOnScreen
+        // A second drop on the same chat before the composer took the
+        // first adds to it; one left by another chat is dropped.
+        let pending = composerDropRequest?.owner == AnyHashable(owner) ? composerDropRequest?.providers ?? [] : []
+        composerDropRequest = AttachmentDropRequest(owner: owner, providers: pending + providers)
+    }
+
+    /// Whether the request was still the pending one for the chat on
+    /// screen: a drop that came on top of it replaced it with both, so its
+    /// composer stages that, and one dropped on another chat is discarded.
+    func consumeComposerDropRequest(_ id: UUID) -> Bool {
+        guard let request = composerDropRequest, request.id == id else { return false }
+        composerDropRequest = nil
+        guard let owner = request.owner.base as? ComposerDraftKey else { return false }
+        return composerDraftKeysAreSameChat(owner, composerDraftKeyOnScreen)
+    }
+
+    /// Files dropped on the open group room go to its composer.
+    func dropIntoRoomComposer(_ providers: [NSItemProvider]) {
+        guard !providers.isEmpty, let surface = activeRoomSurface else { return }
+        let owner = "\(surface.dashboardID.uuidString)/\(surface.room.roomID)"
+        // A second drop on the same room before the composer took the
+        // first adds to it.
+        let pending = roomDropRequest?.owner == AnyHashable(owner) ? roomDropRequest?.providers ?? [] : []
+        roomDropRequest = AttachmentDropRequest(owner: owner, providers: pending + providers)
+    }
+
+    /// Whether the request was still the pending one for the open room.
+    func consumeRoomDropRequest(_ id: UUID) -> Bool {
+        guard let request = roomDropRequest, request.id == id else { return false }
+        roomDropRequest = nil
+        guard let surface = activeRoomSurface else { return false }
+        return request.owner == AnyHashable("\(surface.dashboardID.uuidString)/\(surface.room.roomID)")
     }
 
     /// The composer took the quote: drop it, so the quoted text is not kept
@@ -10428,6 +10713,9 @@ final class AppState: ObservableObject {
             .flatMap(Self.normalizedStoredChatResumeIdentity)
             ?? initialChatResumeServerIdentity
         defaults.set(identity, forKey: Self.chatResumeServerIdentityKey)
+        // A follow-up's turn may have ended while disconnected: its reply
+        // isn't watched for across a reconnect, so none is tagged wrongly.
+        stopWaitingForPredictiveFollowUp()
         guard let previousIdentity, previousIdentity != identity else { return false }
 
         retireSpeechOperationsForServerReplacement(previousIdentity: previousIdentity, identity: identity)
@@ -10465,6 +10753,8 @@ final class AppState: ObservableObject {
         resetHostPins()
         sessionStars = SessionStars()
         defaults.removeObject(forKey: SessionStars.storageKey)
+        pinnedChatOrder = PinnedChatOrder()
+        defaults.removeObject(forKey: PinnedChatOrder.storageKey)
         allProfilesCatalogTask?.cancel()
         allProfilesCatalogTask = nil
         allProfilesCatalog = AllProfilesCatalog()
@@ -10479,6 +10769,8 @@ final class AppState: ObservableObject {
         profileHermesNames = [:]
         refreshSiriProfileShortcuts()
         clearSessionPresentationCache()
+        // Guesses name sessions, and a new server's ids can repeat the old one's.
+        forgetPredictiveState()
         // Saved chats are kept apart per dashboard and stay for the next
         // visit there: only removing the dashboard, signing out of it or
         // Settings' Delete Saved Chats wipes them. What of them is in memory
@@ -10547,27 +10839,31 @@ final class AppState: ObservableObject {
         return activeProfile
     }
 
-    /// Upstream's canonical-forever-chat guard: `/new` or `/reset` inside a
-    /// bot's canonical chat would fork the relationship into a scratch
-    /// session — the one thing Bot Mode promises never happens. Returns
-    /// "/compact" (fresh working context, SAME conversation) ONLY when the
-    /// active session is positively that bot's canonical chat by ROSTER
-    /// evidence (the canonical registry names it, or names the lineage tip a
-    /// compaction moved it to). No roster evidence, no reroute — upstream's
-    /// `isCanonicalChatOnScreen` fails closed identically, and ordinary
+    /// Upstream's canonical-forever-chat guard: `/new`, `/reset` or
+    /// `/clear` inside a bot's canonical chat would fork the relationship
+    /// into a scratch session — the one thing Bot Mode promises never
+    /// happens. True ONLY
+    /// when the active session is positively a bot's canonical chat (see
+    /// `activeChatIsCanonicalBotChat`), whatever follows the command (`/new
+    /// A title` is still a reset). No evidence, no reroute: ordinary
     /// sessions keep full `/new` freedom.
-    private func canonicalForeverChatRerouteText(for text: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard ["/new", "/reset", "/clear"].contains(trimmed) else { return nil }
-        guard let sessionId = activeSessionId else { return nil }
-        guard let bot = botOwnership.bot(owningAny: [sessionId]) else { return nil }
-        let canonicalIDs = [bot.canonicalSession?.id, bot.canonicalSession?.resolvedID]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return BotMentions.foreverChatRerouteText(
-            for: text,
-            isCanonicalBotChat: canonicalIDs.contains(sessionId)
-        )
+    private func isCanonicalForeverChatReset(_ text: String) -> Bool {
+        guard let command = Self.parseSlashCommand(text),
+              ["new", "reset", "clear"].contains(command.name) else { return false }
+        return activeChatIsCanonicalBotChat
+    }
+
+    /// Whether the open chat is a bot's canonical chat, by positive
+    /// evidence: this process registered one of its ids when it opened the
+    /// Bot Chat (the registry only ever holds canonical chats and the
+    /// runtimes resuming them), or the roster's canonical id is one of the
+    /// chat's own ids. A resume runs a Bot Chat under a fresh runtime id the
+    /// roster never names, so the roster alone missed every reopened Bot
+    /// Chat and `/new` forked it into a workspace chat (#1307).
+    private var activeChatIsCanonicalBotChat: Bool {
+        guard let sessionId = activeSessionId else { return false }
+        let ids = chatOwnSessionIDs(for: sessionId).union([sessionId])
+        return botOwnership.botProfileName(owningAny: ids) != nil
     }
 
     /// The composer's @mention middleware, shared by every routing path (a
@@ -10692,6 +10988,10 @@ final class AppState: ObservableObject {
     private var parkedRoomOutboxes: [String: GroupRoomOutbox] = [:]
     /// Unsent room composer text, keyed like `parkedRoomOutboxes`.
     private var groupRoomDrafts: [String: String] = [:]
+    /// The events of rooms left this run, keyed like `parkedRoomOutboxes`:
+    /// a room opened again shows them at once while its tail loads, and the
+    /// tail replaces them (#1352).
+    private var keptRoomReplays: [String: GroupRoomReplay] = [:]
     /// The files staged in a room's composer, kept with its text. Their
     /// local copies are deleted when the draft is dropped.
     private var groupRoomAttachments: [String: [Attachment]] = [:]
@@ -10783,6 +11083,7 @@ final class AppState: ObservableObject {
         closeRoomSurface(clearingRoomError: false, parkingPendingSend: false)
         parkedRoomOutboxes.removeAll()
         groupRoomDrafts.removeAll()
+        keptRoomReplays.removeAll()
         dropRoomAttachments { _ in true }
         // A send still awaiting its reply belongs to the outgoing identity;
         // its defer's removal is a no-op once the key is gone.
@@ -10793,10 +11094,14 @@ final class AppState: ObservableObject {
         "\(dashboardID.uuidString)|\(roomID)"
     }
 
-    /// Move the open room's pending send (if any) into the parked store.
+    /// Move the open room's pending send (if any) into the parked store, and
+    /// keep its events to show when it opens again.
     private func parkActiveRoomSend() {
         guard let surface = activeRoomSurface else { return }
         let key = Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)
+        if activeRoomReplay.roomID == surface.room.roomID, !activeRoomReplay.events.isEmpty {
+            keptRoomReplays[key] = activeRoomReplay
+        }
         if groupRoomOutbox.pending != nil {
             parkedRoomOutboxes[key] = groupRoomOutbox
         } else {
@@ -10814,6 +11119,7 @@ final class AppState: ObservableObject {
         }
         parkedRoomOutboxes = parkedRoomOutboxes.filter { !isGone($0.key) }
         groupRoomDrafts = groupRoomDrafts.filter { !isGone($0.key) }
+        keptRoomReplays = keptRoomReplays.filter { !isGone($0.key) }
         dropRoomAttachments(where: isGone)
     }
 
@@ -10833,6 +11139,7 @@ final class AppState: ObservableObject {
             let key = Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)
             parkedRoomOutboxes.removeValue(forKey: key)
             groupRoomDrafts.removeValue(forKey: key)
+            keptRoomReplays.removeValue(forKey: key)
             dropRoomAttachments { $0 == key }
         }
         closeRoomSurface(parkingPendingSend: false)
@@ -10953,6 +11260,31 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// A dictation Retry's words for a room's draft, after what it holds.
+    /// The open composer keeps its draft here as it changes, so the words
+    /// reach whichever composer shows the room now, or wait for reopen.
+    /// False when the room can't be confirmed (disbanded, off the room
+    /// list, or on a dashboard no longer active): the caller keeps the
+    /// recording, offered again for a Retry.
+    @discardableResult
+    func appendToRoomDraft(_ words: String, dashboardID: UUID, roomID: String) -> Bool {
+        // The open room counts even when the list missed it (a new room
+        // whose list refresh failed).
+        let isOpen = activeRoomSurface.map {
+            $0.dashboardID == dashboardID && $0.room.roomID == roomID && !$0.room.isDisbanded
+        } ?? false
+        guard dashboardID == activeDashboardID,
+              isOpen || groupRooms.contains(where: { $0.roomID == roomID && !$0.isDisbanded }) else {
+            return false
+        }
+        let key = Self.roomKey(dashboardID: dashboardID, roomID: roomID)
+        let text = ComposerDictation.draft(before: groupRoomDrafts[key] ?? "", dictated: words)
+        guard !text.isEmpty else { return true }
+        groupRoomDrafts[key] = text
+        roomDraftAppend = RoomDraftAppend(dashboardID: dashboardID, roomID: roomID, words: words)
+        return true
+    }
+
     /// The files staged in the open room's composer.
     func activeRoomAttachments() -> [Attachment] {
         guard let surface = activeRoomSurface else { return [] }
@@ -10999,9 +11331,10 @@ final class AppState: ObservableObject {
         groupRoomOutbox.discard()
         pendingRoomMessage = nil
         roomSendErrorMessage = nil
-        // A quote the closed room's composer never took must not land in
-        // the next room opened.
+        // A quote or drop the closed room's composer never took must not
+        // land in the next room opened.
         roomQuoteRequest = nil
+        roomDropRequest = nil
     }
 
     /// Probe `groups.capabilities` and, when the foundation methods are
@@ -11093,10 +11426,14 @@ final class AppState: ObservableObject {
         activeRoomSendInFlight = inFlightRoomSendTokens[
             Self.roomKey(dashboardID: dashboardID, roomID: room.roomID)
         ] != nil
-        // A quote the room being left never took stays with it.
-        if activeRoomSurface?.room.roomID != room.roomID { roomQuoteRequest = nil }
+        // A quote or drop the room being left never took stays with it.
+        if activeRoomSurface?.room.roomID != room.roomID {
+            roomQuoteRequest = nil
+            roomDropRequest = nil
+        }
         activeRoomSurface = GroupRoomSurface(dashboardID: dashboardID, room: room)
-        activeRoomReplay = GroupRoomReplay(roomID: room.roomID)
+        activeRoomReplay = keptRoomReplays[Self.roomKey(dashboardID: dashboardID, roomID: room.roomID)]
+            ?? GroupRoomReplay(roomID: room.roomID)
         activeRoomDriverStatus = nil
         roomApprovalAnswers = [:]
         // A send parked when this room was left comes back with its retry
@@ -11607,7 +11944,7 @@ final class AppState: ObservableObject {
 
     /// Internal so the saved-dashboard migration can normalize the legacy
     /// identity key the same way the runtime boundary does.
-    static func normalizedChatResumeServerIdentity(_ baseURL: String) -> String? {
+    nonisolated static func normalizedChatResumeServerIdentity(_ baseURL: String) -> String? {
         guard let normalized = try? ConnectionURLPolicy.normalizedBaseURL(baseURL),
               var components = URLComponents(string: normalized),
               let scheme = components.scheme?.lowercased(),
@@ -12056,6 +12393,34 @@ final class AppState: ObservableObject {
         profileAvatarURLs = profileAppearanceStore.loadAvatarURLs(dashboardID: dashboardID)
         profileGlowPicks = profileAppearanceStore.loadGlowColors(dashboardID: dashboardID)
         modelVisibility = scopedModelVisibility(dashboardID: dashboardID)
+        restoreDisplayPreferences()
+    }
+
+    private static let displayPreferencesByProfileKey = "profileDisplayPreferencesByDashboard"
+
+    private static func displayPreferencesKey(dashboardID: UUID?, profile: String) -> String {
+        "\(dashboardPreferenceBucket(dashboardID)).\(profile)"
+    }
+
+    /// The preferences last read or set for this dashboard's profile.
+    private func storedDisplayPreferences(dashboardID: UUID?, profile: String) -> ProfileDisplayPreferences? {
+        let stored = defaults.dictionary(forKey: Self.displayPreferencesByProfileKey) as? [String: Data] ?? [:]
+        guard let data = stored[Self.displayPreferencesKey(dashboardID: dashboardID, profile: profile)] else { return nil }
+        return try? JSONDecoder().decode(ProfileDisplayPreferences.self, from: data)
+    }
+
+    private func rememberDisplayPreferences() {
+        guard let data = try? JSONEncoder().encode(displayPreferences) else { return }
+        var stored = defaults.dictionary(forKey: Self.displayPreferencesByProfileKey) as? [String: Data] ?? [:]
+        stored[Self.displayPreferencesKey(dashboardID: activeDashboardID, profile: activeProfile)] = data
+        defaults.set(stored, forKey: Self.displayPreferencesByProfileKey)
+    }
+
+    /// Another dashboard or profile: its last known preferences until its
+    /// config is read, Hermes' defaults for one never read here.
+    private func restoreDisplayPreferences() {
+        displayPreferences = storedDisplayPreferences(dashboardID: activeDashboardID, profile: activeProfile)
+            ?? ProfileDisplayPreferences()
     }
 
     /// One-time move of the pre-scoping global profile order and model
@@ -12149,8 +12514,6 @@ final class AppState: ObservableObject {
         if visibilities.removeValue(forKey: bucket) != nil {
             persistModelVisibilities(visibilities)
         }
-        forgetPulseHome(of: id)
-        forgetPulseFoldedBriefs(of: id)
     }
 
     // MARK: Relay gateways each dashboard's host reported
@@ -12168,12 +12531,6 @@ final class AppState: ObservableObject {
 
     func relayGatewayIDs(of dashboardID: UUID) -> Set<String> {
         Set(storedRelayGatewayIDs()[dashboardID.uuidString]?.values.map { $0 } ?? [])
-    }
-
-    /// Every relay gateway a saved dashboard's host said it pairs this
-    /// iPhone through.
-    var knownRelayGatewayIDs: Set<String> {
-        Set(storedRelayGatewayIDs().values.flatMap(\.values))
     }
 
     /// Nil unless every pairing of this dashboard's hosts is end-to-end
@@ -12218,12 +12575,10 @@ final class AppState: ObservableObject {
         saveRelayGatewayIDs(stored)
     }
 
-    /// Settings > Notifications sorts pairings by these, so it redraws; and
-    /// Pulse pushes from a host's gateways offer Quiet for today by them.
+    /// Settings > Notifications sorts pairings by these, so it redraws.
     private func saveRelayGatewayIDs(_ stored: [String: [String: String]]) {
         objectWillChange.send()
         defaults.set(stored, forKey: Self.relayGatewayIDsByDashboardKey)
-        sharePulseQuiet()
     }
 
     private func storedRelayGatewayIDs() -> [String: [String: String]] {
@@ -13118,6 +13473,8 @@ final class AppState: ObservableObject {
         resetHostPins()
         sessionStars = SessionStars()
         defaults.removeObject(forKey: SessionStars.storageKey)
+        pinnedChatOrder = PinnedChatOrder()
+        defaults.removeObject(forKey: PinnedChatOrder.storageKey)
         allProfilesCatalogTask?.cancel()
         allProfilesCatalogTask = nil
         allProfilesCatalog = AllProfilesCatalog()
@@ -13409,12 +13766,9 @@ final class AppState: ObservableObject {
         // The outgoing dashboard's chat and Chats list as they show now are
         // what the next visit there opens to.
         recordOfflineChatCopy()
+        keepBotChatCopy()
         recordSavedChatList()
         selectDashboardTarget(id)
-        // Pulse's badge, marks and chat are the outgoing dashboard's.
-        pulseUnseen = 0
-        pulseSources = [:]
-        pulseHomeChatID = nil
         rememberDashboardURL(dashboard.normalizedURL)
         let crossedServer = prepareChatResumeForConnection(to: dashboard.normalizedURL, dashboardID: id)
         retireConnectionRuntimeForDashboardSwitch()
@@ -15160,7 +15514,9 @@ final class AppState: ObservableObject {
         requiredViewportTransitionGeneration: UInt64?,
         historySourceUnavailable: Bool
     ) async -> Bool {
+        // A Kanban worker is refused under any of its ids.
         guard reconciliationSessionWasNotFound,
+              !reconciliationWasKanbanWorker,
               let storedID = row.storedSessionId,
               !storedID.isEmpty,
               storedID != row.id,
@@ -15506,6 +15862,7 @@ final class AppState: ObservableObject {
         durablePersistedRowIDs = []
         reconciliationWasIdentityRejected = false
         reconciliationSessionWasNotFound = false
+        reconciliationWasKanbanWorker = false
         refreshActiveChatScrollSessionIdentity(isReconciling: true)
         turnState = .synchronizing
         // The resume RPC can overlap a user-initiated config.set. Capture the
@@ -16084,6 +16441,12 @@ final class AppState: ObservableObject {
                 // bounded current-Hermes page with one enormous row (which
                 // must not claim the backend lacks pagination).
                 errorMessage = UserFacingError.message(for: error)
+            case let rpcError as RpcError where rpcError.code == 4132:
+                // A Kanban worker's transcript: Hermes lets only the board
+                // run it. Lists leave these out; a link can still reach one.
+                reconciliationWasKanbanWorker = true
+                reconciliationSessionWasNotFound = true
+                errorMessage = AppLocalization.string("This chat is a Kanban task's worker, so only the board can run it. Open the task on the Kanban board and check its Worker Log.")
             default:
                 errorMessage = AppLocalization.string("Failed to restore this conversation: \(UserFacingError.message(for: error))")
             }
@@ -17193,7 +17556,7 @@ final class AppState: ObservableObject {
         return nil
     }
 
-    func canonicalSessionID(for sessionID: String?) -> String? {
+    private func canonicalSessionID(for sessionID: String?) -> String? {
         ChatSessionPersistenceIdentity.canonicalID(
             for: sessionID,
             identity: activeChatScrollSessionIdentity,
@@ -17624,6 +17987,8 @@ final class AppState: ObservableObject {
               Self.uiTestFailedConnectionStub() == nil else { return }
         #endif
         guard let savedConnection = connection else { return }
+        // As on every connect: a follow-up's turn may have ended unseen.
+        stopWaitingForPredictiveFollowUp()
         // The renewal's ownership is captured BEFORE any await: the renewed
         // ticket belongs to exactly this dashboard and this switch
         // generation. After the mint (or the silent re-auth), the fences
@@ -20173,17 +20538,22 @@ final class AppState: ObservableObject {
 
     /// Hermes announced a user message in a chat (`user.message`). Every
     /// client of the chat hears it, this one's own sends included: one
-    /// arriving with a turn running here, already shown here by its row id,
-    /// or matching the latest user message here is this device's (so is
-    /// the same text resent elsewhere; its stored count still reads it).
+    /// already shown here by its row id, or matching the latest user
+    /// message here while that one has no row id yet, is this device's
+    /// (so is the same text resent elsewhere then; its stored count still
+    /// reads it).
     private func noteUserMessageElsewhere(sessionId: String, rowId: Int?, text: String) {
-        if eventBelongsToActiveSession(sessionId), !turnState.isRunning,
-           openChatSync.sessionID == activeSessionId,
-           rowId.map({ id in !messages.contains(where: { $0.rowId == id }) }) ?? true {
-            let latestHere = messages.last(where: { $0.role == .user })?.content ?? ""
-            if OpenChatSync.squashed(latestHere) != OpenChatSync.squashed(text) {
-                openChatSync.noteUserMessageElsewhere()
-            }
+        let latestHere = messages.last(where: { $0.role == .user })
+        let elsewhere = eventBelongsToActiveSession(sessionId)
+            && (rowId.map({ id in !messages.contains(where: { $0.rowId == id }) }) ?? true)
+            && (rowId != nil && latestHere?.rowId != nil
+                || OpenChatSync.squashed(latestHere?.content ?? "") != OpenChatSync.squashed(text))
+        // A follow-up waiting in this chat: whatever turn is running here.
+        if elsewhere, let activeSessionId {
+            notePredictiveFollowUpMessageElsewhere(sessionId: activeSessionId, rowId: rowId)
+        }
+        if elsewhere, !turnState.isRunning, openChatSync.sessionID == activeSessionId {
+            openChatSync.noteUserMessageElsewhere()
         }
         noteCatalogChanged()
     }
@@ -22233,13 +22603,26 @@ final class AppState: ObservableObject {
         }
         guard botOpenFenceIsCurrent(epoch: epoch, client: client) else { return false }
         noteBotChatSession(created.sessionId, profile: bot.name, label: bot.displayLabel)
-        if let stored = created.storedSessionId {
-            noteBotChatSession(stored, profile: bot.name, label: bot.displayLabel)
+        // The open resumes the STORED id, as Desktop's does: Hermes finds a
+        // chat by its stored key (the live session it just made, or the row
+        // the title wrote) and answers 4007 for a runtime id. Opening the
+        // runtime id failed the open, so a new bot's first message went to
+        // a chat Conduit never had open, and it was gone on the way back.
+        // A create that named no stored id is found by its title instead,
+        // which just landed: the lookup gives the row to open.
+        guard let storedID = created.storedSessionId else {
+            return await adoptWinningBotChat(
+                bot,
+                client: client,
+                epoch: epoch,
+                presentationMigrationSessionIDs: presentationMigrationSessionIDs,
+                viewportTransitionGeneration: viewportTransitionGeneration
+            )
         }
         return await openCanonicalBotChat(
             bot,
-            registryID: created.storedSessionId ?? created.sessionId,
-            resumeID: created.sessionId,
+            registryID: storedID,
+            resumeID: storedID,
             epoch: epoch,
             client: client,
             presentationMigrationSessionIDs: presentationMigrationSessionIDs,
@@ -22251,7 +22634,8 @@ final class AppState: ObservableObject {
     /// miss and the eager title. Re-consult the registry; adopt the winner.
     /// Our abandoned lazy session holds zero messages and the gateway prunes
     /// it. If the winner cannot be confirmed, fail closed — never open our
-    /// untitled stray, never mint again.
+    /// untitled stray, never mint again. A create that named no stored id
+    /// comes here too, after its own title landed: the winner is our chat.
     private func adoptWinningBotChat(
         _ bot: BotProfile,
         client: HermesClient,
@@ -22376,12 +22760,6 @@ final class AppState: ObservableObject {
     /// profile, so tests can pin all three cases without driving a switch.
     func profileOwnershipVerdictForTesting(_ profile: String) -> ProfileOwnershipVerdict {
         profileOwnershipVerdict(for: profile)
-    }
-
-    /// The persisted selection for a workspace, so a test can pin that the
-    /// conversation's KIND — not just its id — survived restoration.
-    func storedSessionReferenceForTesting(_ profile: String) -> SessionReference? {
-        chatResumeCoordinator.lastSession(for: profile)
     }
 
     func adoptActiveSessionForWidgetTesting(_ sessionID: String) {
@@ -22635,13 +23013,18 @@ final class AppState: ObservableObject {
         // profile explicitly (its canonical row may legitimately surface in
         // the raw catalog as a stray from older server data), so the guard
         // would only misfire here.
+        // A saved chat's row opens by its stored session id.
+        let listedSession = (sessions + cronSessions).first(where: {
+            $0.id == sessionId || $0.alternateIds.contains(sessionId)
+        }) ?? (sessions + cronSessions).first(where: { $0.storedSessionId == sessionId })
         if conversationProfile == nil,
-           let session = (sessions + cronSessions).first(where: {
-               $0.id == sessionId || $0.alternateIds.contains(sessionId)
-           }), !sessionBelongsToProfile(session, profile: activeProfile) {
+           let session = listedSession, !sessionBelongsToProfile(session, profile: activeProfile) {
             errorMessage = AppLocalization.string("That conversation belongs to another workspace. Switch profiles to open it.")
             return (.failed, true)
         }
+        // Read before the open marks it read: an unread chat lands at the
+        // start of its latest reply once its transcript is in (#365).
+        let opensUnreadReply = listedSession.map { isSessionUnread($0) } ?? false
         let transitionGeneration: UInt64
         if let viewportTransitionGeneration {
             guard chatViewportTransitionIsCurrent(
@@ -22675,9 +23058,20 @@ final class AppState: ObservableObject {
         setActiveSessionState(id: sessionId)
         keepDelegateAgents(of: acceptedSessionIDs)
         messages = []
+        // A chat with a saved copy shows it while Hermes sends the transcript
+        // (#1352): a Bot Chat the copy kept when it was left, any other the
+        // one on the phone.
+        // A known Bot Chat opened the ordinary way (a notification, a link)
+        // is still the bot's: the registry names it.
+        if let bot = conversationProfile ?? botConversationProfile(for: sessionId) {
+            presentKeptBotChatCopy(bot: bot, openedAs: sessionId, title: preferredTitle)
+        } else if let listedSession {
+            presentSavedCopyWhileOpening(listedSession, openedAs: sessionId)
+        }
         // Explicit navigation owns the chat surface from here. A chat picked
-        // in the saved list keeps its saved copy up until its own transcript
-        // replaces it (`messages`' didSet), rather than blanking first.
+        // in the saved list, or opened with a saved copy, keeps that copy up
+        // until its own transcript replaces it (`messages`' didSet), rather
+        // than blanking first.
         if offlineChatPresentation?.picked?.sessionIDs.contains(sessionId) != true {
             dismissOfflineChatPresentation()
         }
@@ -22743,6 +23137,7 @@ final class AppState: ObservableObject {
             // Read before any await: the flags describe the reconcile above.
             return (.failed, reconciliationWasIdentityRejected || reconciliationSessionWasNotFound)
         }
+        if opensUnreadReply { chatReplyStartLandingRequest &+= 1 }
         return (.opened, false)
     }
 
@@ -22847,10 +23242,6 @@ final class AppState: ObservableObject {
                 errorMessage = AppLocalization.string("This notification predates multi-dashboard pairing. Update the notifier on the sending gateway and pair it again to continue.")
             }
             return .failed
-        }
-        if await opensPulseScreen(for: target) {
-            traceStage = "pulse"
-            return .opened
         }
         traceStage = "open start"
         let notificationAttemptID = UUID()
@@ -23355,9 +23746,7 @@ final class AppState: ObservableObject {
         !isStartingNewChat && (canStartNewChatNow || canQueueNewChat || showsPendingNewChat)
     }
 
-    /// New Chat can start a chat right now, with nothing to wait for. Do
-    /// it's refusal on the Pulse screen goes by it too (PulseFeed.swift).
-    var canStartNewChatNow: Bool {
+    private var canStartNewChatNow: Bool {
         isConnected && !isConnecting && !isProfileSwitching && client != nil
             && turnState != .synchronizing && offlineChatPresentation == nil
     }
@@ -23438,6 +23827,9 @@ final class AppState: ObservableObject {
         let previousSessionID = activeSessionId
         let previousTitle = activeSessionTitle
         cacheMessagePresentation()
+        // The chat being left shows as it is now when it's opened again.
+        recordOfflineChatCopy()
+        keepBotChatCopy()
         let newTitle = AppLocalization.string("New conversation")
         activeSessionTitle = newTitle
         let previousTurnState = turnState
@@ -23747,11 +24139,15 @@ final class AppState: ObservableObject {
                   profile == activeProfile,
                   self.client === client else { return }
 
+            // Hermes' session.resume finds a conversation by its stored id
+            // (or title), never by the runtime id session.create answered
+            // with: resuming that one is "session not found" (issue 1400).
+            // The stored id reattaches the live session the create made.
+            let storedID = branched.storedSessionId.flatMap { $0.isEmpty ? nil : $0 }
+                ?? branched.sessionId
             let summary = SessionSummary(
-                id: branched.storedSessionId ?? branched.sessionId,
-                alternateIds: [branched.sessionId, branched.storedSessionId]
-                    .compactMap { $0 }
-                    .filter { $0 != branched.storedSessionId ?? branched.sessionId },
+                id: storedID,
+                alternateIds: [branched.sessionId].filter { $0 != storedID },
                 title: title,
                 model: runtime.model.isEmpty ? "Hermes" : runtime.model,
                 updatedLabel: AppLocalization.string("now"),
@@ -23769,9 +24165,7 @@ final class AppState: ObservableObject {
             // the catalog below). They must never alias the source
             // conversation, and the source keeps its own mappings.
             if let runtime = ChatScrollIdentityNormalization.sessionID(branched.sessionId),
-               let durable = ChatScrollIdentityNormalization.sessionID(
-                   branched.storedSessionId ?? branched.sessionId
-               ),
+               let durable = ChatScrollIdentityNormalization.sessionID(storedID),
                runtime != durable {
                 conversationIdentityIndex.recordAuthoritative(
                     runtimeID: runtime,
@@ -23792,11 +24186,11 @@ final class AppState: ObservableObject {
             keepDelegateAgents(of: knownSessionIDs(for: branched.sessionId))
             let token = beginReconciliation()
             let reconciled = await reconcile(
-                sessionId: branched.sessionId,
+                sessionId: storedID,
                 using: client,
                 token: token,
-                acceptedSessionIDs: knownSessionIDs(for: branched.sessionId),
-                conversationIdentity: captureConversationIdentity(for: branched.sessionId),
+                acceptedSessionIDs: knownSessionIDs(for: storedID),
+                conversationIdentity: captureConversationIdentity(for: storedID),
                 requiredViewportTransitionGeneration: transitionGeneration
             )
             guard chatViewportTransitionIsCurrent(generation: transitionGeneration),
@@ -23834,6 +24228,28 @@ final class AppState: ObservableObject {
             clientEpoch: activeClientEpoch,
             viewportTransitionGeneration: chatViewportTransitionGeneration
         )
+    }
+
+    /// A failed send that said nothing: its chat was left (or the
+    /// connection changed) before Hermes refused it, and Hermes didn't get
+    /// it. One whose reply was lost after its chat was left may have gone,
+    /// so it isn't announced as unsent.
+    func composerSubmissionStoppedQuietly(_ context: ComposerSubmissionContext) -> Bool {
+        if takeComposerSubmissionOfUnknownDelivery(context) { return false }
+        return !isCurrentComposerSubmission(context)
+    }
+
+    /// The failed send may have reached Hermes: its reply was lost after
+    /// its chat was left. Asked once per failed send.
+    func takeComposerSubmissionOfUnknownDelivery(_ context: ComposerSubmissionContext) -> Bool {
+        guard let index = composerSubmissionsOfUnknownDelivery.firstIndex(of: context) else { return false }
+        composerSubmissionsOfUnknownDelivery.remove(at: index)
+        return true
+    }
+
+    /// A dashboard left or signed out of: nobody asks about its sends again.
+    func forgetComposerSubmissionsOfUnknownDelivery() {
+        composerSubmissionsOfUnknownDelivery.removeAll()
     }
 
     private func isCurrentComposerSubmission(_ context: ComposerSubmissionContext) -> Bool {
@@ -23961,6 +24377,9 @@ final class AppState: ObservableObject {
         })
     }
 
+    /// Most callers only need the sync; the returned context is for the ones
+    /// that send again from where the submission recovered.
+    @discardableResult
     private func recoverComposerSubmission(
         using context: ComposerSubmissionContext
     ) async -> ComposerSubmissionContext? {
@@ -23989,7 +24408,9 @@ final class AppState: ObservableObject {
         // behind it: the first message starts one, as New Chat would, and
         // goes into it rather than nowhere.
         if composerSubmissionStartsChat(text: text, attachments: attachments, context: submissionContext) {
-            guard let started = await startChatForComposerSubmission() else { return false }
+            guard let started = await checkingBeforeSend(submissionContext, startsChat: true, {
+                await startChatForComposerSubmission()
+            }) else { return false }
             submissionContext = started
         }
         let sent = await performComposerSubmission(
@@ -24085,7 +24506,7 @@ final class AppState: ObservableObject {
         }
         // The canonical-chat `/new` reroute is a compaction, which carries no
         // attachments; refuse rather than submit a literal `/compact` turn.
-        if !attachments.isEmpty, canonicalForeverChatRerouteText(for: text) != nil {
+        if !attachments.isEmpty, isCanonicalForeverChatReset(text) {
             errorMessage = AppLocalization.string(
                 "This bot chat never resets. Remove the attachments to compact it instead."
             )
@@ -24105,7 +24526,7 @@ final class AppState: ObservableObject {
         // One authoritative read-only probe corrects the state before the
         // routing decision. Trusted state never pays for the probe.
         if turnState == .idle, turnStateIsStale,
-           await correctStaleIdleTurnState(using: submissionContext) {
+           await checkingBeforeSend(submissionContext, { await correctStaleIdleTurnState(using: submissionContext) }) {
             if let onBusy { onBusy(); return false }
             lifecycleLog.notice("submitComposer: stale-idle corrected to running → busy \(busyMode.rawValue, privacy: .public)")
             return await submitWhileBusy(text, attachments: attachments, mode: busyMode, context: submissionContext)
@@ -24131,9 +24552,9 @@ final class AppState: ObservableObject {
         // transcript.
         if turnState == .idle,
            transcriptFreshnessIsStale || pendingLocalOrderingDebt != nil {
-            switch await confirmTranscriptFreshnessBeforeSend(
-                using: submissionContext
-            ) {
+            switch await checkingBeforeSend(submissionContext, {
+                await confirmTranscriptFreshnessBeforeSend(using: submissionContext)
+            }) {
             case .proceed:
                 break
             case .routeToBusySubmission:
@@ -24164,6 +24585,41 @@ final class AppState: ObservableObject {
             restorePendingScreenshot(screenshot)
         }
         return sent
+    }
+
+    /// A check Hermes answers before a send's message shows. On a slow or
+    /// dropped connection it can take seconds, and the field is empty by
+    /// then: without a word from the composer the message looked as if it
+    /// went nowhere, and leaving the chat to retry dropped it (#1401).
+    /// `startsChat`: the check is starting the chat from the empty canvas,
+    /// which opens a new viewport of its own on the way.
+    private func checkingBeforeSend<T>(
+        _ context: ComposerSubmissionContext,
+        startsChat: Bool = false,
+        _ check: () async -> T
+    ) async -> T {
+        let marker = ComposerSendCheck(
+            sessionID: context.sessionID,
+            viewportTransitionGeneration: context.viewportTransitionGeneration,
+            startsChat: startsChat,
+            earlierNewChat: newChatOpenedSessionID
+        )
+        composerSendChecks.append(marker)
+        defer { composerSendChecks.removeAll { $0.id == marker.id } }
+        return await check()
+    }
+
+    /// The chat on screen has a send still checking Hermes.
+    var composerSendIsChecking: Bool {
+        composerSendChecks.contains { check in
+            if check.startsChat, isStartingNewChat {
+                // The chat this check starts, never one an earlier New Chat made.
+                return activeSessionId == nil
+                    || (activeSessionId == newChatOpenedSessionID && activeSessionId != check.earlierNewChat)
+            }
+            return check.sessionID == activeSessionId
+                && check.viewportTransitionGeneration == chatViewportTransitionGeneration
+        }
     }
 
     /// A typed message while a turn runs, by `mode`: into the turn, as a
@@ -24616,15 +25072,8 @@ final class AppState: ObservableObject {
     /// What the host's notifier plugin serves; Settings nudges an update.
     @Published private(set) var notifierPlugin = NotifierPluginStatus() {
         // A plugin that just said it takes on-screen reports gets the turn
-        // already running; one that answered without Pulse ends the Pulse
-        // this dashboard remembered.
-        didSet {
-            if oldValue.state != notifierPlugin.state {
-                updateChatOnScreen()
-                forgetPulseHomeIfGone()
-                sharePulseQuiet()
-            }
-        }
+        // already running.
+        didSet { if oldValue.state != notifierPlugin.state { updateChatOnScreen() } }
     }
     /// The plugin on its repository's main branch, once read. A reset for
     /// another host keeps it (`freshNotifierPluginStatus`).
@@ -24863,6 +25312,8 @@ final class AppState: ObservableObject {
     lazy var chatTakeoverClient = ChatTakeoverClient(request: { [weak self] path, method, body in
         guard let bridge = self?.dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
         return try await bridge.requestJSON(path: path, method: method, body: body)
+    }, profileParameter: { [weak self] in
+        self?.notifierPlugin.dashboardProfileParameter ?? "profile"
     })
 
     /// The refused chat's takeover offer or progress. The composer shows it
@@ -24944,6 +25395,14 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// The profile whose claims the takeover route reads: a Bot Chat's bot,
+    /// else the workspace. A Bot Chat's claim is in its bot's registry, so
+    /// asking the workspace found nobody holding it, the resend was refused
+    /// again, and the offer never went away.
+    private func chatTakeoverProfile(_ state: ChatTakeoverState) -> String {
+        botScopeProfile(forSessionIDs: Set(state.sessionIDs), workspaceProfile: activeProfile) ?? activeProfile
+    }
+
     /// Asks the host to drop the other app's claim, waiting while it runs a
     /// turn. On success the composer sends its draft again.
     func takeOverChat() {
@@ -24956,18 +25415,21 @@ final class AppState: ObservableObject {
         state.phase = .waiting
         chatTakeover = state
         let client = chatTakeoverClient
-        let profile = activeProfile
+        let profile = chatTakeoverProfile(state)
         let waiting = state
         // Only `client` is held across the awaits; `self` is re-taken weakly
         // just to publish the result.
         chatTakeoverTask = Task { [weak self] in
-            let phase = await Self.runChatTakeover(client: client, state: waiting, profile: profile)
+            let phase = await Self.runChatTakeover(client: client, state: waiting, profile: profile, onOwner: { surface in
+                self?.noteChatTakeoverOwner(surface, sessionID: waiting.sessionID)
+            })
             guard let self else { return }
             // Only the latest takeover clears its own handle.
             if !Task.isCancelled { self.chatTakeoverTask = nil }
             guard let phase, !Task.isCancelled,
                   self.chatTakeover?.sessionID == waiting.sessionID else { return }
             var settled = waiting
+            settled.surface = self.chatTakeover?.surface ?? waiting.surface
             settled.phase = phase
             if phase == .ready {
                 self.chatTakeoverReadyCount &+= 1
@@ -24981,19 +25443,32 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Who the plugin says holds the chat while Conduit waits. Hermes'
+    /// refusal doesn't name another bot's message running in a Bot Chat, so
+    /// the notice says so once the plugin does, instead of "another window".
+    private func noteChatTakeoverOwner(_ surface: String, sessionID: String) {
+        guard var state = chatTakeover, state.sessionID == sessionID, state.phase == .waiting,
+              state.surface != surface else { return }
+        state.surface = surface
+        chatTakeover = state
+    }
+
     /// Polls the takeover route until it settles: while the owner is mid-turn,
     /// and through a few transient failures (bridge not ready, 5xx, network).
-    /// Nil when cancelled.
+    /// `onOwner` hears who holds the chat when a busy answer names it. Nil
+    /// when cancelled.
     static func runChatTakeover(
         client: ChatTakeoverClient,
         state: ChatTakeoverState,
         profile: String,
         pollInterval: Duration = chatTakeoverPollInterval,
         waitLimit: TimeInterval = chatTakeoverWaitLimit,
-        keepWaiting: () -> Bool = { true }
+        keepWaiting: () -> Bool = { true },
+        onOwner: (String) -> Void = { _ in }
     ) async -> ChatTakeoverState.Phase? {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(waitLimit))
+        var state = state
         var transientFailures = 0
         while !Task.isCancelled, keepWaiting() {
             do {
@@ -25002,8 +25477,12 @@ final class AppState: ObservableObject {
                     return .ready
                 case .sameHost:
                     return .heldHere
-                case .busy:
+                case .busy(let surface):
                     transientFailures = 0
+                    if let surface {
+                        state.surface = surface
+                        onOwner(surface)
+                    }
                     guard clock.now < deadline else {
                         return .failed(state.stillReplyingMessage)
                     }
@@ -25088,12 +25567,14 @@ final class AppState: ObservableObject {
         state.phase = .waiting
         chatTakeover = state
         let client = chatTakeoverClient
-        let profile = activeProfile
+        let profile = chatTakeoverProfile(state)
         let waiting = state
         let wait = Task { () -> ChatTakeoverState.Phase? in
             await Self.runChatTakeover(
                 client: client, state: waiting, profile: profile, waitLimit: Self.callChatTakeoverWaitLimit,
-                keepWaiting: stillWanted
+                keepWaiting: stillWanted, onOwner: { [weak self] surface in
+                    self?.noteChatTakeoverOwner(surface, sessionID: waiting.sessionID)
+                }
             )
         }
         // Held as the takeover's task, so dismissing the notice (or a profile
@@ -25106,6 +25587,8 @@ final class AppState: ObservableObject {
         if chatTakeoverTask == handle { chatTakeoverTask = nil }
         // Dismissed, or replaced by another refusal, while it waited.
         guard chatTakeover?.sessionID == state.sessionID, chatTakeover?.phase == .waiting else { return false }
+        // Keeps the owner the plugin named while it waited.
+        state.surface = chatTakeover?.surface ?? state.surface
         guard let phase else {
             // The call moved on: the composer offers the button again.
             state.phase = .offered
@@ -25146,13 +25629,15 @@ final class AppState: ObservableObject {
                 ids.append(id)
             }
             var state = ChatTakeoverState(sessionID: runtimeID, sessionIDs: ids, surface: details.surface, phase: .offered)
-            // What a refusal of the resend says: the other app holds it again.
-            let refusedAgainMessage = state.openElsewhereMessage
             // Nil: the call ended while it waited, so there's no refusal to report.
             guard let phase = await Self.runChatTakeover(
                 client: chatTakeoverClient, state: state, profile: profile ?? activeProfile,
-                waitLimit: Self.callChatTakeoverWaitLimit, keepWaiting: stillWanted
+                waitLimit: Self.callChatTakeoverWaitLimit, keepWaiting: stillWanted,
+                onOwner: { state.surface = $0 }
             ) else { throw CancellationError() }
+            // What a refusal of the resend says: the other app holds it
+            // again, named as the plugin named it during the wait.
+            let refusedAgainMessage = state.openElsewhereMessage
             state.phase = phase
             guard state.phase == .ready else { throw VoiceAudioError.unavailable(state.callRefusalMessage) }
             // Another host now, or a turn the call moved past: nothing to send.
@@ -25310,11 +25795,13 @@ final class AppState: ObservableObject {
                 if let upload = chatResumeLifecycleOperations.uploadAttachment {
                     fileReference = try await upload(client, sessionId, attachment)
                 } else if attachment.kind == .image {
-                    let base64 = await AttachmentHelper.toBase64(attachment)
+                    // A large photo goes resized (#1265).
+                    let picture = await AttachmentHelper.pictureForHermes(attachment)
+                    let base64 = picture?.base64 ?? ""
                     guard isCurrentComposerSubmission(submissionContext) else { throw CancellationError() }
-                    guard !base64.isEmpty else { throw AttachmentError.unreadableFile(attachment.name) }
+                    guard let picture, !base64.isEmpty else { throw AttachmentError.unreadableFile(attachment.name) }
                     do {
-                        let stagedPath = try await attachImage(client, sessionId, base64, attachment.name)
+                        let stagedPath = try await attachImage(client, sessionId, base64, picture.filename)
                         if queued, let stagedPath { stagedImagePaths.append(stagedPath) }
                         fileReference = nil
                     } catch let error as RpcError where Self.isImageAttachRefusal(error) {
@@ -25326,8 +25813,8 @@ final class AppState: ObservableObject {
                         fileReference = try await attachFile(
                             client,
                             sessionId,
-                            AttachmentHelper.dataUrl(base64: base64, for: attachment),
-                            attachment.name
+                            AttachmentHelper.dataUrl(base64: base64, mimeType: picture.mimeType),
+                            picture.filename
                         )
                     }
                 } else {
@@ -25437,9 +25924,10 @@ final class AppState: ObservableObject {
                         linkID: liveActivityLinkSessionID(for: sessionId),
                         title: activeSessionTitle,
                         profile: activeProfile,
-                        profileName: profileDisplayName(activeProfile),
-                        glowHex: profileGlowColors()[activeProfile]?.hex
-                            ?? profileGlowTint(activeProfile).flatMap { ProfileGlowRGB(UIColor($0).resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark)))?.hex },
+                        // A Bot Chat's card names its bot and wears its color, as the chat does.
+                        profileName: conversationAgentIdentity.name,
+                        glowHex: profileGlowColors()[conversationIdentityProfile]?.hex
+                            ?? profileGlowTint(conversationIdentityProfile).flatMap { ProfileGlowRGB(UIColor($0).resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark)))?.hex },
                         dashboardID: activeDashboardID?.uuidString
                     )
                 case .queued:
@@ -25507,7 +25995,11 @@ final class AppState: ObservableObject {
                 await recoverComposerSubmission(using: submissionContext)
                 return false
             }
-            guard isCurrentComposerSubmission(submissionContext) else { return false }
+            guard isCurrentComposerSubmission(submissionContext) else {
+                // Its chat was left; the reply may only have been lost.
+                if Self.isAmbiguousPromptDelivery(error) { composerSubmissionsOfUnknownDelivery.append(submissionContext) }
+                return false
+            }
             if Self.isAmbiguousPromptDelivery(error) {
                 lifecycleLog.notice(
                     "prompt.submit ambiguous (\(error.localizedDescription, privacy: .private)); querying authoritative state session=\(sessionId, privacy: .private(mask: .hash))"
@@ -25517,8 +26009,8 @@ final class AppState: ObservableObject {
                     acceptedSessionIDs: submissionSessionIDs,
                     baseline: submissionBaseline,
                     // Exactly what prompt.submit sent (a mention annotation
-                    // or the forever-chat reroute changes it, staged files'
-                    // references lead it); the check projects it the way
+                    // changes it, staged files' references lead it); the
+                    // check projects it the way
                     // the persisted user row is shown.
                     submittedText: promptText,
                     submissionContext: submissionContext
@@ -26428,11 +26920,11 @@ final class AppState: ObservableObject {
             // attachment-free slash commands arrive HERE, never through
             // sendMessage's reroute, so a bot's canonical chat compacts
             // instead of forking into a scratch session.
-            if canonicalForeverChatRerouteText(for: text) != nil {
+            if isCanonicalForeverChatReset(text) {
                 cancelChatResumeRestoration()
                 appendSlashOutput(
                     AppLocalization.string(
-                        "This chat never resets — compacting instead. Bot chats are one continuous conversation; for a throwaway session with this bot, use Sessions mode."
+                        "Bot chats never reset, so this one is compacted instead: Hermes carries on from a summary with fresh context, and keeps its memory and skills. For a separate chat, start one in Chats."
                     ),
                     context: submissionContext
                 )
@@ -27664,7 +28156,12 @@ final class AppState: ObservableObject {
             // A spoken steer that fails is dropped by Voice; there is no
             // composer draft to recover or banner to show.
             guard surfacesFailure,
-                  isCurrentOrAliasedComposerSubmission(submissionContext) else { return false }
+                  isCurrentOrAliasedComposerSubmission(submissionContext) else {
+                if surfacesFailure, Self.isAmbiguousPromptDelivery(error) {
+                    composerSubmissionsOfUnknownDelivery.append(submissionContext)
+                }
+                return false
+            }
             errorMessage = UserFacingError.message(for: error)
             await recoverComposerSubmission(using: submissionContext)
             return false
@@ -27757,7 +28254,11 @@ final class AppState: ObservableObject {
             await recoverComposerSubmission(using: submissionContext)
             return false
         } catch {
-            guard isCurrentOrAliasedComposerSubmission(submissionContext) else { return false }
+            guard isCurrentOrAliasedComposerSubmission(submissionContext) else {
+                // Its chat was left; the redirect may only have lost its reply.
+                if Self.isAmbiguousPromptDelivery(error) { composerSubmissionsOfUnknownDelivery.append(submissionContext) }
+                return false
+            }
             errorMessage = AppLocalization.string("Could not redirect the active response: \(UserFacingError.message(for: error))")
             await recoverComposerSubmission(using: submissionContext)
             return false
@@ -27936,13 +28437,16 @@ final class AppState: ObservableObject {
     /// Answers one question of a clarification request. Batch questions route
     /// per question (`question_id` + the gateway's authoritative `remaining`
     /// list); a `nil` questionId targets the card's single question — the
-    /// shape every push-relay card and legacy gateway produces.
-    func respondToClarify(requestId: String, questionId: String? = nil, answer: String) async {
-        let trimmedAnswer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedAnswer.isEmpty,
+    /// shape every push-relay card and legacy gateway produces. A nil
+    /// `answer` leaves one of a form's questions blank (`isForm`), which
+    /// Hermes reads as skipped.
+    func respondToClarify(requestId: String, questionId: String? = nil, answer: String?) async {
+        let trimmedAnswer = answer?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedAnswer?.isEmpty != true,
               let index = messages.firstIndex(where: { $0.clarify?.requestId == requestId }),
               var activity = messages[index].clarify,
-              !activity.isExpired else { return }
+              !activity.isExpired,
+              trimmedAnswer != nil || activity.isForm else { return }
 
         let questionIndex: Int?
         if let questionId {
@@ -27961,7 +28465,65 @@ final class AppState: ObservableObject {
         messages[index].clarify = activity
         setRunning(true)
         cacheMessagePresentation()
+        await sendClarifyAnswer(trimmedAnswer ?? "", for: activity.questions[questionIndex], requestId: requestId)
+    }
 
+    /// Sends a form's fields together (`ClarifyActivity.isForm`): every
+    /// question still open, with its answer in `answers` by qid, or left
+    /// blank when it has none there, which Hermes reads as skipped.
+    func respondToClarifyForm(requestId: String, answers: [String: String]) async {
+        guard let index = messages.firstIndex(where: { $0.clarify?.requestId == requestId }),
+              var activity = messages[index].clarify,
+              !activity.isExpired, activity.isForm else { return }
+        var sending: [(question: ClarifyQuestion, answer: String)] = []
+        for questionIndex in activity.questions.indices where activity.questions[questionIndex].isAnswerable {
+            activity.questions[questionIndex].status = .submitting
+            activity.questions[questionIndex].error = nil
+            let answer = answers[activity.questions[questionIndex].id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            sending.append((activity.questions[questionIndex], answer))
+        }
+        guard !sending.isEmpty else { return }
+        messages[index].clarify = activity
+        setRunning(true)
+        cacheMessagePresentation()
+        // One at a time, in order: the last lock resolves the request.
+        var stillOpen: Set<String>?
+        for (question, answer) in sending {
+            // Expired meanwhile: every open question went with it. A card
+            // that left the screen (another chat opened) still sends.
+            if messages.first(where: { $0.clarify?.requestId == requestId })?.clarify?.isExpired == true { return }
+            // No longer on Hermes' list of open questions: another device
+            // answered it while the form was sending.
+            if let stillOpen, !stillOpen.contains(question.id) {
+                settleClarifyQuestionAnsweredElsewhere(requestId: requestId, questionId: question.id)
+                continue
+            }
+            if let remaining = await sendClarifyAnswer(answer, for: question, requestId: requestId) {
+                stillOpen = Set(remaining)
+            }
+        }
+    }
+
+    /// Settles one question another device answered, without showing this
+    /// device's answer as what Hermes received.
+    private func settleClarifyQuestionAnsweredElsewhere(requestId: String, questionId: String) {
+        guard let index = messages.firstIndex(where: { $0.clarify?.requestId == requestId }),
+              var activity = messages[index].clarify,
+              let questionIndex = activity.questions.firstIndex(where: { $0.id == questionId }) else {
+            return
+        }
+        activity.questions[questionIndex].status = .answered
+        activity.questions[questionIndex].answer = nil
+        activity.questions[questionIndex].error = nil
+        messages[index].clarify = activity
+        cacheMessagePresentation()
+    }
+
+    /// Sends one question's answer, already marked submitting; an empty
+    /// `answer` leaves it blank. Returns the questions Hermes still waits on
+    /// after it, when its reply lists them.
+    @discardableResult
+    private func sendClarifyAnswer(_ answer: String, for question: ClarifyQuestion, requestId: String) async -> [String]? {
         // Plugin-minted clarify ids are answered through the relay's decision
         // loop (the gateway's own clarify id never reached this device); the
         // gateway-side middleware polls the relay and resolves the tool call.
@@ -27971,27 +28533,24 @@ final class AppState: ObservableObject {
         // Batch relay decisions answer per question; the legacy scalar relay
         // card keeps the whole-decision response shape.
         if requestId.hasPrefix(PendingDecisionPayload.relayRequestPrefix) {
-            let target = activity.questions[questionIndex]
-            if target.isSyntheticID {
-                await respondToRelayClarify(requestId: requestId, answer: trimmedAnswer)
-            } else {
-                await respondToRelayClarifyQuestion(
-                    requestId: requestId,
-                    questionId: target.id,
-                    answer: trimmedAnswer
-                )
+            if question.isSyntheticID {
+                await respondToRelayClarify(requestId: requestId, answer: answer)
+                return nil
             }
-            return
+            return await respondToRelayClarifyQuestion(
+                requestId: requestId,
+                questionId: question.id,
+                answer: answer
+            )
         }
         guard let client else {
             markClarifyQuestionError(
                 requestId: requestId,
-                questionId: activity.questions[questionIndex].id,
+                questionId: question.id,
                 message: AppLocalization.string("Gateway connection is unavailable.")
             )
-            return
+            return nil
         }
-        let question = activity.questions[questionIndex]
         // Ownership snapshot for the gateway-owned respond below — same fence
         // as `respondToApproval`: a completion (success or failure) from a
         // replaced client must not touch whatever decision state is current,
@@ -28002,12 +28561,13 @@ final class AppState: ObservableObject {
         // The wire answer for a multi-select question must be the array form
         // Hermes' batch parser accepts; typed custom text arrives as a bare
         // string and is wrapped here so every multi-select path is uniform.
+        // A blank stays empty: Hermes reads it as skipped.
         let wireAnswer: String
-        if question.multiSelect,
-           (try? JSONSerialization.jsonObject(with: Data(trimmedAnswer.utf8))) as? [String] == nil {
-            wireAnswer = ClarifyQuestion.multiSelectAnswer([trimmedAnswer])
+        if question.multiSelect, !answer.isEmpty,
+           (try? JSONSerialization.jsonObject(with: Data(answer.utf8))) as? [String] == nil {
+            wireAnswer = ClarifyQuestion.multiSelectAnswer([answer])
         } else {
-            wireAnswer = trimmedAnswer
+            wireAnswer = answer
         }
         do {
             let outcome = try await client.respondToClarification(
@@ -28018,15 +28578,17 @@ final class AppState: ObservableObject {
                 // respond shape every gateway generation accepts.
                 questionId: question.isSyntheticID ? nil : question.id
             )
-            guard profile == activeProfile, self.client === client else { return }
+            guard profile == activeProfile, self.client === client else { return nil }
             applyClarifyResponseOutcome(
                 outcome,
                 requestId: requestId,
                 questionId: question.id,
                 answer: wireAnswer
             )
+            guard case .accepted(let remaining) = outcome else { return nil }
+            return remaining
         } catch {
-            guard profile == activeProfile, self.client === client else { return }
+            guard profile == activeProfile, self.client === client else { return nil }
             if Self.isExpiredPromptError(error) {
                 // Older gateways report expiry as RPC 4009 instead of the
                 // typed `expired` status — same teardown either way.
@@ -28039,6 +28601,7 @@ final class AppState: ObservableObject {
                     globalMessage: UserFacingError.message(for: error)
                 )
             }
+            return nil
         }
     }
 
@@ -28068,22 +28631,27 @@ final class AppState: ObservableObject {
 
     /// Answers ONE question of a batch relay decision. First-answer-wins per
     /// question: only the targeted qid locks; sibling questions stay open
-    /// until their own answers land.
+    /// until their own answers land. Returns the questions the relay still
+    /// waits on, when it lists them.
     private func respondToRelayClarifyQuestion(
         requestId: String,
         questionId: String,
         answer: String
-    ) async {
+    ) async -> [String]? {
         do {
             let outcome = try await relayQuestionResponder(requestId, questionId, answer)
             guard let index = messages.firstIndex(where: { $0.clarify?.requestId == requestId }),
                   var activity = messages[index].clarify,
                   let questionIndex = activity.questions.firstIndex(where: { $0.id == questionId }) else {
-                return
+                return nil
             }
+            var stillOpen: [String]?
             switch outcome {
             case .locked(let remaining):
+                stillOpen = remaining
                 activity.questions[questionIndex].status = .answered
+                // What the user gave: a blank shows Skipped even where an
+                // older relay got "(left blank)" for it (`blankAnswer`).
                 activity.questions[questionIndex].answer = answer
                 activity.questions[questionIndex].error = nil
                 // An explicit remaining list is authoritative about what is
@@ -28120,17 +28688,19 @@ final class AppState: ObservableObject {
             }
             messages[index].clarify = activity
             cacheMessagePresentation()
+            return stillOpen
         } catch {
             guard let index = messages.firstIndex(where: { $0.clarify?.requestId == requestId }),
                   var activity = messages[index].clarify,
                   let questionIndex = activity.questions.firstIndex(where: { $0.id == questionId }) else {
-                return
+                return nil
             }
             activity.questions[questionIndex].status = .error
             activity.questions[questionIndex].answer = nil
             activity.questions[questionIndex].error = UserFacingError.message(for: error)
             messages[index].clarify = activity
             cacheMessagePresentation()
+            return nil
         }
     }
 
@@ -29228,20 +29798,20 @@ final class AppState: ObservableObject {
 
     private func profileSessionsPath(_ profile: String, offset: Int = 0) -> String {
         DashboardPath.withExplicitProfile(
-            "/api/profiles/sessions?limit=200&offset=\(offset)&min_messages=1&archived=exclude&order=recent&exclude_sources=cron",
+            "/api/profiles/sessions?limit=200&offset=\(offset)&min_messages=1&archived=exclude&order=recent&exclude_sources=\(SessionSource.chatListExcludedSources)",
             profile: profile
         )
     }
 
     private func archivedSessionsPath(_ profile: String, offset: Int = 0) -> String {
         DashboardPath.withExplicitProfile(
-            "/api/profiles/sessions?limit=200&offset=\(offset)&min_messages=1&archived=only&order=recent&exclude_sources=cron",
+            "/api/profiles/sessions?limit=200&offset=\(offset)&min_messages=1&archived=only&order=recent&exclude_sources=\(SessionSource.chatListExcludedSources)",
             profile: profile
         )
     }
 
-    /// Fetch cron sessions separately. The main profileSessionsPath uses
-    /// exclude_sources=cron, so cron sessions never appear in the normal
+    /// Fetch cron sessions separately. The main profileSessionsPath excludes
+    /// cron (and Kanban workers), so cron sessions never appear in the normal
     /// dashboard query. This dedicated path uses source=cron to populate
     /// the cron tab in the sidebar.
     private func dashboardCronSessions(
@@ -29821,6 +30391,8 @@ final class AppState: ObservableObject {
         persistHostPinSyncState()
         sessionStars.forget(profile: activeProfile)
         sessionStars.save(to: defaults)
+        pinnedChatOrder.forget(profile: activeProfile)
+        pinnedChatOrder.save(to: defaults)
         voiceJobSessionIDsByProfile.removeValue(forKey: activeProfile)
         forgetPinnedReplies(profile: activeProfile)
         persistActiveSessionTitles()
@@ -30410,33 +30982,14 @@ final class AppState: ObservableObject {
     /// browser uses. Folder paths are selected from Hermes' filesystem listing,
     /// not entered as arbitrary strings by the phone.
     var projectFolderPickerRoot: String {
-        !runtime.cwd.isEmpty ? runtime.cwd : workspaceRoot
+        runtime.cwd
     }
 
     func workspaceDirectoryEntries(at path: String) async throws -> [WorkspaceEntry] {
-        guard let dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
         let profile = activeProfile
-        guard let encodedPath = DashboardPath.encodedQueryComponent(path) else {
-            throw DashboardTicketBridgeError.requestFailed(AppLocalization.string("The workspace path could not be encoded."))
-        }
-        let result = try await dashboardTicketBridge.requestJSON(
-            path: DashboardPath.withProfile("/api/fs/list?path=\(encodedPath)", profile: profile)
-        )
+        let entries = try await workspaceDirectoryEntries(at: path, profile: profile)
         guard profile == activeProfile else { return [] }
-        if let error = result["error"] as? String, !error.isEmpty {
-            throw DashboardTicketBridgeError.requestFailed(error)
-        }
-        return ((result["entries"] as? [[String: Any]]) ?? []).compactMap { item in
-            guard let name = item["name"] as? String,
-                  let entryPath = item["path"] as? String,
-                  !name.isEmpty,
-                  !entryPath.isEmpty else { return nil }
-            return WorkspaceEntry(name: name, path: entryPath, isDirectory: item["isDirectory"] as? Bool ?? false)
-        }.sorted {
-            $0.isDirectory != $1.isDirectory
-                ? $0.isDirectory
-                : $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
+        return entries
     }
 
     private func writeProjectIdea(_ idea: String, in folder: String, profile: String) async {
@@ -30989,26 +31542,39 @@ final class AppState: ObservableObject {
         return string.isEmpty ? nil : string
     }
 
+    /// Counts display saves that landed, so a config read sent before one
+    /// doesn't put the older choice back.
+    private var displayPreferencesWriteRevision = 0
+
     private func loadProfileDisplayPreferences() async {
         let profile = activeProfile
         guard let owner = currentDashboardRuntimeOwner() else { return }
         let dashboardTicketBridge = owner.bridge
+        let revision = displayPreferencesWriteRevision
         do {
             let config = try await dashboardTicketBridge.requestJSON(path: dashboardPath("/api/config", profile: profile))
             guard ownsDashboardRuntime(owner), profile == activeProfile else { return }
             let display = config["display"] as? [String: Any] ?? [:]
             profileTimeZoneSetting = (profile, config[ProfileTimeZone.configKey] as? String ?? "")
+            // A display save that landed while this read was out is newer.
+            guard revision == displayPreferencesWriteRevision else { return }
+            let reasoning = ReasoningDisplayMode(display: display)
             displayPreferences = ProfileDisplayPreferences(
-                showReasoning: display["show_reasoning"] as? Bool ?? true,
+                showReasoning: reasoning == .show,
+                thinkingOnRequest: reasoning != .off,
                 showToolProgress: display["tool_progress"] as? String != "off",
-                expandToolsByDefault: display["expand_tools"] as? Bool ?? false
+                expandToolsByDefault: display["expand_tools"] as? Bool ?? false,
+                showReviews: ProfileDisplayPreferences.showsReviews(display["memory_notifications"])
             )
         } catch {
             // A read cut off by a dashboard switch fails here; it must not
             // reset the next dashboard's preferences for a profile of the
             // same name.
             guard ownsDashboardRuntime(owner), profile == activeProfile else { return }
-            displayPreferences = ProfileDisplayPreferences()
+            // Unread (offline, say): what this profile last said, not
+            // Hermes' defaults, so thinking set to Off stays off.
+            displayPreferences = storedDisplayPreferences(dashboardID: activeDashboardID, profile: profile)
+                ?? ProfileDisplayPreferences()
             profileTimeZoneSetting = nil
         }
     }
@@ -31021,21 +31587,41 @@ final class AppState: ObservableObject {
 
     func loadProfileSettings(keys: [String]) async -> [String: ProfileSettingValue] {
         let profile = activeProfile
-        guard let owner = currentDashboardRuntimeOwner() else { return [:] }
+        guard let owner = currentDashboardRuntimeOwner() else { return keptDisplaySettings(keys: keys) }
         let dashboardTicketBridge = owner.bridge
         do {
             let config = try await dashboardTicketBridge.requestJSON(path: dashboardPath("/api/config", profile: profile))
             guard ownsDashboardRuntime(owner), profile == activeProfile else { return [:] }
-            return Dictionary(uniqueKeysWithValues: keys.compactMap { key in
-                profileSettingValue(in: config, key: key).map { (key, $0) }
+            return Dictionary(uniqueKeysWithValues: keys.compactMap { key -> (String, ProfileSettingValue)? in
+                if key == ReasoningDisplayMode.settingKey {
+                    // Worked out from two config values (ReasoningDisplayMode).
+                    let display = config["display"] as? [String: Any] ?? [:]
+                    return (key, .text(ReasoningDisplayMode(display: display).rawValue))
+                }
+                return profileSettingValue(in: config, key: key).map { (key, $0) }
             })
         } catch {
             // A read that fails after a dashboard or profile switch belongs to
             // the settings page that was left; the one on screen has no error.
             guard ownsDashboardRuntime(owner), profile == activeProfile else { return [:] }
             errorMessage = AppLocalization.string("Could not load profile settings: \(UserFacingError.message(for: error))")
-            return [:]
+            return keptDisplaySettings(keys: keys)
         }
+    }
+
+    /// Unread, the display rows show what the chats follow meanwhile: the
+    /// settings last read, kept on the phone. Self-improvement updates
+    /// keeps only whether they show, so it reads Never show or Hermes'
+    /// default.
+    private func keptDisplaySettings(keys: [String]) -> [String: ProfileSettingValue] {
+        let kept = displayPreferences
+        var values: [String: ProfileSettingValue] = [
+            ReasoningDisplayMode.settingKey: .text(kept.reasoningMode.rawValue),
+            "display.tool_progress": .text(kept.showToolProgress ? "all" : "off"),
+            "display.expand_tools": .bool(kept.expandToolsByDefault),
+        ]
+        if !kept.showReviews { values["display.memory_notifications"] = .text("off") }
+        return values.filter { keys.contains($0.key) }
     }
 
     func loadProfileConfigOptions() async -> ProfileConfigOptions {
@@ -31258,14 +31844,39 @@ final class AppState: ObservableObject {
                 guard ownsDashboardRuntime(owner), profile == activeProfile else { return false }
                 return true
             }
+            let reasoning = key == ReasoningDisplayMode.settingKey ? value.textValue.flatMap(ReasoningDisplayMode.init(rawValue:)) : nil
+            if key == ReasoningDisplayMode.settingKey, reasoning == nil { return false }
             try await updateProfileConfig(profile: profile) { [weak self] config in
-                self?.setProfileSettingValue(value, in: &config, key: key)
+                if let reasoning {
+                    var display = config["display"] as? [String: Any] ?? [:]
+                    reasoning.write(into: &display)
+                    config["display"] = display
+                } else {
+                    self?.setProfileSettingValue(value, in: &config, key: key)
+                }
             }
+            if reasoning != nil || key.hasPrefix("display.") { displayPreferencesWriteRevision &+= 1 }
             // The write landed on its own profile; what's mirrored on screen
             // must still be that dashboard's and profile's.
             guard ownsDashboardRuntime(owner), profile == activeProfile else { return true }
             if key == ProfileTimeZone.configKey, let zone = value.textValue {
                 profileTimeZoneSetting = (profile, zone)
+            }
+            if let reasoning {
+                // Thinking in the chat on screen follows at once.
+                displayPreferences.showReasoning = reasoning == .show
+                displayPreferences.thinkingOnRequest = reasoning != .off
+            }
+            if key == "display.memory_notifications" {
+                // Rows already in the chat hide or come back with it.
+                displayPreferences.showReviews = ProfileDisplayPreferences.showsReviews(value.textValue)
+            }
+            if key == "display.tool_progress" {
+                // The kept choice follows the save, so the offline copy does too.
+                displayPreferences.showToolProgress = value.textValue != "off"
+            }
+            if key == "display.expand_tools", let expand = value.boolValue {
+                displayPreferences.expandToolsByDefault = expand
             }
             if key == "approvals.mode", let mode = value.textValue?.lowercased() {
                 // Mirror the saved profile mode immediately and re-resolve the
@@ -31352,12 +31963,12 @@ final class AppState: ObservableObject {
             try await updateProfileConfig(profile: profile) { config in
                 var display = config["display"] as? [String: Any] ?? [:]
                 switch key {
-                case .reasoning: display["show_reasoning"] = enabled
                 case .toolProgress: display["tool_progress"] = enabled ? "on" : "off"
                 case .expandTools: display["expand_tools"] = enabled
                 }
                 config["display"] = display
             }
+            displayPreferencesWriteRevision &+= 1
             return true
         } catch {
             // After a dashboard switch the preferences on screen are the next
@@ -31372,7 +31983,6 @@ final class AppState: ObservableObject {
 
     private func applyDisplayPreference(_ key: DisplayPreferenceKey, enabled: Bool) {
         switch key {
-        case .reasoning: displayPreferences.showReasoning = enabled
         case .toolProgress: displayPreferences.showToolProgress = enabled
         case .expandTools: displayPreferences.expandToolsByDefault = enabled
         }
@@ -32062,6 +32672,7 @@ final class AppState: ObservableObject {
             resetReasoningSegment()
             sealInterimCommentary(text, alreadyStreamed: alreadyStreamed)
             setRunning(true)
+            notifyVoiceAssistant(.interim(sessionID: streamSessionId, text: text, alreadyStreamed: alreadyStreamed))
 
         case .reasoningDelta(_, let text):
             finalizePendingStreamingCompletion()
@@ -32077,7 +32688,7 @@ final class AppState: ObservableObject {
                 reasoning: reasoning,
                 alreadyShown: alreadyShown
             )
-            notifyVoiceAssistant(.completed(sessionID: streamSessionId, content: content))
+            notifyVoiceAssistant(.completed(sessionID: streamSessionId, content: content, alreadyShown: alreadyShown))
 
         case .messageReaction(_, let rowId, let reactions, let role):
             applyAgentReaction(rowId: rowId, reactions: reactions, role: role)
@@ -32088,6 +32699,8 @@ final class AppState: ObservableObject {
             clearStreamingText()
             errorMessage = message
             setRunning(false)
+            // A follow-up that failed wrote nothing to tag.
+            predictiveTurnEnded(sessionId: streamSessionId)
             notifyVoiceAssistant(.failed(sessionID: streamSessionId, message: message))
 
         case .messageInterrupted:
@@ -32095,6 +32708,7 @@ final class AppState: ObservableObject {
             resetReasoningTurn()
             clearStreamingText()
             setRunning(false)
+            predictiveTurnEnded(sessionId: streamSessionId)
             notifyVoiceAssistant(.interrupted(sessionID: streamSessionId))
 
         case .sessionBusy(_, let busy):
@@ -32190,6 +32804,8 @@ final class AppState: ObservableObject {
 
         case .toolComplete(_, let name, let output, let eventToolID):
             if name.lowercased() == "clarify" { break }
+            // Hermes may have changed files an open Folder tab shows.
+            noteWorkspaceToolCompleted(name)
             // Hermes just read or asked to change Conduit's settings.
             if name.lowercased() == "conduit_settings" { Task { await syncAgentSettings() } }
             // A confirmation Hermes just asked for shows without waiting on the push.
@@ -32856,8 +33472,10 @@ final class AppState: ObservableObject {
                 && existing.status == .submitting
                 && !liveInputPromptSubmissions.contains(activity.requestId)
             guard existing.isAnswerable || orphanedSubmission else { return }
+            var replacement = activity
+            replacement.profile = activeProfile
             messages[index].content = activity.title
-            messages[index].inputPrompt = activity
+            messages[index].inputPrompt = replacement
             return
         }
         settleReasoningSegmentIntoTranscript()
@@ -32866,6 +33484,7 @@ final class AppState: ObservableObject {
         // request whose answer is still in flight comes back here: it stays
         // `.submitting` for that send to settle, never answerable twice.
         var appended = activity
+        appended.profile = activeProfile
         if liveInputPromptSubmissions.contains(activity.requestId) {
             appended.status = .submitting
             appended.error = nil
@@ -32949,6 +33568,14 @@ final class AppState: ObservableObject {
         guard let index = messages.firstIndex(where: { $0.id == messageId }),
               let current = messages[index].inputPrompt,
               current.isAnswerable else { return }
+        // A card left from the profile before a switch: its answer (a
+        // password, a login) must not go out on the new profile's
+        // connection.
+        guard current.profile.isEmpty || current.profile == activeProfile else {
+            messages[index].inputPrompt?.status = .expired
+            messages[index].inputPrompt?.error = Self.inputPromptWithdrawnNotice(reason: nil)
+            return
+        }
         let skipped = value == nil
         liveInputPromptSubmissions.insert(current.requestId)
         defer { liveInputPromptSubmissions.remove(current.requestId) }
@@ -33300,107 +33927,11 @@ final class AppState: ObservableObject {
 
     // MARK: - Chat support surfaces
 
-    func openWorkspace() async {
-        guard !runtime.cwd.isEmpty else {
-            errorMessage = AppLocalization.string("Workspace unavailable: Hermes has not reported a working directory for this session yet.")
-            return
-        }
-        workspaceRoot = runtime.cwd
-        workspaceEntries = [:]
-        expandedWorkspacePaths = []
-        workspaceError = nil
-        workspaceSelectedFile = nil
-        workspacePreview = nil
-        workspaceFileError = nil
-        workspacePreviewRequest = nil
-        workspaceFileLoading = false
+    /// The drawer shell's + › Workspace (V2 off), which has no Artifacts:
+    /// the Folder tab on its own.
+    func openWorkspace() {
+        // Without the chat's folder it still offers the projects'.
         showWorkspaceSheet = true
-        await loadWorkspace(path: runtime.cwd)
-    }
-
-    func refreshWorkspace() async {
-        guard !workspaceRoot.isEmpty else { return }
-        workspaceEntries = [:]
-        expandedWorkspacePaths = []
-        await loadWorkspace(path: workspaceRoot)
-    }
-
-    func toggleWorkspaceFolder(_ entry: WorkspaceEntry) async {
-        guard entry.isDirectory else { return }
-        if expandedWorkspacePaths.contains(entry.path) {
-            expandedWorkspacePaths.remove(entry.path)
-            return
-        }
-        expandedWorkspacePaths.insert(entry.path)
-        guard workspaceEntries[entry.path] == nil else { return }
-        if !(await loadWorkspace(path: entry.path)) {
-            expandedWorkspacePaths.remove(entry.path)
-        }
-    }
-
-    /// The latest file pick: only its read answers, whichever lands last.
-    private var workspacePreviewRequest: UUID?
-
-    func previewWorkspaceFile(_ entry: WorkspaceEntry) async {
-        guard let owner = currentDashboardRuntimeOwner() else { return }
-        let profile = activeProfile
-        let request = UUID()
-        workspacePreviewRequest = request
-        workspaceSelectedFile = entry
-        workspacePreview = nil
-        workspaceFileError = nil
-        workspaceFileLoading = true
-        defer { if workspacePreviewRequest == request { workspaceFileLoading = false } }
-        let isCurrent = { [self] in
-            workspacePreviewRequest == request && profile == activeProfile && ownsDashboardRuntime(owner)
-        }
-        do {
-            guard let path = DashboardPath.encodedQueryComponent(entry.path) else {
-                throw DashboardTicketBridgeError.requestFailed(AppLocalization.string("The workspace path could not be encoded."))
-            }
-            let result = try await owner.bridge.requestJSON(
-                path: DashboardPath.withProfile("/api/fs/read-text?path=\(path)", profile: profile)
-            )
-            guard isCurrent() else { return }
-            workspacePreview = WorkspaceFilePreview(
-                binary: result["binary"] as? Bool ?? false,
-                byteSize: result["byteSize"] as? Int ?? 0,
-                language: result["language"] as? String ?? "text",
-                mimeType: result["mimeType"] as? String ?? "text/plain",
-                text: result["text"] as? String ?? "",
-                truncated: result["truncated"] as? Bool ?? false
-            )
-        } catch {
-            guard isCurrent() else { return }
-            workspaceFileError = UserFacingError.message(for: error)
-        }
-    }
-
-    /// The file staged for Save to Files; the caller removes it with
-    /// `WorkspaceDownloads.remove` once it is done with it.
-    func workspaceDownload(for entry: WorkspaceEntry) async -> WorkspaceDownload? {
-        guard let owner = currentDashboardRuntimeOwner() else { return nil }
-        let dashboardTicketBridge = owner.bridge
-        let profile = activeProfile
-        do {
-            guard let path = DashboardPath.encodedQueryComponent(entry.path) else {
-                throw DashboardTicketBridgeError.requestFailed(AppLocalization.string("The workspace path could not be encoded."))
-            }
-            let result = try await dashboardTicketBridge.requestJSON(
-                path: DashboardPath.withProfile("/api/fs/read-data-url?path=\(path)", profile: profile),
-                maxResponseBytes: DataURLLimits.maxJSONResponseBytes
-            )
-            guard profile == activeProfile, ownsDashboardRuntime(owner) else { return nil }
-            guard let dataURL = result["dataUrl"] as? String,
-                  let data = DataURLLimits.decodeBase64DataURL(dataURL) else {
-                throw DashboardTicketBridgeError.requestFailed(AppLocalization.string("The gateway returned an invalid file payload."))
-            }
-            return try WorkspaceDownloads.stage(data, name: entry.name)
-        } catch {
-            guard profile == activeProfile, ownsDashboardRuntime(owner) else { return nil }
-            workspaceFileError = UserFacingError.message(for: error)
-            return nil
-        }
     }
 
     /// Hermes messages can refer to generated media as `MEDIA:
@@ -33569,36 +34100,6 @@ final class AppState: ObservableObject {
             logs: (logs?["lines"] as? [Any] ?? []).map { String(describing: $0) },
             error: status == nil ? AppLocalization.string("Could not refresh dashboard status.") : nil
         )
-    }
-
-    @discardableResult
-    private func loadWorkspace(path: String) async -> Bool {
-        let owner = currentDashboardRuntimeOwner()
-        let profile = activeProfile
-        workspaceLoadingPath = path
-        workspaceError = nil
-        defer { if workspaceLoadingPath == path { workspaceLoadingPath = nil } }
-        do {
-            let entries = try await workspaceDirectoryEntries(at: path)
-            // The bridge's invalidation makes a late answer throw; this
-            // re-check also covers a switch landing between that answer and
-            // this resumption, so no other dashboard's listing merges in.
-            if let owner {
-                guard ownsDashboardRuntime(owner), profile == activeProfile else { return false }
-            }
-            workspaceEntries[path] = entries
-            return true
-        } catch {
-            // A dashboard switch invalidates the bridge, so a listing still in
-            // flight fails rather than answering; that failure belongs to the
-            // dashboard switched away from and isn't reported over the next.
-            // (No bridge at all is still this dashboard's error.)
-            if let owner {
-                guard ownsDashboardRuntime(owner), profile == activeProfile else { return false }
-            }
-            workspaceError = UserFacingError.message(for: error)
-            return false
-        }
     }
 
     private func setRunning(_ running: Bool) {
@@ -33860,6 +34361,7 @@ final class AppState: ObservableObject {
             bridge: dashboardTicketBridge,
             baseURL: connection.baseUrl,
             profile: profile ?? activeProfile,
+            profileParameter: notifierPlugin.dashboardProfileParameter,
             speechOutput: { [weak self] in self?.voiceSpeechOutput ?? .onDevice },
             makeOnDeviceSpeech: { onStart, onPCM16 in OnDeviceSpeechStream(onStart: onStart, onPCM16: onPCM16) },
             fallsBackToOnDeviceSpeech: fallsBackToOnDeviceSpeech
@@ -34044,7 +34546,8 @@ final class AppState: ObservableObject {
         appleSpeechAvailability = AppleOnDeviceSpeechTranscriber.currentAvailability()
         let service = HermesVoiceConfigurationService(
             requester: voiceCapabilityRequesterForTesting ?? bridge,
-            profile: profile
+            profile: profile,
+            profileParameter: { [weak self] in self?.notifierPlugin.dashboardProfileParameter ?? "profile" }
         )
         await service.reload()
         guard profile == activeProfile, bridge === dashboardTicketBridge else { return }
@@ -34435,8 +34938,13 @@ final class AppState: ObservableObject {
             return await resumeVoiceCall(sessionID: callID)
         }
         // A call from Hermes opens with its news, which Local Live has no
-        // model of its own to say: classic voice takes it.
-        if intent.source == .hermesCall, liveEngine == .localLive { liveEngine = nil }
+        // model of its own to say outside agent mode: classic voice takes
+        // it. In agent mode its fast model says it (#1376). The call made
+        // that choice when it was answered: a live opening waits in
+        // pendingHermesCall, and a classic one was queued for classic voice.
+        if intent.source == .hermesCall, liveEngine == .localLive, pendingHermesCall == nil {
+            liveEngine = nil
+        }
         if intent.source == .screenQuestion {
             // The device-test gate: an engine not cleared for screen
             // questions takes them in classic voice.
@@ -34755,10 +35263,64 @@ final class AppState: ObservableObject {
     /// and steers, which go through the composer. True when it waited.
     @discardableResult
     func waitForTransportIfDropped() async -> Bool {
+        await checkQuietTransportOffScreen()
         guard voiceRequestWaitsForTransport else { return false }
         reconnectNowForWaitingVoice("Voice request waiting")
         await awaitTransportForVoiceRequest(timeout: voiceRequestConnectionWait)
         return true
+    }
+
+    /// How long a socket may have been quiet before a request made off
+    /// screen checks it first.
+    static let quietTransportCheckAfter: TimeInterval = PollCadence.keepaliveForeground
+
+    /// The quick check of a quiet connection, or nil when there is nothing
+    /// to check (no open socket, or one that spoke recently). A test seam.
+    var quietTransportLiveness: @MainActor (HermesClient) async -> Bool? = { client in
+        guard client.isConnected, client.quietInterval >= AppState.quietTransportCheckAfter else { return nil }
+        return await client.checkLiveness()
+    }
+
+    private var quietTransportCheckTask: Task<Void, Never>?
+
+    /// A request to Hermes made while Conduit is off screen: in the car, on
+    /// a locked phone, in a Watch call or a call from Hermes. iOS may have
+    /// held Conduit suspended before CarPlay or the call woke it, and a
+    /// socket that died meanwhile still looks open: a GPT-Live call started
+    /// in the car ran (it starts over plain HTTP), but every request it
+    /// handed Hermes waited on the dead socket until it timed out, and the
+    /// call said Hermes wasn't available, while one started on the phone
+    /// worked (#1362). The phone coming on screen pings first and
+    /// reconnects a socket that doesn't answer; so does this, for a socket
+    /// that has been quiet, and the request then waits for the reconnect as
+    /// after any drop. Requests at the same time share one check.
+    func checkQuietTransportOffScreen() async {
+        if let running = quietTransportCheckTask {
+            await running.value
+            return
+        }
+        guard !isSceneActive, isConnected, let client else { return }
+        let check = Task { @MainActor [weak self] in
+            guard let self, await self.quietTransportLiveness(client) == false else { return }
+            self.noteConnectionStep("Connection check before a voice request")
+            // The close reaches handleDisconnect a moment later.
+            await self.awaitConnectionDropped(timeout: .seconds(2))
+        }
+        quietTransportCheckTask = check
+        await check.value
+        quietTransportCheckTask = nil
+    }
+
+    private func awaitConnectionDropped(timeout: Duration) async {
+        guard isConnected else { return }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { @MainActor in
+                for await connected in self.$isConnected.values where !connected { return }
+            }
+            group.addTask { try? await Task.sleep(for: timeout) }
+            await group.next()
+            group.cancelAll()
+        }
     }
 
     /// A drop is under way that a reconnect from here can repair: the socket
@@ -35114,7 +35676,8 @@ final class AppState: ObservableObject {
                 personality: personality,
                 answerLength: style.answerLength,
                 asksFirst: false,
-                onWatch: true
+                onWatch: true,
+                acknowledgesOnceStarted: true
             ) + GrokLiveProtocol.grokInstructions(now: Date(), timeZone: .current)
                 + (hermesCall?.instructionBlock(delegation: false, canAnswer: waiting != nil, waiting: waiting?.waiting) ?? "") + style.instructions,
             functions: GeminiLiveToolBridge.watchDeclarations(
@@ -35471,7 +36034,10 @@ final class AppState: ObservableObject {
     private func readAloudGateway(isCurrentFor profile: String) -> Bool {
         guard let gateway = messageReadAloudController.gateway,
               let bridge = dashboardTicketBridge else { return false }
+        // A gateway built before the plugin listed dashboard-profiles names the wrong parameter.
+        let parameter = (gateway as? HermesVoiceGateway)?.profileParameter ?? notifierPlugin.dashboardProfileParameter
         return gateway.profile == profile && readAloudGatewayBridge === bridge
+            && parameter == notifierPlugin.dashboardProfileParameter
     }
 
     /// `speakingAs`: a room bot's profile, so Hermes reads its message with
@@ -35792,6 +36358,9 @@ final class AppState: ObservableObject {
         setRunning(false)
         // The turn has settled, its reply in place.
         requestStepSummaryIfWanted(sessionId: sessionId)
+        // Suggested replies and the follow-up clock for the new reply; a
+        // system notice merged into the last row isn't one.
+        predictiveTurnSettled(sessionId: sessionId, isReply: systemNotice == nil)
         // Cancel any pending coalesced flush and write immediately — the
         // turn is complete so all messages are in their final state. One
         // write covering the stream's session id too; this used to write the
@@ -36466,8 +37035,27 @@ enum AttachmentHelper {
     }
 
     static func dataUrl(base64: String, for attachment: Attachment) -> String {
-        let mimeType = attachment.mimeType.flatMap { $0.isEmpty ? nil : $0 } ?? "application/octet-stream"
+        dataUrl(base64: base64, mimeType: attachment.mimeType)
+    }
+
+    static func dataUrl(base64: String, mimeType: String?) -> String {
+        let mimeType = mimeType.flatMap { $0.isEmpty ? nil : $0 } ?? "application/octet-stream"
         return "data:\(mimeType);base64,\(base64)"
+    }
+
+    /// A picture as a message sends it to Hermes: resized when it is larger
+    /// than a model takes (`PictureUpload`), else as it is. Nil when the
+    /// file can't be read. Off the main actor: decoding a photo is slow.
+    typealias PictureForHermes = (base64: String, filename: String, mimeType: String?)
+
+    static func pictureForHermes(_ attachment: Attachment) async -> PictureForHermes? {
+        await Task.detached(priority: .userInitiated) { () -> PictureForHermes? in
+            guard let data = AttachmentHelper.data(for: attachment) else { return nil }
+            if let resized = PictureUpload.resized(data, filename: attachment.name) {
+                return (resized.data.base64EncodedString(), resized.filename, resized.mimeType)
+            }
+            return (data.base64EncodedString(), attachment.name, attachment.mimeType)
+        }.value
     }
 
     private static func data(for attachment: Attachment) -> Data? {
@@ -36500,8 +37088,7 @@ extension AppState {
         return listed
     }
 
-    /// Another profile's row in All: it opens with a switch to its profile
-    /// and has no live status here.
+    /// Another profile's row in All: it opens with a switch to its profile.
     func isOtherProfileRow(_ session: SessionSummary) -> Bool {
         rowProfile(session) != activeProfile
     }
