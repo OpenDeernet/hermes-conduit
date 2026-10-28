@@ -77,7 +77,7 @@ struct LiveTurnTrace {
     private var seconds: TimeInterval { Double(samples) / Double(Self.sampleRate) }
 
     private var levels: String {
-        guard let loudest, let quietest else { return "no microphone audio" }
+        guard let loudest, let quietest else { return samples > 0 ? "under 100 ms of microphone audio" : "no microphone audio" }
         return "microphone loudest \(loudest) dBFS, quietest \(quietest) dBFS"
     }
 

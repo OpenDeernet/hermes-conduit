@@ -547,7 +547,7 @@ saved transcript (see Ending a call and what gets saved)
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-27, #1347.
+**Checked:** 2026-10-28, #1424 (Grok and Local Live sessions trace turns; transcripts unchanged); 2026-10-27, #1347.
 
 ## The Watch call log
 
@@ -796,7 +796,7 @@ Hermes calls · tools and jobs · consent · saved transcripts · notifier token
   `Conduit/Services/AppState+ScreenQuestion.swift` (ScreenQuestionVoiceRouting.liveEngines)
   lists GPT-Live, Gemini and Grok only, until Qwen is device-tested there.
 
-**Checked:** 2026-10-26, #1247 (the Watch broker's token answers keep Conduit running through BackgroundTaskHold); 2026-10-25, voice.qwen.* and save_calls naming Qwen, the Watch's qwen_live_token, a token minted after consent was withdrawn, provider precedence and the screen-question gap, at #1182, carried in #1235; 2026-10-24, #1182: independent provider routes and regression tests.
+**Checked:** 2026-10-28, #1424 (QwenLiveSocket traces turn detection and speech start and end); 2026-10-26, #1247 (the Watch broker's token answers keep Conduit running through BackgroundTaskHold); 2026-10-25, voice.qwen.* and save_calls naming Qwen, the Watch's qwen_live_token, a token minted after consent was withdrawn, provider precedence and the screen-question gap, at #1182, carried in #1235; 2026-10-24, #1182: independent provider routes and regression tests.
 
 ## Texting someone for the user
 
@@ -2062,7 +2062,7 @@ setup, the microphone, the server's turn detection and the user's turns, and
 each tool call.
 
 **Siblings:** Grok Live (phone, CarPlay, calls from Hermes) · Local Live ·
-Qwen Live (turn steps only) · Gemini Live and GPT-Live (no trace) · Watch
+Qwen Live (turn steps and the controller's tool steps) · Gemini Live and GPT-Live (no trace) · Watch
 calls (no trace) · docs/VOICE_SETTINGS.md
 
 **Code**
@@ -2071,6 +2071,7 @@ calls (no trace) · docs/VOICE_SETTINGS.md
 - Wiring: `Conduit/Services/AppState.swift` (traceName, session.onTrace)
 
 **Rulings**
+- A long call keeps its first 20 steps (the setup) and its newest ones, up to 200, so a late turn that never ends is kept (2026-10-28, #1424).
 - Event kinds, function names, routes and levels only: never what the user or the model said, a call's arguments or a tool's answer (2026-10-28, #1424, from #1418).
 - The user's turns show when the server heard speech start and end, with the microphone's loudest and quietest 100 ms between them, and say once when 15 s of audio pass with no start or no end, so a turn the server never ends can be told apart from audio that never arrived (2026-10-28, #1424, from #1418).
 

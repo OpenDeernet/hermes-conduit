@@ -22,6 +22,10 @@ private let liveCallTraceLogger = Logger(subsystem: "com.milim.relay", category:
 final class LiveCallTrace {
     static let shared = LiveCallTrace()
     static let maximumSteps = 200
+    /// The call's first steps (its setup and microphone) are always kept;
+    /// past the cap, the oldest after them make way for the newest, so a
+    /// late turn that never ends is still there (#1418).
+    static let keptFirstSteps = 20
 
     private(set) var name: String?
     private var startedAt = Date()
@@ -39,9 +43,9 @@ final class LiveCallTrace {
 
     func note(_ label: String, at date: Date = Date()) {
         guard name != nil else { return }
-        guard steps.count < Self.maximumSteps else {
+        if steps.count >= Self.maximumSteps {
+            steps.remove(at: Self.keptFirstSteps)
             droppedSteps += 1
-            return
         }
         steps.append("+\(String(format: "%.1f", max(0, date.timeIntervalSince(startedAt))))s \(label)")
         liveCallTraceLogger.notice("Live call trace: \(label, privacy: .public)")
@@ -51,7 +55,7 @@ final class LiveCallTrace {
     var report: String? {
         guard let name else { return nil }
         var lines = ["Last \(name) call: steps"] + steps
-        if droppedSteps > 0 { lines.append("… \(droppedSteps) more steps not kept") }
+        if droppedSteps > 0 { lines.insert("… \(droppedSteps) steps not kept", at: 1 + Self.keptFirstSteps) }
         return lines.joined(separator: "\n")
     }
 }
