@@ -12160,6 +12160,16 @@ final class AppState: ObservableObject {
             let title = row.title.trimmingCharacters(in: .whitespacesAndNewlines)
             titles[profile] = title.isEmpty || title == profile ? nil : title
         }
+        // A title, from Edit Bot, Desktop or a rename, replaces a name kept
+        // on the device while the gateway had no bot looks, so it can't
+        // come back while the roster is loading or offline.
+        let replaced = profileDeviceNames.keys.filter { titles[$0] != nil }
+        if !replaced.isEmpty {
+            for profile in replaced {
+                profileAppearanceStore.saveDeviceName(nil, for: profile, dashboardID: activeDashboardID)
+            }
+            profileDeviceNames = profileAppearanceStore.loadDeviceNames(dashboardID: activeDashboardID)
+        }
         guard titles != profileBotTitles else { return }
         profileBotTitles = titles
         profileAppearanceStore.saveBotTitles(titles, dashboardID: activeDashboardID)
