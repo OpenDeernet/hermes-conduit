@@ -1114,7 +1114,7 @@ pulse where`, `pulse spots` and `pulse status` commands
 **Open gaps**
 - None of it has been tried on a phone against notifier 0.104.0, nor arrivals from a real day's location sharing (#1379, notifier #420, #422, #423, #424).
 - A held pick also matches another saved place with the same name: the model names the place by its name, and the name keeps a pick working after its place is saved again (notifier #424).
-- Walking past hasn't been tried on a phone: how late iOS fires for 100 m circles, and whether a 3 km driving circle helps or nags, are what the kept timings are for (notifier #435, #1414). Visits at places that aren't saved still wake nothing.
+- Walking past hasn't been tried on a phone: how late iOS fires for 100 m circles, and whether a 3 km driving circle helps or nags, are what the kept timings are for (notifier #435, #1414). Arriving at or leaving a place that is neither saved nor a watched shop still wakes nothing.
 - An item said for a place that has no saved place keeps waiting for one until it expires; What Pulse remembers says so, but nothing asks the user to save the place.
 
 **Checked:** 2026-10-28, at #1423, carrying the `pulse` branch's entry: #1414 (walking past, from notifier #435 and the app's spot watcher; the rest as at #1379).
