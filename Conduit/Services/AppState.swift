@@ -10697,6 +10697,9 @@ final class AppState: ObservableObject {
     /// The approvals answered here, by id: a read already under way when
     /// one was answered can't bring its row or card back.
     var answeredLinkedRoomApprovalIDs: Set<String> = []
+    /// The open copy's opening tail read failed: its next tick reads the
+    /// tail again.
+    private(set) var activeRoomCopyNeedsTail = false
     /// Your Hermes' copies of the rooms other people host that your agents
     /// joined, which Group Chats lists after your own (RoomCopies.swift).
     @Published var linkedRoomCopies: LinkedRoomCopies?
@@ -11657,6 +11660,7 @@ final class AppState: ObservableObject {
         activeRoomReplay = GroupRoomReplay(roomID: copy.roomID)
         activeRoomDriverStatus = copy.state
         activeRoomOwners = [:]
+        activeRoomCopyNeedsTail = false
         roomApprovalAnswers = [:]
         groupRoomOutbox = GroupRoomOutbox()
         pendingRoomMessage = nil
@@ -11678,6 +11682,7 @@ final class AppState: ObservableObject {
                 return
             }
             errorMessage = AppLocalization.string("Could not load this group chat: \(UserFacingError.message(for: error))")
+            activeRoomCopyNeedsTail = true
         }
         if !copy.isOver { startRoomPolling() }
     }
@@ -11692,7 +11697,7 @@ final class AppState: ObservableObject {
         do {
             // The opening tail read failed: read the tail again, not the
             // room from its first event.
-            if activeRoomReplay.cursor == 0, activeRoomReplay.events.isEmpty, copy.lastSeq > 0 {
+            if activeRoomCopyNeedsTail {
                 let window = GroupRoomReplay.tailWindow
                 let tail = try await client.log(
                     roomID: copy.roomID, sinceSeq: max(0, copy.lastSeq - window), limit: window)
@@ -11700,6 +11705,7 @@ final class AppState: ObservableObject {
                 var replay = GroupRoomReplay(roomID: copy.roomID)
                 replay.adoptInitialTail(page: tail)
                 activeRoomReplay = replay
+                activeRoomCopyNeedsTail = false
                 errorMessage = nil
                 return
             }
