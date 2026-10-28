@@ -96,9 +96,11 @@ enum AttachmentDrop {
 }
 
 /// Files dropped on a chat or room, handed to its composer. Equal by
-/// identity: each drop is its own request.
+/// identity: each drop is its own request. `owner` is the chat's draft key
+/// or the room it was dropped on, so a request never reaches another.
 struct AttachmentDropRequest: Equatable {
     let id = UUID()
+    let owner: AnyHashable
     let providers: [NSItemProvider]
 
     static func == (lhs: AttachmentDropRequest, rhs: AttachmentDropRequest) -> Bool {

@@ -10340,31 +10340,39 @@ final class AppState: ObservableObject {
     /// as attachments for the user to send.
     func dropIntoComposer(_ providers: [NSItemProvider]) {
         guard !providers.isEmpty else { return }
-        // A second drop before the composer took the first adds to it.
-        composerDropRequest = AttachmentDropRequest(providers: (composerDropRequest?.providers ?? []) + providers)
+        let owner = composerDraftKeyOnScreen
+        // A second drop on the same chat before the composer took the
+        // first adds to it; one left by another chat is dropped.
+        let pending = composerDropRequest?.owner == AnyHashable(owner) ? composerDropRequest?.providers ?? [] : []
+        composerDropRequest = AttachmentDropRequest(owner: owner, providers: pending + providers)
     }
 
-    /// Whether the request was still the pending one: a drop that came
-    /// on top of it replaced it with both, so its composer stages that.
+    /// Whether the request was still the pending one for the chat on
+    /// screen: a drop that came on top of it replaced it with both, so its
+    /// composer stages that, and one dropped on another chat is discarded.
     func consumeComposerDropRequest(_ id: UUID) -> Bool {
-        guard composerDropRequest?.id == id else { return false }
+        guard let request = composerDropRequest, request.id == id else { return false }
         composerDropRequest = nil
-        return true
+        guard let owner = request.owner.base as? ComposerDraftKey else { return false }
+        return composerDraftKeysAreSameChat(owner, composerDraftKeyOnScreen)
     }
 
     /// Files dropped on the open group room go to its composer.
     func dropIntoRoomComposer(_ providers: [NSItemProvider]) {
-        guard !providers.isEmpty, activeRoomSurface != nil else { return }
-        // A second drop before the composer took the first adds to it.
-        roomDropRequest = AttachmentDropRequest(providers: (roomDropRequest?.providers ?? []) + providers)
+        guard !providers.isEmpty, let surface = activeRoomSurface else { return }
+        let owner = "\(surface.dashboardID.uuidString)/\(surface.room.roomID)"
+        // A second drop on the same room before the composer took the
+        // first adds to it.
+        let pending = roomDropRequest?.owner == AnyHashable(owner) ? roomDropRequest?.providers ?? [] : []
+        roomDropRequest = AttachmentDropRequest(owner: owner, providers: pending + providers)
     }
 
-    /// Whether the request was still the pending one: a drop that came
-    /// on top of it replaced it with both, so its composer stages that.
+    /// Whether the request was still the pending one for the open room.
     func consumeRoomDropRequest(_ id: UUID) -> Bool {
-        guard roomDropRequest?.id == id else { return false }
+        guard let request = roomDropRequest, request.id == id else { return false }
         roomDropRequest = nil
-        return true
+        guard let surface = activeRoomSurface else { return false }
+        return request.owner == AnyHashable("\(surface.dashboardID.uuidString)/\(surface.room.roomID)")
     }
 
     /// The composer took the quote: drop it, so the quoted text is not kept
