@@ -98,7 +98,12 @@ struct RoomCopyBottomBar: View {
                     respond(approval, choice: choice)
                 }
             }
-            Label(RoomCopyText.noPosting(for: copy), systemImage: "eye")
+            Label {
+                Text(verbatim: RoomCopyText.noPosting(for: copy))
+            } icon: {
+                Image(systemName: "eye")
+                    .accessibilityHidden(true)
+            }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -108,6 +113,10 @@ struct RoomCopyBottomBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        // One answered elsewhere drops its card, and its answer with it.
+        .onChange(of: appState.activeRoomCopyApprovals.map(\.id)) { _, ids in
+            answers = answers.filter { ids.contains($0.key) }
+        }
     }
 
     /// The agent by its name in the room.

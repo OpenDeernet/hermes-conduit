@@ -245,7 +245,9 @@ struct GroupChatView: View {
                 members: members,
                 size: 56
             )
-            Text(AppLocalization.string("No messages yet. Say something to the room."))
+            Text(surface?.copy == nil
+                ? AppLocalization.string("No messages yet. Say something to the room.")
+                : AppLocalization.string("No messages yet."))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

@@ -10979,7 +10979,8 @@ final class AppState: ObservableObject {
 
     /// Whether the open room takes a quote: one that is still running.
     func canQuoteIntoRoom() -> Bool {
-        activeRoomSurface?.room.isDisbanded == false
+        // A room someone else hosts has no composer yet (C5).
+        activeRoomSurface?.room.isDisbanded == false && activeRoomSurface?.copy == nil
     }
 
     /// Selected room text goes into the room's draft as a `>` quote, with
@@ -11585,7 +11586,7 @@ final class AppState: ObservableObject {
 
     /// Permanently disband the open room (destructive; the view confirms).
     func disbandActiveRoom() async {
-        guard let surface = activeRoomSurface, let client, isConnected,
+        guard let surface = activeRoomSurface, surface.copy == nil, let client, isConnected,
               groupCapabilities?.supports("groups.disband") == true else { return }
         let epoch = groupRoomEpoch
         do {

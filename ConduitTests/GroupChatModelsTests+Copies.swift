@@ -169,6 +169,9 @@ extension GroupChatModelsTests {
         // Nothing goes to the gateway from it: no send.
         let sent = await appState.sendGroupRoomMessage("hello")
         XCTAssertFalse(sent)
+        XCTAssertFalse(appState.canQuoteIntoRoom(), "no composer to quote or mention into")
+        await appState.disbandActiveRoom()
+        XCTAssertNotNil(appState.activeRoomSurface, "a room someone else hosts isn't yours to disband")
 
         appState.closeGroupRoom()
         XCTAssertNil(appState.activeRoomSurface)
