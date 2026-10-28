@@ -1117,7 +1117,7 @@ pulse where`, `pulse spots` and `pulse status` commands
 - Walking past hasn't been tried on a phone: how late iOS fires for 100 m circles, and whether a 3 km driving circle helps or nags, are what the kept timings are for (notifier #435, #1414). Visits at places that aren't saved still wake nothing.
 - An item said for a place that has no saved place keeps waiting for one until it expires; What Pulse remembers says so, but nothing asks the user to save the place.
 
-**Checked:** 2026-10-28, at #1414 on the `pulse` branch (walking past, from notifier #435 and the app's spot watcher; the rest as at #1379).
+**Checked:** 2026-10-28, at #1423, carrying the `pulse` branch's entry: #1414 (walking past, from notifier #435 and the app's spot watcher; the rest as at #1379).
 
 ## Artifacts
 
