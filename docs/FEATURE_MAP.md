@@ -1117,7 +1117,7 @@ pulse where`, `pulse spots` and `pulse status` commands (`pulse status` shows Wh
 - With Where you are on, Pulse's look-ups may read `conduit_location` and ask Maps from "me" or a saved place, within the look-ups' caps, each read listed in Settings > Location's When Hermes read your location under the Pulse chat (2026-10-27, notifier #420).
 
 **Open gaps**
-- None of it has been tried on a phone against notifier 0.104.0, nor the Walking past switch and its caption against notifier 0.111.0, nor arrivals from a real day's location sharing (#1379, notifier #420, #422, #423, #424).
+- None of it has been tried on a phone against notifier 0.104.0, nor the Walking past switch and its caption against notifier 0.111.0, nor arrivals from a real day's location sharing (#1379, #1426, notifier #420, #422, #423, #424).
 - A held pick also matches another saved place with the same name: the model names the place by its name, and the name keeps a pick working after its place is saved again (notifier #424).
 - Walking past hasn't been tried on a phone: how late iOS fires for 100 m circles, and whether a 3 km driving circle helps or nags, are what the kept timings are for (notifier #435, #1414). Arriving at or leaving a place that is neither saved nor a watched shop still wakes nothing.
 - An item said for a place that has no saved place keeps waiting for one until it expires; meanwhile, with walking past on, its words are watched as a kind of shop and coming near one makes it due as getting there would. What Pulse remembers says it waits, but nothing asks the user to save the place.
