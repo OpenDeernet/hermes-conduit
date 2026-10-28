@@ -716,6 +716,10 @@ final class AppState: ObservableObject {
     /// "Coding Assistant" for `coding-agent`. Names only; routing keeps the
     /// profile id.
     @Published private(set) var profileHermesNames: [String: String] = [:]
+    /// Each profile's bot title (`ui_meta['hermes-bots'].title`), the name
+    /// Edit Bot, the Profiles sheet and Hermes Desktop rename it with. It
+    /// wins over `display_name`, as on Desktop and in the bot's pushes.
+    @Published private(set) var profileBotTitles: [String: String] = [:]
     @Published private(set) var profileAvatarURLs: [String: URL] {
         // Also bumped when a photo's bytes change under the same URL, so the
         // glow colors drawn from the photos are worked out again.
@@ -724,6 +728,9 @@ final class AppState: ObservableObject {
     /// Backdrop glow colors picked in the profile picker (`#rrggbb`), for
     /// the selected dashboard.
     @Published private(set) var profileGlowPicks: [String: String] = [:]
+    /// Names given in the profile picker to profiles a gateway without bot
+    /// looks can't name, for the selected dashboard.
+    @Published private(set) var profileDeviceNames: [String: String] = [:]
     private var profileAvatarRevision = 0
     private var profileGlowCache: (key: ProfileGlowCacheKey, colors: [String: ProfileGlowRGB])?
     /// Each photo's colors, kept while the photos stay the same, so a pick
@@ -5821,6 +5828,7 @@ final class AppState: ObservableObject {
     private let reviewSummaryCacheKey = "conduit.reviewSummaryCache.v1"
     private let knownProfilesKey = "conduit.knownProfiles.v1"
     private let profileHermesNamesKey = "conduit.profileHermesNames.v1"
+    private let profileBotTitlesKey = "conduit.profileBotTitles.v1"
     /// Per-dashboard copies of profile-level presentation choices (#148).
     /// Profile names repeat across Hermes servers ("default" everywhere), so
     /// these are keyed by dashboard UUID. The pre-scoping global values were
@@ -6305,6 +6313,7 @@ final class AppState: ObservableObject {
         defaultProfileName = self.profileAppearanceStore.loadDefaultName(dashboardID: initialDashboardID)
         profileAvatarURLs = self.profileAppearanceStore.loadAvatarURLs(dashboardID: initialDashboardID)
         profileGlowPicks = self.profileAppearanceStore.loadGlowColors(dashboardID: initialDashboardID)
+        profileDeviceNames = self.profileAppearanceStore.loadDeviceNames(dashboardID: initialDashboardID)
         appIconChoice = UIApplication.shared.alternateIconName == AppIconChoice.light.alternateIconName ? .light : .dark
         themePreference = ThemePreference(
             rawValue: defaults.string(forKey: themePreferenceKey) ?? ""
@@ -6361,6 +6370,7 @@ final class AppState: ObservableObject {
             (defaults.stringArray(forKey: knownProfilesKey) ?? []) + [activeProfile, "default"]
         )
         profileHermesNames = defaults.dictionary(forKey: profileHermesNamesKey) as? [String: String] ?? [:]
+        profileBotTitles = defaults.dictionary(forKey: profileBotTitlesKey) as? [String: String] ?? [:]
         restoreActiveSessionState(for: activeProfile)
         restorePinnedSessions(for: activeProfile)
         if shouldLoadSavedConnection {
@@ -10624,6 +10634,8 @@ final class AppState: ObservableObject {
         defaults.removeObject(forKey: knownProfilesKey)
         defaults.removeObject(forKey: profileHermesNamesKey)
         profileHermesNames = [:]
+        defaults.removeObject(forKey: profileBotTitlesKey)
+        profileBotTitles = [:]
         refreshSiriProfileShortcuts()
         clearSessionPresentationCache()
         // Guesses name sessions, and a new server's ids can repeat the old one's.
@@ -11958,13 +11970,38 @@ final class AppState: ObservableObject {
         if let baseURL = connection?.baseUrl { prepareDashboardBridge(for: baseURL) }
     }
 
-    /// Gateway profile IDs remain stable; this is only the device-local label
-    /// used for presentation in the chat and profile picker.
+    /// Gateway profile IDs remain stable; this is only the label used for
+    /// presentation in the chat and profile picker: the profile's bot title,
+    /// else its Hermes `display_name`, else its id. The main profile goes by
+    /// its Conduit name, and by those only while it has none (#1257); a
+    /// name given on a gateway without bot looks comes first.
     func profileDisplayName(_ profile: String) -> String {
-        let normalized = profile.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalized.isEmpty || normalized.lowercased() == "default" { return defaultProfileName }
+        var normalized = profile.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isMain = normalized.isEmpty || normalized.lowercased() == "default"
+        if isMain {
+            guard defaultProfileName == ProfileAppearanceStore.defaultName else { return defaultProfileName }
+            normalized = "default"
+        }
+        if !isMain, let name = profileDeviceNames[normalized] { return name }
+        if let title = profileBotTitles[normalized] { return title }
         if let name = profileHermesNames[normalized] { return name }
+        if isMain { return defaultProfileName }
         return String(normalized.prefix(1)).uppercased() + String(normalized.dropFirst())
+    }
+
+    /// Takes the bot titles the roster gave. A profile the roster leaves out
+    /// keeps its title; one listed without a title has none.
+    func adoptProfileBotTitles(_ rows: [(profile: String, title: String)]) {
+        var titles = profileBotTitles
+        for row in rows {
+            let profile = row.profile.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !profile.isEmpty else { continue }
+            let title = row.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            titles[profile] = title.isEmpty || title == profile ? nil : title
+        }
+        guard titles != profileBotTitles else { return }
+        profileBotTitles = titles
+        defaults.set(titles, forKey: profileBotTitlesKey)
     }
 
     /// Takes the `display_name`s a listing gave. The bot roster and
@@ -12037,6 +12074,49 @@ final class AppState: ObservableObject {
         publishWidgetSnapshot()
         // A call ringing on the Watch shows it.
         shareWatchCallVoices()
+    }
+
+    /// The Profiles sheet's Rename. The main profile keeps its Conduit
+    /// name, as Settings > Edit profile does; any other profile's bot title
+    /// is written as Edit Bot writes it, so Bots, Desktop and every name in
+    /// Conduit follow. A gateway without bot looks keeps it on the device,
+    /// like its photos. An empty name goes back to Hermes' name. Returns a
+    /// message when it was not saved.
+    func renameProfile(_ profile: String, to name: String) async -> String? {
+        if BotManagement.isDefaultProfile(profile) {
+            saveDefaultProfileName(name)
+            return nil
+        }
+        switch await profilePhotoHome(for: profile) {
+        case .device:
+            profileAppearanceStore.saveDeviceName(name, for: profile, dashboardID: activeDashboardID)
+            profileDeviceNames = profileAppearanceStore.loadDeviceNames(dashboardID: activeDashboardID)
+            return nil
+        case .offline:
+            return AppLocalization.string("Connect to Hermes to rename this profile.")
+        case .hermes(let bot, let client):
+            let epoch = botRosterEpoch
+            let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let patch: [String: Any?] = ["title": title.isEmpty ? nil : title]
+            var outcome: BotMetaWriteOutcome
+            do {
+                let result = try await client.configureBotProfile(
+                    name: bot.name,
+                    botMeta: BotMetaPatch.merged(existing: bot.botMeta, patch: patch),
+                    expectedMetaRevision: bot.botMetaRevision
+                )
+                outcome = BotMetaWriteOutcome(configureResult: result)
+                if outcome == .conflict {
+                    outcome = await retryBotMetaWrite(bot.name, patch: patch, client: client, epoch: epoch)
+                }
+            } catch {
+                outcome = .failed
+            }
+            await refreshBotRosterAfterWrite()
+            return outcome == .persisted || outcome == .unsupported
+                ? nil
+                : AppLocalization.string("The name was not saved.")
+        }
     }
 
     var mainProfileNamesByDashboard: [String: String] {
@@ -12233,6 +12313,7 @@ final class AppState: ObservableObject {
         defaultProfileName = profileAppearanceStore.loadDefaultName(dashboardID: dashboardID)
         profileAvatarURLs = profileAppearanceStore.loadAvatarURLs(dashboardID: dashboardID)
         profileGlowPicks = profileAppearanceStore.loadGlowColors(dashboardID: dashboardID)
+        profileDeviceNames = profileAppearanceStore.loadDeviceNames(dashboardID: dashboardID)
         modelVisibility = scopedModelVisibility(dashboardID: dashboardID)
         restoreDisplayPreferences()
     }
@@ -21116,6 +21197,7 @@ final class AppState: ObservableObject {
             // the roster VIEW hides meta-hidden rows for display only.
             botRoster = BotProfile.displayOrder(snapshot.bots)
             adoptProfileHermesNames(snapshot.bots.map { (profile: $0.name, displayName: $0.displayName) })
+            adoptProfileBotTitles(snapshot.bots.map { (profile: $0.name, title: $0.botTitle ?? "") })
             desktopGroupChats = snapshot.desktopGroups
             botRosterSupportsProtocol = snapshot.supportsBotProtocol
             botModePhase = .available
@@ -21740,6 +21822,11 @@ final class AppState: ObservableObject {
                 await refreshBotRosterAfterWrite()
                 return .saved(warning: problems.joined(separator: " "))
             }
+        }
+        // The main profile goes by its Conduit name, so a rename here is
+        // that name too.
+        if metaPersisted, patch.keys.contains("title"), BotManagement.isDefaultProfile(bot.name) {
+            saveDefaultProfileName(title)
         }
         if removing, metaPersisted {
             do {

@@ -196,6 +196,37 @@ final class BotModeTests: XCTestCase {
         XCTAssertFalse(BotChatHygiene.isCanonicalBotChatRow(unrelated, roster: [bot]))
     }
 
+    /// A bot renamed in Edit Bot (or the Profiles sheet) goes by that name
+    /// everywhere Conduit names the profile, not only in Bots (#1409).
+    func testABotTitleNamesItsProfileEverywhere() async {
+        var roster = [
+            makeBot(name: "default", botTitle: "Muse"),
+            makeBot(name: "atlas", botTitle: "Atlas Prime")
+        ]
+        let harness = makeBotHarness(lifecycleOperations: ChatResumeLifecycleOperations(
+            botRoster: { _ in BotRosterSnapshot(bots: roster, supportsBotProtocol: true) }
+        ))
+        harness.appState.client = HermesClient(
+            connection: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"),
+            profile: "default"
+        )
+
+        await harness.appState.refreshBotRoster()
+        XCTAssertEqual(harness.appState.profileDisplayName("atlas"), "Atlas Prime")
+        XCTAssertEqual(harness.appState.profileDisplayName("default"), "Muse", "A main profile with no Conduit name goes by its bot's")
+
+        harness.appState.saveDefaultProfileName("Home")
+        XCTAssertEqual(harness.appState.profileDisplayName("default"), "Home", "The Conduit name wins for the main profile")
+
+        // A profile listing that only knows `display_name` doesn't undo it.
+        harness.appState.adoptProfileHermesNames([(profile: "atlas", displayName: "Atlas")])
+        XCTAssertEqual(harness.appState.profileDisplayName("atlas"), "Atlas Prime")
+
+        roster = [makeBot(name: "default"), makeBot(name: "atlas")]
+        await harness.appState.refreshBotRoster()
+        XCTAssertEqual(harness.appState.profileDisplayName("atlas"), "Atlas", "A cleared title falls back to the display name")
+    }
+
     func testActiveProfileSessionsProjectionDropsCanonicalButKeepsCatalog() async {
         let bot = makeBot(name: "atlas", canonicalID: "stored-1")
         let canonicalRow = makeSessionSummary(id: "stored-1", title: "Bot Chat")

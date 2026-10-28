@@ -36,6 +36,9 @@ final class ProfileAppearanceStore {
     /// Per dashboard, the backdrop glow color picked for a profile
     /// (`#rrggbb`). A device-local presentation choice, like the order.
     static let glowColorsKey = "conduit.profileGlowColorByDashboard.v1"
+    /// Per dashboard, names given to profiles other than the main one on a
+    /// gateway without bot looks, which has nowhere to keep them.
+    static let deviceNamesKey = "conduit.profileDeviceNameByDashboard.v1"
     /// The bucket for writes made while no dashboard is selected.
     private static let unscopedBucket = "unscoped"
 
@@ -195,8 +198,31 @@ final class ProfileAppearanceStore {
         defaults.dictionary(forKey: Self.glowColorsKey) as? [String: [String: String]] ?? [:]
     }
 
-    /// Remove Dashboard: its label, photos and glow colors go with it.
+    func loadDeviceNames(dashboardID: UUID?) -> [String: String] {
+        deviceNames()[Self.bucket(dashboardID)] ?? [:]
+    }
+
+    /// Nil or empty goes back to Hermes' name.
+    func saveDeviceName(_ name: String?, for profile: String, dashboardID: UUID?) {
+        let normalized = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var all = deviceNames()
+        let bucket = Self.bucket(dashboardID)
+        var names = all[bucket] ?? [:]
+        names[profile] = normalized.isEmpty ? nil : normalized
+        all[bucket] = names.isEmpty ? nil : names
+        defaults.set(all, forKey: Self.deviceNamesKey)
+    }
+
+    private func deviceNames() -> [String: [String: String]] {
+        defaults.dictionary(forKey: Self.deviceNamesKey) as? [String: [String: String]] ?? [:]
+    }
+
+    /// Remove Dashboard: its labels, photos and glow colors go with it.
     func removeAll(dashboardID: UUID) {
+        var deviceNames = deviceNames()
+        if deviceNames.removeValue(forKey: Self.bucket(dashboardID)) != nil {
+            defaults.set(deviceNames, forKey: Self.deviceNamesKey)
+        }
         var glows = glowColors()
         if glows.removeValue(forKey: Self.bucket(dashboardID)) != nil {
             defaults.set(glows, forKey: Self.glowColorsKey)

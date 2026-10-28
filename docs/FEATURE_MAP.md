@@ -1198,7 +1198,7 @@ same bot.
 
 **Siblings:** New Bot · Edit Bot · Hermes Desktop's bot editor (same
 profile records) · the bot's face in the Bots list, its Bot Chat and group
-rooms · generated pictures, shared with group pictures · profile pictures in the profile picker · the SOUL a new bot is
+rooms · generated pictures, shared with group pictures · profile pictures in the profile picker · the profile's name everywhere else in Conduit (Profile names) · the SOUL a new bot is
 born with (the messaging section older gateways need) · the Bots list's row
 menu (New Chat, Groups, Pin, Hide, Duplicate, Delete) and its Hidden section,
 as on Desktop's bot row · Edit Bot's MCP catalog (adding a server with
@@ -1236,7 +1236,7 @@ and README.md's bots line)
 - Desktop's drawn faces, shapes and pets show only as stills; Conduit draws an initial on the color.
 - The group picture switch guard has no test: it needs a ready DashboardTicketBridge double and a room switch mid-request (#1191).
 
-**Checked:** 2026-10-27, at #1395 (the editor's Model page gained search with each match's provider; saving unchanged); 2026-10-25, at #1222 (configure and MCP add wait in the profile config queue); before that #1192; group pictures at #1191.
+**Checked:** 2026-10-28, #1410 (a rename here names the profile everywhere, see Profile names); 2026-10-27, at #1395 (the editor's Model page gained search with each match's provider; saving unchanged); 2026-10-25, at #1222 (configure and MCP add wait in the profile config queue); before that #1192; group pictures at #1191.
 
 ## Opening a Bot Chat
 
@@ -2840,6 +2840,42 @@ model-facing text (none describe the glow)
 - The chat's other sheets (gateway diagnostics, workspace browser, delegate agents, pinned replies) never took a profile glow and stay gold.
 
 **Checked:** 2026-10-25, #1263.
+
+## Profile names
+
+What Conduit calls a profile, and where it is renamed. A bot is a Hermes
+profile, so its name in Bots and its name everywhere else are one name.
+
+**Siblings:** the Profiles sheet's Edit menu (Rename, Choose Photo, Remove
+Photo) · Settings > Edit profile (the profile in use) · Edit Bot's name
+· Hermes Desktop's bot editor (the same title) · every place Conduit names a
+profile through `profileDisplayName` (sidebar, profile switcher and chips,
+All profiles, chat placeholders, call screens, voice settings, widgets) ·
+the Bots list and Bot Chats (`displayLabel`) · pushes and calls from Hermes,
+named by the notifier's `bot_name` in the same order · the Watch's caller
+name (`mainProfileNamesByDashboard`) · the text that describes them (the
+rename sheet's message, the Profiles row caption in Settings, README.md's
+profiles line)
+
+**Code**
+- Names: `Conduit/Services/AppState.swift` (profileDisplayName, adoptProfileBotTitles, adoptProfileHermesNames, renameProfile, saveDefaultProfileName, updateBot), `Conduit/Services/ProfileAppearanceStore.swift` (the main profile's name, and device names)
+- Profiles sheet: `Conduit/Views/ProfilePickerSheet.swift` (ProfilePickerRow's editMenu and rename alert)
+- Settings: `Conduit/Views/AuxiliaryViews.swift` (ProfileSettingsDetail: every profile's name)
+- Bots: `Conduit/Services/BotModeModels.swift` (BotProfile.displayLabel), `Conduit/Views/BotEditorSheet.swift`
+- Pushes: `notifier/session_titles.py` (bot_name)
+- Tests: `ConduitTests/BotModeTests.swift` (testABotTitleNamesItsProfileEverywhere), `ConduitTests/ProfileDiscoveryTests.swift` (display names, device names)
+
+**Rulings**
+- A profile goes by its bot title (`ui_meta['hermes-bots'].title`), else its Hermes `display_name`, else its id, as on Desktop and in its pushes. A listing that only knows `display_name` (`/api/profiles`) never undoes a title (Eric 2026-10-28, #1410, issue #1409).
+- The main profile goes by its Conduit name, kept on the device per dashboard, and by its bot's name only while it has none (#1257). Renaming it on the Profiles sheet or in Settings > Edit profile sets that name; renaming the main bot in Edit Bot sets it too, so the rename shows (2026-10-28, #1410).
+- Renaming any other profile, on its card or in Settings > Edit profile, writes its bot title the way Edit Bot does (compare-and-swap on ui_meta, retried once on a conflict), so Bots and Desktop show it, and its id, chats and settings stay. An empty name goes back to Hermes' name (2026-10-28, #1410).
+- Every profile is renamed from its Profiles card, Bot Mode or not: people who never open Bots still need it (Eric 2026-10-28, #1410).
+- A gateway without bot looks (`botModePhase == .gatewayUnsupported`) has nowhere to keep another profile's name, so the name stays on the device per dashboard, as photos there do, and comes first (2026-10-28, #1410).
+
+**Open gaps**
+- None known.
+
+**Checked:** 2026-10-28, #1410.
 
 ## Settings rows a toggle reveals
 

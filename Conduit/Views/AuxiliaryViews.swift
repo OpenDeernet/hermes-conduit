@@ -1364,7 +1364,7 @@ private struct SettingsHome: View {
             v2Action(
                 icon: "person.2.crop.square.stack",
                 title: AppLocalization.string("Profiles"),
-                detail: AppLocalization.string("Add, reorder, or change profile photos"),
+                detail: AppLocalization.string("Rename, reorder, or change profile photos"),
                 identifier: "settings.profiles",
                 first: true
             ) {
@@ -1593,6 +1593,8 @@ private struct ProfileSettingsDetail: View {
     @EnvironmentObject private var appState: AppState
     @State private var name: String
     @State private var didSave = false
+    @State private var isSaving = false
+    @State private var saveError: String?
 
     init(profile: String, displayName: String, saveDefaultProfileName: @escaping (String) -> Void) {
         self.profile = profile
@@ -1608,29 +1610,56 @@ private struct ProfileSettingsDetail: View {
                 Text("Choose a different profile from the session drawer. Chat, model, workspace, and memory preferences on the other settings pages follow that profile.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            if profile == "default" {
-                ConduitSettingsSection(title: AppLocalization.string("On this device"), symbol: "pencil", tint: .conduitAccent) {
-                    Text("Display name").font(.subheadline.weight(.semibold))
-                    TextField("Hermes", text: $name)
-                        .textInputAutocapitalization(.words)
-                        .padding(10)
-                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    Text("This only changes how the default profile is named in Conduit. Hermes itself still uses the default profile.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Button(didSave ? AppLocalization.string("Saved") : AppLocalization.string("Save display name")) {
-                        saveDefaultProfileName(name)
-                        name = appState.defaultProfileName
-                        didSave = true
-                    }
-                        .buttonStyle(.settingsPrimary)
+            ConduitSettingsSection(title: namedOnDevice ? AppLocalization.string("On this device") : AppLocalization.string("Name"), symbol: "pencil", tint: .conduitAccent) {
+                Text("Display name").font(.subheadline.weight(.semibold))
+                TextField("Hermes", text: $name)
+                    .textInputAutocapitalization(.words)
+                    .padding(10)
+                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Text(profile == "default"
+                     ? AppLocalization.string("This only changes how the default profile is named in Conduit. Hermes itself still uses the default profile.")
+                     : namedOnDevice
+                        ? AppLocalization.string("This only changes how the profile is named in Conduit.")
+                        : AppLocalization.string("Chats and settings stay with the profile. Bots and Hermes Desktop show the new name too."))
+                    .font(.footnote).foregroundStyle(.secondary)
+                if let saveError {
+                    Text(saveError).font(.footnote).foregroundStyle(.red)
                 }
+                Button(didSave ? AppLocalization.string("Saved") : AppLocalization.string("Save display name")) {
+                    save()
+                }
+                    .buttonStyle(.settingsPrimary)
+                    .disabled(isSaving)
             }
         }
         .navigationTitle("Profile")
     }
 
     private var currentDisplayName: String {
-        profile == "default" ? appState.defaultProfileName : displayName
+        appState.profileDisplayName(profile)
+    }
+
+    /// The main profile's name is Conduit's own; any other profile's is its
+    /// bot title on Hermes, unless the gateway has no bot looks.
+    private var namedOnDevice: Bool {
+        profile == "default" || !appState.profilePhotosLiveOnHermes
+    }
+
+    private func save() {
+        guard profile != "default" else {
+            saveDefaultProfileName(name)
+            name = appState.profileDisplayName(profile)
+            didSave = true
+            return
+        }
+        isSaving = true
+        saveError = nil
+        Task {
+            saveError = await appState.renameProfile(profile, to: name)
+            isSaving = false
+            name = appState.profileDisplayName(profile)
+            didSave = saveError == nil
+        }
     }
 }
 
