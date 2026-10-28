@@ -747,7 +747,7 @@ struct PulseClient {
     /// Any of enabled, memory, daily_report, report_profiles, report_times,
     /// brief_time, time_zone, model, nudge, memory_daily_tokens,
     /// followup_daily_tokens, note, quiet_days, quiet_until, night,
-    /// inbox_deadlines, look_first, where and private_pushes; answers with
+    /// inbox_deadlines, look_first, where, spots and private_pushes; answers with
     /// the new state.
     func update(_ changes: [String: Any]) async throws -> PulseState {
         let response = try await request(Self.path, "PUT", changes)
