@@ -1657,8 +1657,10 @@ private struct ProfileSettingsDetail: View {
         Task { @MainActor in
             saveError = await appState.renameProfile(profile, to: name)
             isSaving = false
+            // A failed save keeps what was typed, to try again.
+            guard saveError == nil else { return }
             name = appState.profileDisplayName(profile)
-            didSave = saveError == nil
+            didSave = true
         }
     }
 }
