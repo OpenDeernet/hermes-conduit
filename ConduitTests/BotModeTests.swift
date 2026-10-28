@@ -235,6 +235,38 @@ final class BotModeTests: XCTestCase {
         XCTAssertEqual(harness.appState.profileDisplayName("default"), "Studio")
     }
 
+    /// On a gateway without bot looks a rename stays on the device and names
+    /// the profile until the roster says the gateway keeps bot looks; the
+    /// name already shown writes nothing (#1409).
+    func testADeviceNameNamesAProfileOnlyWithoutBotLooks() async {
+        var unsupported = true
+        let harness = makeBotHarness(lifecycleOperations: ChatResumeLifecycleOperations(
+            botRoster: { _ in
+                if unsupported { throw RpcError(code: -32601, message: "unknown method") }
+                return BotRosterSnapshot(bots: [self.makeBot(name: "atlas", botTitle: "Atlas Prime")], supportsBotProtocol: true)
+            }
+        ))
+        harness.appState.client = HermesClient(
+            connection: HermesConnection(baseUrl: "https://one.example", ticket: "ticket"),
+            profile: "default"
+        )
+        await harness.appState.refreshBotRoster()
+        XCTAssertEqual(harness.appState.botModePhase, .gatewayUnsupported)
+
+        let unchanged = await harness.appState.renameProfile("atlas", to: "Atlas")
+        XCTAssertNil(unchanged)
+        XCTAssertTrue(harness.appState.profileDeviceNames.isEmpty, "Saving the name shown writes nothing")
+
+        let renamed = await harness.appState.renameProfile("atlas", to: "Atlas Local")
+        XCTAssertNil(renamed)
+        XCTAssertEqual(harness.appState.profileDisplayName("atlas"), "Atlas Local")
+
+        unsupported = false
+        await harness.appState.refreshBotRoster()
+        XCTAssertEqual(harness.appState.botModePhase, .available)
+        XCTAssertEqual(harness.appState.profileDisplayName("atlas"), "Atlas Prime", "Bot looks: the title names it")
+    }
+
     func testActiveProfileSessionsProjectionDropsCanonicalButKeepsCatalog() async {
         let bot = makeBot(name: "atlas", canonicalID: "stored-1")
         let canonicalRow = makeSessionSummary(id: "stored-1", title: "Bot Chat")

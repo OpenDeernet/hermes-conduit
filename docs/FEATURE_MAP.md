@@ -2959,11 +2959,11 @@ profiles line)
 - Settings: `Conduit/Views/AuxiliaryViews.swift` (ProfileSettingsDetail: every profile's name)
 - Bots: `Conduit/Services/BotModeModels.swift` (BotProfile.displayLabel), `Conduit/Views/BotEditorSheet.swift`
 - Pushes: `notifier/session_titles.py` (bot_name)
-- Tests: `ConduitTests/BotModeTests.swift` (testABotTitleNamesItsProfileEverywhere), `ConduitTests/ProfileDiscoveryTests.swift` (display names, device names)
+- Tests: `ConduitTests/BotModeTests.swift` (testABotTitleNamesItsProfileEverywhere, testADeviceNameNamesAProfileOnlyWithoutBotLooks), `ConduitTests/ProfileDiscoveryTests.swift` (display names, device names)
 
 **Rulings**
 - A profile goes by its bot title (`ui_meta['hermes-bots'].title`), else its Hermes `display_name`, else its id, as on Desktop and in its pushes. A listing that only knows `display_name` (`/api/profiles`) never undoes a title (Eric 2026-10-28, #1413, issue #1409).
-- The main profile goes by its Conduit name, kept on the device per dashboard, and by its bot's name only while it has none (#1257). Renaming it on the Profiles sheet or in Settings > Edit profile sets that name; renaming the main bot in Edit Bot sets it too, so the rename shows (2026-10-28, #1413).
+- The main profile goes by its Conduit name, kept on the device per dashboard, and by its bot's name only while it has none (#1257). Renaming it on the Profiles sheet or in Settings > Edit profile sets that name; renaming the main bot in Edit Bot sets it too, so the rename shows. A rename on the card or in Settings doesn't reach the main bot's title, so Bots and Desktop keep theirs (2026-10-28, #1413).
 - Renaming any other profile, on its card or in Settings > Edit profile, writes its bot title the way Edit Bot does (compare-and-swap on ui_meta, retried once on a conflict), so Bots and Desktop show it, and its id, chats and settings stay. An empty name goes back to Hermes' name (2026-10-28, #1413).
 - Titles and display names are remembered per saved dashboard, so one server's names never label another's profiles (2026-10-28, #1413).
 - Every profile is renamed from its Profiles card, Bot Mode or not: people who never open Bots still need it (Eric 2026-10-28, #1413).

@@ -576,7 +576,6 @@ struct SettingsView: View {
     let loadProfileConfigOptions: () async -> ProfileConfigOptions
     let loadProfileModelDefaults: () async -> ProfileModelDefaults?
     let persistProfileMainModel: (String, String, String) async -> Bool
-    let saveDefaultProfileName: (String) -> Void
     let reconnect: () async -> Bool
     let disconnect: () -> Void
     /// V2's Settings tab: the home page shows this bar (the profile picker)
@@ -663,8 +662,7 @@ struct SettingsView: View {
         case .profile:
             ProfileSettingsDetail(
                 profile: snapshot.profile,
-                displayName: snapshot.profileDisplayName,
-                saveDefaultProfileName: saveDefaultProfileName
+                displayName: snapshot.profileDisplayName
             )
         case .model:
             ProfileConfigSettingsPage(
@@ -1589,17 +1587,15 @@ private struct ProfileSettingsDetail: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
     let profile: String
     let displayName: String
-    let saveDefaultProfileName: (String) -> Void
     @EnvironmentObject private var appState: AppState
     @State private var name: String
     @State private var didSave = false
     @State private var isSaving = false
     @State private var saveError: String?
 
-    init(profile: String, displayName: String, saveDefaultProfileName: @escaping (String) -> Void) {
+    init(profile: String, displayName: String) {
         self.profile = profile
         self.displayName = displayName
-        self.saveDefaultProfileName = saveDefaultProfileName
         _name = State(initialValue: displayName)
     }
 
@@ -1646,12 +1642,6 @@ private struct ProfileSettingsDetail: View {
     }
 
     private func save() {
-        guard !BotManagement.isDefaultProfile(profile) else {
-            saveDefaultProfileName(name)
-            name = appState.profileDisplayName(profile)
-            didSave = true
-            return
-        }
         isSaving = true
         saveError = nil
         Task { @MainActor in

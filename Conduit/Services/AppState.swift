@@ -12241,9 +12241,11 @@ final class AppState: ObservableObject {
     /// name, as Settings > Edit profile does; any other profile's bot title
     /// is written as Edit Bot writes it, so Bots, Desktop and every name in
     /// Conduit follow. A gateway without bot looks keeps it on the device,
-    /// like its photos. An empty name goes back to Hermes' name. Returns a
-    /// message when it was not saved.
+    /// like its photos. An empty name goes back to Hermes' name, and the
+    /// name already shown writes nothing, so a Save with no edit never pins
+    /// a display name as a title. Returns a message when it was not saved.
     func renameProfile(_ profile: String, to name: String) async -> String? {
+        guard name.trimmingCharacters(in: .whitespacesAndNewlines) != profileDisplayName(profile) else { return nil }
         if BotManagement.isDefaultProfile(profile) {
             saveDefaultProfileName(name)
             return nil
@@ -12257,6 +12259,7 @@ final class AppState: ObservableObject {
             }
             profileAppearanceStore.saveDeviceName(name, for: profile, dashboardID: activeDashboardID)
             profileDeviceNames = profileAppearanceStore.loadDeviceNames(dashboardID: activeDashboardID)
+            publishWidgetSnapshot()
             return nil
         case .offline:
             return AppLocalization.string("Connect to Hermes to rename this profile.")
@@ -12293,11 +12296,21 @@ final class AppState: ObservableObject {
             await refreshBotRosterAfterWrite()
             return AppLocalization.string("The name was not saved.")
         }
-        // A name kept on the device while the gateway had no bot looks is
-        // replaced by the title.
-        if profileDeviceNames[current.name] != nil, botOpenFenceIsCurrent(epoch: epoch, client: client) {
-            profileAppearanceStore.saveDeviceName(nil, for: current.name, dashboardID: activeDashboardID)
-            profileDeviceNames = profileAppearanceStore.loadDeviceNames(dashboardID: activeDashboardID)
+        if botOpenFenceIsCurrent(epoch: epoch, client: client) {
+            // Shown at once, whether or not the roster refresh below answers.
+            var titles = profileBotTitles
+            titles[current.name] = title.isEmpty || title == current.name ? nil : title
+            if titles != profileBotTitles {
+                profileBotTitles = titles
+                profileAppearanceStore.saveBotTitles(titles, dashboardID: activeDashboardID)
+            }
+            // A name kept on the device while the gateway had no bot looks
+            // is replaced by the title.
+            if profileDeviceNames[current.name] != nil {
+                profileAppearanceStore.saveDeviceName(nil, for: current.name, dashboardID: activeDashboardID)
+                profileDeviceNames = profileAppearanceStore.loadDeviceNames(dashboardID: activeDashboardID)
+            }
+            publishWidgetSnapshot()
         }
         await refreshBotRosterAfterWrite()
         return nil
