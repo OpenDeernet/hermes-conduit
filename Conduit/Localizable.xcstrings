@@ -372466,84 +372466,84 @@
         }
       }
     },
-    "This iPhone isn't watching shops: in Settings > Location, share in the background at Precise, with precise location allowed for Conduit." : {
+    "This iPhone isn't watching shops: in Settings > Location, share in the background at Precise, and allow Conduit's location Always, with Precise Location on." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dieses iPhone achtet nicht auf Geschäfte: Teile unter Einstellungen > Standort im Hintergrund mit „Genau“ und erlaube Conduit den genauen Standort."
+            "value" : "Dieses iPhone achtet nicht auf Geschäfte: Teile unter Einstellungen > Standort im Hintergrund mit „Genau“ und erlaube Conduit den Standortzugriff „Immer“ mit aktiviertem „Genauer Standort“."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este iPhone no está atento a tiendas: en Ajustes > Ubicación, comparte en segundo plano con Exacta y permite a Conduit la ubicación exacta."
+            "value" : "Este iPhone no está atento a tiendas: en Ajustes > Ubicación, comparte en segundo plano con Exacta y permite la ubicación de Conduit «Siempre», con «Ubicación exacta» activada."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cet iPhone ne surveille aucun commerce : dans Réglages > Position, partagez en arrière-plan en mode Précise et autorisez la position exacte pour Conduit."
+            "value" : "Cet iPhone ne surveille aucun commerce : dans Réglages > Position, partagez en arrière-plan en mode Précise et autorisez la position de Conduit « Toujours », avec « Position exacte » activée."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iPhone ini tidak memperhatikan toko: di Pengaturan > Lokasi, bagikan di latar belakang dengan Akurat, dan izinkan lokasi akurat untuk Conduit."
+            "value" : "iPhone ini tidak memperhatikan toko: di Pengaturan > Lokasi, bagikan di latar belakang dengan Akurat, dan izinkan lokasi Conduit \"Selalu\" dengan \"Lokasi Akurat\" aktif."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Questo iPhone non tiene d'occhio i negozi: in Impostazioni > Posizione, condividi in background con Precisa e consenti a Conduit la posizione esatta."
+            "value" : "Questo iPhone non tiene d'occhio i negozi: in Impostazioni > Posizione, condividi in background con Precisa e consenti a Conduit la posizione \"Sempre\", con \"Posizione esatta\" attiva."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このiPhoneはお店を見張っていません：設定 > 位置情報で、バックグラウンドの共有を「正確」にし、Conduitに正確な位置情報を許可してください。"
+            "value" : "このiPhoneはお店を見張っていません：設定 > 位置情報で、バックグラウンドの共有を「正確」にし、Conduitの位置情報を「常に」にして「正確な位置情報」をオンにしてください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이 iPhone은 가게를 지켜보고 있지 않아요. 설정 > 위치에서 백그라운드 공유를 '정확'으로 하고 Conduit에 정확한 위치를 허용하세요."
+            "value" : "이 iPhone은 가게를 지켜보고 있지 않아요. 설정 > 위치에서 백그라운드 공유를 '정확'으로 하고, Conduit의 위치 접근을 '항상'으로, '정확한 위치'를 켜 주세요."
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ten iPhone nie wypatruje sklepów: w Ustawieniach > Lokalizacja udostępniaj w tle z opcją Dokładna i zezwól Conduit na dokładną lokalizację."
+            "value" : "Ten iPhone nie wypatruje sklepów: w Ustawieniach > Lokalizacja udostępniaj w tle z opcją Dokładna i zezwól Conduit na lokalizację „Zawsze” z włączoną „Dokładną lokalizacją”."
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Este iPhone não está de olho em lojas: em Ajustes > Localização, compartilhe em segundo plano como Exata e permita a localização exata para o Conduit."
+            "value" : "Este iPhone não está de olho em lojas: em Ajustes > Localização, compartilhe em segundo plano como Exata e permita a localização do Conduit \"Sempre\", com \"Localização Exata\" ativada."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Этот iPhone не следит за магазинами: в Настройках > Геопозиция включите фоновую передачу с точностью «Точно» и разрешите Conduit точную геопозицию."
+            "value" : "Этот iPhone не следит за магазинами: в Настройках > Геопозиция включите фоновую передачу с точностью «Точно» и разрешите Conduit доступ к геопозиции «Всегда» с включённой «Точной геопозицией»."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bu iPhone dükkanları izlemiyor: Ayarlar > Konum'da arka planda Kesin olarak paylaş ve Conduit'e kesin konuma izin ver."
+            "value" : "Bu iPhone dükkanları izlemiyor: Ayarlar > Konum'da arka planda Kesin olarak paylaş ve Conduit'in konum iznini \"Her Zaman\" yapıp \"Kesin Konum\"u aç."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这台 iPhone 没有在留意店铺：请在“设置 > 位置”中以“精确”在后台共享，并允许 Conduit 使用精确位置。"
+            "value" : "这台 iPhone 没有在留意店铺：请在“设置 > 位置”中以“精确”在后台共享，并将 Conduit 的位置权限设为“始终”，同时打开“精确位置”。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這支 iPhone 沒有在留意店家：請在「設定 > 位置」中以「精確」在背景分享，並允許 Conduit 使用精確位置。"
+            "value" : "這支 iPhone 沒有在留意店家：請在「設定 > 位置」中以「精確」在背景分享，並將 Conduit 的位置權限設為「永遠」，同時開啟「精確位置」。"
           }
         }
       }

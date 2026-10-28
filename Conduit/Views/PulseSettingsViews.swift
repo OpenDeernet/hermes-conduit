@@ -17,6 +17,7 @@ import SwiftUI
 struct PulseSettingsPage: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject var appLanguage = AppLanguageStore.shared
+    @ObservedObject private var location = LocationSharingController.shared
 
     @State private var state: PulseState?
     @State private var loadError: String?
@@ -502,7 +503,7 @@ struct PulseSettingsPage: View {
             if appState.pulseReadsWhere, let whereOn = state.whereYouAre {
                 Toggle("Where you are", isOn: Binding(
                     get: { whereOn },
-                    set: { on in change(["where": on]) { $0.whereYouAre = on } }
+                    set: { on in changeWatching(["where": on]) { $0.whereYouAre = on } }
                 ))
                 .disabled(working)
                 .accessibilityIdentifier("settings.pulse.where")
@@ -517,15 +518,15 @@ struct PulseSettingsPage: View {
                 if whereOn, let walking = state.walkingPast {
                     Toggle("Walking past", isOn: Binding(
                         get: { walking },
-                        set: { on in change(["spots": on]) { $0.walkingPast = on } }
+                        set: { on in changeWatching(["spots": on]) { $0.walkingPast = on } }
                     ))
                     .disabled(working)
                     .accessibilityIdentifier("settings.pulse.walking-past")
                     Text("Pulse can ask Conduit to watch for a few kinds of shop near you, like a florist before an anniversary or a shop you said you'd stop at. Conduit searches Apple Maps on this iPhone and tells your gateway the shop's name, when you came near it, how close, how accurate that was and how fast you were moving, never where the shop is. Only while Conduit shares your precise location in the background. Turning this off deletes the shops your gateway kept.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    if walking, state.whereReady, !LocationSharingController.shared.watchesSpots {
-                        Text("This iPhone isn't watching shops: in Settings > Location, share in the background at Precise, with precise location allowed for Conduit.")
+                    if walking, state.whereReady, !location.watchesSpots {
+                        Text("This iPhone isn't watching shops: in Settings > Location, share in the background at Precise, and allow Conduit's location Always, with Precise Location on.")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
@@ -989,6 +990,25 @@ struct PulseSettingsPage: View {
             state = shown
         }
         run { client in try await client.update(changes) }
+    }
+
+    /// A change to Where you are or Walking past: once the host has it off,
+    /// this iPhone stops watching shops at once instead of on its next send
+    /// (another device stops when the host's next reply lists none).
+    private func changeWatching(_ changes: [String: Any], optimistic: @escaping (inout PulseState) -> Void) {
+        guard !working else { return }
+        if var shown = state {
+            optimistic(&shown)
+            state = shown
+        }
+        run { client in
+            let next = try await client.update(changes)
+            if next.walkingPast == false || next.whereYouAre == false,
+               location.binding?.dashboardID == client.dashboardID {
+                location.forgetSpots()
+            }
+            return next
+        }
     }
 
     private func backfillStep(_ action: PulseBackfillAction, days: Int? = nil) {

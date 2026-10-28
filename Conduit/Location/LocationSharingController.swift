@@ -258,6 +258,16 @@ final class LocationSharingController: ObservableObject {
         if config.binding != nil, settings.background { reconfigureMonitors() }
     }
 
+    /// Stops watching shops now (Walking past or Where you are turned off
+    /// in Settings > Pulse), as a reply listing none would, and drops the
+    /// entries waiting to be sent.
+    func forgetSpots() {
+        spots.replied([], near: nil)
+        guard !unsent.spotEntries.isEmpty else { return }
+        unsent.spotEntries = []
+        saveUnsent()
+    }
+
     func reconfigureMonitors() {
         monitor.configure(settings: settings, places: places, bound: config.binding != nil && !configUnreadable)
         spots.configure(enabled: watchesSpots, savedPlaces: places.count)
