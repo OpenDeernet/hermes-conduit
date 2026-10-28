@@ -362,9 +362,11 @@ final class LocationSharingController: ObservableObject {
             let endBackground = beginBackgroundWork(for: .place)
             defer { endBackground() }
             let location = await fixes.currentFix(accuracy: kCLLocationAccuracyBest, maxAge: 15, timeout: .seconds(15))
-            if let location, LocationPrecisionRules.containingPrivatePlace(LocationRawFix(location), places: places) != nil {
-                return
-            }
+            // Nothing from inside a private place: without a fresh fix the last
+            // known one decides, and with neither nothing is sent.
+            guard let checked = location ?? fixes.lastKnownFix,
+                  LocationPrecisionRules.containingPrivatePlace(LocationRawFix(checked), places: places) == nil
+            else { return }
             let entry = LocationSpotEntry(
                 spotID: spot.watchID, name: spot.name, at: date, fixAt: location?.timestamp,
                 distance: location.map { $0.distance(from: spot.location) },

@@ -289,7 +289,13 @@ final class LocationSyncEngine: ObservableObject {
             acknowledge(batch, answer: answer)
             if batch.spotEntries != nil,
                let reply = LocationCrypto.openSpotsReply(answer["reply"], key: key, batchID: batch.batchID) {
-                spotsReplied?(LocationSpotWatch.parse(reply, date: LocationHostDates.parse))
+                let watches = LocationSpotWatch.parse(reply, date: LocationHostDates.parse)
+                if watches.isEmpty, let listed = reply["spots"] as? [Any], !listed.isEmpty {
+                    Self.log.info("Pulse spots reply listed \(listed.count, privacy: .public) watches and none parsed")
+                }
+                spotsReplied?(watches)
+            } else if batch.spotEntries != nil, answer["reply"] != nil {
+                Self.log.info("Pulse spots reply didn't open")
             }
             return .sent
         } catch let error as DashboardTicketBridgeError {

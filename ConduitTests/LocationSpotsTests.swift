@@ -136,6 +136,7 @@ extension NotificationE2ETests {
                                            latitude: 51.53, longitude: -0.07, radius: 750)]
         var saved: [PulseSpotState] = []
         let watcher = PulseSpotWatcher(state: state, save: { saved.append($0) })
+        watcher.hasMonitor = { false }
         watcher.now = { now }
         var entered: [(String, Date)] = []
         watcher.entered = { spot, at in entered.append((spot.name, at)) }
@@ -158,6 +159,7 @@ extension NotificationE2ETests {
     @MainActor
     func testShopsGetWhatSavedPlacesLeaveOfIOSsTwenty() {
         let watcher = PulseSpotWatcher(state: PulseSpotState(), save: { _ in })
+        watcher.hasMonitor = { false }
         watcher.configure(enabled: true, savedPlaces: 3)
         XCTAssertEqual(watcher.room, 10)
         watcher.configure(enabled: true, savedPlaces: 14)

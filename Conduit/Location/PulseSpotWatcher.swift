@@ -52,6 +52,10 @@ final class PulseSpotWatcher {
         try await MapsKit.search(query, near: centre, span: span)
     }
 
+    /// Whether a monitor was left with shops in it, so turning off empties
+    /// it even before it's opened this launch.
+    var hasMonitor: () -> Bool = { UserDefaults.standard.bool(forKey: PulseSpotWatcher.monitoredKey) }
+
     private let save: (PulseSpotState) -> Void
     private var monitor: CLMonitor?
     private var eventsTask: Task<Void, Never>?
@@ -71,7 +75,7 @@ final class PulseSpotWatcher {
     func configure(enabled: Bool, savedPlaces: Int) {
         room = enabled ? max(0, min(Self.maxSpots, Self.conditionLimit - min(savedPlaces, Self.conditionLimit))) : 0
         guard watching else {
-            if state != PulseSpotState() || monitor != nil || Self.hasMonitor {
+            if state != PulseSpotState() || monitor != nil || hasMonitor() {
                 state = PulseSpotState()
                 save(state)
                 queue { await $0.syncMonitor() }
@@ -208,12 +212,11 @@ final class PulseSpotWatcher {
 
     // MARK: Monitor
 
-    private static var hasMonitor: Bool { UserDefaults.standard.bool(forKey: monitoredKey) }
-    private static let monitoredKey = "conduit.location.pulseSpotsMonitored.v1"
+    nonisolated static let monitoredKey = "conduit.location.pulseSpotsMonitored.v1"
 
     private func syncMonitor() async {
         expire()
-        if state.spots.isEmpty, monitor == nil, !Self.hasMonitor { return }
+        if state.spots.isEmpty, monitor == nil, !hasMonitor() { return }
         let monitor = await spotsMonitor()
         let wanted = Dictionary(uniqueKeysWithValues: state.spots.map { ($0.id, $0) })
         let current = await monitor.identifiers
@@ -244,6 +247,11 @@ final class PulseSpotWatcher {
             } catch {
                 LocationSyncEngine.log.info("Pulse spot monitor stopped: \(LogRedaction.message(error), privacy: .public)")
             }
+            // Its events ended: the next sync opens it again by name (this one
+            // is released with this task) and adds the shops back.
+            guard let self, self.monitor === created else { return }
+            self.monitor = nil
+            self.eventsTask = nil
         }
         return created
     }
@@ -257,6 +265,7 @@ final class PulseSpotWatcher {
         }
         guard let spot = state.spots.first(where: { $0.id == identifier }) else { return }
         let before = state.inside[identifier]
+        guard before != inside else { return }
         state.inside[identifier] = inside
         save(state)
         guard before == false, inside, state.watches.contains(where: { $0.id == spot.watchID && $0.until > now() }) else { return }
