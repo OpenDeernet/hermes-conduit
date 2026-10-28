@@ -4011,6 +4011,7 @@ final class AppState: ObservableObject {
         let controller = GeminiLiveConversationController(
             makeSession: { [weak self] in
                 let session = LocalLiveSession(client: client)
+                session.onTrace = { LiveCallTrace.shared.note($0) }
                 // The greeting setting, said by the speech server itself:
                 // Hermes isn't asked, so "own words" is a short fixed line.
                 session.greeting = { [weak self] in
