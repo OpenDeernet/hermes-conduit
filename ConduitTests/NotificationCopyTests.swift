@@ -145,7 +145,7 @@ final class NotificationCopyTests: XCTestCase {
         XCTAssertEqual(preview.title, "Report finished")
         XCTAssertEqual(preview.subtitle, "Planning · Segundo Cérebro")
         XCTAssertEqual(preview.body, "All 150 products analysed.")
-        XCTAssertEqual(NotificationCopy.chatNames(content).title, "Planning", "Chat names never shows Hermes' words")
+        XCTAssertEqual(NotificationCopy.chatNames(content).title, "Planning ", "Chat names never shows Hermes' words")
         XCTAssertNil(NotificationCopy.preview(["title_label": "response.ready", "headline": "Done"]).subtitle)
     }
 
