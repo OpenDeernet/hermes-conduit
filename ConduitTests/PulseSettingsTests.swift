@@ -180,7 +180,8 @@ final class PulseSettingsTests: XCTestCase {
          "backfill": {"state": "reading", "from": 1758441600, "to": 1761033600, "days": 30,
                       "narrow": false, "unreadable": ["work"]},
          "backfill_days": 30, "ratings": {"commitment": {"yes": 3, "no": 1}}, "inbox_deadlines": false,
-         "look_first": false, "where": true, "where_ready": false, "private_pushes": true}
+         "look_first": false, "where": true, "where_ready": false, "private_pushes": true,
+         "spots": false}
         """)))
 
         XCTAssertTrue(state.enabled)
@@ -207,6 +208,7 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertEqual(state.whereYouAre, true)
         XCTAssertFalse(state.whereReady)
         XCTAssertEqual(state.privatePushes, true)
+        XCTAssertEqual(state.walkingPast, false)
         XCTAssertEqual(state.memoryCounts, ["commitment": 2, "fact": 5])
         XCTAssertEqual(state.memoryTokens, 34_000)
         XCTAssertEqual(state.dailyTokens, 200_000)
@@ -239,13 +241,15 @@ final class PulseSettingsTests: XCTestCase {
         XCTAssertTrue(state.offersProfileChoice)
         // A plugin from before 0.90.0 keeps no deadlines from the Shortcuts inbox,
         // one from before 0.96.0 has Pulse look nothing up, one from before
-        // 0.100.0 never reads where the user is, and one from before 0.104.0
-        // hides no private reminders.
+        // 0.100.0 never reads where the user is, one from before 0.104.0
+        // hides no private reminders, and one from before 0.111.0 watches no
+        // shops.
         XCTAssertNil(state.inboxDeadlines)
         XCTAssertNil(state.lookFirst)
         XCTAssertNil(state.whereYouAre)
         XCTAssertFalse(state.whereReady)
         XCTAssertNil(state.privatePushes)
+        XCTAssertNil(state.walkingPast)
     }
 
     func testStateReadsPulsesModel() throws {

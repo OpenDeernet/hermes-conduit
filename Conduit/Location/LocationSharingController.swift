@@ -100,6 +100,13 @@ final class LocationSharingController: ObservableObject {
     var deviceConditions: @MainActor () -> DeviceConditions = { DeviceConditionsMonitor.shared.current }
 
     private var unsent: LocationUnsent
+    /// How many times shop watching was forgotten, and that count when the
+    /// batch now being sent was built.
+    private var spotsForgotten = 0
+    private var spotsSentAt = 0
+    /// Whether shops could be watched at the last reconfigure (nil before
+    /// the first).
+    private var spotsAllowedBefore: Bool?
     private var sendChain: Task<Bool, Never>?
     private var callWatch: Task<Void, Never>?
     private var lastCallFix: CLLocation?
@@ -123,7 +130,9 @@ final class LocationSharingController: ObservableObject {
         }
         self.unsent = unsent ?? LocationSharedStore.readUnsent()
         self.engine.spotsReplied = { [weak self] watches in
-            guard let self else { return }
+            // A reply to a batch sent before Walking past went off lists
+            // watches the host no longer keeps.
+            guard let self, self.spotsSentAt == self.spotsForgotten else { return }
             self.spots.replied(watches, near: self.fixes.lastKnownFix)
         }
     }
@@ -258,9 +267,28 @@ final class LocationSharingController: ObservableObject {
         if config.binding != nil, settings.background { reconfigureMonitors() }
     }
 
+    /// Stops watching shops now (Walking past or Where you are turned off
+    /// in Settings > Pulse), as a reply listing none would, and drops the
+    /// entries waiting to be sent.
+    func forgetSpots() {
+        spotsForgotten += 1
+        spots.replied([], near: nil)
+        guard !unsent.spotEntries.isEmpty else { return }
+        unsent.spotEntries = []
+        saveUnsent()
+    }
+
+    /// Shop entries waiting to be sent.
+    var unsentSpotEntryCount: Int { unsent.spotEntries.count }
+
     func reconfigureMonitors() {
         monitor.configure(settings: settings, places: places, bound: config.binding != nil && !configUnreadable)
-        spots.configure(enabled: watchesSpots, savedPlaces: places.count)
+        let watching = watchesSpots
+        spots.configure(enabled: watching, savedPlaces: places.count)
+        // Shops may be watched again (Always or Precise allowed in iOS
+        // Settings): a send now brings back the host's list.
+        if watching, spotsAllowedBefore == false { Task { await flush(settingsOnly: true) } }
+        spotsAllowedBefore = watching
     }
 
     /// Whether this iPhone may watch shops for Pulse: background sharing at
@@ -373,6 +401,10 @@ final class LocationSharingController: ObservableObject {
                 accuracy: location.map(\.horizontalAccuracy),
                 speed: location.flatMap { $0.speed >= 0 ? $0.speed : nil },
                 radius: spot.radius)
+            // Walking past may have been turned off, or the shop dropped,
+            // while the fix came.
+            guard watchesSpots, spots.state.watches.contains(where: { $0.id == spot.watchID }),
+                  spots.state.spots.contains(where: { $0.id == spot.id }) else { return }
             unsent.keep(spotEntry: entry)
             saveUnsent()
             if let location { spots.moved(location) }
@@ -514,12 +546,19 @@ final class LocationSharingController: ObservableObject {
         // not held for later.
         if let fix = unsent.fix, !settings.shares(fix.source, at: at) { unsent.fix = nil }
         if !settings.shares(.place, at: at) { unsent.events = [] }
-        let watching = watchesSpots
+        var watching = watchesSpots
         if !watching { unsent.spotEntries = [] }
         saveUnsent()
-        let pending = unsent
+        var pending = unsent
         if pending.isEmpty, !settingsOnly { return true }
+        let forgotten = spotsForgotten
         guard let request = await requestProvider?(binding) else { return false }
+        // Walking past turned off, a pause, or Location settings changed
+        // while the connection came: this batch carries no shops.
+        if spotsForgotten != forgotten || !watchesSpots {
+            watching = false
+            pending.spotEntries = []
+        }
         var batch = LocationBatch(sentAt: at, settings: settings)
         batch.approximateOnly = approximate || config.approximateOnly
         batch.knownPlaces = places
@@ -536,6 +575,7 @@ final class LocationSharingController: ObservableObject {
         defer { isSending = false }
         let sentSettings = config.settings
         let sentPlaces = config.places
+        spotsSentAt = spotsForgotten
         let outcome = await engine.send(batch, config: config, request: request)
         guard outcome != .failed else { return false }
         if outcome == .sent { noteSent(batch.fix, at: at) }

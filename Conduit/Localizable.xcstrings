@@ -372301,6 +372301,334 @@
           }
         }
       }
+    },
+    "Walking past" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Vorbeigehen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al pasar cerca"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En passant"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saat lewat"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passando vicino"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通りがかり"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지나갈 때"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Po drodze"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ao passar perto"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "По пути"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yakından geçerken"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "路过时"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "路過時"
+          }
+        }
+      }
+    },
+    "Pulse can ask Conduit to watch for a few kinds of shop near you, like a florist before an anniversary or a shop you said you'd stop at. Conduit searches Apple Maps on this iPhone and tells your gateway the shop's name, when you came near it, how close, how accurate that was and how fast you were moving, never where the shop is. Only while Conduit shares your precise location in the background. Turning this off deletes the shops your gateway kept." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse kann Conduit bitten, auf ein paar Arten von Geschäften in deiner Nähe zu achten, etwa einen Blumenladen vor einem Jahrestag oder einen Laden, bei dem du vorbeischauen wolltest. Conduit sucht auf diesem iPhone in Apple Karten und teilt deinem Gateway den Namen des Geschäfts mit, wann du in die Nähe kamst, wie nah, wie genau das war und wie schnell du unterwegs warst, nie, wo das Geschäft liegt. Nur solange Conduit deinen genauen Standort im Hintergrund teilt. Wenn du das ausschaltest, werden die Geschäfte gelöscht, die dein Gateway gespeichert hat."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse puede pedirle a Conduit que esté atento a algunos tipos de tienda cerca de ti, como una floristería antes de un aniversario o una tienda en la que dijiste que pasarías. Conduit busca en Apple Maps en este iPhone y le dice a tu gateway el nombre de la tienda, cuándo pasaste cerca, a qué distancia, con qué precisión y a qué velocidad ibas, nunca dónde está la tienda. Solo mientras Conduit comparte tu ubicación exacta en segundo plano. Al desactivarlo se borran las tiendas que guardó tu gateway."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse peut demander à Conduit de surveiller quelques types de commerces près de vous, comme un fleuriste avant un anniversaire ou une boutique où vous avez dit que vous passeriez. Conduit cherche dans Apple Plans sur cet iPhone et dit à votre passerelle le nom du commerce, quand vous en êtes passé près, à quelle distance, avec quelle précision et à quelle vitesse vous alliez, jamais où se trouve le commerce. Uniquement pendant que Conduit partage votre position précise en arrière-plan. Désactiver ceci supprime les commerces gardés par votre passerelle."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse dapat meminta Conduit memperhatikan beberapa jenis toko di dekat Anda, seperti toko bunga sebelum hari jadi atau toko yang Anda bilang akan Anda mampiri. Conduit mencari di Apple Maps di iPhone ini dan memberi tahu gateway Anda nama toko, kapan Anda mendekatinya, seberapa dekat, seberapa akurat, dan seberapa cepat Anda bergerak, tidak pernah lokasi tokonya. Hanya selama Conduit membagikan lokasi akurat Anda di latar belakang. Menonaktifkan ini menghapus toko yang disimpan gateway Anda."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse può chiedere a Conduit di tenere d'occhio alcuni tipi di negozio vicino a te, come un fiorista prima di un anniversario o un negozio dove hai detto che saresti passato. Conduit cerca in Apple Mappe su questo iPhone e dice al tuo gateway il nome del negozio, quando ci sei passato vicino, quanto vicino, con quale precisione e a che velocità andavi, mai dove si trova il negozio. Solo mentre Conduit condivide la tua posizione precisa in background. Disattivandolo si eliminano i negozi conservati dal tuo gateway."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulseは、記念日前の花屋や立ち寄ると言っていたお店など、近くにある数種類のお店をConduitに見張ってもらえます。ConduitはこのiPhone上でAppleマップを検索し、ゲートウェイにはお店の名前、近くに来た時刻、どれだけ近づいたか、その精度、移動の速さを伝え、お店の場所は伝えません。Conduitが正確な位置情報をバックグラウンドで共有している間だけ動作します。オフにすると、ゲートウェイが保存したお店は削除されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse는 기념일 전의 꽃집이나 들르겠다고 한 가게처럼 근처의 몇 가지 가게를 Conduit이 지켜보도록 요청할 수 있어요. Conduit은 이 iPhone에서 Apple 지도를 검색하고, 게이트웨이에 가게 이름, 근처에 온 시각, 얼마나 가까웠는지, 그 정확도, 이동 속도를 알려 주며 가게 위치는 절대 알리지 않아요. Conduit이 백그라운드에서 정확한 위치를 공유하는 동안에만 작동해요. 끄면 게이트웨이에 저장된 가게가 삭제돼요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse może poprosić Conduit, by wypatrywał kilku rodzajów sklepów w pobliżu, na przykład kwiaciarni przed rocznicą albo sklepu, do którego obiecałeś zajrzeć. Conduit wyszukuje w Mapach Apple na tym iPhonie i przekazuje bramie nazwę sklepu, kiedy byłeś w pobliżu, jak blisko, z jaką dokładnością i jak szybko się poruszałeś, nigdy położenie sklepu. Tylko gdy Conduit udostępnia Twoją dokładną lokalizację w tle. Wyłączenie tej opcji usuwa sklepy zapisane przez bramę."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Pulse pode pedir ao Conduit para ficar de olho em alguns tipos de loja perto de você, como uma floricultura antes de um aniversário ou uma loja em que você disse que passaria. O Conduit pesquisa no Apple Maps neste iPhone e informa ao seu gateway o nome da loja, quando você passou perto, a que distância, com que precisão e a que velocidade você estava, nunca onde a loja fica. Só enquanto o Conduit compartilha sua localização exata em segundo plano. Desativar isso apaga as lojas que seu gateway guardou."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse может попросить Conduit следить за несколькими видами магазинов рядом с вами, например за цветочным перед годовщиной или магазином, куда вы обещали зайти. Conduit ищет в Apple Картах на этом iPhone и сообщает вашему шлюзу название магазина, когда вы оказались рядом, насколько близко, с какой точностью и с какой скоростью вы двигались, но никогда не местоположение магазина. Только пока Conduit передаёт вашу точную геопозицию в фоне. При выключении магазины, сохранённые шлюзом, удаляются."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse, Conduit'ten yakınındaki birkaç tür dükkanı izlemesini isteyebilir; örneğin bir yıl dönümünden önce bir çiçekçi ya da uğrayacağını söylediğin bir dükkan. Conduit bu iPhone'da Apple Haritalar'da arama yapar ve ağ geçidine dükkanın adını, ne zaman yakınına geldiğini, ne kadar yaklaştığını, bunun ne kadar doğru olduğunu ve ne hızla ilerlediğini söyler, dükkanın nerede olduğunu asla söylemez. Yalnızca Conduit kesin konumunu arka planda paylaşırken çalışır. Bunu kapatmak ağ geçidinin sakladığı dükkanları siler."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 可以让 Conduit 留意你附近的几类店铺，比如纪念日前的花店，或你说过要顺路去的店。Conduit 在这台 iPhone 上搜索 Apple 地图，告诉你的网关店名、你何时走近、离得多近、定位精度以及你移动的速度，从不告诉它店在哪里。仅在 Conduit 于后台共享你的精确位置时有效。关闭后，网关保存的店铺会被删除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulse 可以請 Conduit 留意你附近的幾類店家，例如紀念日前的花店，或你說過要順路去的店。Conduit 會在這支 iPhone 上搜尋 Apple 地圖，告訴你的閘道器店名、你何時走近、距離多近、定位精確度以及你移動的速度，從不告訴它店在哪裡。僅在 Conduit 於背景分享你的精確位置時有效。關閉後，閘道器儲存的店家會被刪除。"
+          }
+        }
+      }
+    },
+    "This iPhone isn't watching shops: in Settings > Location, share in the background at Precise, and allow Conduit's location Always, with Precise Location on." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses iPhone achtet nicht auf Geschäfte: Teile unter Einstellungen > Standort im Hintergrund mit „Genau“ und erlaube Conduit den Standortzugriff „Immer“ mit aktiviertem „Genauer Standort“."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este iPhone no está atento a tiendas: en Ajustes > Ubicación, comparte en segundo plano con Exacta y permite la ubicación de Conduit «Siempre», con «Ubicación exacta» activada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet iPhone ne surveille aucun commerce : dans Réglages > Position, partagez en arrière-plan en mode Précise et autorisez la position de Conduit « Toujours », avec « Position exacte » activée."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone ini tidak memperhatikan toko: di Pengaturan > Lokasi, bagikan di latar belakang dengan Akurat, dan izinkan lokasi Conduit \"Selalu\" dengan \"Lokasi Akurat\" aktif."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo iPhone non tiene d'occhio i negozi: in Impostazioni > Posizione, condividi in background con Precisa e consenti a Conduit la posizione \"Sempre\", con \"Posizione esatta\" attiva."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneはお店を見張っていません：設定 > 位置情報で、バックグラウンドの共有を「正確」にし、Conduitの位置情報を「常に」にして「正確な位置情報」をオンにしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 iPhone은 가게를 지켜보고 있지 않아요. 설정 > 위치에서 백그라운드 공유를 '정확'으로 하고, Conduit의 위치 접근을 '항상'으로, '정확한 위치'를 켜 주세요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ten iPhone nie wypatruje sklepów: w Ustawieniach > Lokalizacja udostępniaj w tle z opcją Dokładna i zezwól Conduit na lokalizację „Zawsze” z włączoną „Dokładną lokalizacją”."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este iPhone não está de olho em lojas: em Ajustes > Localização, compartilhe em segundo plano como Exata e permita a localização do Conduit \"Sempre\", com \"Localização Exata\" ativada."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этот iPhone не следит за магазинами: в Настройках > Геопозиция включите фоновую передачу с точностью «Точно» и разрешите Conduit доступ к геопозиции «Всегда» с включённой «Точной геопозицией»."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu iPhone dükkanları izlemiyor: Ayarlar > Konum'da arka planda Kesin olarak paylaş ve Conduit'in konum iznini \"Her Zaman\" yapıp \"Kesin Konum\"u aç."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 iPhone 没有在留意店铺：请在“设置 > 位置”中以“精确”在后台共享，并将 Conduit 的位置权限设为“始终”，同时打开“精确位置”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這支 iPhone 沒有在留意店家：請在「設定 > 位置」中以「精確」在背景分享，並將 Conduit 的位置權限設為「永遠」，同時開啟「精確位置」。"
+          }
+        }
+      }
+    },
+    "This iPhone isn't watching shops: your saved places use all the places iOS lets Conduit watch. Remove one in Settings > Location to make room." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses iPhone beobachtet keine Geschäfte: Deine gespeicherten Orte belegen alle Orte, die iOS Conduit beobachten lässt. Entferne einen unter Einstellungen > Standort, um Platz zu schaffen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este iPhone no está vigilando tiendas: tus lugares guardados ocupan todos los lugares que iOS permite vigilar a Conduit. Elimina uno en Ajustes > Ubicación para hacer sitio."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet iPhone ne surveille aucune boutique : vos lieux enregistrés occupent tous les lieux qu'iOS laisse Conduit surveiller. Supprimez-en un dans Réglages > Position pour faire de la place."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone ini tidak memantau toko: tempat tersimpan Anda memakai semua tempat yang diizinkan iOS untuk dipantau Conduit. Hapus satu di Pengaturan > Lokasi untuk memberi ruang."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo iPhone non sta controllando negozi: i tuoi luoghi salvati occupano tutti i luoghi che iOS lascia controllare a Conduit. Rimuovine uno in Impostazioni > Posizione per fare spazio."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneはお店を見守っていません：保存した場所が、iOSがConduitに見守りを許可している場所の数をすべて使っています。設定 > 位置情報で1つ削除して空きを作ってください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 iPhone은 가게를 지켜보고 있지 않습니다: 저장된 장소가 iOS가 Conduit에 허용하는 감시 장소를 모두 사용하고 있습니다. 설정 > 위치에서 하나를 삭제해 자리를 만드세요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ten iPhone nie obserwuje sklepów: Twoje zapisane miejsca zajmują wszystkie miejsca, które iOS pozwala Conduit obserwować. Usuń jedno w Ustawieniach > Lokalizacja, aby zrobić miejsce."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este iPhone não está observando lojas: seus lugares salvos usam todos os lugares que o iOS deixa o Conduit observar. Remova um em Ajustes > Localização para abrir espaço."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этот iPhone не следит за магазинами: ваши сохранённые места занимают все места, за которыми iOS разрешает следить Conduit. Удалите одно в Настройках > Геопозиция, чтобы освободить место."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu iPhone mağazaları izlemiyor: kayıtlı yerleriniz, iOS'un Conduit'e izlemesine izin verdiği tüm yerleri kullanıyor. Yer açmak için Ayarlar > Konum'dan birini kaldırın."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 iPhone 没有在留意商店：你保存的地点已占满 iOS 允许 Conduit 留意的全部地点。请在“设置”>“位置”中移除一个以腾出空间。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這台 iPhone 沒有在留意商店：你儲存的地點已佔滿 iOS 允許 Conduit 留意的全部地點。請在「設定」>「位置」中移除一個以騰出空間。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

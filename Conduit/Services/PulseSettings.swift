@@ -147,6 +147,10 @@ struct PulseState: Equatable {
     /// A private Pulse push says only that Pulse has something (0.104.0):
     /// on by default; nil from an older plugin.
     var privatePushes: Bool?
+    /// Walking past (0.111.0): with Where you are, the phone watches a few
+    /// kinds of shop for what Pulse holds for one; on by default; nil from
+    /// an older plugin.
+    var walkingPast: Bool?
     var memoryCounts: [String: Int] = [:]
     var memoryChunks = 0
     var memoryTokens = 0
@@ -224,6 +228,7 @@ struct PulseState: Equatable {
         whereYouAre = PulseJSON.bool(json["where"])
         whereReady = PulseJSON.bool(json["where_ready"]) ?? false
         privatePushes = PulseJSON.bool(json["private_pushes"])
+        walkingPast = PulseJSON.bool(json["spots"])
         memoryCounts = PulseJSON.counts(json["memory_counts"])
         memoryChunks = PulseJSON.int(json["memory_chunks"]) ?? 0
         memoryTokens = PulseJSON.int(json["memory_tokens"]) ?? 0
@@ -742,7 +747,7 @@ struct PulseClient {
     /// Any of enabled, memory, daily_report, report_profiles, report_times,
     /// brief_time, time_zone, model, nudge, memory_daily_tokens,
     /// followup_daily_tokens, note, quiet_days, quiet_until, night,
-    /// inbox_deadlines, look_first, where and private_pushes; answers with
+    /// inbox_deadlines, look_first, where, spots and private_pushes; answers with
     /// the new state.
     func update(_ changes: [String: Any]) async throws -> PulseState {
         let response = try await request(Self.path, "PUT", changes)

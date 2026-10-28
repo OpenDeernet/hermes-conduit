@@ -17,12 +17,15 @@ import SwiftUI
 struct PulseSettingsPage: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject var appLanguage = AppLanguageStore.shared
+    @ObservedObject private var location = LocationSharingController.shared
 
     @State private var state: PulseState?
     @State private var loadError: String?
     /// The step holding the page's one request slot; a switch of dashboard
     /// cancels it and frees the slot at once.
     @State private var workingID: UUID?
+    /// Steps started, so a load answered after one began doesn't undo it.
+    @State private var stepsStarted = 0
     @State private var actionTask: Task<Void, Never>?
     @State private var errorMessage: String?
     @State private var notice: String?
@@ -123,7 +126,7 @@ struct PulseSettingsPage: View {
                 .foregroundStyle(.secondary)
             Toggle("Pulse", isOn: Binding(
                 get: { state.enabled },
-                set: { on in change(["enabled": on]) { $0.enabled = on } }
+                set: { on in changeWatching(["enabled": on]) { $0.enabled = on } }
             ))
             .disabled(working)
             .accessibilityIdentifier("settings.pulse.enabled")
@@ -502,7 +505,7 @@ struct PulseSettingsPage: View {
             if appState.pulseReadsWhere, let whereOn = state.whereYouAre {
                 Toggle("Where you are", isOn: Binding(
                     get: { whereOn },
-                    set: { on in change(["where": on]) { $0.whereYouAre = on } }
+                    set: { on in changeWatching(["where": on]) { $0.whereYouAre = on } }
                 ))
                 .disabled(working)
                 .accessibilityIdentifier("settings.pulse.where")
@@ -513,6 +516,26 @@ struct PulseSettingsPage: View {
                     Text("Pulse can't read where you are yet: in Settings > Location, turn on Share in the background, or Resume sharing if it's paused.")
                         .font(.caption)
                         .foregroundStyle(.orange)
+                }
+                if whereOn, let walking = state.walkingPast {
+                    Toggle("Walking past", isOn: Binding(
+                        get: { walking },
+                        set: { on in changeWatching(["spots": on]) { $0.walkingPast = on } }
+                    ))
+                    .disabled(working)
+                    .accessibilityIdentifier("settings.pulse.walking-past")
+                    Text("Pulse can ask Conduit to watch for a few kinds of shop near you, like a florist before an anniversary or a shop you said you'd stop at. Conduit searches Apple Maps on this iPhone and tells your gateway the shop's name, when you came near it, how close, how accurate that was and how fast you were moving, never where the shop is. Only while Conduit shares your precise location in the background. Turning this off deletes the shops your gateway kept.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if walking, state.whereReady, !location.watchesSpots {
+                        Text("This iPhone isn't watching shops: in Settings > Location, share in the background at Precise, and allow Conduit's location Always, with Precise Location on.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    } else if walking, state.whereReady, location.places.count >= PulseSpotWatcher.conditionLimit {
+                        Text("This iPhone isn't watching shops: your saved places use all the places iOS lets Conduit watch. Remove one in Settings > Location to make room.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
         }
@@ -889,9 +912,10 @@ struct PulseSettingsPage: View {
 
     private func load() async {
         let client = self.client
+        let steps = stepsStarted
         do {
             let next = try await client.state()
-            guard isShown(client), !Task.isCancelled else { return }
+            guard isShown(client), !Task.isCancelled, stepsStarted == steps else { return }
             apply(next)
             loadError = nil
         } catch {
@@ -912,6 +936,12 @@ struct PulseSettingsPage: View {
             seededDays = true
         }
         state = next
+        // Pulse, Where you are or Walking past off, here or elsewhere: this
+        // iPhone stops watching shops for this dashboard now.
+        if location.binding?.dashboardID == appState.activeDashboardID,
+           !next.enabled || next.walkingPast == false || next.whereYouAre == false {
+            location.forgetSpots()
+        }
     }
 
     /// One step at a time: shows its error, then the state Pulse answers
@@ -924,6 +954,7 @@ struct PulseSettingsPage: View {
         guard !working else { return }
         let id = UUID()
         workingID = id
+        stepsStarted += 1
         errorMessage = nil
         notice = nil
         let dashboard = appState.activeDashboardID
@@ -973,6 +1004,25 @@ struct PulseSettingsPage: View {
             state = shown
         }
         run { client in try await client.update(changes) }
+    }
+
+    /// A change to Pulse, Where you are or Walking past: once the host has
+    /// all on, a send now brings back the shops to watch (`apply` stops
+    /// watching when one is off).
+    private func changeWatching(_ changes: [String: Any], optimistic: @escaping (inout PulseState) -> Void) {
+        guard !working else { return }
+        if var shown = state {
+            optimistic(&shown)
+            state = shown
+        }
+        run { client in
+            let next = try await client.update(changes)
+            if location.binding?.dashboardID == client.dashboardID,
+               next.enabled, next.walkingPast == true, next.whereYouAre == true, location.watchesSpots {
+                Task { await location.flush(settingsOnly: true) }
+            }
+            return next
+        }
     }
 
     private func backfillStep(_ action: PulseBackfillAction, days: Int? = nil) {
