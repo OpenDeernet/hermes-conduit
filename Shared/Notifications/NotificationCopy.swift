@@ -51,7 +51,7 @@ enum NotificationCopy {
         // A reply whose notification Hermes wrote (conduit_notify, #1415):
         // its heading is the title, and the subtitle says which chat.
         if label == "response.ready", let headline = nonEmpty(content["headline"]) {
-            let chat = nonEmpty(content["session_title"])
+            let chat = nonEmpty(content["session_title"])?.trimmingCharacters(in: .whitespacesAndNewlines)
             let subtitle = [chat, profileLine(content, title: chat)].compactMap { $0 }.joined(separator: " · ")
             return (headline, subtitle.isEmpty ? nil : subtitle, hostBody)
         }

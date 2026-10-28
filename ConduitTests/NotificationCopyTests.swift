@@ -138,7 +138,7 @@ final class NotificationCopyTests: XCTestCase {
 
     func testWrittenHeadlineIsOnlyInThePreviewCopy() {
         let content: [String: Any] = [
-            "title_label": "response.ready", "session_title": "Planning", "headline": "Report finished",
+            "title_label": "response.ready", "session_title": "Planning ", "headline": "Report finished",
             "profile": "segundo-cerebro", "profile_name": "Segundo Cérebro", "body": "All 150 products analysed.",
         ]
         let preview = NotificationCopy.preview(content)
