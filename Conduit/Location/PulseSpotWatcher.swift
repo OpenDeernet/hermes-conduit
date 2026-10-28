@@ -104,10 +104,12 @@ final class PulseSpotWatcher {
             return
         }
         let added = Set(live.map(\.id)).subtracting(state.watches.map(\.id))
+        // The same watch with other words: its shops are searched again.
+        let requeried = live.contains { watch in state.watches.contains { $0.id == watch.id && $0.query != watch.query } }
         state.watches = live
         dropSpotsWithoutWatches()
         save(state)
-        if !added.isEmpty || resized {
+        if !added.isEmpty || requeried || resized {
             let centre = location ?? state.searchCentre
             queue { await $0.searchAgain(near: centre) }
         } else {
@@ -183,10 +185,15 @@ final class PulseSpotWatcher {
                 spots.append(found[rank])
             }
         }
-        // A shop already watched keeps its id and what the phone knew of it.
+        // A shop already watched keeps its id and what the phone knew of it,
+        // each old one claimed once (Maps can list one shop twice).
+        var unclaimed = state.spots
         state.spots = spots.map { spot in
-            state.spots.first { $0.watchID == spot.watchID && $0.name == spot.name && $0.radius == spot.radius
-                && $0.location.distance(from: spot.location) < 50 } ?? spot
+            guard let index = unclaimed.firstIndex(where: {
+                $0.watchID == spot.watchID && $0.name == spot.name && $0.radius == spot.radius
+                    && $0.location.distance(from: spot.location) < 50
+            }) else { return spot }
+            return unclaimed.remove(at: index)
         }
         state.searchLatitude = location.coordinate.latitude
         state.searchLongitude = location.coordinate.longitude
@@ -218,12 +225,12 @@ final class PulseSpotWatcher {
         expire()
         if state.spots.isEmpty, monitor == nil, !hasMonitor() { return }
         let monitor = await spotsMonitor()
-        let wanted = Dictionary(uniqueKeysWithValues: state.spots.map { ($0.id, $0) })
+        let wanted = Dictionary(state.spots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let current = await monitor.identifiers
         for identifier in current where wanted[identifier] == nil {
             await monitor.remove(identifier)
         }
-        for spot in state.spots where !current.contains(spot.id) {
+        for spot in wanted.values where !current.contains(spot.id) {
             let condition = CLMonitor.CircularGeographicCondition(
                 center: CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude), radius: spot.radius)
             await monitor.add(condition, identifier: spot.id)

@@ -27,6 +27,7 @@ struct LocationSpotWatch: Codable, Equatable {
     var walkRadius: CLLocationDistance
     var driveRadius: CLLocationDistance
 
+    static let intents: Set<String> = ["opportunity", "errand", "arrival"]
     static let maxCount = 6
     static let maxQueryLength = 40
     /// What iOS's circles can be: the host keeps within this anyway.
@@ -49,7 +50,7 @@ struct LocationSpotWatch: Codable, Equatable {
                   let walk = (radius["walk"] as? NSNumber)?.doubleValue,
                   let drive = (radius["drive"] as? NSNumber)?.doubleValue
             else { continue }
-            let intent = spot["intent"] as? String ?? "opportunity"
+            let intent = (spot["intent"] as? String).flatMap { intents.contains($0) ? $0 : nil } ?? "opportunity"
             found.append(LocationSpotWatch(
                 id: id, query: query, until: until, intent: intent,
                 walkRadius: min(max(walk, radiusRange.lowerBound), radiusRange.upperBound),
@@ -136,8 +137,15 @@ extension LocationCrypto {
     }
 
     /// The reply's JSON object, from the ingest answer's `reply`
-    /// (`{nonce, ct}`); nil when there's none or it doesn't open.
+    /// (`{nonce, ct}`); nil when there's none, it doesn't open, or what
+    /// opens isn't a JSON object.
     static func openSpotsReply(_ reply: Any?, key: SessionKey, batchID: String) -> [String: Any]? {
+        openSpotsPlaintext(reply, key: key, batchID: batchID)
+            .flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+    }
+
+    /// The reply's opened bytes; nil when there's none or it doesn't open.
+    static func openSpotsPlaintext(_ reply: Any?, key: SessionKey, batchID: String) -> Data? {
         guard let reply = reply as? [String: Any],
               let nonceText = reply["nonce"] as? String, let nonce = NotificationE2E.base64URLDecoded(nonceText),
               let sealedText = reply["ct"] as? String, let sealed = NotificationE2E.base64URLDecoded(sealedText),
@@ -147,6 +155,6 @@ extension LocationCrypto {
                   box, using: SymmetricKey(data: key.key),
                   authenticating: spotsAAD(kid: key.kid, deviceID: key.deviceID, batchID: batchID))
         else { return nil }
-        return (try? JSONSerialization.jsonObject(with: plaintext)) as? [String: Any]
+        return plaintext
     }
 }

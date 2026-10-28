@@ -69,6 +69,11 @@ extension NotificationE2ETests {
         XCTAssertEqual(watches.first?.walkRadius, 50)
         XCTAssertEqual(watches.first?.driveRadius, 5_000)
         XCTAssertEqual(watches.first?.radius(driving: true), 5_000)
+        XCTAssertEqual(watches.first?.intent, "errand")
+        // An intent the app doesn't know is an opportunity.
+        let unknown: [String: Any] = ["spots": [["id": "0.c1", "query": "florist", "until": "2026-10-28T00:00:00Z",
+                                                 "intent": "whenever", "radius": ["walk": 750, "drive": 3_000]]]]
+        XCTAssertEqual(LocationSpotWatch.parse(unknown).first?.intent, "opportunity")
         // The app reads the host's dates with fractions too.
         let fraction: [String: Any] = ["spots": [["id": "0.c1", "query": "florist", "until": "2026-10-28T00:00:00.250Z",
                                                   "radius": ["walk": 750, "drive": 3_000]]]]

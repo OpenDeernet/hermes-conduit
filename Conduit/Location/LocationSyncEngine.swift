@@ -288,7 +288,11 @@ final class LocationSyncEngine: ObservableObject {
             }
             acknowledge(batch, answer: answer)
             if batch.spotEntries != nil,
-               let reply = LocationCrypto.openSpotsReply(answer["reply"], key: key, batchID: batch.batchID) {
+               let opened = LocationCrypto.openSpotsPlaintext(answer["reply"], key: key, batchID: batch.batchID) {
+                guard let reply = (try? JSONSerialization.jsonObject(with: opened)) as? [String: Any] else {
+                    Self.log.info("Pulse spots reply opened but wasn't a JSON object")
+                    return .sent
+                }
                 let watches = LocationSpotWatch.parse(reply, date: LocationHostDates.parse)
                 if watches.isEmpty, let listed = reply["spots"] as? [Any], !listed.isEmpty {
                     Self.log.info("Pulse spots reply listed \(listed.count, privacy: .public) watches and none parsed")
