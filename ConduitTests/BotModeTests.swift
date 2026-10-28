@@ -265,7 +265,7 @@ final class BotModeTests: XCTestCase {
         await harness.appState.refreshBotRoster()
         XCTAssertEqual(harness.appState.botModePhase, .available)
         XCTAssertEqual(harness.appState.profileDisplayName("atlas"), "Atlas Prime", "Bot looks: the title names it")
-        XCTAssertNil(harness.appState.profileDeviceNames["atlas"], "The title replaces the device name, so it can't come back offline")
+        XCTAssertNil(harness.appState.profileDeviceNames["atlas"], "A roster that answers drops device names, so they can't come back offline")
 
         let unlisted = await harness.appState.renameProfile("ghost", to: "Ghost Writer")
         XCTAssertEqual(unlisted, AppLocalization.string("The name was not saved."), "A profile the roster doesn't list has nowhere to keep a name")

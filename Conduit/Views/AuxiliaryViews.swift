@@ -1589,6 +1589,8 @@ private struct ProfileSettingsDetail: View {
     let displayName: String
     @EnvironmentObject private var appState: AppState
     @State private var name: String
+    /// The name the field last showed: Save writes nothing until it's edited.
+    @State private var seeded: String
     @State private var didSave = false
     @State private var isSaving = false
     @State private var saveError: String?
@@ -1597,6 +1599,7 @@ private struct ProfileSettingsDetail: View {
         self.profile = profile
         self.displayName = displayName
         _name = State(initialValue: displayName)
+        _seeded = State(initialValue: displayName)
     }
 
     var body: some View {
@@ -1629,6 +1632,16 @@ private struct ProfileSettingsDetail: View {
             }
         }
         .navigationTitle("Profile")
+        // A rename elsewhere (Edit Bot, the Profiles sheet) shows here
+        // unless the field is being edited.
+        .onAppear(perform: followCurrentName)
+        .onChange(of: currentDisplayName) { _, _ in followCurrentName() }
+    }
+
+    private func followCurrentName() {
+        guard name == seeded else { return }
+        name = currentDisplayName
+        seeded = currentDisplayName
     }
 
     private var currentDisplayName: String {
@@ -1642,6 +1655,8 @@ private struct ProfileSettingsDetail: View {
     }
 
     private func save() {
+        guard name.trimmingCharacters(in: .whitespacesAndNewlines)
+                != seeded.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
         isSaving = true
         saveError = nil
         Task { @MainActor in
@@ -1650,6 +1665,7 @@ private struct ProfileSettingsDetail: View {
             // A failed save keeps what was typed, to try again.
             guard saveError == nil else { return }
             name = appState.profileDisplayName(profile)
+            seeded = name
             didSave = true
         }
     }
