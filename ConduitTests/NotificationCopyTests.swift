@@ -136,7 +136,7 @@ final class NotificationCopyTests: XCTestCase {
         XCTAssertEqual(NotificationCopy.chatNames(["title": "Head to the airport", "profile": "work"]).subtitle, "work")
     }
 
-    func testWrittenHeadlineShowsOnlyWithFullPreviews() {
+    func testWrittenHeadlineIsOnlyInThePreviewCopy() {
         let content: [String: Any] = [
             "title_label": "response.ready", "session_title": "Planning", "headline": "Report finished",
             "profile": "segundo-cerebro", "profile_name": "Segundo Cérebro", "body": "All 150 products analysed.",
