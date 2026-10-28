@@ -142,7 +142,7 @@ struct AttachmentDropTarget: ViewModifier {
                         .transition(.opacity)
                 }
             }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isTargeted)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isTargeted && isEnabled)
     }
 }
 

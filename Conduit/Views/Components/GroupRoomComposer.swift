@@ -250,6 +250,17 @@ struct GroupRoomComposer: View {
                 onSubmitFromReturn: { submitFromReturnKey() },
                 onDropFiles: { providers in importDroppedFiles(providers) },
                 attachments: {
+                    // A drop on the editor that left files out says so here,
+                    // not only behind the sheet.
+                    if let composerError, !composerError.isEmpty {
+                        Label(composerError, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.top, 8)
+                    }
                     if !attachments.isEmpty { attachmentStrip }
                 },
                 dictateButton: {

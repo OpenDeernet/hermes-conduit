@@ -829,6 +829,11 @@ struct ComposerBar: View, Equatable {
                 // Off while the composer is locked, as on the chat itself.
                 onDropFiles: appState.composerIsEnabled ? { providers in handleDroppedFiles(providers) } : nil,
                 attachments: {
+                    // A drop on the editor that left files out says so here,
+                    // not only behind the sheet.
+                    if let composerErrorMessage, !composerErrorMessage.isEmpty {
+                        pasteErrorNotice(composerErrorMessage)
+                    }
                     if let replyReference {
                         replyReferenceChip(replyReference)
                             .padding(.horizontal, 12)
