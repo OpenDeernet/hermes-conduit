@@ -35,14 +35,16 @@ struct LocationSpotWatch: Codable, Equatable {
     func radius(driving: Bool) -> CLLocationDistance { driving ? driveRadius : walkRadius }
 
     /// The usable watches in a reply's `spots`: one that doesn't parse is
-    /// dropped, never the rest.
-    static func parse(_ object: [String: Any], formatter: ISO8601DateFormatter = ISO8601DateFormatter()) -> [LocationSpotWatch] {
+    /// dropped, never the rest. `date` reads the host's ISO 8601 dates (the
+    /// app passes LocationHostDates.parse, which also takes fractions).
+    static func parse(_ object: [String: Any],
+                      date: (String) -> Date? = { ISO8601DateFormatter().date(from: $0) }) -> [LocationSpotWatch] {
         guard let spots = object["spots"] as? [[String: Any]] else { return [] }
         var found: [LocationSpotWatch] = []
         for spot in spots.prefix(maxCount) {
             guard let id = spot["id"] as? String, LocationSpotEntry.isWatchID(id),
                   let query = spot["query"] as? String, !query.isEmpty, query.count <= maxQueryLength,
-                  let untilText = spot["until"] as? String, let until = formatter.date(from: untilText),
+                  let untilText = spot["until"] as? String, let until = date(untilText),
                   let radius = spot["radius"] as? [String: Any],
                   let walk = (radius["walk"] as? NSNumber)?.doubleValue,
                   let drive = (radius["drive"] as? NSNumber)?.doubleValue

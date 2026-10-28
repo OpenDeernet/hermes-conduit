@@ -673,10 +673,13 @@ final class LocationSharingController: ObservableObject {
         if date != nil {
             unsent.fix = nil
             unsent.events = []
+            unsent.spotEntries = []
             saveUnsent()
             lastTalkingUpload = nil
             voiceCallEnded()
         }
+        // Paused, shops stop being watched (and are forgotten); resumed, they start again.
+        reconfigureMonitors()
         await flush(settingsOnly: true)
         // Resumed: a voice mode the user allowed may read again.
         if date == nil { await prepareVoiceReads() }
@@ -691,6 +694,7 @@ final class LocationSharingController: ObservableObject {
             config.settings.pausedUntil = nil
             if config.binding != nil { config.settingsPending = true }
         }
+        reconfigureMonitors()
         if send, config.binding != nil {
             Task {
                 await flush(settingsOnly: true)
@@ -783,6 +787,7 @@ final class LocationSharingController: ObservableObject {
         lastTalkingUpload = nil
         unsent.fix = nil
         unsent.events = []
+        unsent.spotEntries = []
         saveUnsent()
         if !settings.isOn {
             save { $0.binding = nil }

@@ -80,6 +80,7 @@ final class PulseSpotWatcher {
         }
         if state.spots.count > room {
             state.spots = Array(state.spots.prefix(room))
+            state.inside = state.inside.filter { id, _ in state.spots.contains { $0.id == id } }
             save(state)
         }
         queue { await $0.syncMonitor() }
@@ -151,7 +152,13 @@ final class PulseSpotWatcher {
         for watch in state.watches {
             let radius = watch.radius(driving: state.driving)
             let span = max(Self.minimumSpan, radius * 2)
-            let items = (try? await search(watch.query, location.coordinate, span)) ?? []
+            let items: [MKMapItem]
+            do {
+                items = try await search(watch.query, location.coordinate, span)
+            } catch {
+                LocationSyncEngine.log.info("Pulse spot search failed: \(LogRedaction.message(error), privacy: .public)")
+                items = []
+            }
             let found = items.compactMap { item -> PulseSpotState.Spot? in
                 let coordinate = MapDatum.fromMap(item.placemark.coordinate)
                 let shop = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
@@ -219,6 +226,8 @@ final class PulseSpotWatcher {
             await monitor.add(condition, identifier: spot.id)
         }
         UserDefaults.standard.set(!state.spots.isEmpty, forKey: Self.monitoredKey)
+        // An empty monitor stays open, like the saved places' one: opening a
+        // second CLMonitor by the same name while the first lives aborts.
     }
 
     /// The one monitor, opened by name so a background relaunch gets the

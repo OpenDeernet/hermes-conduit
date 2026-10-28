@@ -289,7 +289,7 @@ final class LocationSyncEngine: ObservableObject {
             acknowledge(batch, answer: answer)
             if batch.spotEntries != nil,
                let reply = LocationCrypto.openSpotsReply(answer["reply"], key: key, batchID: batch.batchID) {
-                spotsReplied?(LocationSpotWatch.parse(reply))
+                spotsReplied?(LocationSpotWatch.parse(reply, date: LocationHostDates.parse))
             }
             return .sent
         } catch let error as DashboardTicketBridgeError {

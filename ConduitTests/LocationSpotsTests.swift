@@ -23,9 +23,9 @@ private enum SpotsVector {
     static let ct = "RSb-7Nwq_9jt-B7HWAv_SPltlJEc6LxRt7X3SZpkRAPmQpIwx2XqSgbozttH4e7PXIBz7--wx6SvijJ4rB52grSIcH1P5lW--qyBlDHqv8LF8X36fLS865DAjZ1lHblttmF43FSZy6jgBAUa4kWH3830Do-kgxQGJqhlLIsAmlKOJZYXJwtuI4MbFThcMw6ZptFoTpazrq8FEoHF_G0"
 
     static func sessionKey() -> LocationCrypto.SessionKey {
-        let bytes = stride(from: 0, to: key.count, by: 2).map { offset -> UInt8 in
+        let bytes = stride(from: 0, to: key.count, by: 2).compactMap { offset -> UInt8? in
             let start = key.index(key.startIndex, offsetBy: offset)
-            return UInt8(key[start..<key.index(start, offsetBy: 2)], radix: 16)!
+            return UInt8(key[start..<key.index(start, offsetBy: 2)], radix: 16)
         }
         return LocationCrypto.SessionKey(kid: kid, key: Data(bytes), deviceID: deviceID)
     }
@@ -69,6 +69,10 @@ extension NotificationE2ETests {
         XCTAssertEqual(watches.first?.walkRadius, 50)
         XCTAssertEqual(watches.first?.driveRadius, 5_000)
         XCTAssertEqual(watches.first?.radius(driving: true), 5_000)
+        // The app reads the host's dates with fractions too.
+        let fraction: [String: Any] = ["spots": [["id": "0.c1", "query": "florist", "until": "2026-10-28T00:00:00.250Z",
+                                                  "radius": ["walk": 750, "drive": 3_000]]]]
+        XCTAssertEqual(LocationSpotWatch.parse(fraction, date: LocationHostDates.parse).count, 1)
     }
 
     // MARK: The batch
