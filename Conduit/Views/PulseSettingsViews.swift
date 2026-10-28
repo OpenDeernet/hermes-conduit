@@ -521,9 +521,14 @@ struct PulseSettingsPage: View {
                     ))
                     .disabled(working)
                     .accessibilityIdentifier("settings.pulse.walking-past")
-                    Text("Pulse can ask Conduit to watch for a few kinds of shop near you, like a florist before an anniversary or a shop you said you'd stop at. Conduit searches Apple Maps on this iPhone and tells your gateway only the shop's name, when you came near it and how close, never where it is. Only while Conduit shares your precise location in the background. Turning this off deletes the shops your gateway kept.")
+                    Text("Pulse can ask Conduit to watch for a few kinds of shop near you, like a florist before an anniversary or a shop you said you'd stop at. Conduit searches Apple Maps on this iPhone and tells your gateway the shop's name, when you came near it, how close, how accurate that was and how fast you were moving, never where the shop is. Only while Conduit shares your precise location in the background. Turning this off deletes the shops your gateway kept.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if walking, state.whereReady, !LocationSharingController.shared.watchesSpots {
+                        Text("This iPhone isn't watching shops: in Settings > Location, share in the background at Precise, with precise location allowed for Conduit.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
         }
