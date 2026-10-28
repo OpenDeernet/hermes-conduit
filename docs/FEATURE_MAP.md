@@ -2052,30 +2052,32 @@ Classic's transcription streams · Watch calls (Gemini, Qwen, Grok, Local Live; 
 **Open gaps**
 - On the Watch's GPT-Live bridge, a reply already handed to a socket that then drops is lost with it, on any dropped connection and not only a backlogged one: the bridge sends without asking for a confirmation, where the phone's writer hands a failed frame's result back.
 
-**Checked:** 2026-10-25, Qwen in the siblings, at #1182, carried in #1235; #1231, for the text cap; 2026-10-24, #1223.
+**Checked:** 2026-10-28, #1424 (only audio the writer took counts toward the call trace's levels); 2026-10-25, Qwen in the siblings, at #1182, carried in #1235; #1231, for the text cap; 2026-10-24, #1223.
 
 ## Live call trace
 
-The steps of the last Grok Live or Local Live call that Diagnostics & logs
+The steps of the last Grok Live, Qwen Live or Local Live call that Diagnostics & logs
 (Last connection) shows and copies, so a user can paste them into an issue:
 setup, the microphone, the server's turn detection and the user's turns, and
 each tool call.
 
 **Siblings:** Grok Live (phone, CarPlay, calls from Hermes) · Local Live ·
-Gemini, Qwen and GPT-Live (no trace) · Watch calls (no trace) ·
-docs/VOICE_SETTINGS.md
+Qwen Live (turn steps only) · Gemini Live and GPT-Live (no trace) · Watch
+calls (no trace) · docs/VOICE_SETTINGS.md
 
 **Code**
 - The trace and its report: `Conduit/Voice/LiveCallTrace.swift`, `Conduit/Views/ChatSupportSheets.swift` (lastConnectionReport)
-- Steps: `Shared/GrokLive/GrokLiveSession.swift`, `Shared/LocalLive/LocalLiveSession.swift` (onTrace), `Shared/GrokLive/LiveTurnTrace.swift`, `Shared/GrokLive/GrokLiveProtocol.swift` (turnDetectionSummary), `Conduit/Voice/GeminiLive/GeminiLiveConversationController.swift` (traceName, traceInputRoute)
+- Steps: `Shared/GrokLive/GrokLiveSession.swift`, `Shared/LocalLive/LocalLiveSession.swift`, `Shared/GeminiLive/QwenLiveSocket.swift`, `Shared/GeminiLive/GeminiLiveSession.swift` (onTrace), `Shared/GrokLive/LiveTurnTrace.swift`, `Shared/GrokLive/GrokLiveProtocol.swift` (turnDetectionSummary), `Conduit/Voice/GeminiLive/GeminiLiveConversationController.swift` (traceName, traceInputRoute)
 - Wiring: `Conduit/Services/AppState.swift` (traceName, session.onTrace)
 
 **Rulings**
 - Event kinds, function names, routes and levels only: never what the user or the model said, a call's arguments or a tool's answer (2026-10-28, #1424, from #1418).
 - The user's turns show when the server heard speech start and end, with the microphone's loudest and quietest 100 ms between them, and say once when 15 s of audio pass with no start or no end, so a turn the server never ends can be told apart from audio that never arrived (2026-10-28, #1424, from #1418).
 
+- Qwen Live's trace has the turn steps and the controller's tool steps; Grok's own session steps (setup, functions taken) have no Qwen counterpart (2026-10-28, #1424).
+
 **Open gaps**
-- Gemini, Qwen and GPT-Live calls aren't traced, and the Watch has no trace to show.
+- Gemini Live sends no turn detection events and GPT-Live's turns run over WebRTC, so neither is traced; the Watch has no trace to show.
 
 **Checked:** 2026-10-28, #1424.
 

@@ -170,7 +170,6 @@ final class GrokLiveSession: GeminiLiveSessionControlling {
         }
         let id = connectionID
         let writer = socketWriter(for: socket)
-        if case .audio(let pcm16) = message, let step = turnTrace.add(pcm16) { onTrace?(step) }
         let queued = writer.enqueue(texts, isAudio: message.isAudio) { [weak self] error in
             if let error {
                 onFailure?()
@@ -202,8 +201,10 @@ final class GrokLiveSession: GeminiLiveSessionControlling {
                 onFailure?()
             }
         }
+        // Only audio the server gets counts toward the turn's levels.
+        if queued, let onTrace, case .audio(let pcm16) = message, let step = turnTrace.add(pcm16) { onTrace(step) }
         if !queued {
-            if !tracedAudioDrop {
+            if message.isAudio, !tracedAudioDrop {
                 tracedAudioDrop = true
                 onTrace?("Microphone audio dropped: the connection fell behind")
             }
@@ -464,9 +465,9 @@ final class GrokLiveSession: GeminiLiveSessionControlling {
         case .turnDetection(let summary):
             onTrace?("Turn detection: \(summary)")
         case .speechStarted:
-            onTrace?(turnTrace.speechStarted())
+            if let onTrace { onTrace(turnTrace.speechStarted()) }
         case .speechStopped:
-            onTrace?(turnTrace.speechStopped())
+            if let onTrace { onTrace(turnTrace.speechStopped()) }
         case .responseStarted:
             onTrace?("Reply started")
             responseActive = true

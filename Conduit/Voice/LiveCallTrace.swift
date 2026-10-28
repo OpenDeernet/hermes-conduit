@@ -2,7 +2,7 @@
 //  LiveCallTrace.swift
 //  Conduit
 //
-//  The last Grok Live or Local Live call's steps: the session setup, the
+//  The last Grok Live, Qwen Live or Local Live call's steps: the session setup, the
 //  microphone and the turn detection the server applied, when it heard the
 //  user start and stop with the microphone's levels (#1418), which functions
 //  xAI took, each function call by name and how it was answered, and tool

@@ -212,8 +212,9 @@ final class LocalLiveSession: GeminiLiveSessionControlling {
         if wantsResponse, let create = try? LocalLiveProtocol.encode(GrokLiveProtocol.responseCreate) {
             texts.append(create)
         }
-        if case .audio(let pcm16) = message, let step = turnTrace.add(pcm16) { onTrace?(step) }
-        enqueue(texts, isAudio: message.isAudio, onSent: onSent, onFailure: onFailure)
+        let queued = enqueue(texts, isAudio: message.isAudio, onSent: onSent, onFailure: onFailure)
+        // Only audio the server gets counts toward the turn's levels.
+        if queued, let onTrace, case .audio(let pcm16) = message, let step = turnTrace.add(pcm16) { onTrace(step) }
     }
 
     /// The user stopped the reply: the server stops it, and one that shuts
@@ -265,10 +266,13 @@ final class LocalLiveSession: GeminiLiveSessionControlling {
         send(.textTurn(text), onSent: nil, onFailure: nil)
     }
 
-    private func enqueue(_ texts: [String], isAudio: Bool = false, onSent: (@MainActor () -> Void)?, onFailure: (@MainActor () -> Void)?) {
+    /// False when nothing went to the writer: no socket, or audio dropped
+    /// behind a full queue.
+    @discardableResult
+    private func enqueue(_ texts: [String], isAudio: Bool = false, onSent: (@MainActor () -> Void)?, onFailure: (@MainActor () -> Void)?) -> Bool {
         guard !texts.isEmpty, let socket else {
             if texts.isEmpty { onSent?() } else { onFailure?() }
-            return
+            return false
         }
         let id = connectionID
         let writer: LiveVoiceSocketWriter
@@ -294,6 +298,7 @@ final class LocalLiveSession: GeminiLiveSessionControlling {
             }
             onFailure?()
         }
+        return queued
     }
 
     // MARK: Connection
@@ -509,9 +514,9 @@ final class LocalLiveSession: GeminiLiveSessionControlling {
         case .turnDetection(let summary):
             onTrace?("Turn detection: \(summary)")
         case .speechStarted:
-            onTrace?(turnTrace.speechStarted())
+            if let onTrace { onTrace(turnTrace.speechStarted()) }
         case .speechStopped:
-            onTrace?(turnTrace.speechStopped())
+            if let onTrace { onTrace(turnTrace.speechStopped()) }
         case .responseStarted:
             if readinessResponseOpen { return }
             onTrace?("Reply started")

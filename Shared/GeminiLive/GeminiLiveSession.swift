@@ -251,6 +251,9 @@ final class GeminiLiveSession {
     /// A new connection took over. Function calls opened on the previous
     /// connection can no longer be answered on this one.
     var onConnectionReplaced: (@MainActor () -> Void)?
+    /// Privacy-safe steps for the call's trace. Only Qwen's socket reports
+    /// them (its server's turn detection, #1418); Gemini sends no such events.
+    var onTrace: (@MainActor (String) -> Void)?
     /// Counts connections that took over: a function call made under one
     /// value can't be answered once it changes.
     private(set) var connectionGeneration = 0
@@ -444,7 +447,7 @@ final class GeminiLiveSession {
             if hasConnectedOnce { startingFresh = true }
             do {
                 let request = try QwenLiveSocket.request(token: token)
-                socket = QwenLiveSocket(upstream: openSocket(request), voice: voice.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? token.qwenVoice)
+                socket = QwenLiveSocket(upstream: openSocket(request), voice: voice.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? token.qwenVoice, onTrace: onTrace)
             } catch {
                 fail(UserFacingError.message(for: error))
                 return
