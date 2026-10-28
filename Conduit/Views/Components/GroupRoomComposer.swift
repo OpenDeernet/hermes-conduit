@@ -170,6 +170,11 @@ struct GroupRoomComposer: View {
         .onChange(of: appState.roomQuoteRequest) { _, request in
             applyQuoteRequest(request)
         }
+        .onChange(of: appState.roomDropRequest) { _, request in
+            guard let request else { return }
+            appState.consumeRoomDropRequest(request.id)
+            importDroppedFiles(request.providers)
+        }
         // A dictation Retry added words to this room's kept draft, which
         // tracks the field as it changes: show it. Reading the kept draft
         // keeps both of two Retries that land in the same update.
@@ -244,6 +249,7 @@ struct GroupRoomComposer: View {
                 onCollapse: { isShowingFullEditor = false },
                 canSubmitFromReturn: canSubmitFromReturn,
                 onSubmitFromReturn: { submitFromReturnKey() },
+                onDropFiles: { providers in importDroppedFiles(providers) },
                 attachments: {
                     if !attachments.isEmpty { attachmentStrip }
                 },
@@ -919,6 +925,24 @@ struct GroupRoomComposer: View {
                     ComposerBar.stageDocument(at: url, limitMegabytes: limit)
                 }.value)
             }
+            finishImport(outcomes, roomID: roomID)
+        }
+    }
+
+    /// Files dropped on the room (#1408), staged like picked documents.
+    /// A plugin that can't store a room's files says what fixes it, as the
+    /// Attach menu does.
+    private func importDroppedFiles(_ providers: [NSItemProvider]) {
+        guard !isUploading, !providers.isEmpty else { return }
+        guard appState.canAttachRoomFiles else {
+            composerError = AppLocalization.string("Update the Conduit plugin on your Hermes host to send files to group chats.")
+            Haptics.error()
+            return
+        }
+        let limit = GroupRoomFilesClient.stagingLimit(preference: attachmentLimitMegabytes)
+        let roomID = surface?.room.roomID
+        Task {
+            let outcomes = await AttachmentDrop.stage(providers, limitMegabytes: limit)
             finishImport(outcomes, roomID: roomID)
         }
     }

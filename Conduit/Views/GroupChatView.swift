@@ -60,6 +60,10 @@ struct GroupChatView: View {
         // Each bot's color, for its name, bubble, tags and "To" chip.
         .environment(\.groupMemberTints, appState.groupMemberTints(members))
         .environment(\.chatTextSize, chatTextSize)
+        // Files dragged onto the room are staged in its composer (#1408).
+        .attachmentDropTarget { providers in
+            appState.dropIntoRoomComposer(providers)
+        }
         .toolbar { toolbarContent }
         // V2's screen hosts this view and owns the room menu and picker.
         .modifier(GroupRoomPicturePicker(request: $choosingPicture, isEnabled: !isV2))

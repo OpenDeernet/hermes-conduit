@@ -2217,6 +2217,10 @@ final class AppState: ObservableObject {
     /// The same for the open group room's composer, kept apart so a chat's
     /// composer never takes a quote meant for a room.
     @Published private(set) var roomQuoteRequest: ComposerQuoteRequest?
+    /// Files dropped on the open chat (#1408), waiting for its composer to
+    /// stage them, and the same for the open room's composer.
+    @Published private(set) var composerDropRequest: AttachmentDropRequest?
+    @Published private(set) var roomDropRequest: AttachmentDropRequest?
     /// Words added to a room's kept draft from outside its composer (a
     /// dictation Retry). The open room's composer adds them to its field.
     @Published private(set) var roomDraftAppend: RoomDraftAppend?
@@ -10330,6 +10334,29 @@ final class AppState: ObservableObject {
     func consumeComposerPrefill(_ token: UUID) {
         guard composerPrefillToken == token else { return }
         composerPrefillDraftKey = nil
+    }
+
+    /// Files dropped on the open chat go to its composer, which stages them
+    /// as attachments for the user to send.
+    func dropIntoComposer(_ providers: [NSItemProvider]) {
+        guard !providers.isEmpty else { return }
+        composerDropRequest = AttachmentDropRequest(providers: providers)
+    }
+
+    func consumeComposerDropRequest(_ id: UUID) {
+        guard composerDropRequest?.id == id else { return }
+        composerDropRequest = nil
+    }
+
+    /// Files dropped on the open group room go to its composer.
+    func dropIntoRoomComposer(_ providers: [NSItemProvider]) {
+        guard !providers.isEmpty, activeRoomSurface != nil else { return }
+        roomDropRequest = AttachmentDropRequest(providers: providers)
+    }
+
+    func consumeRoomDropRequest(_ id: UUID) {
+        guard roomDropRequest?.id == id else { return }
+        roomDropRequest = nil
     }
 
     /// The composer took the quote: drop it, so the quoted text is not kept
