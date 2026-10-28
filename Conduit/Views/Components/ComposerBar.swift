@@ -610,6 +610,10 @@ struct ComposerBar: View, Equatable {
                 compressingNotice
             }
 
+            if updates.inputs.isCheckingSend {
+                sendingNotice
+            }
+
             if let takeover = appState.activeChatTakeover {
                 chatTakeoverNotice(takeover)
             }
@@ -852,6 +856,7 @@ struct ComposerBar: View, Equatable {
         let isDictating = dictation.isDictating || dictation.isStarting || dictation.isTranscribing
         let turnControl = Self.turnControlExpandsComposer(action: action, restsWhenIdle: restsWhenIdle)
         let hasNotice = showsStateNotice || appState.composerNotice != nil || appState.isCompressingActiveSession
+            || updates.inputs.isCheckingSend
             || appState.activeChatTakeover != nil || composerErrorMessage != nil
             || !dictationClips.offered(for: dictationClipIdentity, delivering: appState.dictationClipsOnTheirWay).isEmpty
         let pickerUp = showAttachmentMenu || showDocumentPicker || showCamera
@@ -1159,6 +1164,26 @@ struct ComposerBar: View, Equatable {
         .padding(.bottom, 2)
     }
 
+    /// A sent message checking Hermes before it shows (#1401): the field
+    /// is empty, so this says it's on its way.
+    private var sendingNotice: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityHidden(true)
+            Text(AppLocalization.string("Sending…"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
+        .accessibilityIdentifier("composer.sending")
+    }
+
     private func pasteErrorNotice(_ message: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -1235,11 +1260,15 @@ struct ComposerBar: View, Equatable {
             } label: {
                 Label("Document", systemImage: "doc")
             }
-            Button {
-                Haptics.selection()
-                Task { await appState.openWorkspace() }
-            } label: {
-                Label("Workspace", systemImage: "folder")
+            // V2 keeps the chat's folder in ⋯ › Artifacts (#1389); the
+            // drawer shell has no Artifacts, so it stays here.
+            if !V2ShellPreference.isOn {
+                Button {
+                    Haptics.selection()
+                    appState.openWorkspace()
+                } label: {
+                    Label("Workspace", systemImage: "folder")
+                }
             }
             // The other bots, for a tag without typing `@` (the same tag
             // the @ list inserts; the chat's own bot is left out).
@@ -1587,6 +1616,12 @@ struct ComposerBar: View, Equatable {
         let submittedDraftKey = loadedDraftKey ?? activeDraftKey
         let submittedDraftBucket = draftStore.submissionBucket(for: submittedDraftKey)
         let submittedClearCount = draftStore.clearCount
+        let submittedDashboardID = appState.activeDashboardID
+        let submittedChatTitle = appState.displayedChatTitle
+        // The words may come back after the chat's runtime id has moved on:
+        // they go back by its durable id, as a waiting message's do.
+        let submittedRestoreKey = submittedDraftKey == activeDraftKey
+            ? appState.durableComposerDraftKeyOnScreen : submittedDraftKey
         let submissionContext = appState.composerSubmissionContext()
         rotateAttachmentGeneration()
         collapseSubmittedDraft(clearingReply: submittedReply != nil)
@@ -1611,6 +1646,10 @@ struct ComposerBar: View, Equatable {
                     attachments: submittedAttachments,
                     replyReference: submittedReply,
                     for: submittedDraftKey,
+                    restoringTo: submittedRestoreKey,
+                    dashboardID: submittedDashboardID,
+                    chatTitle: submittedChatTitle,
+                    stoppedQuietly: appState.composerSubmissionStoppedQuietly(submissionContext),
                     clearCount: submittedClearCount
                 )
                 Haptics.error()
@@ -1960,6 +1999,10 @@ struct ComposerBar: View, Equatable {
         attachments submittedAttachments: [Attachment],
         replyReference submittedReply: ComposerReplyReference?,
         for key: ComposerDraftKey,
+        restoringTo durableKey: ComposerDraftKey,
+        dashboardID: UUID?,
+        chatTitle: String,
+        stoppedQuietly: Bool,
         clearCount: UInt64
     ) {
         // A sign-out or server switch cleared the drafts while it was on
@@ -1972,6 +2015,20 @@ struct ComposerBar: View, Equatable {
             attachments: submittedAttachments,
             replyReference: submittedReply
         )
+        // AppState hands them to the composer on screen, which may not be
+        // this one: leaving the chat mid-send replaces it, and words put in
+        // this one's field then were lost (#1401). Words typed meanwhile
+        // stay, below the message that didn't go.
+        if let dashboardID {
+            appState.returnFailedComposerSubmission(
+                failed,
+                key: durableKey,
+                dashboardID: dashboardID,
+                title: chatTitle,
+                stoppedQuietly: stoppedQuietly
+            )
+            return
+        }
         let restorationKey: ComposerDraftKey
         if Self.draftKeysAreEquivalent(
             key,
@@ -1987,8 +2044,6 @@ struct ComposerBar: View, Equatable {
             draftStore.restoreFailedSubmission(failed, for: restorationKey)
             return
         }
-        // Words typed while the failed request was in flight stay, below
-        // the message that didn't go.
         let restored = ComposerDraft(text: text, attachments: attachments, replyReference: replyReference)
             .restoring(failed)
         // Put back, not typed: a failed "/cmd" opens no suggestions.

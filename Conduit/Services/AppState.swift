@@ -1110,6 +1110,8 @@ final class AppState: ObservableObject {
     /// A chat tapped in the saved list: it opens once the live list lands,
     /// ahead of the automatic resume.
     private var chatPickedFromSavedList: SavedChatListPick?
+    /// The Bot Chats left this run, by dashboard and bot (`keepBotChatCopy`).
+    private var keptBotChatCopies: [String: KeptBotChatCopy] = [:]
     /// The scope whose list in memory came from Hermes after the saved files
     /// were last wiped, and so may be saved.
     private var savableChatListScope: WidgetWorkspaceID?
@@ -2050,15 +2052,12 @@ final class AppState: ObservableObject {
     /// A card with an event this recent may belong to an agent the gateway
     /// roster hasn't registered yet, so the roster check leaves it alone.
     static let delegateAgentRosterGrace: TimeInterval = 30
-    @Published private(set) var workspaceRoot = ""
-    @Published private(set) var workspaceEntries: [String: [WorkspaceEntry]] = [:]
-    @Published private(set) var expandedWorkspacePaths: Set<String> = []
-    @Published private(set) var workspaceLoadingPath: String?
-    @Published private(set) var workspaceError: String?
-    @Published private(set) var workspacePreview: WorkspaceFilePreview?
-    @Published private(set) var workspaceSelectedFile: WorkspaceEntry?
-    @Published private(set) var workspaceFileError: String?
-    @Published private(set) var workspaceFileLoading = false
+    /// A file path tapped in a reply, for the open chat's Folder tab to
+    /// show (AppState+Workspace.swift).
+    @Published var workspaceReveal: WorkspaceReveal?
+    /// Counts the tools Hermes finished that may have changed files, so an
+    /// open Folder tab reads its folders again.
+    @Published var workspaceChanges = 0
     @Published private(set) var gatewayDiagnostics: GatewayDiagnostics?
     @Published private(set) var gatewayDiagnosticsLoading = false
     /// Restart Gateway's progress and outcome, and the dashboard it belongs
@@ -2250,6 +2249,12 @@ final class AppState: ObservableObject {
     /// Words the composer puts back: a waiting message taken back to edit,
     /// or one its chat never took. ComposerBar applies each, then consumes it.
     @Published var composerRestoreRequests: [ComposerRestoreRequest] = []
+    /// A composer send still checking Hermes before its message shows: the
+    /// composer says it's sending meanwhile (#1401).
+    @Published private(set) var composerSendChecks: [ComposerSendCheck] = []
+    /// Sends whose chat was left while their reply was lost: Hermes may
+    /// have them, so their words come back without an "unsent" notice.
+    private var composerSubmissionsOfUnknownDelivery: [ComposerSubmissionContext] = []
     /// Why a waiting message went back to a draft, until it's dismissed or
     /// the composer is used.
     @Published var composerNotice: String? {
@@ -5261,6 +5266,7 @@ final class AppState: ObservableObject {
         lastPresentationCacheFlushDate = Date()
         cacheMessagePresentation(for: sessionIDs)
         recordOfflineChatCopy()
+        keepBotChatCopy()
     }
 
     // MARK: - Offline chat cache (#99)
@@ -5299,7 +5305,10 @@ final class AppState: ObservableObject {
               turnState != .synchronizing,
               !messages.isEmpty,
               let dashboardID = activeDashboardID,
-              let identities = offlineChatIdentities() else { return }
+              let identities = offlineChatIdentities(),
+              // A Bot Chat keeps no copy on the phone, even when a stray row
+              // of it is in the workspace's list (`keepBotChatCopy` keeps it).
+              botStoreProfile(forSessionIDs: Array(identities)) == nil else { return }
         offlineChatCache.record(
             dashboardID: dashboardID,
             profile: activeProfile,
@@ -5621,6 +5630,97 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// A chat opened while connected shows its saved copy until its own
+    /// transcript lands, as a chat picked in the saved list does, so going
+    /// back to a chat never shows it blank first (#1352). A chat with no
+    /// copy opens as before, and so does one already picked in the saved
+    /// list (its copy is up).
+    private func presentSavedCopyWhileOpening(_ session: SessionSummary, openedAs sessionID: String) {
+        guard let dashboardID = activeDashboardID else { return }
+        var ids = Set(session.nestingIDs)
+        ids.insert(sessionID)
+        // A Bot Chat's row can turn up in the workspace's list (a stray from
+        // older server data): its copy is the one kept in memory, never a file.
+        guard botStoreProfile(forSessionIDs: Array(ids)) == nil else { return }
+        if let picked = offlineChatPresentation?.picked, !picked.sessionIDs.isDisjoint(with: ids) { return }
+        let durableID = session.storedSessionId ?? session.id
+        guard let saved = offlineChatCache.loadTranscript(durableID, dashboardID: dashboardID, profile: activeProfile) else {
+            return
+        }
+        offlineChatPresentation = OfflineChatPresentation(
+            dashboardID: dashboardID,
+            profile: activeProfile,
+            snapshot: OfflineChatSnapshot(lastSessionID: nil, sessions: [], transcripts: []),
+            displayedTranscript: saved,
+            picked: OfflineChatPresentation.PickedChat(title: session.title, sessionIDs: ids, durableSessionID: durableID)
+        )
+    }
+
+    /// A Bot Chat has no row of its own, so it keeps no copy on the phone:
+    /// the one on screen is kept in memory when it's left, by dashboard and
+    /// bot, to show while it opens again (#1352).
+    private struct KeptBotChatCopy {
+        let sessionIDs: Set<String>
+        let transcript: OfflineCachedTranscript
+    }
+
+    private static func keptBotChatCopyKey(dashboardID: UUID, bot: String) -> String {
+        "\(dashboardID.uuidString)|\(bot)"
+    }
+
+    /// Keeps the Bot Chat on screen, as `recordOfflineChatCopy` saves any
+    /// other chat: connected, authoritative rows only.
+    private func keepBotChatCopy() {
+        guard isConnected,
+              offlineChatPresentation == nil,
+              turnState != .synchronizing,
+              let dashboardID = activeDashboardID,
+              let sessionID = activeSessionId,
+              let identities = offlineChatIdentities(),
+              let bot = botStoreProfile(forSessionIDs: Array(identities.union([sessionID]))) else { return }
+        let rows = messages.compactMap(OfflineCachedMessage.init)
+            .suffix(OfflineChatCacheStore.maxMessagesPerTranscript)
+        guard !rows.isEmpty else { return }
+        keptBotChatCopies[Self.keptBotChatCopyKey(dashboardID: dashboardID, bot: bot)] = KeptBotChatCopy(
+            sessionIDs: identities.union([sessionID]),
+            transcript: OfflineCachedTranscript(
+                sessionID: sessionID,
+                title: activeSessionTitle,
+                savedAt: Date(),
+                messages: Array(rows)
+            )
+        )
+    }
+
+    /// `presentSavedCopyWhileOpening` for a Bot Chat: its kept copy, when
+    /// the chat being opened is one of the ids it was kept under. It is what
+    /// was on screen when the chat was left, a /new's compaction included.
+    private func presentKeptBotChatCopy(bot: String, openedAs sessionID: String, title: String?) {
+        guard let dashboardID = activeDashboardID,
+              let kept = keptBotChatCopies[Self.keptBotChatCopyKey(dashboardID: dashboardID, bot: bot)],
+              kept.sessionIDs.contains(sessionID) else { return }
+        // Under the id it opens as, the Bot Chat's own: the one it was kept
+        // under was that run's runtime id, and words typed while it opens
+        // must keep to a draft the chat finds again.
+        let transcript = OfflineCachedTranscript(
+            sessionID: sessionID,
+            title: kept.transcript.title,
+            savedAt: kept.transcript.savedAt,
+            messages: kept.transcript.messages
+        )
+        offlineChatPresentation = OfflineChatPresentation(
+            dashboardID: dashboardID,
+            profile: activeProfile,
+            snapshot: OfflineChatSnapshot(lastSessionID: nil, sessions: [], transcripts: []),
+            displayedTranscript: transcript,
+            picked: OfflineChatPresentation.PickedChat(
+                title: title ?? kept.transcript.title,
+                sessionIDs: kept.sessionIDs.union([sessionID]),
+                durableSessionID: sessionID
+            )
+        )
+    }
+
     /// The chat picked in the saved list for this scope, as the id to open it
     /// by: its live row's when the live list has it, else its saved durable
     /// id. Forgotten once taken; a pick from another scope is dropped.
@@ -5679,8 +5779,10 @@ final class AppState: ObservableObject {
     private func wipeOfflineChatCache(dashboardID: UUID?) {
         if let dashboardID {
             offlineChatCache.removeDashboard(dashboardID)
+            keptBotChatCopies = keptBotChatCopies.filter { !$0.key.hasPrefix("\(dashboardID.uuidString)|") }
         } else {
             offlineChatCache.removeAll()
+            keptBotChatCopies.removeAll()
         }
         // Chat pictures kept on the phone go with the chats. Their files are
         // named by a hash, so they cannot be told apart by server.
@@ -5727,6 +5829,7 @@ final class AppState: ObservableObject {
         // on other dashboards. Keep their files rather than rewriting only
         // the messages currently loaded in memory.
         offlineChatCache.removeSavedChats()
+        keptBotChatCopies.removeAll()
         TranscriptImageCache.purge()
         TranscriptPictureMemory.forgetAll()
         // The summaries describing runs of steps go with the chats.
@@ -7838,6 +7941,8 @@ final class AppState: ObservableObject {
             openLinkedBotChat(profile)
         case .settings(let page):
             settingsLinkRequest = page
+        case .file(let path):
+            revealWorkspaceFile(path)
         }
     }
 
@@ -10840,6 +10945,10 @@ final class AppState: ObservableObject {
     private var parkedRoomOutboxes: [String: GroupRoomOutbox] = [:]
     /// Unsent room composer text, keyed like `parkedRoomOutboxes`.
     private var groupRoomDrafts: [String: String] = [:]
+    /// The events of rooms left this run, keyed like `parkedRoomOutboxes`:
+    /// a room opened again shows them at once while its tail loads, and the
+    /// tail replaces them (#1352).
+    private var keptRoomReplays: [String: GroupRoomReplay] = [:]
     /// The files staged in a room's composer, kept with its text. Their
     /// local copies are deleted when the draft is dropped.
     private var groupRoomAttachments: [String: [Attachment]] = [:]
@@ -10931,6 +11040,7 @@ final class AppState: ObservableObject {
         closeRoomSurface(clearingRoomError: false, parkingPendingSend: false)
         parkedRoomOutboxes.removeAll()
         groupRoomDrafts.removeAll()
+        keptRoomReplays.removeAll()
         dropRoomAttachments { _ in true }
         // A send still awaiting its reply belongs to the outgoing identity;
         // its defer's removal is a no-op once the key is gone.
@@ -10941,10 +11051,14 @@ final class AppState: ObservableObject {
         "\(dashboardID.uuidString)|\(roomID)"
     }
 
-    /// Move the open room's pending send (if any) into the parked store.
+    /// Move the open room's pending send (if any) into the parked store, and
+    /// keep its events to show when it opens again.
     private func parkActiveRoomSend() {
         guard let surface = activeRoomSurface else { return }
         let key = Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)
+        if activeRoomReplay.roomID == surface.room.roomID, !activeRoomReplay.events.isEmpty {
+            keptRoomReplays[key] = activeRoomReplay
+        }
         if groupRoomOutbox.pending != nil {
             parkedRoomOutboxes[key] = groupRoomOutbox
         } else {
@@ -10962,6 +11076,7 @@ final class AppState: ObservableObject {
         }
         parkedRoomOutboxes = parkedRoomOutboxes.filter { !isGone($0.key) }
         groupRoomDrafts = groupRoomDrafts.filter { !isGone($0.key) }
+        keptRoomReplays = keptRoomReplays.filter { !isGone($0.key) }
         dropRoomAttachments(where: isGone)
     }
 
@@ -10981,6 +11096,7 @@ final class AppState: ObservableObject {
             let key = Self.roomKey(dashboardID: surface.dashboardID, roomID: surface.room.roomID)
             parkedRoomOutboxes.removeValue(forKey: key)
             groupRoomDrafts.removeValue(forKey: key)
+            keptRoomReplays.removeValue(forKey: key)
             dropRoomAttachments { $0 == key }
         }
         closeRoomSurface(parkingPendingSend: false)
@@ -11269,7 +11385,8 @@ final class AppState: ObservableObject {
         // A quote the room being left never took stays with it.
         if activeRoomSurface?.room.roomID != room.roomID { roomQuoteRequest = nil }
         activeRoomSurface = GroupRoomSurface(dashboardID: dashboardID, room: room)
-        activeRoomReplay = GroupRoomReplay(roomID: room.roomID)
+        activeRoomReplay = keptRoomReplays[Self.roomKey(dashboardID: dashboardID, roomID: room.roomID)]
+            ?? GroupRoomReplay(roomID: room.roomID)
         activeRoomDriverStatus = nil
         roomApprovalAnswers = [:]
         // A send parked when this room was left comes back with its retry
@@ -13602,6 +13719,7 @@ final class AppState: ObservableObject {
         // The outgoing dashboard's chat and Chats list as they show now are
         // what the next visit there opens to.
         recordOfflineChatCopy()
+        keepBotChatCopy()
         recordSavedChatList()
         selectDashboardTarget(id)
         rememberDashboardURL(dashboard.normalizedURL)
@@ -22893,9 +23011,20 @@ final class AppState: ObservableObject {
         setActiveSessionState(id: sessionId)
         keepDelegateAgents(of: acceptedSessionIDs)
         messages = []
+        // A chat with a saved copy shows it while Hermes sends the transcript
+        // (#1352): a Bot Chat the copy kept when it was left, any other the
+        // one on the phone.
+        // A known Bot Chat opened the ordinary way (a notification, a link)
+        // is still the bot's: the registry names it.
+        if let bot = conversationProfile ?? botConversationProfile(for: sessionId) {
+            presentKeptBotChatCopy(bot: bot, openedAs: sessionId, title: preferredTitle)
+        } else if let listedSession {
+            presentSavedCopyWhileOpening(listedSession, openedAs: sessionId)
+        }
         // Explicit navigation owns the chat surface from here. A chat picked
-        // in the saved list keeps its saved copy up until its own transcript
-        // replaces it (`messages`' didSet), rather than blanking first.
+        // in the saved list, or opened with a saved copy, keeps that copy up
+        // until its own transcript replaces it (`messages`' didSet), rather
+        // than blanking first.
         if offlineChatPresentation?.picked?.sessionIDs.contains(sessionId) != true {
             dismissOfflineChatPresentation()
         }
@@ -23651,6 +23780,9 @@ final class AppState: ObservableObject {
         let previousSessionID = activeSessionId
         let previousTitle = activeSessionTitle
         cacheMessagePresentation()
+        // The chat being left shows as it is now when it's opened again.
+        recordOfflineChatCopy()
+        keepBotChatCopy()
         let newTitle = AppLocalization.string("New conversation")
         activeSessionTitle = newTitle
         let previousTurnState = turnState
@@ -24051,6 +24183,28 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// A failed send that said nothing: its chat was left (or the
+    /// connection changed) before Hermes refused it, and Hermes didn't get
+    /// it. One whose reply was lost after its chat was left may have gone,
+    /// so it isn't announced as unsent.
+    func composerSubmissionStoppedQuietly(_ context: ComposerSubmissionContext) -> Bool {
+        if takeComposerSubmissionOfUnknownDelivery(context) { return false }
+        return !isCurrentComposerSubmission(context)
+    }
+
+    /// The failed send may have reached Hermes: its reply was lost after
+    /// its chat was left. Asked once per failed send.
+    func takeComposerSubmissionOfUnknownDelivery(_ context: ComposerSubmissionContext) -> Bool {
+        guard let index = composerSubmissionsOfUnknownDelivery.firstIndex(of: context) else { return false }
+        composerSubmissionsOfUnknownDelivery.remove(at: index)
+        return true
+    }
+
+    /// A dashboard left or signed out of: nobody asks about its sends again.
+    func forgetComposerSubmissionsOfUnknownDelivery() {
+        composerSubmissionsOfUnknownDelivery.removeAll()
+    }
+
     private func isCurrentComposerSubmission(_ context: ComposerSubmissionContext) -> Bool {
         guard context.profile == activeProfile,
               context.clientIdentity == client.map(ObjectIdentifier.init),
@@ -24207,7 +24361,9 @@ final class AppState: ObservableObject {
         // behind it: the first message starts one, as New Chat would, and
         // goes into it rather than nowhere.
         if composerSubmissionStartsChat(text: text, attachments: attachments, context: submissionContext) {
-            guard let started = await startChatForComposerSubmission() else { return false }
+            guard let started = await checkingBeforeSend(submissionContext, startsChat: true, {
+                await startChatForComposerSubmission()
+            }) else { return false }
             submissionContext = started
         }
         let sent = await performComposerSubmission(
@@ -24323,7 +24479,7 @@ final class AppState: ObservableObject {
         // One authoritative read-only probe corrects the state before the
         // routing decision. Trusted state never pays for the probe.
         if turnState == .idle, turnStateIsStale,
-           await correctStaleIdleTurnState(using: submissionContext) {
+           await checkingBeforeSend(submissionContext, { await correctStaleIdleTurnState(using: submissionContext) }) {
             if let onBusy { onBusy(); return false }
             lifecycleLog.notice("submitComposer: stale-idle corrected to running → busy \(busyMode.rawValue, privacy: .public)")
             return await submitWhileBusy(text, attachments: attachments, mode: busyMode, context: submissionContext)
@@ -24349,9 +24505,9 @@ final class AppState: ObservableObject {
         // transcript.
         if turnState == .idle,
            transcriptFreshnessIsStale || pendingLocalOrderingDebt != nil {
-            switch await confirmTranscriptFreshnessBeforeSend(
-                using: submissionContext
-            ) {
+            switch await checkingBeforeSend(submissionContext, {
+                await confirmTranscriptFreshnessBeforeSend(using: submissionContext)
+            }) {
             case .proceed:
                 break
             case .routeToBusySubmission:
@@ -24382,6 +24538,41 @@ final class AppState: ObservableObject {
             restorePendingScreenshot(screenshot)
         }
         return sent
+    }
+
+    /// A check Hermes answers before a send's message shows. On a slow or
+    /// dropped connection it can take seconds, and the field is empty by
+    /// then: without a word from the composer the message looked as if it
+    /// went nowhere, and leaving the chat to retry dropped it (#1401).
+    /// `startsChat`: the check is starting the chat from the empty canvas,
+    /// which opens a new viewport of its own on the way.
+    private func checkingBeforeSend<T>(
+        _ context: ComposerSubmissionContext,
+        startsChat: Bool = false,
+        _ check: () async -> T
+    ) async -> T {
+        let marker = ComposerSendCheck(
+            sessionID: context.sessionID,
+            viewportTransitionGeneration: context.viewportTransitionGeneration,
+            startsChat: startsChat,
+            earlierNewChat: newChatOpenedSessionID
+        )
+        composerSendChecks.append(marker)
+        defer { composerSendChecks.removeAll { $0.id == marker.id } }
+        return await check()
+    }
+
+    /// The chat on screen has a send still checking Hermes.
+    var composerSendIsChecking: Bool {
+        composerSendChecks.contains { check in
+            if check.startsChat, isStartingNewChat {
+                // The chat this check starts, never one an earlier New Chat made.
+                return activeSessionId == nil
+                    || (activeSessionId == newChatOpenedSessionID && activeSessionId != check.earlierNewChat)
+            }
+            return check.sessionID == activeSessionId
+                && check.viewportTransitionGeneration == chatViewportTransitionGeneration
+        }
     }
 
     /// A typed message while a turn runs, by `mode`: into the turn, as a
@@ -25757,7 +25948,11 @@ final class AppState: ObservableObject {
                 await recoverComposerSubmission(using: submissionContext)
                 return false
             }
-            guard isCurrentComposerSubmission(submissionContext) else { return false }
+            guard isCurrentComposerSubmission(submissionContext) else {
+                // Its chat was left; the reply may only have been lost.
+                if Self.isAmbiguousPromptDelivery(error) { composerSubmissionsOfUnknownDelivery.append(submissionContext) }
+                return false
+            }
             if Self.isAmbiguousPromptDelivery(error) {
                 lifecycleLog.notice(
                     "prompt.submit ambiguous (\(error.localizedDescription, privacy: .private)); querying authoritative state session=\(sessionId, privacy: .private(mask: .hash))"
@@ -27914,7 +28109,12 @@ final class AppState: ObservableObject {
             // A spoken steer that fails is dropped by Voice; there is no
             // composer draft to recover or banner to show.
             guard surfacesFailure,
-                  isCurrentOrAliasedComposerSubmission(submissionContext) else { return false }
+                  isCurrentOrAliasedComposerSubmission(submissionContext) else {
+                if surfacesFailure, Self.isAmbiguousPromptDelivery(error) {
+                    composerSubmissionsOfUnknownDelivery.append(submissionContext)
+                }
+                return false
+            }
             errorMessage = UserFacingError.message(for: error)
             await recoverComposerSubmission(using: submissionContext)
             return false
@@ -28007,7 +28207,11 @@ final class AppState: ObservableObject {
             await recoverComposerSubmission(using: submissionContext)
             return false
         } catch {
-            guard isCurrentOrAliasedComposerSubmission(submissionContext) else { return false }
+            guard isCurrentOrAliasedComposerSubmission(submissionContext) else {
+                // Its chat was left; the redirect may only have lost its reply.
+                if Self.isAmbiguousPromptDelivery(error) { composerSubmissionsOfUnknownDelivery.append(submissionContext) }
+                return false
+            }
             errorMessage = AppLocalization.string("Could not redirect the active response: \(UserFacingError.message(for: error))")
             await recoverComposerSubmission(using: submissionContext)
             return false
@@ -30731,33 +30935,14 @@ final class AppState: ObservableObject {
     /// browser uses. Folder paths are selected from Hermes' filesystem listing,
     /// not entered as arbitrary strings by the phone.
     var projectFolderPickerRoot: String {
-        !runtime.cwd.isEmpty ? runtime.cwd : workspaceRoot
+        runtime.cwd
     }
 
     func workspaceDirectoryEntries(at path: String) async throws -> [WorkspaceEntry] {
-        guard let dashboardTicketBridge else { throw DashboardTicketBridgeError.notReady }
         let profile = activeProfile
-        guard let encodedPath = DashboardPath.encodedQueryComponent(path) else {
-            throw DashboardTicketBridgeError.requestFailed(AppLocalization.string("The workspace path could not be encoded."))
-        }
-        let result = try await dashboardTicketBridge.requestJSON(
-            path: DashboardPath.withProfile("/api/fs/list?path=\(encodedPath)", profile: profile)
-        )
+        let entries = try await workspaceDirectoryEntries(at: path, profile: profile)
         guard profile == activeProfile else { return [] }
-        if let error = result["error"] as? String, !error.isEmpty {
-            throw DashboardTicketBridgeError.requestFailed(error)
-        }
-        return ((result["entries"] as? [[String: Any]]) ?? []).compactMap { item in
-            guard let name = item["name"] as? String,
-                  let entryPath = item["path"] as? String,
-                  !name.isEmpty,
-                  !entryPath.isEmpty else { return nil }
-            return WorkspaceEntry(name: name, path: entryPath, isDirectory: item["isDirectory"] as? Bool ?? false)
-        }.sorted {
-            $0.isDirectory != $1.isDirectory
-                ? $0.isDirectory
-                : $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
+        return entries
     }
 
     private func writeProjectIdea(_ idea: String, in folder: String, profile: String) async {
@@ -32572,6 +32757,8 @@ final class AppState: ObservableObject {
 
         case .toolComplete(_, let name, let output, let eventToolID):
             if name.lowercased() == "clarify" { break }
+            // Hermes may have changed files an open Folder tab shows.
+            noteWorkspaceToolCompleted(name)
             // Hermes just read or asked to change Conduit's settings.
             if name.lowercased() == "conduit_settings" { Task { await syncAgentSettings() } }
             // A confirmation Hermes just asked for shows without waiting on the push.
@@ -33693,107 +33880,11 @@ final class AppState: ObservableObject {
 
     // MARK: - Chat support surfaces
 
-    func openWorkspace() async {
-        guard !runtime.cwd.isEmpty else {
-            errorMessage = AppLocalization.string("Workspace unavailable: Hermes has not reported a working directory for this session yet.")
-            return
-        }
-        workspaceRoot = runtime.cwd
-        workspaceEntries = [:]
-        expandedWorkspacePaths = []
-        workspaceError = nil
-        workspaceSelectedFile = nil
-        workspacePreview = nil
-        workspaceFileError = nil
-        workspacePreviewRequest = nil
-        workspaceFileLoading = false
+    /// The drawer shell's + › Workspace (V2 off), which has no Artifacts:
+    /// the Folder tab on its own.
+    func openWorkspace() {
+        // Without the chat's folder it still offers the projects'.
         showWorkspaceSheet = true
-        await loadWorkspace(path: runtime.cwd)
-    }
-
-    func refreshWorkspace() async {
-        guard !workspaceRoot.isEmpty else { return }
-        workspaceEntries = [:]
-        expandedWorkspacePaths = []
-        await loadWorkspace(path: workspaceRoot)
-    }
-
-    func toggleWorkspaceFolder(_ entry: WorkspaceEntry) async {
-        guard entry.isDirectory else { return }
-        if expandedWorkspacePaths.contains(entry.path) {
-            expandedWorkspacePaths.remove(entry.path)
-            return
-        }
-        expandedWorkspacePaths.insert(entry.path)
-        guard workspaceEntries[entry.path] == nil else { return }
-        if !(await loadWorkspace(path: entry.path)) {
-            expandedWorkspacePaths.remove(entry.path)
-        }
-    }
-
-    /// The latest file pick: only its read answers, whichever lands last.
-    private var workspacePreviewRequest: UUID?
-
-    func previewWorkspaceFile(_ entry: WorkspaceEntry) async {
-        guard let owner = currentDashboardRuntimeOwner() else { return }
-        let profile = activeProfile
-        let request = UUID()
-        workspacePreviewRequest = request
-        workspaceSelectedFile = entry
-        workspacePreview = nil
-        workspaceFileError = nil
-        workspaceFileLoading = true
-        defer { if workspacePreviewRequest == request { workspaceFileLoading = false } }
-        let isCurrent = { [self] in
-            workspacePreviewRequest == request && profile == activeProfile && ownsDashboardRuntime(owner)
-        }
-        do {
-            guard let path = DashboardPath.encodedQueryComponent(entry.path) else {
-                throw DashboardTicketBridgeError.requestFailed(AppLocalization.string("The workspace path could not be encoded."))
-            }
-            let result = try await owner.bridge.requestJSON(
-                path: DashboardPath.withProfile("/api/fs/read-text?path=\(path)", profile: profile)
-            )
-            guard isCurrent() else { return }
-            workspacePreview = WorkspaceFilePreview(
-                binary: result["binary"] as? Bool ?? false,
-                byteSize: result["byteSize"] as? Int ?? 0,
-                language: result["language"] as? String ?? "text",
-                mimeType: result["mimeType"] as? String ?? "text/plain",
-                text: result["text"] as? String ?? "",
-                truncated: result["truncated"] as? Bool ?? false
-            )
-        } catch {
-            guard isCurrent() else { return }
-            workspaceFileError = UserFacingError.message(for: error)
-        }
-    }
-
-    /// The file staged for Save to Files; the caller removes it with
-    /// `WorkspaceDownloads.remove` once it is done with it.
-    func workspaceDownload(for entry: WorkspaceEntry) async -> WorkspaceDownload? {
-        guard let owner = currentDashboardRuntimeOwner() else { return nil }
-        let dashboardTicketBridge = owner.bridge
-        let profile = activeProfile
-        do {
-            guard let path = DashboardPath.encodedQueryComponent(entry.path) else {
-                throw DashboardTicketBridgeError.requestFailed(AppLocalization.string("The workspace path could not be encoded."))
-            }
-            let result = try await dashboardTicketBridge.requestJSON(
-                path: DashboardPath.withProfile("/api/fs/read-data-url?path=\(path)", profile: profile),
-                maxResponseBytes: DataURLLimits.maxJSONResponseBytes
-            )
-            guard profile == activeProfile, ownsDashboardRuntime(owner) else { return nil }
-            guard let dataURL = result["dataUrl"] as? String,
-                  let data = DataURLLimits.decodeBase64DataURL(dataURL) else {
-                throw DashboardTicketBridgeError.requestFailed(AppLocalization.string("The gateway returned an invalid file payload."))
-            }
-            return try WorkspaceDownloads.stage(data, name: entry.name)
-        } catch {
-            guard profile == activeProfile, ownsDashboardRuntime(owner) else { return nil }
-            workspaceFileError = UserFacingError.message(for: error)
-            return nil
-        }
     }
 
     /// Hermes messages can refer to generated media as `MEDIA:
@@ -33962,36 +34053,6 @@ final class AppState: ObservableObject {
             logs: (logs?["lines"] as? [Any] ?? []).map { String(describing: $0) },
             error: status == nil ? AppLocalization.string("Could not refresh dashboard status.") : nil
         )
-    }
-
-    @discardableResult
-    private func loadWorkspace(path: String) async -> Bool {
-        let owner = currentDashboardRuntimeOwner()
-        let profile = activeProfile
-        workspaceLoadingPath = path
-        workspaceError = nil
-        defer { if workspaceLoadingPath == path { workspaceLoadingPath = nil } }
-        do {
-            let entries = try await workspaceDirectoryEntries(at: path)
-            // The bridge's invalidation makes a late answer throw; this
-            // re-check also covers a switch landing between that answer and
-            // this resumption, so no other dashboard's listing merges in.
-            if let owner {
-                guard ownsDashboardRuntime(owner), profile == activeProfile else { return false }
-            }
-            workspaceEntries[path] = entries
-            return true
-        } catch {
-            // A dashboard switch invalidates the bridge, so a listing still in
-            // flight fails rather than answering; that failure belongs to the
-            // dashboard switched away from and isn't reported over the next.
-            // (No bridge at all is still this dashboard's error.)
-            if let owner {
-                guard ownsDashboardRuntime(owner), profile == activeProfile else { return false }
-            }
-            workspaceError = UserFacingError.message(for: error)
-            return false
-        }
     }
 
     private func setRunning(_ running: Bool) {

@@ -254,7 +254,7 @@ the saved transcript's job cards · `docs/VOICE_BACKGROUND_JOBS.md`
 **Open gaps**
 - GPT-Live's model can't put a card on the call screen: Gemini, Grok and Local Live agent have `show_on_screen`, GPT-Live has no marker for it. Cards Hermes shows still appear (#366).
 
-**Checked:** 2026-10-26, #1247 (the Watch broker's tool and poll answers keep Conduit running through BackgroundTaskHold); 2026-10-25, at #1252, for the request whose chat an unattached call took; Qwen in the siblings, at #1182, carried in #1235; at #1224: a result counts as told once the model says something after it or once it has gone out twice (one resend, GPT-Live and Watch included), and a job stays on the job lists until then (#1210), a direct Watch call's iPhone-run jobs included; one already sent when the call ends counts as told, never carried into the next call. Earlier at #1223, for GPT-Live's replies that couldn't go out; at #1221, for the Watch's late refusals and answers lost to a reconnect; at 78f21da; at #1191; at #1220: a cut screen card reads fences as "Code fences in messages" says.
+**Checked:** 2026-10-28, #1407 (a line ending in a file-path link isn't read as a saved call's job note); 2026-10-26, #1247 (the Watch broker's tool and poll answers keep Conduit running through BackgroundTaskHold); 2026-10-25, at #1252, for the request whose chat an unattached call took; Qwen in the siblings, at #1182, carried in #1235; at #1224: a result counts as told once the model says something after it or once it has gone out twice (one resend, GPT-Live and Watch included), and a job stays on the job lists until then (#1210), a direct Watch call's iPhone-run jobs included; one already sent when the call ends counts as told, never carried into the next call. Earlier at #1223, for GPT-Live's replies that couldn't go out; at #1221, for the Watch's late refusals and answers lost to a reconnect; at 78f21da; at #1191; at #1220: a cut screen card reads fences as "Code fences in messages" says.
 
 ## Tools and consent in calls
 
@@ -1120,9 +1120,10 @@ pick at its moment, goes time-sensitive; see Notifications) · the Watch
 
 The files, pages and links Hermes made, listed for every chat (the Chats
 bar's Artifacts page) or for one chat (its … menu), opened in the chat's own
-viewers, with Show in Chat.
+viewers, with Show in Chat. Beside the list, the Folder tab (Workspace files).
 
-**Siblings:** the Artifacts page · a chat's own Artifacts sheet · Bot Chats
+**Siblings:** the Artifacts page · a chat's own Artifacts sheet · the panel
+beside the chat on a wide window · Bot Chats
 (kept in the bot's own profile) · All (every included profile's chats) ·
 group rooms (no Artifacts list) · the notifier's artifacts route · README.md
 
@@ -1141,13 +1142,53 @@ group rooms (no Artifacts list) · the notifier's artifacts route · README.md
 - A Bot Chat has no row in the workspace's chat list, so its ⋯ menu finds its ids from the chat itself (with the durable id Hermes confirmed under the bot's profile, so a relaunch or a reopened runtime still finds it) and the roster's registry id and lineage tip (2026-10-24, #1218, Eric's report: the item was greyed out).
 - A picture image generation made is listed: the host reads `image_generate`'s result, a saved file as a written image and a hosted one as an image link (2026-10-24, #1218 with notifier #353, plugin 0.71.1, Eric's report: a bot's generated pictures were missing).
 - A Bot Chat is listed though Hermes keeps it hidden: the host reads a chat asked for by id whether hidden or not, and a profile's whole list takes its hidden "Bot Chat" session and the sessions continuing it, while other hidden chats (a group room member's turns) stay out (2026-10-25, #1272 with notifier #376, plugin 0.78.1, Eric's report: a bot's pictures were still missing from both lists).
+- On a window with room for the chat and the panel, ⋯ › Artifacts opens beside the chat instead of in a sheet, with its own search field; a phone keeps the sheet (2026-10-27, #1399).
 - One host path is one artifact across stores: profiles share the host's files, so a file two stores list shows once, at its newest mention.
 - A file still opening is dropped when the list moves to another server or profile, and only the latest open clears the spinner. Every reload, including one on a dashboard without artifacts, outdates the request before it (2026-10-24, from #895's review, #1191).
 
 **Open gaps**
 - Group rooms' messages aren't listed: a room has no Artifacts list, and its members' replies stay out of the Artifacts page.
 
-**Checked:** 2026-10-25, #1272 with notifier #376; the sheet's ids at #1218; the page and Show in Chat at #1203; opens and reloads at #1191.
+**Checked:** 2026-10-27, #1399 (the panel and the Folder tab); #1272 with notifier #376; the sheet's ids at #1218; the page and Show in Chat at #1203; opens and reloads at #1191.
+
+## Workspace files
+
+The Folder beside Artifacts: the open chat's working folder or a project's,
+browsed as a tree, searched, previewed, edited and changed, and a file path a
+reply names opened there (#1389).
+
+**Siblings:** a chat's ⋯ › Artifacts sheet (Folder tab) · the panel beside
+the chat on a wide window · the Chats bar's Artifacts page (projects' folders
+only) · + › Workspace in the drawer shell (V2 off, which has no Artifacts) ·
+file paths in replies (Links in messages) · group rooms (a tapped path opens
+the Folder on its own) · Bot Chats (the bot's profile) · the notifier's
+workspace routes · the project folder picker (same Hermes listing) · Files
+prepared for preview (how the Folder opens pages and Quick Look) ·
+README.md
+
+**Code**
+- Client and path links: `Conduit/Services/WorkspaceFiles.swift` (WorkspaceFilesClient, WorkspacePathLinks, WorkspaceRoot, WorkspaceReveal)
+- Roots, profile, reveal and refresh: `Conduit/Services/AppState+Workspace.swift` (workspaceRoots, workspaceProfile, absoluteWorkspacePath, revealWorkspaceFile, noteWorkspaceToolCompleted, readWorkspaceText, workspaceDirectoryEntries)
+- Tree, search, viewing and changes: `Conduit/Services/WorkspaceExplorer.swift`
+- Screens: `Conduit/Views/V2/V2WorkspaceViews.swift` (WorkspaceFolderView, WorkspaceFileSheet, WorkspaceMoveSheet), `Conduit/Views/V2/V2ArtifactsViews.swift` (ChatArtifactsContent, the page's tabs), `Conduit/Views/V2/V2ConversationScreen.swift` (ChatSidePanel, openArtifacts), `Conduit/Views/ChatSupportSheets.swift` (WorkspaceSheet), `Conduit/Views/RootView.swift`, `Conduit/Views/Components/ComposerBar.swift` (+ › Workspace)
+- Links: `Conduit/Views/Components/SelectableTextView.swift` (bridge), `Conduit/Services/ConduitAppLink.swift` (file)
+- State: `Conduit/Models/Models.swift` (WorkspaceEntry, WorkspaceFilePreview), `Conduit/Services/AppState.swift` (workspaceReveal, workspaceChanges, showWorkspaceSheet, openWorkspace)
+- Tests: `ConduitTests/WorkspaceFilesTests.swift`, `ConduitTests/AppStateMultiDashboardTests.swift` (workspace listing and file pick)
+- Host: `notifier/workspace_files.py` (notifier #431), `notifier/dashboard/plugin_api.py` (/workspace/list, search, recent and the POST actions; capability workspace-files)
+
+**Rulings**
+- The Folder lives in Artifacts, not behind the composer's +: a tab in the chat's ⋯ › Artifacts sheet, beside the chat on a wide window, and on the Chats bar's Artifacts page. + › Workspace stays only in the drawer shell, which has no Artifacts (2026-10-27, #1399, Eric: "+" hurt visibility).
+- The full explorer: previews, search, Recently Changed, new folder and file, rename, move, duplicate, delete with a confirmation, upload, and text editing that refuses a save over a file changed since it was opened (Replace It or Keep Editing) (2026-10-27, #1399, Eric picked it).
+- The tree starts at the chat's folder and switches to a project's folder, never above them; the plugin keeps every path inside the root it's given and leaves out files holding keys or passwords. Hermes' own file routes already reach the home folder, so this scopes the view rather than guarding the host: on a personal install the plugin takes any folder as a root, and on a hosted or locked install only one inside Hermes' files folder (2026-10-27, #1399).
+- Without the plugin's workspace routes the Folder still browses and opens files through Hermes' own listing; search, Recently Changed and changes ask for a plugin update.
+- A path in a reply is a link when inline code names one, or when plain text names a path with a folder and a known file type; a relative path is in the chat's folder. It opens in the Folder, at the file, switching to the chat's or a project's folder that holds it. A file in none of them opens to read only, outside the tree, as Hermes' own file routes would show it (2026-10-27, #1399).
+- A tool that writes, moves or deletes files, or runs commands, refreshes an open Folder when it completes; nothing polls.
+- An answer for another dashboard, profile or folder is dropped, its failure too, and only the latest file picked shows.
+
+**Open gaps**
+- Group rooms have no Artifacts: a path tapped in a room opens the Folder on its own, at the projects' folders.
+
+**Checked:** 2026-10-28, #1407 with notifier #431 and its follow-up; 2026-10-27, #1399 with notifier #431.
 
 ## Bots: create and edit
 
@@ -1273,20 +1314,23 @@ drawn until a touch mounts its text view.
 **Siblings:** chats, project chats and Bot Chat (one chat view) · group rooms ·
 VoiceOver and Switch Control (text view always mounted) · Voice Control and Full
 Keyboard Access (the text view mounts and lays out when they ask for the
-reply's elements) · long-press Open Link
+reply's elements) · long-press Open Link · file paths, linked to the Folder
+(Workspace files)
 
 **Code**
 - Drawn until touched, mounted on touch: `Conduit/Views/Components/SelectableTextView.swift` (drawsUntilTouched, SelectableTextViewHostView.hitTest and accessibilityElements, mountTextViewForTouch)
+- File paths: `Conduit/Views/Components/SelectableTextView.swift` (bridge), `Conduit/Services/WorkspaceFiles.swift` (WorkspacePathLinks), `Conduit/Services/ConduitAppLink.swift` (file), `Conduit/Services/AppState+Workspace.swift` (absoluteWorkspacePath, revealWorkspaceFile)
 - Test: `ConduitTests/DrawnTextLinkTapTests.swift`
 - Surfaces that draw until touched: `Conduit/Views/ChatView.swift`, `Conduit/Views/GroupChatView.swift` (selectableTextDrawsUntilTouched)
 
 **Rulings**
 - The touch that mounts a reply's text view is routed to it laid out, so it finds the link under the finger; a link never needs a second tap (2026-10-26, #1303, carried in #1311).
+- A file path in a reply is a `conduit://file` link, drawn as a link, that opens the Folder at that file; only inside the app (2026-10-27, #1399).
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-26, #1311 (carries #1303; Voice Control and Full Keyboard Access in Siblings).
+**Checked:** 2026-10-27, #1399 (file paths); #1311 (carries #1303; Voice Control and Full Keyboard Access in Siblings).
 
 ## Markdown lists in messages
 
@@ -1323,6 +1367,42 @@ Read Aloud and live voice read-back · chat list previews and quotes
 
 **Checked:** 2026-10-23, at #1175.
 
+## A chat while it opens
+
+A chat that's opened again shows what it had at once, while Hermes sends
+the rest, instead of a blank chat.
+
+**Siblings:** chats and project chats · Bot Chat · group rooms · a cold
+launch and a chat picked in the saved Chats list (the same read-only copy) ·
+iPad and Mac windows (the same chat view) · Settings' Data handling caption ·
+Watch and CarPlay (not needed: neither shows a transcript)
+
+| Opening | Shows while it loads | Kept |
+|---|---|---|
+| A chat or project chat | its saved copy (newest 120 rows) | on the phone, the last 20 chats left per dashboard and profile; the last 8 read or saved also in memory |
+| A Bot Chat | the copy kept when it was left (after a `/new`, the compacted chat as it showed) | in memory, per dashboard and bot, one per bot, up to 120 rows |
+| A group room | the events it had | in memory, per dashboard and room, up to 400 events, until the room leaves the list |
+| A chat never opened | nothing, as before | not applicable |
+
+**Code**
+- Chats: `Conduit/Services/AppState.swift` (performSessionOpenNotingRefusal, presentSavedCopyWhileOpening, recordOfflineChatCopy), `Conduit/Services/OfflineChatCache.swift` (loadTranscript, keptTranscripts), `Conduit/Views/OfflineChatTranscriptView.swift`, `Conduit/Views/ChatView.swift` (the copy's overlay)
+- Bot Chat: `Conduit/Services/AppState.swift` (keepBotChatCopy, presentKeptBotChatCopy, keptBotChatCopies)
+- Group rooms: `Conduit/Services/AppState.swift` (openGroupRoom, parkActiveRoomSend, keptRoomReplays)
+- Tests: `ConduitTests/OfflineChatCacheTests.swift`, `ConduitTests/GroupChatSessionSafetyTests.swift`
+
+**Rulings**
+- What shows while a chat opens is presentation only: it never enters the live transcript, so approvals, paging and resume never read it, and the live transcript replaces it wholesale (2026-10-27, #1404, Eric picked this over seeding the live transcript or keeping chat views alive).
+- Copies are kept per dashboard and profile (Bot Chat: per bot), so another profile's history never shows (2026-10-27, #1404).
+
+**Open gaps**
+- A chat whose live transcript lands somewhere other than its newest row (an unread reply, a restored reading place) moves there at the handover.
+- Bot Chat copies and group room events are memory only, so they don't outlive Conduit being stopped.
+- Settings' Data handling caption says recent conversations are kept so Conduit opens straight to them while it connects. It doesn't mention reopening, because what's kept on the device hasn't changed.
+- The first open of a chat after launch reads its file on the main thread (repeat opens come from memory); kept as is unless it shows in profiling (#1404).
+- While the copy is up, VoiceOver reads its rows with no "opening" announcement; the header and composer say Conduit is connecting, as for a chat picked in the saved list (#1404).
+
+**Checked:** 2026-10-27, #1404.
+
 ## Composer drafts
 
 Unsent words, files and a quoted reply wait in the composer they were typed
@@ -1330,23 +1410,28 @@ in until they're sent, whichever way the user leaves.
 
 **Siblings:** chat composer (chats, project chats, Bot Chat) · New Chat ·
 a saved copy's composer and its waiting message ("Sends when connected") ·
-group rooms · the full editor · the notices that say where words went
+group rooms · the full editor · the notices that say where words went ·
+the composer's Sending… while a send checks Hermes
 
 | Leaving by | Chat composer | Group room |
 |---|---|---|
 | Back, or another chat from the list | text, files and quote kept | text and files kept |
 | A room opened over the chat | kept | not applicable |
+| Leaving while a send is on its way | back in its draft if it doesn't go | held by the room's pending message |
 | Sign-out or another server | dropped | dropped, files deleted |
 | The room disbanded or left the list | not applicable | dropped, files deleted |
 
 **Code**
-- Chat composer: `Conduit/Views/Components/ComposerBar.swift` (loadDraft, saveDraft, handoffComposer, onDisappear, draftKeyToKeep, restoreSubmittedDraftIfNeeded), `Conduit/Views/Components/ComposerDraftStore.swift` (clearCount)
+- Chat composer: `Conduit/Views/Components/ComposerBar.swift` (loadDraft, saveDraft, handoffComposer, onDisappear, draftKeyToKeep, restoreSubmittedDraftIfNeeded, applyComposerRestoreRequests, sendingNotice, composerInUse), `Conduit/Views/Components/ComposerUpdates.swift` (isCheckingSend), `Conduit/Views/Components/ComposerDraftStore.swift` (clearCount)
+- A send that didn't go: `Conduit/Services/AppState+PendingSend.swift` (returnFailedComposerSubmission, restoreFailedPendingComposerSend's mayHaveGone), `Conduit/Services/AppState.swift` (composerSubmissionStoppedQuietly, takeComposerSubmissionOfUnknownDelivery); its checks before the message shows: `Conduit/Services/AppState.swift` (checkingBeforeSend, composerSendIsChecking: the stale-idle probe, the transcript freshness read, starting a chat from the empty canvas)
 - Waiting message: `Conduit/Services/AppState+PendingSend.swift` (returnPendingComposerSendToDraft, restoreFailedPendingComposerSend, pendingComposerSendNotice), `Conduit/Services/AppState.swift` (conversationIsGone), `Conduit/Models/PendingComposerSend.swift`
 - Group rooms: `Conduit/Views/Components/GroupRoomComposer.swift`, `Conduit/Services/AppState.swift` (activeRoomDraft, activeRoomAttachments, pruneRoomStores)
-- Tests: `ConduitTests/ComposerDraftStoreTests.swift`, `ConduitTests/GroupChatSessionSafetyTests.swift`, `ConduitTests/OfflineChatCacheTests.swift`, `ConduitTests/AppStateChatResumeTests.swift`
+- Tests: `ConduitTests/ComposerDraftStoreTests.swift`, `ConduitTests/GroupChatSessionSafetyTests.swift`, `ConduitTests/OfflineChatCacheTests.swift`, `ConduitTests/AppStateChatResumeTests.swift`, `ConduitTests/AppStateForegroundLifecycleTests.swift` (the Sending… line, leaving mid-send)
 
 **Rulings**
 - Drafts live in memory per (profile, chat), and a sign-out or server switch clears them on purpose; nothing the composer held before the clear goes back in after it: not when it goes away, hands off to another chat or a room, nor when a send that was on its way fails (2026-10-24, #1185).
+- A send's words leave the field when Send is tapped. If it doesn't go, they come back through AppState's restore requests, never through the composer that sent them: leaving the chat mid-send replaces that composer, and words put back into it were lost, so the user had to type them again. The composer on screen puts them in its field when they're its chat's, otherwise in their chat's stored draft. A send that stopped with no error to say so (its chat was left before its message showed) leaves the waiting message's notice: back in the composer, or back in that chat's draft, by name, and only while its dashboard and profile are on screen. One whose reply was lost after its chat was left may have reached Hermes, so its words come back without that notice, a waiting message's included. Sending… keeps the V2 composer open, as other notices do (2026-10-27, #1403, from #1401).
+- Until a send's message shows in the transcript, the composer says "Sending…" in the chat it was sent from: on a slow or dropped connection the checks before it (whether Hermes is still busy, whether the transcript is current, starting the chat) can take seconds, and an emptied field with nothing else read as a message that went nowhere (2026-10-27, #1403, from #1401).
 - A waiting message is never sent on its own after it's handed back. When Hermes says its chat is gone, its words go into the composer on screen, unsent, with a notice saying so (2026-10-24, #1185).
 
 **Open gaps**
@@ -1355,7 +1440,7 @@ group rooms · the full editor · the notices that say where words went
 - A room's quoted message and its "To" picks aren't kept when the room is left.
 - A room that's disbanded while another dashboard is in use keeps its staged files until that dashboard is opened again or the user signs out.
 
-**Checked:** 2026-10-24, at #1185; a failed '/command' put back without its suggestion list over it at #1191 (#891 review).
+**Checked:** 2026-10-27, #1403 (failed sends' words outlast the composer; Sending… before the message shows); 2026-10-24, at #1185; a failed '/command' put back without its suggestion list over it at #1191 (#891 review).
 
 ## A new chat that something waits on
 
@@ -2501,20 +2586,21 @@ Gateway files Conduit downloads to show or hand to the share sheet: where the
 copy goes and when it is removed.
 
 **Siblings:** a chat's media and file previews · the Artifacts page's opener ·
-the gateway media resolver · the workspace browser's Save to Files
+the gateway media resolver · the Folder's Quick Look and Share or Save
 
 **Code**
 - Media previews: `Conduit/Views/Components/MediaPreviewPresenter.swift` (stage, stagingRoot, removeDirectory), `Conduit/Views/Components/MarkdownText.swift`, `Conduit/Views/Components/GatewayMediaDataURLResolver.swift`, `Conduit/Views/V2/V2ArtifactsViews.swift`
-- Workspace: `Conduit/Services/WorkspaceDownloads.swift`, `Conduit/Services/AppState.swift` (workspaceDownload), `Conduit/Views/ChatSupportSheets.swift` (WorkspaceFilePreviewSheet), swept at launch from `Conduit/ConduitApp.swift`
+- Folder: `Conduit/Views/V2/V2WorkspaceViews.swift` (quickLook), through the media preview presenter
 - Tests: `ConduitTests/MarkdownLargeDocumentTests+MediaPreview.swift`
 
 **Rulings**
 - Each download goes in a folder of its own, removed when the preview or share sheet that asked for it closes, or when it is dismissed or switched to another file while still downloading; a previous run's leftovers are swept at launch (2026-10-24, #1220, from #1002).
+- The Folder opens files through the media preview presenter, so its copies follow the same rule; the workspace browser's own download folder is gone (2026-10-27, #1399).
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-24, at #1220.
+**Checked:** 2026-10-27, #1399; #1220.
 
 ## Review labels
 
