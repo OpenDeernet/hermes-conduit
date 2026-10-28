@@ -553,9 +553,9 @@ final class LocationSharingController: ObservableObject {
         if pending.isEmpty, !settingsOnly { return true }
         let forgotten = spotsForgotten
         guard let request = await requestProvider?(binding) else { return false }
-        // Walking past turned off while the connection came: its entries
-        // were dropped and this batch asks for no shops.
-        if spotsForgotten != forgotten {
+        // Walking past turned off, a pause, or Location settings changed
+        // while the connection came: this batch carries no shops.
+        if spotsForgotten != forgotten || !watchesSpots {
             watching = false
             pending.spotEntries = []
         }
