@@ -108,7 +108,7 @@ private struct OfflineChatRows: View {
         _ = stepToggleRevision
         let preferences = appState.displayPreferences
         return rows.filter { row in
-            row.drawsRow(preferences: preferences, isBusy: appState.isBusy, disclosure: disclosure)
+            row.step?.drawsRow(messageID: row.id, preferences: preferences, isBusy: appState.isBusy, disclosure: disclosure) ?? true
         }
     }
 
@@ -117,8 +117,7 @@ private struct OfflineChatRows: View {
             MessageBubble(
                 message: row.message,
                 gatewayResolver: appState.gatewayMediaResolver,
-                step: row.step,
-                stepsAbove: row.stepsAbove
+                step: row.step
             )
             .equatable()
         }

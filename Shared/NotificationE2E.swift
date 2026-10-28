@@ -166,7 +166,7 @@ enum NotificationE2E {
         /// provisioned for (never the relay's routing stub).
         var routingPayload: [String: Any] {
             var payload = content
-            for banner in ["title", "body", "title_label", "session_title", "headline"] { payload.removeValue(forKey: banner) }
+            for banner in ["title", "body", "title_label", "session_title"] { payload.removeValue(forKey: banner) }
             payload["type"] = type
             payload["gateway_id"] = record.gatewayID
             if let dashboardID = record.dashboardID { payload["dashboard_id"] = dashboardID }
@@ -548,14 +548,6 @@ enum NotificationSharedSettings {
         set { defaults?.set(newValue, forKey: showPreviewsKey) }
     }
 
-    private static let showChatNamesKey = "conduit.notifications.showChatNames"
-
-    /// Show previews off but the chat's title and the profile shown (#1415).
-    static var showChatNames: Bool {
-        get { defaults?.bool(forKey: showChatNamesKey) ?? false }
-        set { defaults?.set(newValue, forKey: showChatNamesKey) }
-    }
-
     private static let appLanguageKey = "conduit.notifications.appLanguage"
 
     /// The App Language ("system" or a localization identifier), so the
@@ -606,5 +598,14 @@ enum NotificationSharedSettings {
     static var knownGatewayIDs: Set<String> {
         get { Set(defaults?.stringArray(forKey: knownGatewayIDsKey) ?? []) }
         set { defaults?.set(newValue.sorted(), forKey: knownGatewayIDsKey) }
+    }
+
+    private static let pulseQuietGatewaysKey = "conduit.notifications.pulseQuietGateways"
+
+    /// The relay gateways whose host's plugin takes Quiet for today, so the
+    /// extension offers it on their Pulse pushes (PulseNotifications).
+    static var pulseQuietGateways: Set<String> {
+        get { Set(defaults?.stringArray(forKey: pulseQuietGatewaysKey) ?? []) }
+        set { defaults?.set(newValue.sorted(), forKey: pulseQuietGatewaysKey) }
     }
 }

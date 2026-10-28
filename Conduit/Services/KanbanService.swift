@@ -305,16 +305,18 @@ final class KanbanService {
         let capturedBoard = board
         let debounce = nudgeDebounceIntervalNanoseconds
         pendingDispatcherNudge = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: debounce)
-            if Task.isCancelled { return }
-            guard let self else { return }
-            // Dispatch is an acceleration hint, never a mutation dependency:
-            // `try?` swallows a bad board slug and a failed request alike.
-            _ = try? await self.request(
-                path: try self.withBoard(Self.namespace + "/dispatch", slug: capturedBoard),
-                method: "POST",
-                body: [:]
-            )
+            do {
+                try? await Task.sleep(nanoseconds: debounce)
+                if Task.isCancelled { return }
+                guard let self else { return }
+                _ = try? await self.request(
+                    path: try self.withBoard(Self.namespace + "/dispatch", slug: capturedBoard),
+                    method: "POST",
+                    body: [:]
+                )
+            } catch {
+                // Dispatch is an acceleration hint, never a mutation dependency.
+            }
         }
     }
 
@@ -395,7 +397,7 @@ final class KanbanService {
                 for id in chunk {
                     group.addTask {
                         do {
-                            _ = try await self.request(
+                            try await self.request(
                                 path: try self.withBoard(Self.namespace + "/tasks/" + (try self.pathComponent(id)), slug: board),
                                 method: "DELETE",
                                 body: nil

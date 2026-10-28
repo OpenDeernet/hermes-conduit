@@ -5,9 +5,8 @@ import UserNotifications
 /// The relay sends encrypted pushes with the generic copy for their type and
 /// `mutable-content`, so iOS hands them here first. Every encrypted push is
 /// rewritten in the App Language (#1144): a push that verifies gets its real
-/// title, profile and body with Show in notifications on Full previews
-/// (NotificationCopy), its chat's title and profile over the generic body
-/// with Chat names (#1415), and the generic copy for its type otherwise. Anything that doesn't
+/// title and body when Show previews is on (NotificationCopy), and the
+/// generic copy for its type otherwise. Anything that doesn't
 /// verify, is a replay, or is plaintext for a pairing that has a key shows
 /// only the generic copy and loses its routing data, so tapping it routes
 /// nowhere. Conduit itself re-verifies the envelope on tap; nothing this
@@ -54,12 +53,15 @@ final class NotificationService: UNNotificationServiceExtension {
             if NotificationSharedSettings.showPreviews {
                 let preview = NotificationCopy.preview(verified.content)
                 if let title = preview.title { content.title = title }
-                if let subtitle = preview.subtitle { content.subtitle = subtitle }
                 if let body = preview.body { content.body = body }
-            } else if NotificationSharedSettings.showChatNames {
-                let names = NotificationCopy.chatNames(verified.content)
-                if let title = names.title { content.title = title }
-                if let subtitle = names.subtitle { content.subtitle = subtitle }
+            }
+            // Quiet for today on a Pulse push, where its plugin takes it.
+            if PulseNotifications.offersQuietToday(
+                titleLabel: verified.content["title_label"] as? String,
+                gatewayID: verified.record.gatewayID,
+                quietGateways: NotificationSharedSettings.pulseQuietGateways
+            ) {
+                content.categoryIdentifier = PulseNotifications.categoryIdentifier
             }
             deliver(content)
         }

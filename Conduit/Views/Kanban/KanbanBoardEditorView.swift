@@ -21,7 +21,7 @@ enum KanbanBoardEditorMode {
 
 struct KanbanBoardEditorView: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
-    @Environment(KanbanStore.self) private var store
+    @EnvironmentObject private var store: KanbanStore
     @Environment(\.dismiss) private var dismiss
 
     private let mode: KanbanBoardEditorMode

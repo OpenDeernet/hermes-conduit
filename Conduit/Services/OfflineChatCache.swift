@@ -408,11 +408,6 @@ final class OfflineChatCacheStore {
 
     private let directory: URL
     private let fileManager: FileManager
-    /// The copies last read or written, by file, so a chat opened again
-    /// shows its copy without reading and decoding it on the tap (#1352).
-    private var keptTranscripts: [URL: OfflineCachedTranscript] = [:]
-    private var keptTranscriptOrder: [URL] = []
-    static let maxKeptTranscripts = 8
 
     init(directory: URL, fileManager: FileManager = .default) {
         self.directory = directory
@@ -440,32 +435,12 @@ final class OfflineChatCacheStore {
     /// One saved conversation with its rows, or nil when it has none.
     func loadTranscript(_ sessionID: String, dashboardID: UUID, profile: String) -> OfflineCachedTranscript? {
         let url = transcriptFileURL(sessionID, dashboardID: dashboardID, profile: profile)
-        if let kept = keptTranscripts[url] {
-            keep(kept, at: url)
-            return kept
-        }
         guard let data = try? Data(contentsOf: url),
               let transcript = try? JSONDecoder().decode(OfflineCachedTranscript.self, from: data),
               transcript.sessionID == sessionID else {
             return nil
         }
-        keep(transcript, at: url)
         return transcript
-    }
-
-    private func keep(_ transcript: OfflineCachedTranscript, at url: URL) {
-        keptTranscripts[url] = transcript
-        keptTranscriptOrder.removeAll { $0 == url }
-        keptTranscriptOrder.append(url)
-        while keptTranscriptOrder.count > Self.maxKeptTranscripts {
-            keptTranscripts[keptTranscriptOrder.removeFirst()] = nil
-        }
-    }
-
-    /// Kept copies go with their files.
-    private func forgetKeptTranscripts(where isGone: (URL) -> Bool) {
-        keptTranscriptOrder.removeAll(where: isGone)
-        keptTranscripts = keptTranscripts.filter { !isGone($0.key) }
     }
 
     /// A scope saved in the first format moves to a file per conversation
@@ -584,10 +559,8 @@ final class OfflineChatCacheStore {
     }
 
     private func removeTranscriptFiles(_ sessionIDs: Set<String>, dashboardID: UUID, profile: String) {
-        let urls = Set(sessionIDs.map { transcriptFileURL($0, dashboardID: dashboardID, profile: profile) })
-        forgetKeptTranscripts { urls.contains($0) }
-        for url in urls {
-            try? fileManager.removeItem(at: url)
+        for id in sessionIDs {
+            try? fileManager.removeItem(at: transcriptFileURL(id, dashboardID: dashboardID, profile: profile))
         }
     }
 
@@ -599,7 +572,6 @@ final class OfflineChatCacheStore {
         let listed = Set(snapshot.transcripts.map {
             transcriptFileURL($0.sessionID, dashboardID: dashboardID, profile: profile).lastPathComponent
         })
-        forgetKeptTranscripts { $0.lastPathComponent.hasPrefix(prefix) && !listed.contains($0.lastPathComponent) }
         guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
             return
         }
@@ -637,11 +609,10 @@ final class OfflineChatCacheStore {
     }
 
     func removeDashboard(_ dashboardID: UUID) {
-        let prefix = dashboardID.uuidString.lowercased() + "--"
-        forgetKeptTranscripts { $0.lastPathComponent.hasPrefix(prefix) }
         guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
             return
         }
+        let prefix = dashboardID.uuidString.lowercased() + "--"
         for file in files where file.lastPathComponent.hasPrefix(prefix) {
             try? fileManager.removeItem(at: file)
         }
@@ -650,7 +621,6 @@ final class OfflineChatCacheStore {
     /// Deletes presentation copies across dashboards, preserving accepted
     /// unsent messages even when their dashboard is not loaded in memory.
     func removeSavedChats() {
-        forgetKeptTranscripts { _ in true }
         guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
             return
         }
@@ -660,7 +630,6 @@ final class OfflineChatCacheStore {
     }
 
     func removeAll() {
-        forgetKeptTranscripts { _ in true }
         try? fileManager.removeItem(at: directory)
     }
 
@@ -747,10 +716,7 @@ final class OfflineChatCacheStore {
 
     private func write(_ transcript: OfflineCachedTranscript, dashboardID: UUID, profile: String) -> Bool {
         guard let data = try? JSONEncoder().encode(transcript) else { return false }
-        let url = transcriptFileURL(transcript.sessionID, dashboardID: dashboardID, profile: profile)
-        guard write(data, to: url) else { return false }
-        keep(transcript, at: url)
-        return true
+        return write(data, to: transcriptFileURL(transcript.sessionID, dashboardID: dashboardID, profile: profile))
     }
 
     @discardableResult

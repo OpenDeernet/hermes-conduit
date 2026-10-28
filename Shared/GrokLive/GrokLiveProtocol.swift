@@ -30,10 +30,9 @@ enum GrokLiveProtocol {
     static let delegationInstructions = "\nYou can't see the user's email, messages, calendar and schedule, to-dos, health or patient portals, bank or other accounts, files or systems, and web lookups can't reach them either; their Hermes agent can. Whenever the user asks you to check, read, find, send or do anything there (\"what's on my plate today?\" included), call start_job with their request instead of saying you can't. If they only ask whether you can see it, say Hermes can check it for them. Never answer it from guesses or a web lookup, and if start_job fails, tell them plainly. Public facts anyone could look up (weather, news, sports, stock prices) aren't Hermes work: look them up with web_search or x_search on this call, never with start_job."
 
     /// Grok answers start_job as soon as the job exists, so a claim can wait
-    /// for it (the shared instructions, built with `acknowledgesOnceStarted`,
-    /// say to acknowledge only once it returns). On a user's call Grok spoke a start_job call as text and said
+    /// for it. On a user's call Grok spoke a start_job call as text and said
     /// the work was queued when nothing ran.
-    static let jobClaimInstructions = "\nOn this call start_job answers as soon as Hermes has the job. Never say anything was started, queued, sent or done unless a tool's result said so; if a tool returns an error or not_started, tell the user plainly. Tools are only ever function calls: never speak a tool call, its name or its arguments."
+    static let jobClaimInstructions = "\nOn this call start_job answers as soon as Hermes has the job. This replaces the acknowledgement rule above: call start_job without announcing it first, and only once it returns started tell the user in a few words that Hermes is on it. Never say anything was started, queued, sent or done unless a tool's result said so; if a tool returns an error or not_started, tell the user plainly. Tools are only ever function calls: never speak a tool call, its name or its arguments."
 
     /// What Grok's instructions add after the shared ones: the delegation
     /// and job-claim rules, and the clock.
@@ -226,26 +225,12 @@ enum GrokLiveProtocol {
         /// The function names xAI's session.updated echoes back: which of
         /// the declared tools it took, for the call's trace.
         case acceptedFunctions([String])
-        /// The user's words in one input item, whole each time, not as
-        /// deltas. xAI sends drafts while the user talks, each rewriting
-        /// the last, then one completed transcript per item; the session
-        /// keeps only the last one. `itemID` is nil when xAI sent none.
-        case inputTranscriptSnapshot(itemID: String?, text: String, stage: InputTranscriptStage)
+        /// The user's words so far in one input item. xAI sends these as
+        /// cumulative snapshots, sometimes more than once per item, not as
+        /// deltas: the session turns them into the new words only.
+        /// `itemID` is nil when xAI sent none.
+        case inputTranscriptSnapshot(itemID: String?, text: String)
         case event(GeminiLiveProtocol.ServerEvent)
-    }
-
-    /// How far an input transcript has got, from its event's `status`.
-    enum InputTranscriptStage: Equatable {
-        /// `in_progress`: a draft a later snapshot of the item replaces. A
-        /// draft cut mid-phrase ends in "...", and later drafts rewrite
-        /// earlier words, so one isn't an extension of the last.
-        case draft
-        /// `completed`: the item's final transcript, sent once, before the
-        /// reply's own transcript starts.
-        case completed
-        /// No status: a server that sends each item's transcript once, as
-        /// the Realtime protocol does.
-        case unstated
     }
 
     /// One frame can carry at most one event; unknown types are ignored.
@@ -272,13 +257,7 @@ enum GrokLiveProtocol {
         case "conversation.item.input_audio_transcription.completed":
             guard let text = object["transcript"] as? String, !text.isEmpty else { return [] }
             let itemID = (object["item_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-            let stage: InputTranscriptStage
-            switch object["status"] as? String {
-            case "in_progress": stage = .draft
-            case "completed": stage = .completed
-            default: stage = .unstated
-            }
-            return [.inputTranscriptSnapshot(itemID: itemID, text: text, stage: stage)]
+            return [.inputTranscriptSnapshot(itemID: itemID, text: text)]
         case "response.output_audio.delta", "response.audio.delta":
             guard let base64 = object["delta"] as? String, let pcm = Data(base64Encoded: base64), !pcm.isEmpty else { return [] }
             return [.event(.audio(pcm, sampleRate: outputSampleRate))]
@@ -302,6 +281,20 @@ enum GrokLiveProtocol {
         default:
             return []
         }
+    }
+
+    /// What a cumulative input transcript snapshot adds to the item's last
+    /// one, as the delta the shared controller appends; nil when it adds
+    /// nothing. Only a snapshot that extends the last one adds words: an
+    /// appended transcript can't take words back, so a revision of earlier
+    /// words ("send mail" then "send the mail") adds nothing rather than
+    /// repeating them. The session keeps a longer revision as the baseline:
+    /// words a later snapshot adds after it still arrive, but the revised
+    /// words themselves never reach the transcript.
+    static func inputTranscriptDelta(previous: String, snapshot: String) -> String? {
+        guard snapshot != previous, snapshot.hasPrefix(previous) else { return nil }
+        let added = String(snapshot.dropFirst(previous.count))
+        return added.isEmpty ? nil : added
     }
 
     /// `arguments` is a JSON string; Conduit's tools take string values.

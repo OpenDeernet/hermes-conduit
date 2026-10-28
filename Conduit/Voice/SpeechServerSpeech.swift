@@ -384,7 +384,6 @@ extension HermesVoiceGateway {
                 baseURL: baseURL,
                 ticket: ticket,
                 profile: profile,
-                profileParameter: profileParameter,
                 cloudflareAccess: bridge.cloudflareAccess
             )
         } catch {
@@ -407,14 +406,13 @@ extension HermesVoiceGateway {
         baseURL: String,
         ticket: String,
         profile: String,
-        profileParameter: String = "profile",
         cloudflareAccess: CloudflareAccessCredentials?
     ) throws -> URLRequest {
         let url = try ConnectionURLPolicy.webSocketURL(
             baseURL: baseURL,
             path: SpeechServerSpeechStream.socketPath,
             queryItems: [URLQueryItem(name: "ticket", value: ticket)]
-                + LocalLiveProtocol.profileQueryItems(profile, parameter: profileParameter)
+                + LocalLiveProtocol.profileQueryItems(profile)
                 + [URLQueryItem(name: "mode", value: "speak")]
         )
         return URLRequest(url: url).applyingProxyHeaders(cloudflare: cloudflareAccess)

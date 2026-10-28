@@ -111,9 +111,9 @@ enum HermesCallCopy {
     /// The name a ringing call shows, the only text CallKit gives it: the
     /// calling profile (HermesCallerName), with the job's title when the
     /// call carries one.
-    static func callerName(profile: String?, mainName: String?, profileName: String? = nil, title: String?) -> String {
+    static func callerName(profile: String?, mainName: String?, title: String?) -> String {
         HermesCallerName.line(
-            name: HermesCallerName.name(profile: profile, mainName: mainName, profileName: profileName),
+            name: HermesCallerName.name(profile: profile, mainName: mainName),
             title: HermesCallRequest.cleanedTitle(title)
         )
     }
@@ -1074,13 +1074,12 @@ enum HermesCallNotifications {
     /// Where a call notification Conduit posted itself keeps its routing.
     static let localPayloadKey = "conduit_local_call"
 
-    /// Registered at launch and when the app's language changes, so the
-    /// button reads in it.
-    static func registerCategory(center: UNUserNotificationCenter = .current()) {
+    /// Registered with Conduit's other categories (NotificationCategories)
+    /// at launch and when the app's language changes, so the button reads
+    /// in it.
+    static func category() -> UNNotificationCategory {
         let talk = UNNotificationAction(identifier: talkActionIdentifier, title: HermesCallCopy.talkAction, options: [.foreground])
-        center.setNotificationCategories([
-            UNNotificationCategory(identifier: categoryIdentifier, actions: [talk], intentIdentifiers: [], options: [])
-        ])
+        return UNNotificationCategory(identifier: categoryIdentifier, actions: [talk], intentIdentifiers: [], options: [])
     }
 
     /// The local notification for `target`, routed like a call push.

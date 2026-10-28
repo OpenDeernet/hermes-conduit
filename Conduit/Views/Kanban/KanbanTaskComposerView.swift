@@ -17,7 +17,7 @@ import SwiftUI
 ///   Conduit's chat YOLO setting.
 struct KanbanTaskComposerView: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
-    @Environment(KanbanStore.self) private var store
+    @EnvironmentObject private var store: KanbanStore
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
 
@@ -93,7 +93,7 @@ struct KanbanTaskComposerView: View {
             }
             .sheet(isPresented: $showModelSheet) {
                 KanbanModelOverrideSheet(value: modelOverrideBinding)
-                    .environment(store)
+                    .environmentObject(store)
                     .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $showSkillsSheet) {
@@ -106,7 +106,7 @@ struct KanbanTaskComposerView: View {
                     selectedParentID: parentBinding,
                     excludedTaskID: nil
                 )
-                .environment(store)
+                .environmentObject(store)
                 .presentationDetents([.medium, .large])
             }
         }
@@ -439,7 +439,7 @@ struct KanbanTaskComposerView: View {
 /// inventory is unavailable. Entirely detached from any live session model.
 struct KanbanModelOverrideSheet: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
-    @Environment(KanbanStore.self) private var store
+    @EnvironmentObject private var store: KanbanStore
     @Environment(\.dismiss) private var dismiss
     @Binding var value: TaskModelOverride
 
@@ -481,7 +481,6 @@ struct KanbanModelOverrideSheet: View {
                     customEntrySection
                 }
             }
-            .searchable(text: $query, prompt: Text(AppLocalization.string("Search providers or models")))
             .navigationTitle("Model override")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -505,15 +504,15 @@ struct KanbanModelOverrideSheet: View {
         }
     }
 
-    /// Search matches across providers, each naming its provider: several
-    /// often serve the same model.
-    private var searchMatches: [KanbanModelSearchMatch] {
-        let search = ModelSearchQuery(query)
-        guard !search.isEmpty else { return [] }
-        return providers.flatMap { provider in
-            provider.models
-                .filter { search.matches([$0, provider.slug, provider.displayName]) }
-                .map { KanbanModelSearchMatch(provider: provider, model: $0) }
+    private var filteredProviders: [KanbanModelProviderOption] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !trimmed.isEmpty else { return providers }
+        return providers.compactMap { provider in
+            if provider.slug.lowercased().contains(trimmed) || provider.displayName.lowercased().contains(trimmed) {
+                return provider
+            }
+            let models = provider.models.filter { $0.lowercased().contains(trimmed) }
+            return models.isEmpty ? nil : KanbanModelProviderOption(slug: provider.slug, label: provider.label, models: models)
         }
     }
 
@@ -523,19 +522,8 @@ struct KanbanModelOverrideSheet: View {
             if isLoadingOptions {
                 HStack { ProgressView(); Text("Loading models…") }.foregroundStyle(.secondary)
             }
-            if ModelSearchQuery(query).isEmpty {
-                ForEach(providers) { provider in
-                    providerDisclosure(provider)
-                }
-            } else {
-                let matches = searchMatches
-                if matches.isEmpty {
-                    Text(verbatim: AppLocalization.string("Nothing matches “\(query.trimmingCharacters(in: .whitespacesAndNewlines))”."))
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(matches) { match in
-                    modelButton(match.model, provider: match.provider, showsProvider: true)
-                }
+            ForEach(filteredProviders) { provider in
+                providerDisclosure(provider)
             }
             if !isLoadingOptions && providers.isEmpty {
                 Text("No curated model catalog available from Hermes — enter a provider and model below.")
@@ -552,34 +540,23 @@ struct KanbanModelOverrideSheet: View {
     private func providerDisclosure(_ provider: KanbanModelProviderOption) -> some View {
         DisclosureGroup(isExpanded: expandedBinding(provider.slug)) {
             ForEach(provider.models, id: \.self) { model in
-                modelButton(model, provider: provider, showsProvider: false)
+                Button {
+                    value = TaskModelOverride(provider: provider.slug, model: model, reasoningEffort: value.reasoningEffort)
+                } label: {
+                    HStack {
+                        Text(model)
+                        Spacer()
+                        if isSelected(provider.slug, model) {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.conduitAccent)
+                        }
+                    }
+                }
+                .foregroundStyle(.primary)
             }
         } label: {
             Text(provider.displayName)
         }
-    }
-
-    private func modelButton(_ model: String, provider: KanbanModelProviderOption, showsProvider: Bool) -> some View {
-        let selected = isSelected(provider.slug, model)
-        return Button {
-            value = TaskModelOverride(provider: provider.slug, model: model, reasoningEffort: value.reasoningEffort)
-        } label: {
-            HStack {
-                if showsProvider {
-                    ModelSearchResultText(title: model, provider: provider.displayName)
-                } else {
-                    Text(model)
-                }
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(.conduitAccent)
-                        .accessibilityHidden(true)
-                }
-            }
-        }
-        .foregroundStyle(.primary)
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var customEntrySection: some View {
@@ -645,14 +622,6 @@ struct KanbanModelOverrideSheet: View {
             loadFailed = true
         }
     }
-}
-
-/// One model the override sheet's search found, with its provider.
-private struct KanbanModelSearchMatch: Identifiable {
-    let provider: KanbanModelProviderOption
-    let model: String
-
-    var id: String { "\(provider.slug)\u{1F}\(model)" }
 }
 
 // MARK: - Skills picker
@@ -790,7 +759,7 @@ struct KanbanSkillsPickerSheet: View {
 /// Desktop's New Task dialog (one parent, even though the API accepts lists).
 struct KanbanParentPickerSheet: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
-    @Environment(KanbanStore.self) private var store
+    @EnvironmentObject private var store: KanbanStore
     @Environment(\.dismiss) private var dismiss
     @Binding var selectedParentID: String?
     /// Edit flows pass the current task here so nothing can depend on itself.

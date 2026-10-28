@@ -34,7 +34,6 @@ final class ConfigFieldLocalizationTests: XCTestCase {
         "memory.provider": [],
         "context.engine": ["default"],
         "display.memory_notifications": ["default", "on", "off"],
-        ReasoningDisplayMode.settingKey: ["show", "on_request", "off"],
         "display.tool_progress": ["all", "off"],
         "updates.non_interactive_local_changes": ["stash", "discard"],
     ]

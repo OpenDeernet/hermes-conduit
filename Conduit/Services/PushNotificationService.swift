@@ -13,11 +13,6 @@ private final class NotificationObserverToken {
 
 struct ConduitNotificationTarget: Equatable, Identifiable {
     let profile: String?
-    /// The bot's name in Hermes as the Bots list shows it (`profile_name`),
-    /// for a call screen to name the caller; nil when Hermes gave it none or
-    /// an older notifier didn't say. Never routes: `profile` does. Only calls
-    /// read it, and a call's payload is the copy that carries it.
-    let profileName: String?
     /// The runtime identity the notification names. Hermes notifications
     /// identify the live routing session; this is never treated as a durable
     /// conversation id on its own.
@@ -61,7 +56,6 @@ struct ConduitNotificationTarget: Equatable, Identifiable {
 
     init(
         profile: String?,
-        profileName: String? = nil,
         sessionId: String,
         durableSessionID: String? = nil,
         dashboardID: UUID? = nil,
@@ -73,7 +67,6 @@ struct ConduitNotificationTarget: Equatable, Identifiable {
         isChatLink: Bool = false
     ) {
         self.profile = profile
-        self.profileName = profileName
         self.sessionId = sessionId
         self.durableSessionID = durableSessionID
         self.dashboardID = dashboardID
@@ -174,13 +167,20 @@ enum PendingDecisionPayload: Equatable, Codable {
 /// and is no chat link), and when its wait began.
 private struct WaitingTap: Codable {
     let profile: String?
-    let profileName: String?
     let sessionId: String
     let durableSessionID: String?
     let dashboardID: UUID?
     let relayGatewayID: String?
     let type: String?
     let decision: PendingDecisionPayload?
+    let waitingSince: Date
+}
+
+/// Quiet for today's retry waiting for a call, kept across a relaunch as a
+/// `WaitingTap` is: where it's for, and when it was pressed.
+private struct WaitingPulseQuiet: Codable {
+    let dashboardID: String?
+    let gatewayID: String?
     let waitingSince: Date
 }
 
@@ -434,9 +434,6 @@ struct ConduitNotificationPreferences: Codable, Equatable {
     /// user (approvals time out and fail closed), so they chime by default.
     var attentionSound = true
     var showPreviews = false
-    /// The chat's title and the profile without the reply's words, when
-    /// `showPreviews` is off (#1415). See `detail`.
-    var showChatNames = false
     /// Independent of `showPreviews`: controls whether pushes carry structured
     /// decision content (answerable approval cards). Defaults on because the
     /// feature's audience is exactly the approval-gate crowd; privacy-focused
@@ -453,7 +450,6 @@ struct ConduitNotificationPreferences: Codable, Equatable {
         case completionSound = "completion_sound"
         case attentionSound = "attention_sound"
         case showPreviews = "show_previews"
-        case showChatNames = "show_chat_names"
         case decisionCards = "decision_cards"
     }
 }
@@ -476,57 +472,7 @@ extension ConduitNotificationPreferences {
         completionSound = try container.decodeIfPresent(Bool.self, forKey: .completionSound) ?? true
         attentionSound = try container.decodeIfPresent(Bool.self, forKey: .attentionSound) ?? true
         showPreviews = try container.decodeIfPresent(Bool.self, forKey: .showPreviews) ?? false
-        showChatNames = try container.decodeIfPresent(Bool.self, forKey: .showChatNames) ?? false
         decisionCards = try container.decodeIfPresent(Bool.self, forKey: .decisionCards) ?? true
-    }
-}
-
-/// How much a notification says (#1415): Settings > Notifications' "Show in
-/// notifications". Stored as the relay's two flags, so a relay without
-/// `show_chat_names` treats Chat names as Generic.
-enum NotificationDetail: CaseIterable {
-    /// Only what happened: "Response ready".
-    case generic
-    /// The chat's title and the profile, none of Hermes' words.
-    case chatNames
-    /// The chat's title, the profile and what Hermes said.
-    case previews
-
-    var title: String {
-        switch self {
-        case .generic: return AppLocalization.string("Generic")
-        case .chatNames: return AppLocalization.string("Chat names")
-        case .previews: return AppLocalization.string("Full previews")
-        }
-    }
-
-    var caption: String {
-        switch self {
-        case .generic: return AppLocalization.string("Notifications say only what happened, like “Response ready”.")
-        case .chatNames: return AppLocalization.string("Notifications name the chat and profile, without what Hermes said.")
-        case .previews: return AppLocalization.string("Notifications name the chat and profile and show what Hermes said.")
-        }
-    }
-}
-
-extension ConduitNotificationPreferences {
-    var detail: NotificationDetail {
-        get { showPreviews ? .previews : showChatNames ? .chatNames : .generic }
-        set {
-            showPreviews = newValue == .previews
-            showChatNames = newValue != .generic
-        }
-    }
-}
-
-extension NotificationSharedSettings {
-    /// What the Notification Service Extension reads to decide how much a
-    /// decrypted push shows. Chat names goes first, so a push read between
-    /// the two writes never shows more than the level it leaves when going
-    /// down, nor more than the level it goes to when going up.
-    static func mirror(_ preferences: ConduitNotificationPreferences) {
-        showChatNames = preferences.showChatNames
-        showPreviews = preferences.showPreviews
     }
 }
 
@@ -548,10 +494,20 @@ final class PushNotificationService: ObservableObject {
     /// unless a newer tap replaces it. It's kept in `keptTaps` meanwhile,
     /// so it waits again after a relaunch (`restoreWaitingTap`).
     @Published private(set) var pendingRouteAwaitsCall = false
+    /// Quiet for today's retry, tapped during a call when its push is from
+    /// another saved dashboard: the switch would end the call, so it waits
+    /// for the call to end, as a tapped notification does, kept across a
+    /// relaunch the same way (`restoreWaitingPulseQuiet`). A newer tap
+    /// replaces it, and it replaces a tap that waits.
+    @Published private(set) var pendingPulseQuiet: PulseQuietTarget?
+    /// When the waiting retry was pressed: it's for that day only.
+    private var pendingPulseQuietSince: Date?
+    /// Starts the retry's wait over each time a call stops it.
+    @Published private(set) var pulseQuietAttempt = 0
     @Published var preferences = ConduitNotificationPreferences() {
         // The Notification Service Extension decides whether a decrypted
         // push shows its real text; it reads this from the App Group.
-        didSet { NotificationSharedSettings.mirror(preferences) }
+        didSet { NotificationSharedSettings.showPreviews = preferences.showPreviews }
     }
     /// Relay gateways this iPhone holds an end-to-end encryption key for
     /// (#431). Settings > Notifications marks those pairings encrypted.
@@ -813,6 +769,7 @@ final class PushNotificationService: ObservableObject {
     private let keptTaps: UserDefaults?
     private let date: () -> Date
     static let waitingTapKey = "conduit.notifications.waitingTap"
+    static let waitingPulseQuietKey = "conduit.notifications.waitingPulseQuiet"
     /// How long after its wait began a kept tap still opens after a
     /// relaunch: closing Conduit ends a call on the phone, and a launch
     /// much later shouldn't switch workspace for an old tap.
@@ -857,10 +814,11 @@ final class PushNotificationService: ObservableObject {
             preferences = saved.preferences
             if needsRelayStamp { persistRegistration() }
         }
-        NotificationSharedSettings.mirror(preferences)
+        NotificationSharedSettings.showPreviews = preferences.showPreviews
         NotificationSharedSettings.appLanguage = AppLanguage.current.rawValue
         refreshEncryptionState()
         restoreWaitingTap()
+        restoreWaitingPulseQuiet()
     }
 
     // MARK: End-to-end encryption (#431)
@@ -1575,29 +1533,17 @@ final class PushNotificationService: ObservableObject {
     /// notifications, or on a relay without the route, the activity is only
     /// updated while Conduit runs. Returns the installation whose relay
     /// took the token, the one case the Conduit plugin can update and end
-    /// it by push; nil otherwise. `startedAgo` is how long ago the activity
-    /// started, so the relay can end it at once when its turn ended before
-    /// this registration came.
+    /// it by push; nil otherwise.
     @discardableResult
-    func registerLiveActivity(token: String, sessionIDs: [String], startedAgo: TimeInterval) async -> String? {
+    func registerLiveActivity(token: String, sessionIDs: [String]) async -> String? {
         guard let registration, liveActivitiesUnsupportedInstallation != registration.installationID,
               !sessionIDs.isEmpty else { return nil }
         let routeExists = await sendLiveActivity(
-            LiveActivityRegistration(
-                pushToken: token,
-                sessionIDs: Array(sessionIDs.prefix(6)),
-                startedAgo: Self.liveActivityStartedAgo(startedAgo)
-            ),
+            LiveActivityRegistration(pushToken: token, sessionIDs: Array(sessionIDs.prefix(6))),
             method: "PUT",
             registration: registration
         )
         return routeExists == true ? registration.installationID : nil
-    }
-
-    /// How long ago an activity started, as the relay is told: never
-    /// negative (the clock moved back) and never unreadable.
-    nonisolated static func liveActivityStartedAgo(_ startedAgo: TimeInterval) -> TimeInterval {
-        startedAgo.isFinite ? max(0, startedAgo) : 0
     }
 
     /// The activity ended on the phone: the relay forgets its token.
@@ -1654,23 +1600,13 @@ final class PushNotificationService: ObservableObject {
 
     /// Answers ONE question of a batch relay decision. Requires a relay +
     /// notifier pair that ships the batch decision contract; a batch card only
-    /// exists when the batch-capable plugin pushed it. An empty `answer`
-    /// leaves a form's question blank (`blankAnswer`).
+    /// exists when the batch-capable plugin pushed it.
     @discardableResult
     func respondToRelayDecisionQuestion(
         requestId: String,
         questionId: String,
         answer: String
     ) async throws -> RelayQuestionOutcome {
-        var answer = answer
-        if answer.isEmpty {
-            let sealed = relayGatewayID(forRequestID: requestId).flatMap { gatewayID in
-                NotificationE2E.currentRecord(gatewayID: gatewayID, installationID: registration?.installationID, records: Self.e2eKeyStore.records())
-            } != nil
-            // The relay may have been updated since it last said what it takes.
-            if !sealed, relayMeta?.capabilities.contains(Self.clarifySkipCapability) != true { await refreshMeta() }
-            answer = Self.blankAnswer(sealed: sealed, relayCapabilities: relayMeta?.capabilities)
-        }
         let body = Self.respondBody(
             requestID: requestId,
             answer: answer,
@@ -1686,20 +1622,6 @@ final class PushNotificationService: ObservableObject {
         case .released: return .decisionReleased
         case .noLongerActive: return .noLongerActive
         }
-    }
-
-    /// The relay takes a blank answer to one question of a batch, a form's
-    /// field left empty (relay 0.18).
-    nonisolated static let clarifySkipCapability = "clarify-skip"
-    /// What a blank goes as where the relay can't take one: Hermes reads it
-    /// as the answer.
-    nonisolated static let leftBlankAnswer = "(left blank)"
-
-    /// What a question left blank sends through the relay: empty, sealed for
-    /// an encrypted pairing (any relay takes that) or plain to a relay that
-    /// takes a blank; else `leftBlankAnswer`.
-    nonisolated static func blankAnswer(sealed: Bool, relayCapabilities: [String]?) -> String {
-        sealed || relayCapabilities?.contains(clarifySkipCapability) == true ? "" : leftBlankAnswer
     }
 
     /// The relay takes a plaintext clarify answer of at most this many
@@ -1894,15 +1816,7 @@ final class PushNotificationService: ObservableObject {
     }
 
     func setPreference(_ keyPath: WritableKeyPath<ConduitNotificationPreferences, Bool>, enabled: Bool) async {
-        await setPreferences { $0[keyPath: keyPath] = enabled }
-    }
-
-    func setDetail(_ detail: NotificationDetail) async {
-        await setPreferences { $0.detail = detail }
-    }
-
-    private func setPreferences(_ change: (inout ConduitNotificationPreferences) -> Void) async {
-        change(&preferences)
+        preferences[keyPath: keyPath] = enabled
         // Queued behind any update on its way: two quick switches never
         // race, so the relay can't end on the older preferences.
         guard let update = queueRegistrationUpdate() else { return }
@@ -2208,7 +2122,6 @@ final class PushNotificationService: ObservableObject {
             // it); the preference still decides whether Conduit uses it.
             target = ConduitNotificationTarget(
                 profile: target.profile,
-                profileName: target.profileName,
                 sessionId: target.sessionId,
                 durableSessionID: target.durableSessionID,
                 dashboardID: target.dashboardID,
@@ -2222,6 +2135,83 @@ final class PushNotificationService: ObservableObject {
         retainRelayGatewayID(for: target)
         if case .verified = evaluation { persistEncryptedGatewayID(for: target) }
         route(target)
+    }
+
+    /// Where a Pulse push's Quiet for today is for: a push that verifies,
+    /// through a relay gateway whose host's plugin takes it (as the
+    /// extension decided when it gave the push the button). Nil for
+    /// anything else, which the button never acts on.
+    func pulseQuietTarget(_ userInfo: [AnyHashable: Any]) -> PulseQuietTarget? {
+        guard case .verified(let verified) = NotificationE2E.evaluate(
+                  userInfo,
+                  records: Self.e2eKeyStore.records(),
+                  knownGatewayIDs: NotificationSharedSettings.knownGatewayIDs,
+                  keysProvisioned: NotificationSharedSettings.keysProvisioned
+              ),
+              PulseNotifications.offersQuietToday(
+                  titleLabel: verified.content["title_label"] as? String,
+                  gatewayID: verified.record.gatewayID,
+                  quietGateways: NotificationSharedSettings.pulseQuietGateways
+              )
+        else { return nil }
+        return PulseQuietTarget(dashboardID: verified.record.dashboardID, gatewayID: verified.record.gatewayID)
+    }
+
+    /// Quiet for today's retry stopped for a call its switch would have
+    /// ended: it goes through once the call ends (ConduitApp).
+    func pulseQuietAwaitsCall(_ target: PulseQuietTarget) {
+        if pendingRouteAwaitsCall, let pendingTarget { clearPendingTarget(pendingTarget) }
+        let pressedAt = date()
+        pendingPulseQuiet = target
+        pendingPulseQuietSince = pressedAt
+        keepWaitingPulseQuiet(target, since: pressedAt)
+        pulseQuietAttempt += 1
+    }
+
+    /// The call `target` waited for has ended: it stops waiting, and goes
+    /// through if this returns true. False when a newer tap replaced it, or
+    /// when the day it was pressed has ended on the phone's clock: it was
+    /// Quiet for that day, and the next one isn't it.
+    func takePendingPulseQuiet(_ target: PulseQuietTarget) -> Bool {
+        guard pendingPulseQuiet == target else { return false }
+        let pressedAt = pendingPulseQuietSince
+        pendingPulseQuiet = nil
+        pendingPulseQuietSince = nil
+        forgetWaitingPulseQuiet()
+        return pressedAt.map { Calendar.current.isDate($0, inSameDayAs: date()) } ?? false
+    }
+
+    private func keepWaitingPulseQuiet(_ target: PulseQuietTarget, since pressedAt: Date) {
+        guard let keptTaps else { return }
+        let quiet = WaitingPulseQuiet(dashboardID: target.dashboardID, gatewayID: target.gatewayID,
+                                      waitingSince: pressedAt)
+        keptTaps.set(try? JSONEncoder().encode(quiet), forKey: Self.waitingPulseQuietKey)
+    }
+
+    private func forgetWaitingPulseQuiet() {
+        keptTaps?.removeObject(forKey: Self.waitingPulseQuietKey)
+    }
+
+    /// A retry that was waiting for a call when Conduit closed waits again,
+    /// as a waiting tap does (`restoreWaitingTap`): not one older than
+    /// `waitingTapLifetime`, nor one pressed on an earlier day, nor one kept
+    /// beside a tap that waits again. That tap is the newer of the two:
+    /// Conduit closed between keeping it and dropping this
+    /// (`notificationRouteAwaitsCall`), and only one may take the screen.
+    private func restoreWaitingPulseQuiet() {
+        guard let keptTaps, pendingPulseQuiet == nil,
+              let data = keptTaps.data(forKey: Self.waitingPulseQuietKey) else { return }
+        let relaunchedAt = date()
+        guard pendingTarget == nil,
+              let quiet = try? JSONDecoder().decode(WaitingPulseQuiet.self, from: data),
+              (0..<Self.waitingTapLifetime).contains(relaunchedAt.timeIntervalSince(quiet.waitingSince)),
+              Calendar.current.isDate(quiet.waitingSince, inSameDayAs: relaunchedAt) else {
+            forgetWaitingPulseQuiet()
+            return
+        }
+        pendingPulseQuiet = PulseQuietTarget(dashboardID: quiet.dashboardID, gatewayID: quiet.gatewayID)
+        pendingPulseQuietSince = quiet.waitingSince
+        pulseQuietAttempt += 1
     }
 
     // MARK: Ringing calls (#449 step 2)
@@ -2419,6 +2409,14 @@ final class PushNotificationService: ObservableObject {
         pendingRouteOpenStarted = false
         pendingRouteRetryFiredAt = nil
         pendingRouteAwaitsCall = false
+        if pendingPulseQuiet != nil {
+            // A retry this tap replaces: its task is waiting for the call,
+            // and nothing else would stop it.
+            pulseQuietAttempt += 1
+        }
+        pendingPulseQuiet = nil
+        pendingPulseQuietSince = nil
+        forgetWaitingPulseQuiet()
         forgetWaitingTap()
         navigationAttempt += 1
     }
@@ -2509,6 +2507,16 @@ final class PushNotificationService: ObservableObject {
         pendingRouteRetryFiredAt = nil
         pendingRouteAwaitsCall = true
         keepWaitingTap(target)
+        if pendingPulseQuiet != nil {
+            // Pressed while this tap's open was still running: the newer
+            // waiter owns the call's end, so the two don't both take the
+            // screen when it comes, as `pulseQuietAwaitsCall` does the
+            // other way round.
+            pendingPulseQuiet = nil
+            pendingPulseQuietSince = nil
+            forgetWaitingPulseQuiet()
+            pulseQuietAttempt += 1
+        }
         navigationAttempt += 1
     }
 
@@ -2535,7 +2543,6 @@ final class PushNotificationService: ObservableObject {
         guard let keptTaps else { return }
         let tap = WaitingTap(
             profile: target.profile,
-            profileName: target.profileName,
             sessionId: target.sessionId,
             durableSessionID: target.durableSessionID,
             dashboardID: target.dashboardID,
@@ -2564,7 +2571,6 @@ final class PushNotificationService: ObservableObject {
         }
         let target = ConduitNotificationTarget(
             profile: tap.profile,
-            profileName: tap.profileName,
             sessionId: tap.sessionId,
             durableSessionID: tap.durableSessionID,
             dashboardID: tap.dashboardID,
@@ -2678,7 +2684,6 @@ final class PushNotificationService: ObservableObject {
               !sessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let durableSessionID = Self.routingDurableSessionID(from: payload)
         let profile = (payload["profile"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let profileName = (payload["profile_name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let type = (payload["type"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         // The relay stamps `dashboard_id` (an opaque Conduit dashboard UUID)
         // from the authenticated gateway's pairing binding. A malformed value
@@ -2706,7 +2711,6 @@ final class PushNotificationService: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return ConduitNotificationTarget(
             profile: profile?.isEmpty == false ? profile : nil,
-            profileName: profileName?.isEmpty == false ? profileName : nil,
             sessionId: sessionId,
             durableSessionID: durableSessionID,
             dashboardID: dashboardID,
@@ -2965,7 +2969,7 @@ final class PushNotificationService: ObservableObject {
         let url = relayURL.appending(path: path)
         // A request carrying the pairing credential enforces the transport
         // policy (HTTPS, or loopback HTTP for self-hosted development).
-        if credential != nil, !RelayTransportPolicy.allowsCredentialTransport(url) {
+        if let credential, !RelayTransportPolicy.allowsCredentialTransport(url) {
             throw RelayDecisionError.insecureTransport
         }
         var request = URLRequest(url: url)
@@ -3019,12 +3023,10 @@ final class PushNotificationService: ObservableObject {
 private struct LiveActivityRegistration: Encodable {
     let pushToken: String
     let sessionIDs: [String]
-    let startedAgo: TimeInterval
 
     enum CodingKeys: String, CodingKey {
         case pushToken = "push_token"
         case sessionIDs = "session_ids"
-        case startedAgo = "started_ago"
     }
 }
 

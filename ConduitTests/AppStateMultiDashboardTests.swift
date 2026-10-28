@@ -1317,19 +1317,6 @@ extension AppStateMultiDashboardTests {
         XCTAssertNil(appState.errorMessage)
     }
 
-    /// Tool cards saved off is the kept choice at once, so the open chat and
-    /// its offline copy draw without them before the config is read again.
-    func testSavingToolCardsKeepsTheNewChoice() async throws {
-        let (appState, held, _) = heldSwitchFixture()
-        let save = Task { await appState.setProfileSetting("display.tool_progress", value: .text("off")) }
-        try await held.answer(["display": [String: Any]()])   // the config read
-        try await held.answer()                                  // the write
-        let saved = await save.value
-
-        XCTAssertTrue(saved)
-        XCTAssertFalse(appState.displayPreferences.showToolProgress)
-    }
-
     /// A settings save queued behind one that outlives a switch is never
     /// sent to the dashboard switched to, which has its own profile of the
     /// same name.
@@ -1422,20 +1409,18 @@ extension AppStateMultiDashboardTests {
     }
 
     /// A switch invalidates the Mac's bridge, so its listing in flight
-    /// fails; that failure isn't reported over the VPS's folder.
+    /// fails; that failure isn't reported over the VPS's workspace.
     func testAWorkspaceListingFailingAfterASwitchSaysNothingOnTheNewDashboard() async throws {
         let (appState, held, vps) = heldSwitchFixture()
-        let explorer = WorkspaceExplorer()
-        explorer.attach(appState)
-        let open = Task { await explorer.open(root: "/w/mac", profile: appState.activeProfile) }
+        let folder = WorkspaceEntry(name: "mac", path: "/w/mac", isDirectory: true)
+        let expand = Task { await appState.toggleWorkspaceFolder(folder) }
         try await held.waitForRequests(1)
 
         await appState.switchDashboard(to: vps.id)
         try await held.answer(["error": "boom"], status: 500)
-        await open.value
+        await expand.value
 
-        XCTAssertNil(explorer.error, "the Mac's failed listing isn't reported over the VPS")
-        XCTAssertTrue(explorer.entries.isEmpty, "nor its listing")
+        XCTAssertNil(appState.workspaceError, "the Mac's failed listing isn't reported over the VPS")
     }
 
     func testADisplayPreferenceSaveFailingAfterASwitchSaysNothingOnTheNewDashboard() async throws {
@@ -1464,37 +1449,32 @@ extension AppStateMultiDashboardTests {
     /// (or failure) shows, and it is the one that ends the loading state.
     func testOnlyTheLatestWorkspaceFilePickShows() async throws {
         let (appState, held, _) = heldSwitchFixture()
-        let explorer = WorkspaceExplorer()
-        explorer.attach(appState)
-        func file(_ name: String) -> WorkspaceEntry {
-            WorkspaceEntry(name: name, path: "/w/\(name)", isDirectory: false)
-        }
-        let first = Task { await explorer.view(file("a.txt")) }
+        let first = Task { await appState.previewWorkspaceFile(WorkspaceEntry(name: "a.txt", path: "/w/a.txt", isDirectory: false)) }
         try await held.waitForRequests(1)
-        let second = Task { await explorer.view(file("b.txt")) }
+        let second = Task { await appState.previewWorkspaceFile(WorkspaceEntry(name: "b.txt", path: "/w/b.txt", isDirectory: false)) }
         try await held.waitForRequests(2)
 
         try await held.answer(["text": "a's text"])
         await first.value
-        XCTAssertNil(explorer.preview, "a.txt's text never shows under b.txt")
-        XCTAssertTrue(explorer.previewLoading, "b.txt is still loading")
+        XCTAssertNil(appState.workspacePreview, "a.txt's text never shows under b.txt")
+        XCTAssertTrue(appState.workspaceFileLoading, "b.txt is still loading")
 
         try await held.answer(["text": "b's text"])
         await second.value
-        XCTAssertEqual(explorer.viewed?.path, "/w/b.txt")
-        XCTAssertEqual(explorer.preview?.text, "b's text")
-        XCTAssertFalse(explorer.previewLoading)
+        XCTAssertEqual(appState.workspaceSelectedFile?.path, "/w/b.txt")
+        XCTAssertEqual(appState.workspacePreview?.text, "b's text")
+        XCTAssertFalse(appState.workspaceFileLoading)
 
-        let third = Task { await explorer.view(file("c.txt")) }
+        let third = Task { await appState.previewWorkspaceFile(WorkspaceEntry(name: "c.txt", path: "/w/c.txt", isDirectory: false)) }
         try await held.waitForRequests(3)
-        let fourth = Task { await explorer.view(file("d.txt")) }
+        let fourth = Task { await appState.previewWorkspaceFile(WorkspaceEntry(name: "d.txt", path: "/w/d.txt", isDirectory: false)) }
         try await held.waitForRequests(4)
         try await held.answer(["error": "gone"], status: 500)
         await third.value
-        XCTAssertNil(explorer.previewError, "c.txt's failure isn't shown for d.txt")
+        XCTAssertNil(appState.workspaceFileError, "c.txt's failure isn't shown for d.txt")
         try await held.answer(["text": "d's text"])
         await fourth.value
-        XCTAssertEqual(explorer.preview?.text, "d's text")
+        XCTAssertEqual(appState.workspacePreview?.text, "d's text")
     }
 }
 

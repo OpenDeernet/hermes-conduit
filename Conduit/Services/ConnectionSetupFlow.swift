@@ -231,7 +231,7 @@ struct ConnectionSetupFlow: Equatable {
             return details + [.loginCredentials]
         case .cloudflareTokenRejected:
             return details + [.cloudflareTroubleshooting]
-        case .tlsUntrusted, .tlsBadDate, .tlsFailure, .tlsHostnameMismatch, .tlsNotStandardsCompliant:
+        case .tlsUntrusted, .tlsBadDate, .tlsFailure:
             return details + [.tlsTroubleshooting]
         // Transport/dashboard/address problems and a password-login throttle
         // all start at the address editor. A throttled login in particular
@@ -242,7 +242,7 @@ struct ConnectionSetupFlow: Equatable {
             return details
         // No strong diagnosis (or none retained): the seeded staged test is
         // the diagnostic.
-        case .loginRequired, .sessionTicketFailure, .signInPageFailed, .unknown, nil:
+        case .loginRequired, .sessionTicketFailure, .unknown, nil:
             return (try? draft.testConfiguration()) != nil
                 ? details + [.connectionTest]
                 : details

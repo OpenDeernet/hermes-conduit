@@ -11,7 +11,6 @@ import SwiftUI
 
 struct HealthSettingsPage: View {
     @EnvironmentObject private var appState: AppState
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var engine: HealthSyncEngine
     @ObservedObject var appLanguage = AppLanguageStore.shared
 
@@ -65,9 +64,6 @@ struct HealthSettingsPage: View {
             }
         }
         .navigationTitle("Health")
-        // Sharing turns on after its consent sheet, so the rows it reveals
-        // animate on the value rather than in a setter.
-        .animation(ConduitMotion.ease(reduceMotion: reduceMotion), value: preferences.isOn)
         .onAppear {
             loadPreferences()
             voiceReads = HealthVoiceReadLog.load()
@@ -313,11 +309,8 @@ struct HealthSettingsPage: View {
                 if on { next.insert(category) } else { next.remove(category) }
                 // Sharing on with nothing chosen is sharing off: use the button.
                 guard !(preferences.isOn && next.isEmpty) else { return }
-                // Animated: ticking a category reveals its detailed readings.
-                withAnimation(ConduitMotion.ease(reduceMotion: reduceMotion)) {
-                    categories = next
-                    if !on { detailed.remove(category) }
-                }
+                categories = next
+                if !on { detailed.remove(category) }
                 applyIfOn()
             }
         )
