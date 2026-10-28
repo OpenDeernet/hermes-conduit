@@ -10773,10 +10773,10 @@ final class AppState: ObservableObject {
         defaults.removeObject(forKey: voiceJobSessionIDsByProfileKey)
         defaults.removeObject(forKey: reviewSummaryCacheKey)
         defaults.removeObject(forKey: knownProfilesKey)
-        profileAppearanceStore.saveHermesNames([:], dashboardID: activeDashboardID)
-        profileHermesNames = [:]
-        profileAppearanceStore.saveBotTitles([:], dashboardID: activeDashboardID)
-        profileBotTitles = [:]
+        // Names are kept per dashboard: the selected one's come back, and
+        // the outgoing server's never show here.
+        profileHermesNames = profileAppearanceStore.loadHermesNames(dashboardID: activeDashboardID)
+        profileBotTitles = profileAppearanceStore.loadBotTitles(dashboardID: activeDashboardID)
         refreshSiriProfileShortcuts()
         clearSessionPresentationCache()
         // Guesses name sessions, and a new server's ids can repeat the old one's.
@@ -12130,8 +12130,9 @@ final class AppState: ObservableObject {
     /// Gateway profile IDs remain stable; this is only the label used for
     /// presentation in the chat and profile picker: the profile's bot title,
     /// else its Hermes `display_name`, else its id. The main profile goes by
-    /// its Conduit name, and by those only while it has none (#1257). On a
-    /// gateway without bot looks, a name given on the device comes first.
+    /// its Conduit name, and by those only while it has none (#1257). A name
+    /// given on the device (a gateway without bot looks) comes first until
+    /// the roster says the gateway keeps bot looks.
     func profileDisplayName(_ profile: String) -> String {
         var normalized = profile.trimmingCharacters(in: .whitespacesAndNewlines)
         let isMain = normalized.isEmpty || normalized.lowercased() == "default"
@@ -12139,7 +12140,9 @@ final class AppState: ObservableObject {
             guard defaultProfileName == ProfileAppearanceStore.defaultName else { return defaultProfileName }
             normalized = "default"
         }
-        if !isMain, botModePhase == .gatewayUnsupported, let name = profileDeviceNames[normalized] { return name }
+        // Until the roster says the gateway keeps bot looks, launch and
+        // offline included, as the device's photos do.
+        if !isMain, botModePhase != .available, let name = profileDeviceNames[normalized] { return name }
         if let title = profileBotTitles[normalized] { return title }
         if let name = profileHermesNames[normalized] { return name }
         if isMain { return defaultProfileName }
@@ -21379,9 +21382,11 @@ final class AppState: ObservableObject {
             // The FULL roster is kept: sessions-list hygiene must know every
             // bot's canonical registry (including meta-hidden bots), while
             // the roster VIEW hides meta-hidden rows for display only.
-            botRoster = BotProfile.displayOrder(snapshot.bots)
+            // Names first: the roster's didSet publishes the widget, which
+            // shows the profile's name.
             adoptProfileHermesNames(snapshot.bots.map { (profile: $0.name, displayName: $0.displayName) })
             adoptProfileBotTitles(snapshot.bots.map { (profile: $0.name, title: $0.botTitle ?? "") })
+            botRoster = BotProfile.displayOrder(snapshot.bots)
             desktopGroupChats = snapshot.desktopGroups
             botRosterSupportsProtocol = snapshot.supportsBotProtocol
             botModePhase = .available
