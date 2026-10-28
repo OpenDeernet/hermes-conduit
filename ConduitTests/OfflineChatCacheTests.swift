@@ -1429,6 +1429,7 @@ final class OfflineChatCacheTests: XCTestCase {
     func testAChatOpenedAgainShowsItsSavedCopyUntilItsTranscriptLands() async throws {
         useInMemoryKeychain()
         let gate = ControlledSuspension()
+        var gated = false
         let live = [session("stored-a"), session("stored-b")]
         let opened = OpenedChats()
         let (appState, store, dashboard) = makeAppState(
@@ -1439,7 +1440,11 @@ final class OfflineChatCacheTests: XCTestCase {
                 catalog: { _ in live },
                 opened: opened,
                 beforeOpen: { sessionID in
-                    if sessionID == "stored-a" { await gate.suspend() }
+                    // Only the first open of it waits: the gate holds one
+                    // suspension, and a later one would never be resumed.
+                    guard sessionID == "stored-a", !gated else { return }
+                    gated = true
+                    await gate.suspend()
                 }
             )
         )
@@ -1523,6 +1528,7 @@ final class OfflineChatCacheTests: XCTestCase {
     func testAChatWithNoSavedCopyOpensWithoutOne() async throws {
         useInMemoryKeychain()
         let gate = ControlledSuspension()
+        var gated = false
         let live = [session("stored-a"), session("stored-b"), session("stored-c")]
         let opened = OpenedChats()
         let (appState, store, dashboard) = makeAppState(
@@ -1533,7 +1539,11 @@ final class OfflineChatCacheTests: XCTestCase {
                 catalog: { _ in live },
                 opened: opened,
                 beforeOpen: { sessionID in
-                    if sessionID == "stored-c" { await gate.suspend() }
+                    // Only the first open of it waits: the gate holds one
+                    // suspension, and a later one would never be resumed.
+                    guard sessionID == "stored-c", !gated else { return }
+                    gated = true
+                    await gate.suspend()
                 }
             )
         )
