@@ -944,7 +944,8 @@ struct GroupRoomComposer: View {
     /// out of the draft. A plugin that can't store a room's files says
     /// what fixes it, as the Attach menu does.
     private func importDroppedFiles(_ providers: [NSItemProvider]) {
-        guard !providers.isEmpty else { return }
+        // A disbanded room sends nothing, whichever target took the drop.
+        guard !providers.isEmpty, surface?.room.isDisbanded == false else { return }
         guard appState.canAttachRoomFiles else {
             composerError = AppLocalization.string("Update the Conduit plugin on your Hermes host to send files to group chats.")
             Haptics.error()
