@@ -1236,7 +1236,7 @@ and README.md's bots line)
 - Desktop's drawn faces, shapes and pets show only as stills; Conduit draws an initial on the color.
 - The group picture switch guard has no test: it needs a ready DashboardTicketBridge double and a room switch mid-request (#1191).
 
-**Checked:** 2026-10-28, #1410 (a rename here names the profile everywhere, see Profile names); 2026-10-27, at #1395 (the editor's Model page gained search with each match's provider; saving unchanged); 2026-10-25, at #1222 (configure and MCP add wait in the profile config queue); before that #1192; group pictures at #1191.
+**Checked:** 2026-10-28, #1413 (a rename here names the profile everywhere, see Profile names); 2026-10-27, at #1395 (the editor's Model page gained search with each match's provider; saving unchanged); 2026-10-25, at #1222 (configure and MCP add wait in the profile config queue); before that #1192; group pictures at #1191.
 
 ## Opening a Bot Chat
 
@@ -2866,16 +2866,16 @@ profiles line)
 - Tests: `ConduitTests/BotModeTests.swift` (testABotTitleNamesItsProfileEverywhere), `ConduitTests/ProfileDiscoveryTests.swift` (display names, device names)
 
 **Rulings**
-- A profile goes by its bot title (`ui_meta['hermes-bots'].title`), else its Hermes `display_name`, else its id, as on Desktop and in its pushes. A listing that only knows `display_name` (`/api/profiles`) never undoes a title (Eric 2026-10-28, #1410, issue #1409).
-- The main profile goes by its Conduit name, kept on the device per dashboard, and by its bot's name only while it has none (#1257). Renaming it on the Profiles sheet or in Settings > Edit profile sets that name; renaming the main bot in Edit Bot sets it too, so the rename shows (2026-10-28, #1410).
-- Renaming any other profile, on its card or in Settings > Edit profile, writes its bot title the way Edit Bot does (compare-and-swap on ui_meta, retried once on a conflict), so Bots and Desktop show it, and its id, chats and settings stay. An empty name goes back to Hermes' name (2026-10-28, #1410).
-- Every profile is renamed from its Profiles card, Bot Mode or not: people who never open Bots still need it (Eric 2026-10-28, #1410).
-- A gateway without bot looks (`botModePhase == .gatewayUnsupported`) has nowhere to keep another profile's name, so the name stays on the device per dashboard, as photos there do, and comes first (2026-10-28, #1410).
+- A profile goes by its bot title (`ui_meta['hermes-bots'].title`), else its Hermes `display_name`, else its id, as on Desktop and in its pushes. A listing that only knows `display_name` (`/api/profiles`) never undoes a title (Eric 2026-10-28, #1413, issue #1409).
+- The main profile goes by its Conduit name, kept on the device per dashboard, and by its bot's name only while it has none (#1257). Renaming it on the Profiles sheet or in Settings > Edit profile sets that name; renaming the main bot in Edit Bot sets it too, so the rename shows (2026-10-28, #1413).
+- Renaming any other profile, on its card or in Settings > Edit profile, writes its bot title the way Edit Bot does (compare-and-swap on ui_meta, retried once on a conflict), so Bots and Desktop show it, and its id, chats and settings stay. An empty name goes back to Hermes' name (2026-10-28, #1413).
+- Every profile is renamed from its Profiles card, Bot Mode or not: people who never open Bots still need it (Eric 2026-10-28, #1413).
+- A gateway without bot looks (`botModePhase == .gatewayUnsupported`) has nowhere to keep another profile's name, so the name stays on the device per dashboard, as photos there do, and comes first (2026-10-28, #1413).
 
 **Open gaps**
 - None known.
 
-**Checked:** 2026-10-28, #1410.
+**Checked:** 2026-10-28, #1413.
 
 ## Settings rows a toggle reveals
 
