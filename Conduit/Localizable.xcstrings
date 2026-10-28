@@ -366783,7 +366783,7 @@
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ · %@"
+            "value" : "%@ · agent użytkownika %@"
           }
         },
         "pt-BR" : {
@@ -366865,7 +366865,7 @@
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agent: %@"
+            "value" : "Agent użytkownika %@"
           }
         },
         "pt-BR" : {

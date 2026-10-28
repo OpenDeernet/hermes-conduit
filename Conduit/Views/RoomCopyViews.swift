@@ -88,8 +88,9 @@ struct RoomCopyBottomBar: View {
     @State private var answers: [String: AppState.RoomApprovalAnswer] = [:]
 
     var body: some View {
-        VStack(spacing: 8) {
-            ForEach(appState.activeRoomCopyApprovals) { approval in
+        let approvals = appState.activeRoomCopyApprovals
+        let cards = VStack(spacing: 8) {
+            ForEach(approvals) { approval in
                 GroupApprovalCard(
                     approval: approval.card,
                     memberName: name(of: approval),
@@ -97,6 +98,16 @@ struct RoomCopyBottomBar: View {
                 ) { choice in
                     respond(approval, choice: choice)
                 }
+            }
+        }
+        VStack(spacing: 8) {
+            if approvals.count > 1 {
+                // Several waiting at once scroll in a bounded strip, as the
+                // room screen's own approvals do.
+                ScrollView { cards }
+                    .frame(maxHeight: 300)
+            } else {
+                cards
             }
             Label {
                 Text(verbatim: RoomCopyText.noPosting(for: copy))

@@ -255,6 +255,7 @@ extension GroupChatModelsTests {
         XCTAssertEqual(appState.linkedRoomApprovalRows.map(\.id), ["run_b2/req-1"])
     }
 
+    @MainActor
     func testAnApprovalWithoutItsLinkShowsOnlyWhereItsRoomIdIsOne() async throws {
         // Room ids are only unique per host: two Links' rooms can share one.
         let routes = CopiesRoutes(copies: [copiesCopy(), copiesCopy(link: "lk9z8y7x6w5v4u")])
