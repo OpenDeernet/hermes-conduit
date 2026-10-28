@@ -229,6 +229,10 @@ final class LocationSyncEngine: ObservableObject {
     /// Bumped by each new or forgotten key: the host drops the latest fix
     /// it had from this phone then, so a message's fix can't count on it.
     private(set) var keyAgreements = 0
+    /// The shops Pulse wants watched (LocationSpots), from the sealed reply
+    /// to a batch that carried `spot_entries`. Not called when the host
+    /// sent none (an older plugin) or it didn't open.
+    var spotsReplied: (([LocationSpotWatch]) -> Void)?
     private let now: () -> Date
     private let deviceName: () -> String
 
@@ -283,6 +287,10 @@ final class LocationSyncEngine: ObservableObject {
                 answer = try await post(batch, key: key, request: request)
             }
             acknowledge(batch, answer: answer)
+            if batch.spotEntries != nil,
+               let reply = LocationCrypto.openSpotsReply(answer["reply"], key: key, batchID: batch.batchID) {
+                spotsReplied?(LocationSpotWatch.parse(reply))
+            }
             return .sent
         } catch let error as DashboardTicketBridgeError {
             Self.log.info("Location send failed: \(LogRedaction.redactingURLs(Self.describe(error)), privacy: .public)")
