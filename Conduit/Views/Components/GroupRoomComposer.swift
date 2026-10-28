@@ -248,7 +248,7 @@ struct GroupRoomComposer: View {
                 onCollapse: { isShowingFullEditor = false },
                 canSubmitFromReturn: canSubmitFromReturn,
                 onSubmitFromReturn: { submitFromReturnKey() },
-                onDropFiles: { providers in importDroppedFiles(providers) },
+                onDropFiles: surface?.room.isDisbanded == false ? { providers in importDroppedFiles(providers) } : nil,
                 attachments: {
                     // A drop on the editor that left files out says so here,
                     // not only behind the sheet.
