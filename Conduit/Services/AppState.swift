@@ -11989,10 +11989,11 @@ final class AppState: ObservableObject {
         return String(normalized.prefix(1)).uppercased() + String(normalized.dropFirst())
     }
 
-    /// Takes the bot titles the roster gave. A profile the roster leaves out
-    /// keeps its title; one listed without a title has none.
+    /// Takes the bot titles the roster gave. The roster lists every
+    /// profile, so it replaces what was known: a title another server's
+    /// roster gave never names this one's profile.
     func adoptProfileBotTitles(_ rows: [(profile: String, title: String)]) {
-        var titles = profileBotTitles
+        var titles: [String: String] = [:]
         for row in rows {
             let profile = row.profile.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !profile.isEmpty else { continue }
@@ -12100,28 +12101,46 @@ final class AppState: ObservableObject {
         case .offline:
             return AppLocalization.string("Connect to Hermes to rename this profile.")
         case .hermes(let bot, let client):
-            let epoch = botRosterEpoch
-            let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let patch: [String: Any?] = ["title": title.isEmpty ? nil : title]
-            var outcome: BotMetaWriteOutcome
-            do {
-                let result = try await client.configureBotProfile(
-                    name: bot.name,
-                    botMeta: BotMetaPatch.merged(existing: bot.botMeta, patch: patch),
-                    expectedMetaRevision: bot.botMetaRevision
-                )
-                outcome = BotMetaWriteOutcome(configureResult: result)
-                if outcome == .conflict {
-                    outcome = await retryBotMetaWrite(bot.name, patch: patch, client: client, epoch: epoch)
-                }
-            } catch {
-                outcome = .failed
+            // In the photo writes' queue: they write the same ui_meta, and
+            // one landing mid-rename would spend the rename's retry.
+            return await queueProfilePhotoWrite(bot.name) {
+                await self.writeProfileTitle(name, for: bot, client: client)
             }
-            await refreshBotRosterAfterWrite()
-            return outcome == .persisted || outcome == .unsupported
-                ? nil
-                : AppLocalization.string("The name was not saved.")
         }
+    }
+
+    private func writeProfileTitle(_ name: String, for bot: BotProfile, client: HermesClient) async -> String? {
+        let epoch = botRosterEpoch
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let patch: [String: Any?] = ["title": title.isEmpty ? nil : title]
+        // The photo write ahead in the queue may have moved the revision on.
+        let current = botRoster.first(where: { $0.name == bot.name }) ?? bot
+        var outcome: BotMetaWriteOutcome
+        do {
+            let result = try await client.configureBotProfile(
+                name: current.name,
+                botMeta: BotMetaPatch.merged(existing: current.botMeta, patch: patch),
+                expectedMetaRevision: current.botMetaRevision
+            )
+            outcome = BotMetaWriteOutcome(configureResult: result)
+            if outcome == .conflict {
+                outcome = await retryBotMetaWrite(current.name, patch: patch, client: client, epoch: epoch)
+            }
+        } catch {
+            outcome = .failed
+        }
+        guard outcome == .persisted || outcome == .unsupported else {
+            await refreshBotRosterAfterWrite()
+            return AppLocalization.string("The name was not saved.")
+        }
+        // A name kept on the device while the gateway had no bot looks is
+        // replaced by the title.
+        if profileDeviceNames[current.name] != nil, botOpenFenceIsCurrent(epoch: epoch, client: client) {
+            profileAppearanceStore.saveDeviceName(nil, for: current.name, dashboardID: activeDashboardID)
+            profileDeviceNames = profileAppearanceStore.loadDeviceNames(dashboardID: activeDashboardID)
+        }
+        await refreshBotRosterAfterWrite()
+        return nil
     }
 
     var mainProfileNamesByDashboard: [String: String] {

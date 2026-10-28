@@ -224,7 +224,9 @@ final class BotModeTests: XCTestCase {
 
         roster = [makeBot(name: "default"), makeBot(name: "atlas")]
         await harness.appState.refreshBotRoster()
-        XCTAssertEqual(harness.appState.profileDisplayName("atlas"), "Atlas", "A cleared title falls back to the display name")
+        // makeBot's display name is the id, so Hermes' name here is the id.
+        XCTAssertEqual(harness.appState.profileDisplayName("atlas"), "Atlas", "A cleared title falls back to Hermes' name")
+        XCTAssertEqual(harness.appState.profileDisplayName("default"), "Home")
     }
 
     func testActiveProfileSessionsProjectionDropsCanonicalButKeepsCatalog() async {

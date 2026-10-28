@@ -1616,7 +1616,7 @@ private struct ProfileSettingsDetail: View {
                     .textInputAutocapitalization(.words)
                     .padding(10)
                     .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Text(profile == "default"
+                Text(BotManagement.isDefaultProfile(profile)
                      ? AppLocalization.string("This only changes how the default profile is named in Conduit. Hermes itself still uses the default profile.")
                      : namedOnDevice
                         ? AppLocalization.string("This only changes how the profile is named in Conduit.")
@@ -1642,11 +1642,11 @@ private struct ProfileSettingsDetail: View {
     /// The main profile's name is Conduit's own; any other profile's is its
     /// bot title on Hermes, unless the gateway has no bot looks.
     private var namedOnDevice: Bool {
-        profile == "default" || !appState.profilePhotosLiveOnHermes
+        BotManagement.isDefaultProfile(profile) || !appState.profilePhotosLiveOnHermes
     }
 
     private func save() {
-        guard profile != "default" else {
+        guard !BotManagement.isDefaultProfile(profile) else {
             saveDefaultProfileName(name)
             name = appState.profileDisplayName(profile)
             didSave = true
