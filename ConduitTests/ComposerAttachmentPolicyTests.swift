@@ -178,6 +178,11 @@ final class ComposerAttachmentPolicyTests: XCTestCase {
         )
         XCTAssertNil(AttachmentDrop.fileType(registeredTypeIdentifiers: [UTType.url.identifier]))
         XCTAssertNil(AttachmentDrop.fileType(registeredTypeIdentifiers: [UTType.folder.identifier]))
+        XCTAssertEqual(
+            AttachmentDrop.fileType(registeredTypeIdentifiers: [UTType.data.identifier, UTType.pdf.identifier]),
+            .pdf,
+            "Plain data loses the file's kind when something more specific is offered"
+        )
     }
 
     func testDraggedWordsStayTextAndNamedTextFilesAttach() {
@@ -195,6 +200,10 @@ final class ComposerAttachmentPolicyTests: XCTestCase {
         XCTAssertFalse(AttachmentDrop.stagesAsFiles(registeredTypeIdentifiers: [png], suggestedNames: [nil]))
         XCTAssertTrue(AttachmentDrop.stagesAsFiles(registeredTypeIdentifiers: [png, png], suggestedNames: [nil, nil]))
         XCTAssertTrue(AttachmentDrop.stagesAsFiles(registeredTypeIdentifiers: [pdf], suggestedNames: ["report"]))
+        XCTAssertTrue(
+            AttachmentDrop.stagesAsFiles(registeredTypeIdentifiers: [png, [UTType.utf8PlainText.identifier]], suggestedNames: [nil, nil]),
+            "An image dropped with words is staged as a file, the words stay text"
+        )
         XCTAssertFalse(
             AttachmentDrop.stagesAsFiles(registeredTypeIdentifiers: [[UTType.utf8PlainText.identifier]], suggestedNames: [nil]),
             "Dragged words go into the draft"

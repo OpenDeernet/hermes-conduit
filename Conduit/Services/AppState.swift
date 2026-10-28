@@ -11212,9 +11212,10 @@ final class AppState: ObservableObject {
         groupRoomOutbox.discard()
         pendingRoomMessage = nil
         roomSendErrorMessage = nil
-        // A quote the closed room's composer never took must not land in
-        // the next room opened.
+        // A quote or drop the closed room's composer never took must not
+        // land in the next room opened.
         roomQuoteRequest = nil
+        roomDropRequest = nil
     }
 
     /// Probe `groups.capabilities` and, when the foundation methods are

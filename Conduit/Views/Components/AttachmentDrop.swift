@@ -13,11 +13,13 @@ import UniformTypeIdentifiers
 
 enum AttachmentDrop {
     /// The type a dropped item is staged as: the first (richest) type it
-    /// offers that is file content. A link or a folder offers none.
+    /// offers that is file content, preferring a specific type over plain
+    /// data so the name keeps its extension. A link or a folder offers none.
     static func fileType(registeredTypeIdentifiers identifiers: [String]) -> UTType? {
-        identifiers.lazy
+        let candidates = identifiers
             .compactMap { UTType($0) }
-            .first { $0.conforms(to: .data) && !$0.conforms(to: .url) }
+            .filter { $0.conforms(to: .data) && !$0.conforms(to: .url) }
+        return candidates.first { $0 != .data } ?? candidates.first
     }
 
     /// Whether a dropped item is a file to attach. Text counts only when it
@@ -43,7 +45,7 @@ enum AttachmentDrop {
     static func stagesAsFiles(registeredTypeIdentifiers: [[String]], suggestedNames: [String?]) -> Bool {
         let files = zip(registeredTypeIdentifiers, suggestedNames).filter { isFile(registeredTypeIdentifiers: $0, suggestedName: $1) }
         guard let first = files.first else { return false }
-        if files.count > 1 { return true }
+        if files.count > 1 || registeredTypeIdentifiers.count > 1 { return true }
         return fileType(registeredTypeIdentifiers: first.0)?.conforms(to: .image) != true
     }
 
