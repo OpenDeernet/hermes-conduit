@@ -254,6 +254,8 @@ final class GeminiLiveSession {
     /// Privacy-safe steps for the call's trace. Only Qwen's socket reports
     /// them (its server's turn detection, #1418); Gemini sends no such events.
     var onTrace: (@MainActor (String) -> Void)?
+    /// The connection that already traced dropping microphone audio.
+    private var tracedAudioDrop: UUID?
     /// Counts connections that took over: a function call made under one
     /// value can't be answered once it changes.
     private(set) var connectionGeneration = 0
@@ -406,7 +408,13 @@ final class GeminiLiveSession {
             // A closed writer's frames belong to a connection already gone.
             if !(error is CancellationError) { self?.connectionFailed(id, error: error) }
         }
-        if !queued { onFailure?() }
+        if !queued {
+            if message.isAudio, let onTrace, tracedAudioDrop != id {
+                tracedAudioDrop = id
+                onTrace("Microphone audio dropped: the connection fell behind")
+            }
+            onFailure?()
+        }
     }
 
     private func socketWriter(for socket: GeminiLiveSocket) -> LiveVoiceSocketWriter {

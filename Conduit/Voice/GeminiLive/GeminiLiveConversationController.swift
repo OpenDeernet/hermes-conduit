@@ -1119,7 +1119,8 @@ final class GeminiLiveConversationController: ObservableObject {
                     self.trace("Running \(call.name)")
                     var outgoing = await self.tools.handle(call)
                     self.inFlightCallIDs.remove(call.id)
-                    self.trace("\(call.name): \(Self.traceStatus(of: outgoing, answering: call.id))")
+                    // A call that ended while this ran has its own trace no more.
+                    if self.callEpoch == epoch { self.trace("\(call.name): \(Self.traceStatus(of: outgoing, answering: call.id))") }
                     // The model withdrew the call while it ran (the user
                     // spoke over a lookup): its answer must not go back.
                     if self.withdrawnCallIDs.remove(call.id) != nil {
