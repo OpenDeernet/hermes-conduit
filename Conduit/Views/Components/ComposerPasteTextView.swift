@@ -522,11 +522,13 @@ final class ImagePasteTextView: ReturnKeyTextView {
 
     override func paste(itemProviders: [NSItemProvider]) {
         // Dropped files (Finder, Files) attach as picked files do; words
-        // and links among them are left out, and a lone image keeps the
-        // image paste below.
+        // and links among them go into the text, and a lone image keeps
+        // the image paste below.
         if let onDroppedFiles, AttachmentDrop.stagesAsFiles(itemProviders) {
             let files = AttachmentDrop.files(in: itemProviders)
             DispatchQueue.main.async { onDroppedFiles(files) }
+            let words = itemProviders.filter { !AttachmentDrop.isFile($0) }
+            if !words.isEmpty { super.paste(itemProviders: words) }
             return
         }
         guard let provider = itemProviders.first(where: { canLoadImageProvider($0) }) else {

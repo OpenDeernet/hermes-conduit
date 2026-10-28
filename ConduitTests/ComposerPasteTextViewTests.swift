@@ -411,7 +411,7 @@ final class ComposerPasteTextViewTests: XCTestCase {
 
         let callback = expectation(description: "dropped files callback")
         view.onDroppedFiles = { providers in
-            XCTAssertEqual(providers.count, 1, "The dragged words stay out of the files")
+            XCTAssertEqual(providers.count, 1, "The dragged words go to the text, not the files")
             XCTAssertTrue(providers.first === provider)
             callback.fulfill()
         }

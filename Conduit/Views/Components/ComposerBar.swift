@@ -826,7 +826,8 @@ struct ComposerBar: View, Equatable {
                 onCollapse: { isShowingFullEditor = false },
                 canSubmitFromReturn: ComposerReturnKey.canSubmit(action: action) || dictationHoldsSendSlot,
                 onSubmitFromReturn: { submitFromReturnKey() },
-                onDropFiles: { providers in handleDroppedFiles(providers) },
+                // Off while the composer is locked, as on the chat itself.
+                onDropFiles: appState.composerIsEnabled ? { providers in handleDroppedFiles(providers) } : nil,
                 attachments: {
                     if let replyReference {
                         replyReferenceChip(replyReference)
