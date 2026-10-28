@@ -1915,6 +1915,7 @@ message · the group room composer · the Settings caption for the limit
 - The limit and its message: `Conduit/Views/Components/ComposerAttachments.swift` (AttachmentSizeLimit, tooLargeMessage)
 - Chat composer: `Conduit/Views/Components/ComposerBar.swift`
 - Paste: `Conduit/Views/Components/ComposerPasteTextView.swift`
+- Dropped files: `Conduit/Views/Components/AttachmentDrop.swift` (through AttachmentStaging.stageCopy, the Document picker's path)
 - Share extension: `Conduit/Services/AppState+ShareDraft.swift`
 - Ask Hermes About Screen: `Conduit/Intents/AskHermesAboutScreenIntent.swift`
 - Voice message: `Conduit/Services/AppState+VoiceMessage.swift`
@@ -1929,7 +1930,7 @@ message · the group room composer · the Settings caption for the limit
 - A pasted picture link whose header claims more pixels than a reply's picture may have is refused as "The image provider returned invalid image data.", not as too large.
 - The Settings caption doesn't say that a group room takes at most 50 MB whatever the limit.
 
-**Checked:** 2026-10-24, at #1190; the paste's pixel bound at #1191 (#892 review).
+**Checked:** 2026-10-28, #1411 (dropped files refused with the same limit and message as picked ones); 2026-10-24, at #1190; the paste's pixel bound at #1191 (#892 review).
 
 ## Sending files in a chat
 

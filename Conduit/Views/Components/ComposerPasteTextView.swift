@@ -330,6 +330,7 @@ struct ComposerPasteTextView: UIViewRepresentable {
                 textView.onContentHeightChange = nil
                 textView.onPastedImage = nil
                 textView.onPastedImageError = nil
+                textView.onDroppedFiles = nil
                 textView.returnKeySends = false
                 textView.canSubmitFromReturn = false
                 textView.onSubmitFromReturn = nil

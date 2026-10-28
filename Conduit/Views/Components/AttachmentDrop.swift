@@ -110,6 +110,7 @@ struct AttachmentDropTarget: ViewModifier {
     let isEnabled: Bool
     let onDrop: ([NSItemProvider]) -> Void
     @State private var isTargeted = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
@@ -141,6 +142,7 @@ struct AttachmentDropTarget: ViewModifier {
                         .transition(.opacity)
                 }
             }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isTargeted)
     }
 }
 

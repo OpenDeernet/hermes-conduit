@@ -60,8 +60,9 @@ struct GroupChatView: View {
         // Each bot's color, for its name, bubble, tags and "To" chip.
         .environment(\.groupMemberTints, appState.groupMemberTints(members))
         .environment(\.chatTextSize, chatTextSize)
-        // Files dragged onto the room are staged in its composer (#1408).
-        .attachmentDropTarget { providers in
+        // Files dragged onto the room are staged in its composer (#1408);
+        // a plugin that can't store them gets the composer's notice.
+        .attachmentDropTarget(isEnabled: surface.map { !$0.room.isDisbanded } ?? false) { providers in
             appState.dropIntoRoomComposer(providers)
         }
         .toolbar { toolbarContent }

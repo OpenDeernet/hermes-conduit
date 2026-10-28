@@ -929,11 +929,12 @@ struct GroupRoomComposer: View {
         }
     }
 
-    /// Files dropped on the room (#1408), staged like picked documents.
-    /// A plugin that can't store a room's files says what fixes it, as the
-    /// Attach menu does.
+    /// Files dropped on the room (#1408), staged like picked documents,
+    /// even while a send's files go up: a send takes only its own files
+    /// out of the draft. A plugin that can't store a room's files says
+    /// what fixes it, as the Attach menu does.
     private func importDroppedFiles(_ providers: [NSItemProvider]) {
-        guard !isUploading, !providers.isEmpty else { return }
+        guard !providers.isEmpty else { return }
         guard appState.canAttachRoomFiles else {
             composerError = AppLocalization.string("Update the Conduit plugin on your Hermes host to send files to group chats.")
             Haptics.error()

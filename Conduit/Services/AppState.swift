@@ -10340,7 +10340,8 @@ final class AppState: ObservableObject {
     /// as attachments for the user to send.
     func dropIntoComposer(_ providers: [NSItemProvider]) {
         guard !providers.isEmpty else { return }
-        composerDropRequest = AttachmentDropRequest(providers: providers)
+        // A second drop before the composer took the first adds to it.
+        composerDropRequest = AttachmentDropRequest(providers: (composerDropRequest?.providers ?? []) + providers)
     }
 
     func consumeComposerDropRequest(_ id: UUID) {
@@ -10351,7 +10352,8 @@ final class AppState: ObservableObject {
     /// Files dropped on the open group room go to its composer.
     func dropIntoRoomComposer(_ providers: [NSItemProvider]) {
         guard !providers.isEmpty, activeRoomSurface != nil else { return }
-        roomDropRequest = AttachmentDropRequest(providers: providers)
+        // A second drop before the composer took the first adds to it.
+        roomDropRequest = AttachmentDropRequest(providers: (roomDropRequest?.providers ?? []) + providers)
     }
 
     func consumeRoomDropRequest(_ id: UUID) {
