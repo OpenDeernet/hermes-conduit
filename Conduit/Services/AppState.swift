@@ -11307,8 +11307,11 @@ final class AppState: ObservableObject {
         activeRoomSendInFlight = inFlightRoomSendTokens[
             Self.roomKey(dashboardID: dashboardID, roomID: room.roomID)
         ] != nil
-        // A quote the room being left never took stays with it.
-        if activeRoomSurface?.room.roomID != room.roomID { roomQuoteRequest = nil }
+        // A quote or drop the room being left never took stays with it.
+        if activeRoomSurface?.room.roomID != room.roomID {
+            roomQuoteRequest = nil
+            roomDropRequest = nil
+        }
         activeRoomSurface = GroupRoomSurface(dashboardID: dashboardID, room: room)
         activeRoomReplay = GroupRoomReplay(roomID: room.roomID)
         activeRoomDriverStatus = nil
