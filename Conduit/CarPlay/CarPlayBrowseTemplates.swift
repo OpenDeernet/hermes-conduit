@@ -70,15 +70,14 @@ enum CarPlayBrowse {
     static let maximumChats = 11
 
     /// Pinned chats first, then the most recent others, together at most
-    /// `maximumChats`. Pinned chats are newest first too, until
-    /// `arrangePinned` puts them in the order set on the phone (issue 1354).
+    /// `maximumChats`. Pinned chats are newest first too.
     static func chatList(
         from sessions: [SessionSummary],
-        isPinned: (SessionSummary) -> Bool,
-        arrangePinned: ([SessionSummary]) -> [SessionSummary] = { $0 }
+        isPinned: (SessionSummary) -> Bool
     ) -> CarPlayChatList {
-        let pinned = Array(arrangePinned(newestFirst(sessions.filter(isPinned))).prefix(maximumChats)).map { session in
-            var pinnedRow = row(for: session)
+        let pinnedSessions = sessions.filter(isPinned)
+        let pinned = recentChats(from: pinnedSessions).map { row in
+            var pinnedRow = row
             pinnedRow.symbol = pinSymbol
             return pinnedRow
         }
@@ -90,10 +89,6 @@ enum CarPlayBrowse {
     /// The most recent unarchived chats, newest first. Rows without an
     /// activity time keep their listed order after the dated ones.
     static func recentChats(from sessions: [SessionSummary]) -> [CarPlayChatRow] {
-        newestFirst(sessions).prefix(maximumChats).map(row(for:))
-    }
-
-    private static func newestFirst(_ sessions: [SessionSummary]) -> [SessionSummary] {
         sessions.enumerated()
             .filter { !$0.element.isArchived }
             .sorted { lhs, rhs in
@@ -104,18 +99,17 @@ enum CarPlayBrowse {
                 default: return lhs.offset < rhs.offset
                 }
             }
-            .map(\.element)
-    }
-
-    private static func row(for session: SessionSummary) -> CarPlayChatRow {
-        let title = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return CarPlayChatRow(
-            sessionID: session.id,
-            storedSessionID: session.storedSessionId,
-            title: title.isEmpty ? AppLocalization.string("New Chat") : title,
-            detail: session.updatedLabel,
-            symbol: chatSymbol(for: session.source)
-        )
+            .prefix(maximumChats)
+            .map { _, session in
+                let title = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return CarPlayChatRow(
+                    sessionID: session.id,
+                    storedSessionID: session.storedSessionId,
+                    title: title.isEmpty ? AppLocalization.string("New Chat") : title,
+                    detail: session.updatedLabel,
+                    symbol: chatSymbol(for: session.source)
+                )
+            }
     }
 
     static let chatSymbol = "bubble.left.fill"
@@ -190,7 +184,7 @@ enum CarPlayBrowse {
 }
 
 extension CarPlayVoiceMode {
-    static let all: [CarPlayVoiceMode] = [.classic, .geminiLive, .qwenLive, .gptLive, .grokLive, .localLive]
+    static let all: [CarPlayVoiceMode] = [.classic, .geminiLive, .qwenLive, .gptLive, .grokLive]
 
     var symbol: String {
         switch self {
@@ -199,7 +193,6 @@ extension CarPlayVoiceMode {
         case .qwenLive: return "waveform.circle.fill"
         case .gptLive: return "waveform"
         case .grokLive: return "bolt.fill"
-        case .localLive: return "server.rack"
         }
     }
 
@@ -210,19 +203,6 @@ extension CarPlayVoiceMode {
         case .qwenLive: return AppLocalization.string("Qwen Live")
         case .gptLive: return AppLocalization.string("GPT-Live")
         case .grokLive: return AppLocalization.string("Grok Live")
-        case .localLive: return AppLocalization.string("Local Live")
-        }
-    }
-
-    /// The same mode as Settings > Voice > Voice mode names it.
-    var choice: VoiceModeChoice {
-        switch self {
-        case .classic: return .classic
-        case .geminiLive: return .gemini
-        case .qwenLive: return .qwen
-        case .gptLive: return .gpt
-        case .grokLive: return .grok
-        case .localLive: return .local
         }
     }
 }

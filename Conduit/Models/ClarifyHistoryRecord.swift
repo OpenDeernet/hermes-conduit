@@ -61,7 +61,7 @@ extension ClarifyActivity {
             let values = textList(row["user_response"]) ?? jsonTextList(row["user_response"])
             if status == "skipped" {
                 question.status = .answered
-                question.answer = ""
+                question.answer = AppLocalization.string("Skipped")
             } else if let values, !values.isEmpty {
                 question.status = .answered
                 question.multiSelect = true

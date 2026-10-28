@@ -125,13 +125,13 @@ extension V2TopBar {
 extension View {
     /// Pins `bar` to a screen edge, with this view's lists scrolling under
     /// it and fading out beneath it. On iOS 26 it is a `safeAreaBar`, so the
-    /// lists draw the system's soft scroll edge under it; before, and on a
-    /// Mac, it is a `safeAreaInset`, and the bar draws
-    /// `V2ScrollEdgeBackground` itself (`V2LegacyScrollEdge`).
+    /// lists draw the system's soft scroll edge under it; before, it is a
+    /// `safeAreaInset`, and the bar draws `V2ScrollEdgeBackground` itself
+    /// (`V2LegacyScrollEdge`).
     @ViewBuilder
     func v2EdgeBar<Bar: View>(_ edge: VerticalEdge, @ViewBuilder bar: () -> Bar) -> some View {
         let content = bar()
-        if #available(iOS 26.0, *), V2SystemScrollEdge.isUsed {
+        if #available(iOS 26.0, *) {
             scrollEdgeEffectStyle(.soft, for: edge == .top ? .top : .bottom)
                 .safeAreaBar(edge: edge, spacing: 0) { content }
         } else {
@@ -140,25 +140,15 @@ extension View {
     }
 }
 
-/// Whether bars use the system's scroll edge (iOS 26's `safeAreaBar`).
-/// Not when the iPad app runs on a Mac (`isiOSAppOnMac`; Conduit ships no
-/// Catalyst build): there, at some window sizes, a chat's composer bar drew
-/// a hard edge well above the composer and hid the transcript under it
-/// (#1357), so bars keep Conduit's own inset and fade.
-enum V2SystemScrollEdge {
-    static let isUsed = !ProcessInfo.processInfo.isiOSAppOnMac
-}
-
-/// Before iOS 26, and on a Mac, the fading material behind a bar that
-/// lists scroll under. iOS 26 draws its own soft edge there (`v2EdgeBar`),
-/// which costs less than our blur under a gradient mask on every scroll
-/// frame.
+/// Before iOS 26, the fading material behind a bar that lists scroll
+/// under. iOS 26 draws its own soft edge there (`v2EdgeBar`), which
+/// costs less than our blur under a gradient mask on every scroll frame.
 struct V2LegacyScrollEdge: ViewModifier {
     var edge: VerticalEdge = .top
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *), V2SystemScrollEdge.isUsed {
+        if #available(iOS 26.0, *) {
             content
         } else {
             content.background { V2ScrollEdgeBackground(edge: edge) }
@@ -549,7 +539,7 @@ struct V2CapsuleIcon: View {
 }
 
 /// The root screens' backdrop: drifting while its tab is on screen, its warm
-/// glow in the active profile's color, or in `glowProfile`'s when given.
+/// glow in the active profile's color.
 struct V2Backdrop: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.v2Shell) private var shell
@@ -557,16 +547,13 @@ struct V2Backdrop: View {
     /// A tab root's backdrop (Chats, Bots): it also holds still while a chat
     /// or page is pushed over the root, which draws its own.
     var isTabRoot = false
-    /// The profile whose color the glow takes instead of the active one: the
-    /// open chat's, so a Bot Chat glows in its bot's color.
-    var glowProfile: String?
 
     var body: some View {
         // A capsule tab hidden behind the selected one holds still.
         let covered = isTabRoot && shell.isRootCovered
         ConduitBackdrop(
             drifts: drifts && shell.isTabActive && !covered,
-            glowTint: appState.profileGlowTint(glowProfile ?? appState.activeProfile)
+            glowTint: appState.profileGlowTint(appState.activeProfile)
         )
     }
 }

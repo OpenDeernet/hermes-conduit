@@ -637,9 +637,7 @@ enum VoiceSteerOutcome: Equatable {
 enum VoiceAssistantEvent: Equatable {
     case started(sessionID: String)
     case delta(sessionID: String, text: String)
-    /// Seals one speech segment, but leaves the Hermes turn running.
-    case interim(sessionID: String, text: String, alreadyStreamed: Bool)
-    case completed(sessionID: String, content: String?, alreadyShown: Bool = false)
+    case completed(sessionID: String, content: String?)
     case failed(sessionID: String, message: String)
     case interrupted(sessionID: String)
 }

@@ -174,7 +174,7 @@ struct MainView: View {
                 .environmentObject(appState)
         }
         .sheet(isPresented: $appState.showWorkspaceSheet) {
-            WorkspaceSheet()
+            WorkspaceBrowserSheet()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .environmentObject(appState)
@@ -401,13 +401,6 @@ struct MainView: View {
             appState.settingsLinkRequest = nil
             openSettings(at: page)
         }
-        // A file path tapped in a reply: V2 shows a chat's in its
-        // Artifacts; a group room (no Artifacts) and the drawer shell
-        // show the Folder on its own.
-        .onChange(of: appState.workspaceReveal?.id) { _, id in
-            guard id != nil, !useV2Shell || appState.activeRoomSurface != nil else { return }
-            appState.showWorkspaceSheet = true
-        }
     }
 
     /// An in-app settings link (`conduit://settings/calls` or `/voice`, in a reply):
@@ -487,18 +480,13 @@ struct MainView: View {
         NavigationStack {
             ZStack {
                 ConduitBackdrop(drifts: true)
-                Group {
-                    if appState.activeRoomSurface != nil {
-                        // Keyed by room: another room starts with its own draft.
-                        GroupChatView()
-                            .id(appState.activeRoomSurface?.room.roomID)
-                    } else {
-                        ChatView()
-                    }
+                if appState.activeRoomSurface != nil {
+                    // Keyed by room: another room starts with its own draft.
+                    GroupChatView()
+                        .id(appState.activeRoomSurface?.room.roomID)
+                } else {
+                    ChatView()
                 }
-                // The same readable column as V2's chat on a wide window;
-                // the backdrop still fills it.
-                .readableChatColumn()
             }
             .overlay(alignment: .leading) {
                 if !isPersistentSidebarActive {

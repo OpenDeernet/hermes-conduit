@@ -4,7 +4,7 @@ import SwiftUI
 /// decomposer (V3A §4). A push-style list; each row opens the description
 /// editor for that profile.
 struct KanbanProfileRoutingScreen: View {
-    @Environment(KanbanStore.self) private var store
+    @EnvironmentObject private var store: KanbanStore
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -19,7 +19,7 @@ struct KanbanProfileRoutingScreen: View {
                         ForEach(store.profiles) { profile in
                             NavigationLink {
                                 KanbanProfileDescriptionEditorView(profile: profile)
-                                    .environment(store)
+                                    .environmentObject(store)
                             } label: {
                                 profileRow(profile)
                             }
@@ -87,7 +87,7 @@ struct KanbanProfileRoutingScreen: View {
 ///   boundary.
 struct KanbanProfileDescriptionEditorView: View {
     @ObservedObject var appLanguage = AppLanguageStore.shared
-    @Environment(KanbanStore.self) private var store
+    @EnvironmentObject private var store: KanbanStore
     @Environment(\.dismiss) private var dismiss
 
     private let profile: KanbanProfile

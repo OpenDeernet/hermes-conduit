@@ -28,7 +28,6 @@ struct ComposerInputs: Equatable {
     let lastConnectionFailure: ConnectionFailure?
     let showsConnectionRepair: Bool
     let isCompressing: Bool
-    let isCheckingSend: Bool
     let chatTakeover: ChatTakeoverState?
     let activeChatTakeover: ChatTakeoverState?
     let hasRoomSurface: Bool
@@ -47,8 +46,6 @@ struct ComposerInputs: Equatable {
     let prefillText: String
     let prefillDraftKey: ComposerDraftKey?
     let quoteRequest: ComposerQuoteRequest?
-    let dropRequest: AttachmentDropRequest?
-    let predictiveRequest: PredictiveComposerRequest?
     let focusRequest: ComposerFocusRequest?
     let dictationRequest: ComposerDictationRequest?
     let restoreRequests: [ComposerRestoreRequest]
@@ -83,7 +80,6 @@ struct ComposerInputs: Equatable {
         lastConnectionFailure = appState.lastConnectionFailure
         showsConnectionRepair = appState.showsConnectionRepair
         isCompressing = appState.isCompressingActiveSession
-        isCheckingSend = appState.composerSendIsChecking
         chatTakeover = appState.chatTakeover
         activeChatTakeover = appState.activeChatTakeover
         hasRoomSurface = appState.activeRoomSurface != nil
@@ -102,8 +98,6 @@ struct ComposerInputs: Equatable {
         prefillText = appState.composerPrefillText
         prefillDraftKey = appState.composerPrefillDraftKey
         quoteRequest = appState.composerQuoteRequest
-        dropRequest = appState.composerDropRequest
-        predictiveRequest = appState.predictiveComposerRequest
         focusRequest = appState.composerFocusRequest
         dictationRequest = appState.composerDictationRequest
         restoreRequests = appState.composerRestoreRequests
