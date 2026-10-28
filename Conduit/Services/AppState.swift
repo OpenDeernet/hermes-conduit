@@ -711,15 +711,21 @@ final class AppState: ObservableObject {
     }
     /// The dashboard a connection currently belongs to (the selected target).
     var activeDashboardID: UUID? { savedDashboardRegistry.activeDashboardID }
-    @Published private(set) var defaultProfileName: String
+    @Published private(set) var defaultProfileName: String {
+        didSet { persistSiriProfileNames() }
+    }
     /// Each profile's `display_name` set in Hermes, when it has one (#1046):
     /// "Coding Assistant" for `coding-agent`. Names only; routing keeps the
     /// profile id.
-    @Published private(set) var profileHermesNames: [String: String] = [:]
+    @Published private(set) var profileHermesNames: [String: String] = [:] {
+        didSet { persistSiriProfileNames() }
+    }
     /// Each profile's bot title (`ui_meta['hermes-bots'].title`), the name
     /// Edit Bot, the Profiles sheet and Hermes Desktop rename it with. It
     /// wins over `display_name`, as on Desktop and in the bot's pushes.
-    @Published private(set) var profileBotTitles: [String: String] = [:]
+    @Published private(set) var profileBotTitles: [String: String] = [:] {
+        didSet { persistSiriProfileNames() }
+    }
     @Published private(set) var profileAvatarURLs: [String: URL] {
         // Also bumped when a photo's bytes change under the same URL, so the
         // glow colors drawn from the photos are worked out again.
@@ -730,7 +736,9 @@ final class AppState: ObservableObject {
     @Published private(set) var profileGlowPicks: [String: String] = [:]
     /// Names given in the profile picker to profiles a gateway without bot
     /// looks can't name, for the selected dashboard.
-    @Published private(set) var profileDeviceNames: [String: String] = [:]
+    @Published private(set) var profileDeviceNames: [String: String] = [:] {
+        didSet { persistSiriProfileNames() }
+    }
     private var profileAvatarRevision = 0
     private var profileGlowCache: (key: ProfileGlowCacheKey, colors: [String: ProfileGlowRGB])?
     /// Each photo's colors, kept while the photos stay the same, so a pick
@@ -5931,6 +5939,8 @@ final class AppState: ObservableObject {
     private let sessionFilterOrderKey = "conduit.sessionFilterOrder.v1"
     private let reviewSummaryCacheKey = "conduit.reviewSummaryCache.v1"
     private let knownProfilesKey = "conduit.knownProfiles.v1"
+    /// Each known profile's name, for Siri and Shortcuts.
+    private let knownProfileNamesKey = "conduit.knownProfileNames.v1"
     /// Per-dashboard copies of profile-level presentation choices (#148).
     /// Profile names repeat across Hermes servers ("default" everywhere), so
     /// these are keyed by dashboard UUID. The pre-scoping global values were
@@ -10773,6 +10783,7 @@ final class AppState: ObservableObject {
         defaults.removeObject(forKey: voiceJobSessionIDsByProfileKey)
         defaults.removeObject(forKey: reviewSummaryCacheKey)
         defaults.removeObject(forKey: knownProfilesKey)
+        defaults.removeObject(forKey: knownProfileNamesKey)
         // Names are kept per dashboard: the selected one's come back, and
         // the outgoing server's never show here.
         profileHermesNames = profileAppearanceStore.loadHermesNames(dashboardID: activeDashboardID)
@@ -30438,6 +30449,18 @@ final class AppState: ObservableObject {
     private func persistKnownProfiles(_ names: [String]) {
         guard defaults.stringArray(forKey: knownProfilesKey) != names else { return }
         defaults.set(names, forKey: knownProfilesKey)
+        persistSiriProfileNames()
+        refreshSiriProfileShortcuts()
+    }
+
+    /// Siri and Shortcuts name each profile as the rest of Conduit does,
+    /// and follow a rename.
+    private func persistSiriProfileNames() {
+        let ids = defaults.stringArray(forKey: knownProfilesKey) ?? ["default"]
+        var names: [String: String] = [:]
+        for id in ids { names[id] = profileDisplayName(id) }
+        guard defaults.dictionary(forKey: knownProfileNamesKey) as? [String: String] != names else { return }
+        defaults.set(names, forKey: knownProfileNamesKey)
         refreshSiriProfileShortcuts()
     }
 
