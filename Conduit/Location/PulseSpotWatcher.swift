@@ -178,6 +178,14 @@ final class PulseSpotWatcher {
             nearest.append(Array(found.sorted { $0.location.distance(from: location) < $1.location.distance(from: location) }
                 .prefix(Self.perWatch)))
         }
+        // A watch dropped while Maps answered (Walking past turned off, or
+        // a reply listing fewer) keeps none of its shops.
+        guard watching else {
+            await syncMonitor()
+            return
+        }
+        let current = Set(state.watches.map(\.id))
+        nearest = nearest.map { $0.filter { current.contains($0.watchID) } }
         // Round robin: each watch's nearest first, so one watch can't take the room.
         var spots: [PulseSpotState.Spot] = []
         for rank in 0..<Self.perWatch {

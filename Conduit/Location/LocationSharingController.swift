@@ -403,7 +403,8 @@ final class LocationSharingController: ObservableObject {
                 radius: spot.radius)
             // Walking past may have been turned off, or the shop dropped,
             // while the fix came.
-            guard watchesSpots, spots.state.watches.contains(where: { $0.id == spot.watchID }) else { return }
+            guard watchesSpots, spots.state.watches.contains(where: { $0.id == spot.watchID }),
+                  spots.state.spots.contains(where: { $0.id == spot.id }) else { return }
             unsent.keep(spotEntry: entry)
             saveUnsent()
             if let location { spots.moved(location) }
