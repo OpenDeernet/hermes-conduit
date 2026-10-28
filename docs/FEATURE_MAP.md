@@ -1352,6 +1352,8 @@ Watch and CarPlay (not needed: neither shows a transcript)
 - A chat whose live transcript lands somewhere other than its newest row (an unread reply, a restored reading place) moves there at the handover.
 - Bot Chat copies and group room events are memory only, so they don't outlive Conduit being stopped.
 - Settings' Data handling caption says recent conversations are kept so Conduit opens straight to them while it connects. It doesn't mention reopening, because what's kept on the device hasn't changed.
+- The first open of a chat after launch reads its file on the main thread (repeat opens come from memory); kept as is unless it shows in profiling (#1404).
+- While the copy is up, VoiceOver reads its rows with no "opening" announcement; the header and composer say Conduit is connecting, as for a chat picked in the saved list (#1404).
 
 **Checked:** 2026-10-27, #1404.
 

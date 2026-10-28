@@ -23009,8 +23009,10 @@ final class AppState: ObservableObject {
         // A chat with a saved copy shows it while Hermes sends the transcript
         // (#1352): a Bot Chat the copy kept when it was left, any other the
         // one on the phone.
-        if let conversationProfile {
-            presentKeptBotChatCopy(bot: conversationProfile, openedAs: sessionId, title: preferredTitle)
+        // A known Bot Chat opened the ordinary way (a notification, a link)
+        // is still the bot's: the registry names it.
+        if let bot = conversationProfile ?? botConversationProfile(for: sessionId) {
+            presentKeptBotChatCopy(bot: bot, openedAs: sessionId, title: preferredTitle)
         } else if let listedSession {
             presentSavedCopyWhileOpening(listedSession, openedAs: sessionId)
         }
