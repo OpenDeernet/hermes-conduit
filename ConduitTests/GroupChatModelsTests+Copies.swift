@@ -11,6 +11,7 @@ extension GroupChatModelsTests {
     /// A copy as `GET /rooms/copies` shows it (room_copies._shown).
     private func copiesCopy(
         room: String = "conduit-9",
+        link: String = "lk1a2b3c4d5e6f",
         status: String = "started",
         reason: String? = nil,
         from: String = "Furina",
@@ -21,7 +22,7 @@ extension GroupChatModelsTests {
         [
             "room_id": room,
             "name": "Zoo trip",
-            "link": "lk1a2b3c4d5e6f",
+            "link": link,
             "from": from,
             "members": [
                 ["member_id": "m-nahida", "handle": "nahida", "display_name": "Nahida", "owner": NSNull()],
@@ -60,9 +61,10 @@ extension GroupChatModelsTests {
             XCTAssertNil(body)
             return ["ok": true, "copies": [
                 self.copiesCopy(working: true),
-                // One without a room id or Link is left out.
+                // One without a room id, Link or name is left out.
                 ["room_id": "", "link": "lk", "name": "x", "status": "started"],
                 ["room_id": "r", "name": "x", "status": "started"],
+                ["room_id": "r", "link": "lk", "name": "", "status": "started"],
             ]]
         }
         let copies = try await client.copies()
@@ -251,6 +253,28 @@ extension GroupChatModelsTests {
         XCTAssertEqual(routes.approvals.count, 2, "the plugin still lists it")
         XCTAssertEqual(appState.activeRoomCopyApprovals, [])
         XCTAssertEqual(appState.linkedRoomApprovalRows.map(\.id), ["run_b2/req-1"])
+    }
+
+    func testAnApprovalWithoutItsLinkShowsOnlyWhereItsRoomIdIsOne() async throws {
+        // Room ids are only unique per host: two Links' rooms can share one.
+        let routes = CopiesRoutes(copies: [copiesCopy(), copiesCopy(link: "lk9z8y7x6w5v4u")])
+        routes.approvals = [[
+            "run_id": "run_a1", "request_id": "req-1", "room_id": "conduit-9", "link": NSNull(),
+            "room": "Zoo trip", "from": "Furina", "agent": ["profile": "research", "handle": "kuro"],
+            "description": "Run a shell command", "command": "ls", "choices": ["once", "deny"], "session_key": NSNull(),
+        ]]
+        let appState = copiesAppState(routes)
+        copiesConnect(appState)
+        appState.applyNotifierPluginReport(copiesPluginReport)
+        await appState.refreshGroupChatSupport()
+        XCTAssertEqual(appState.linkedRoomCopyRows.count, 2)
+        await appState.openRoomCopy(appState.linkedRoomCopyRows[0])
+        XCTAssertEqual(appState.activeRoomCopyApprovals, [], "it could be either room's")
+
+        routes.copies = [copiesCopy()]
+        await appState.refreshGroupChatSupport()
+        await appState.openRoomCopy(try XCTUnwrap(appState.linkedRoomCopyRows.first))
+        XCTAssertEqual(appState.activeRoomCopyApprovals.map(\.id), ["run_a1/req-1"], "the only room with that id")
     }
 
     @MainActor

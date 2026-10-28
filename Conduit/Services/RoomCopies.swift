@@ -228,7 +228,7 @@ struct RoomCopiesClient {
 
     static func copy(_ object: [String: Any]) -> RoomCopy? {
         guard let roomID = text(object["room_id"]), let link = text(object["link"]),
-              let name = object["name"] as? String,
+              let name = text(object["name"]),
               let status = text(object["status"]) else { return nil }
         let members = (object["members"] as? [[String: Any]] ?? []).compactMap { member -> RoomCopy.Member? in
             guard let memberID = text(member["member_id"]) else { return nil }
@@ -382,8 +382,11 @@ extension AppState {
     /// its room screen shows their cards.
     var activeRoomCopyApprovals: [RoomApproval] {
         guard let copy = activeRoomSurface?.copy else { return [] }
+        // Room ids are only unique per host: one without its Link is this
+        // room's only when no other copy has the same id.
+        let shared = (linkedRoomCopies?.copies ?? []).contains { $0.roomID == copy.roomID && $0.link != copy.link }
         return linkedRoomApprovalRows.filter {
-            $0.roomID == copy.roomID && ($0.link == nil || $0.link == copy.link)
+            $0.roomID == copy.roomID && ($0.link == copy.link || ($0.link == nil && !shared))
         }
     }
 
@@ -408,14 +411,14 @@ extension AppState {
         } catch {
             return .refused(RoomCopyText.deleteRefusal(for: error))
         }
-        guard activeDashboardID == client.dashboardID else { return .deleted }
         if var copies = linkedRoomCopies, copies.dashboardID == client.dashboardID {
             copies.copies.removeAll { $0.id == copy.id }
             linkedRoomCopies = copies
         }
+        guard activeDashboardID == client.dashboardID else { return .deleted }
         // Its invite, ended, would take its row back.
         dismissRoomInvite(inviteID)
-        if activeRoomSurface?.copy?.roomID == copy.roomID {
+        if activeRoomSurface?.copy?.id == copy.id {
             closeGroupRoom()
         }
         return .deleted

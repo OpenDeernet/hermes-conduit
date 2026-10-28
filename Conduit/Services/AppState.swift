@@ -11686,7 +11686,7 @@ final class AppState: ObservableObject {
         do {
             let page = try await client.log(
                 roomID: copy.roomID, sinceSeq: activeRoomReplay.sinceSeq, limit: RoomCopiesClient.maxLogLimit)
-            guard groupRoomEpoch == epoch, activeRoomSurface?.copy?.roomID == copy.roomID else { return }
+            guard groupRoomEpoch == epoch, activeRoomSurface?.copy?.id == copy.id else { return }
             let fresh = page.events.filter { $0.roomID == copy.roomID && $0.seq > activeRoomReplay.cursor }
             if activeRoomReplay.hasGap || activeRoomReplay.pageSkipsAhead(page) {
                 let window = GroupRoomReplay.tailWindow
@@ -11701,15 +11701,18 @@ final class AppState: ObservableObject {
             }
             if fresh.isEmpty || activeRoomReplay.cursor >= page.latestSeq {
                 if let copies = await readLinkedRoomCopies() {
-                    guard groupRoomEpoch == epoch, let open = activeRoomSurface, open.copy?.roomID == copy.roomID
+                    guard groupRoomEpoch == epoch, let open = activeRoomSurface, open.copy?.id == copy.id
                     else { return }
-                    guard let latest = copies.first(where: { $0.roomID == copy.roomID && $0.link == copy.link }) else {
+                    guard let latest = copies.first(where: { $0.id == copy.id }) else {
                         // Deleted elsewhere: it can't be read any more.
                         closeGoneRoomSurface()
                         return
                     }
-                    activeRoomSurface = GroupRoomSurface(dashboardID: open.dashboardID, room: latest.room, copy: latest)
-                    activeRoomDriverStatus = latest.state
+                    // A quiet tick leaves the room screen as it is.
+                    if latest != open.copy {
+                        activeRoomSurface = GroupRoomSurface(dashboardID: open.dashboardID, room: latest.room, copy: latest)
+                    }
+                    if latest.state != activeRoomDriverStatus { activeRoomDriverStatus = latest.state }
                     if latest.isOver {
                         groupRoomPollTask?.cancel()
                         groupRoomPollTask = nil
