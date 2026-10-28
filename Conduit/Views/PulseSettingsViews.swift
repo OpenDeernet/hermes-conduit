@@ -933,6 +933,12 @@ struct PulseSettingsPage: View {
             seededDays = true
         }
         state = next
+        // Pulse, Where you are or Walking past off, here or elsewhere: this
+        // iPhone stops watching shops for this dashboard now.
+        if location.binding?.dashboardID == appState.activeDashboardID,
+           !next.enabled || next.walkingPast == false || next.whereYouAre == false {
+            location.forgetSpots()
+        }
     }
 
     /// One step at a time: shows its error, then the state Pulse answers
@@ -997,9 +1003,8 @@ struct PulseSettingsPage: View {
     }
 
     /// A change to Pulse, Where you are or Walking past: once the host has
-    /// one off, this iPhone stops watching shops at once instead of on its
-    /// next send (another device stops when the host's next reply lists
-    /// none); once all are on, a send now brings back the shops to watch.
+    /// all on, a send now brings back the shops to watch (`apply` stops
+    /// watching when one is off).
     private func changeWatching(_ changes: [String: Any], optimistic: @escaping (inout PulseState) -> Void) {
         guard !working else { return }
         if var shown = state {
@@ -1008,12 +1013,9 @@ struct PulseSettingsPage: View {
         }
         run { client in
             let next = try await client.update(changes)
-            if location.binding?.dashboardID == client.dashboardID {
-                if !next.enabled || next.walkingPast == false || next.whereYouAre == false {
-                    location.forgetSpots()
-                } else if next.enabled, next.walkingPast == true, next.whereYouAre == true, location.watchesSpots {
-                    Task { await location.flush(settingsOnly: true) }
-                }
+            if location.binding?.dashboardID == client.dashboardID,
+               next.enabled, next.walkingPast == true, next.whereYouAre == true, location.watchesSpots {
+                Task { await location.flush(settingsOnly: true) }
             }
             return next
         }

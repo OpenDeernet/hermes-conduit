@@ -104,6 +104,9 @@ final class LocationSharingController: ObservableObject {
     /// batch now being sent was built.
     private var spotsForgotten = 0
     private var spotsSentAt = 0
+    /// Whether shops could be watched at the last reconfigure (nil before
+    /// the first).
+    private var spotsAllowedBefore: Bool?
     private var sendChain: Task<Bool, Never>?
     private var callWatch: Task<Void, Never>?
     private var lastCallFix: CLLocation?
@@ -280,7 +283,12 @@ final class LocationSharingController: ObservableObject {
 
     func reconfigureMonitors() {
         monitor.configure(settings: settings, places: places, bound: config.binding != nil && !configUnreadable)
-        spots.configure(enabled: watchesSpots, savedPlaces: places.count)
+        let watching = watchesSpots
+        spots.configure(enabled: watching, savedPlaces: places.count)
+        // Shops may be watched again (Always or Precise allowed in iOS
+        // Settings): a send now brings back the host's list.
+        if watching, spotsAllowedBefore == false { Task { await flush(settingsOnly: true) } }
+        spotsAllowedBefore = watching
     }
 
     /// Whether this iPhone may watch shops for Pulse: background sharing at
@@ -537,12 +545,19 @@ final class LocationSharingController: ObservableObject {
         // not held for later.
         if let fix = unsent.fix, !settings.shares(fix.source, at: at) { unsent.fix = nil }
         if !settings.shares(.place, at: at) { unsent.events = [] }
-        let watching = watchesSpots
+        var watching = watchesSpots
         if !watching { unsent.spotEntries = [] }
         saveUnsent()
-        let pending = unsent
+        var pending = unsent
         if pending.isEmpty, !settingsOnly { return true }
+        let forgotten = spotsForgotten
         guard let request = await requestProvider?(binding) else { return false }
+        // Walking past turned off while the connection came: its entries
+        // were dropped and this batch asks for no shops.
+        if spotsForgotten != forgotten {
+            watching = false
+            pending.spotEntries = []
+        }
         var batch = LocationBatch(sentAt: at, settings: settings)
         batch.approximateOnly = approximate || config.approximateOnly
         batch.knownPlaces = places
