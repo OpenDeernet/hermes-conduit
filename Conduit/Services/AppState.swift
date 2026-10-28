@@ -11690,6 +11690,19 @@ final class AppState: ObservableObject {
         guard let surface = activeRoomSurface, let copy = surface.copy, groupRoomEpoch == epoch else { return }
         let client = roomCopiesClient
         do {
+            // The opening tail read failed: read the tail again, not the
+            // room from its first event.
+            if activeRoomReplay.cursor == 0, activeRoomReplay.events.isEmpty, copy.lastSeq > 0 {
+                let window = GroupRoomReplay.tailWindow
+                let tail = try await client.log(
+                    roomID: copy.roomID, sinceSeq: max(0, copy.lastSeq - window), limit: window)
+                guard groupRoomEpoch == epoch, activeRoomSurface?.copy?.id == copy.id else { return }
+                var replay = GroupRoomReplay(roomID: copy.roomID)
+                replay.adoptInitialTail(page: tail)
+                activeRoomReplay = replay
+                errorMessage = nil
+                return
+            }
             let page = try await client.log(
                 roomID: copy.roomID, sinceSeq: activeRoomReplay.sinceSeq, limit: RoomCopiesClient.maxLogLimit)
             guard groupRoomEpoch == epoch, activeRoomSurface?.copy?.id == copy.id else { return }

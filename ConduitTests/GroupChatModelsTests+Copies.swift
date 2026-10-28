@@ -180,6 +180,26 @@ extension GroupChatModelsTests {
     }
 
     @MainActor
+    func testAFailedOpeningReadReadsTheTailAgainNotTheFirstEvents() async throws {
+        let routes = CopiesRoutes(copies: [copiesCopy(lastSeq: 300)])
+        routes.events = (1...300).map { copiesEvent($0) }
+        routes.failingLogReads = 1
+        let appState = copiesAppState(routes)
+        copiesConnect(appState)
+        appState.applyNotifierPluginReport(copiesPluginReport)
+        await appState.refreshGroupChatSupport()
+        await appState.openRoomCopy(try XCTUnwrap(appState.linkedRoomCopyRows.first))
+        XCTAssertEqual(appState.activeRoomReplay.events, [])
+        XCTAssertTrue(appState.isPollingActiveRoom)
+
+        await appState.pollActiveRoom()
+        XCTAssertEqual(routes.logReads.last?.since, 300 - GroupRoomReplay.tailWindow)
+        XCTAssertEqual(appState.activeRoomReplay.events.last?.seq, 300)
+        XCTAssertNil(appState.errorMessage)
+        appState.closeGroupRoom()
+    }
+
+    @MainActor
     func testACopysStateIsTheRoomsDriverStatus() async throws {
         let routes = CopiesRoutes(copies: [copiesCopy(working: true)])
         let appState = copiesAppState(routes)
@@ -496,6 +516,8 @@ private final class CopiesRoutes {
     var people: [String: Any] = ["ok": false]
     /// Deleting an agent's chats is refused.
     var refusesSessionDeletes = false
+    /// The next this many log reads fail.
+    var failingLogReads = 0
     private(set) var copiesReads = 0
     private(set) var logReads: [(since: Int, limit: Int)] = []
     private(set) var peopleReads: [String] = []
@@ -521,6 +543,10 @@ private final class CopiesRoutes {
             let since = Int(items.first { $0.name == "since_seq" }?.value ?? "") ?? -1
             let limit = Int(items.first { $0.name == "limit" }?.value ?? "") ?? -1
             logReads.append((since, limit))
+            if failingLogReads > 0 {
+                failingLogReads -= 1
+                throw DashboardTicketBridgeError.http(status: 502, detail: "Bad gateway")
+            }
             let page = Array(events.filter { ($0["seq"] as? Int ?? 0) > since }.prefix(limit))
             let latest = events.compactMap { $0["seq"] as? Int }.max() ?? 0
             let cursor = (page.last?["seq"] as? Int) ?? since
