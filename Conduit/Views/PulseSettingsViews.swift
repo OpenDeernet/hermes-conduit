@@ -24,6 +24,8 @@ struct PulseSettingsPage: View {
     /// The step holding the page's one request slot; a switch of dashboard
     /// cancels it and frees the slot at once.
     @State private var workingID: UUID?
+    /// Steps started, so a load answered after one began doesn't undo it.
+    @State private var stepsStarted = 0
     @State private var actionTask: Task<Void, Never>?
     @State private var errorMessage: String?
     @State private var notice: String?
@@ -910,9 +912,10 @@ struct PulseSettingsPage: View {
 
     private func load() async {
         let client = self.client
+        let steps = stepsStarted
         do {
             let next = try await client.state()
-            guard isShown(client), !Task.isCancelled else { return }
+            guard isShown(client), !Task.isCancelled, stepsStarted == steps else { return }
             apply(next)
             loadError = nil
         } catch {
@@ -951,6 +954,7 @@ struct PulseSettingsPage: View {
         guard !working else { return }
         let id = UUID()
         workingID = id
+        stepsStarted += 1
         errorMessage = nil
         notice = nil
         let dashboard = appState.activeDashboardID
