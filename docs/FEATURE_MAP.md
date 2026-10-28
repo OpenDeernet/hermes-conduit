@@ -2071,13 +2071,13 @@ docs/VOICE_SETTINGS.md
 - Wiring: `Conduit/Services/AppState.swift` (traceName, session.onTrace)
 
 **Rulings**
-- Event kinds, function names, routes and levels only: never what the user or the model said, a call's arguments or a tool's answer (#1418 adds the rest to the tool steps).
-- The user's turns show when the server heard speech start and end, with the microphone's loudest and quietest 100 ms between them, and say once when 15 s of audio pass with no start or no end, so a turn the server never ends can be told apart from audio that never arrived (2026-10-28, #PRNUM, from #1418).
+- Event kinds, function names, routes and levels only: never what the user or the model said, a call's arguments or a tool's answer (2026-10-28, #1424, from #1418).
+- The user's turns show when the server heard speech start and end, with the microphone's loudest and quietest 100 ms between them, and say once when 15 s of audio pass with no start or no end, so a turn the server never ends can be told apart from audio that never arrived (2026-10-28, #1424, from #1418).
 
 **Open gaps**
 - Gemini, Qwen and GPT-Live calls aren't traced, and the Watch has no trace to show.
 
-**Checked:** 2026-10-28, #PRNUM.
+**Checked:** 2026-10-28, #1424.
 
 ## Speech stream failures
 
