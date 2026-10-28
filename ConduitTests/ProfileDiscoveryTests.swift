@@ -125,7 +125,7 @@ final class ProfileDiscoveryTests: XCTestCase {
     /// A gateway without bot looks keeps a renamed profile's name on the
     /// device, per dashboard, and Remove Dashboard takes it (#1409).
     @MainActor
-    func testADeviceNameIsKeptPerDashboardAndRemovedWithIt() throws {
+    func testProfileNamesAreKeptPerDashboardAndRemovedWithIt() throws {
         let suite = "ProfileDeviceNames.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -146,6 +146,16 @@ final class ProfileDiscoveryTests: XCTestCase {
         store.removeAll(dashboardID: first)
         XCTAssertEqual(store.loadDeviceNames(dashboardID: first), [:])
         XCTAssertEqual(store.loadDeviceNames(dashboardID: second), ["work": "Work"])
+
+        // Titles and display names are each dashboard's own too.
+        store.saveBotTitles(["default": "Muse"], dashboardID: first)
+        store.saveHermesNames(["atlas": "Atlas Prime"], dashboardID: first)
+        XCTAssertEqual(store.loadBotTitles(dashboardID: second), [:])
+        XCTAssertEqual(store.loadHermesNames(dashboardID: second), [:])
+        XCTAssertEqual(store.loadBotTitles(dashboardID: first), ["default": "Muse"])
+        store.removeAll(dashboardID: first)
+        XCTAssertEqual(store.loadBotTitles(dashboardID: first), [:])
+        XCTAssertEqual(store.loadHermesNames(dashboardID: first), [:])
     }
 
     // MARK: - Initialization hydration

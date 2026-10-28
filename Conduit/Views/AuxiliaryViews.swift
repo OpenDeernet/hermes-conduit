@@ -1654,7 +1654,7 @@ private struct ProfileSettingsDetail: View {
         }
         isSaving = true
         saveError = nil
-        Task {
+        Task { @MainActor in
             saveError = await appState.renameProfile(profile, to: name)
             isSaving = false
             name = appState.profileDisplayName(profile)

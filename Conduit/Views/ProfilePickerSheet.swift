@@ -266,7 +266,7 @@ private struct ProfilePickerRow: View {
             Button(action: select) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(appState.profileDisplayName(profile)).font(.headline).foregroundStyle(.primary)
-                    Text(profile == "default" ? AppLocalization.string("Primary Hermes profile") : AppLocalization.string("Hermes profile")).font(.caption).foregroundStyle(.secondary)
+                    Text(BotManagement.isDefaultProfile(profile) ? AppLocalization.string("Primary Hermes profile") : AppLocalization.string("Hermes profile")).font(.caption).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }
@@ -332,7 +332,7 @@ private struct ProfilePickerRow: View {
         guard name.trimmingCharacters(in: .whitespacesAndNewlines) != appState.profileDisplayName(profile) else { return }
         isSavingName = true
         saveError = nil
-        Task {
+        Task { @MainActor in
             saveError = await appState.renameProfile(profile, to: name)
             isSavingName = false
             if let saveError {
@@ -393,7 +393,7 @@ private struct ProfilePickerRow: View {
     private func savePhoto(_ image: UIImage?) {
         isSavingPhoto = true
         saveError = nil
-        Task {
+        Task { @MainActor in
             saveError = await appState.setProfilePhoto(image, for: profile)
             isSavingPhoto = false
             if let saveError {

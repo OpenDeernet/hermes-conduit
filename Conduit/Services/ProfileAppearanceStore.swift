@@ -39,6 +39,13 @@ final class ProfileAppearanceStore {
     /// Per dashboard, names given to profiles other than the main one on a
     /// gateway without bot looks, which has nowhere to keep them.
     static let deviceNamesKey = "conduit.profileDeviceNameByDashboard.v1"
+    /// Per dashboard, the bot titles and Hermes `display_name`s its
+    /// listings last gave, so a profile is named at launch and offline
+    /// before they answer. The pre-scoping global names
+    /// (`conduit.profileHermesNames.v1`) are left behind: the next listing
+    /// gives them again.
+    static let botTitlesKey = "conduit.profileBotTitleByDashboard.v1"
+    static let hermesNamesKey = "conduit.profileHermesNameByDashboard.v1"
     /// The bucket for writes made while no dashboard is selected.
     private static let unscopedBucket = "unscoped"
 
@@ -217,11 +224,43 @@ final class ProfileAppearanceStore {
         defaults.dictionary(forKey: Self.deviceNamesKey) as? [String: [String: String]] ?? [:]
     }
 
+    func loadBotTitles(dashboardID: UUID?) -> [String: String] {
+        scopedNames(Self.botTitlesKey)[Self.bucket(dashboardID)] ?? [:]
+    }
+
+    func saveBotTitles(_ titles: [String: String], dashboardID: UUID?) {
+        saveScopedNames(titles, key: Self.botTitlesKey, dashboardID: dashboardID)
+    }
+
+    func loadHermesNames(dashboardID: UUID?) -> [String: String] {
+        scopedNames(Self.hermesNamesKey)[Self.bucket(dashboardID)] ?? [:]
+    }
+
+    func saveHermesNames(_ names: [String: String], dashboardID: UUID?) {
+        saveScopedNames(names, key: Self.hermesNamesKey, dashboardID: dashboardID)
+    }
+
+    private func saveScopedNames(_ names: [String: String], key: String, dashboardID: UUID?) {
+        var all = scopedNames(key)
+        all[Self.bucket(dashboardID)] = names.isEmpty ? nil : names
+        defaults.set(all, forKey: key)
+    }
+
+    private func scopedNames(_ key: String) -> [String: [String: String]] {
+        defaults.dictionary(forKey: key) as? [String: [String: String]] ?? [:]
+    }
+
     /// Remove Dashboard: its labels, photos and glow colors go with it.
     func removeAll(dashboardID: UUID) {
         var deviceNames = deviceNames()
         if deviceNames.removeValue(forKey: Self.bucket(dashboardID)) != nil {
             defaults.set(deviceNames, forKey: Self.deviceNamesKey)
+        }
+        for key in [Self.botTitlesKey, Self.hermesNamesKey] {
+            var names = scopedNames(key)
+            if names.removeValue(forKey: Self.bucket(dashboardID)) != nil {
+                defaults.set(names, forKey: key)
+            }
         }
         var glows = glowColors()
         if glows.removeValue(forKey: Self.bucket(dashboardID)) != nil {

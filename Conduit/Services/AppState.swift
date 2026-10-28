@@ -5827,8 +5827,6 @@ final class AppState: ObservableObject {
     private let sessionFilterOrderKey = "conduit.sessionFilterOrder.v1"
     private let reviewSummaryCacheKey = "conduit.reviewSummaryCache.v1"
     private let knownProfilesKey = "conduit.knownProfiles.v1"
-    private let profileHermesNamesKey = "conduit.profileHermesNames.v1"
-    private let profileBotTitlesKey = "conduit.profileBotTitles.v1"
     /// Per-dashboard copies of profile-level presentation choices (#148).
     /// Profile names repeat across Hermes servers ("default" everywhere), so
     /// these are keyed by dashboard UUID. The pre-scoping global values were
@@ -6314,6 +6312,8 @@ final class AppState: ObservableObject {
         profileAvatarURLs = self.profileAppearanceStore.loadAvatarURLs(dashboardID: initialDashboardID)
         profileGlowPicks = self.profileAppearanceStore.loadGlowColors(dashboardID: initialDashboardID)
         profileDeviceNames = self.profileAppearanceStore.loadDeviceNames(dashboardID: initialDashboardID)
+        profileBotTitles = self.profileAppearanceStore.loadBotTitles(dashboardID: initialDashboardID)
+        profileHermesNames = self.profileAppearanceStore.loadHermesNames(dashboardID: initialDashboardID)
         appIconChoice = UIApplication.shared.alternateIconName == AppIconChoice.light.alternateIconName ? .light : .dark
         themePreference = ThemePreference(
             rawValue: defaults.string(forKey: themePreferenceKey) ?? ""
@@ -6369,8 +6369,6 @@ final class AppState: ObservableObject {
         profiles = orderedProfiles(
             (defaults.stringArray(forKey: knownProfilesKey) ?? []) + [activeProfile, "default"]
         )
-        profileHermesNames = defaults.dictionary(forKey: profileHermesNamesKey) as? [String: String] ?? [:]
-        profileBotTitles = defaults.dictionary(forKey: profileBotTitlesKey) as? [String: String] ?? [:]
         restoreActiveSessionState(for: activeProfile)
         restorePinnedSessions(for: activeProfile)
         if shouldLoadSavedConnection {
@@ -10632,9 +10630,9 @@ final class AppState: ObservableObject {
         defaults.removeObject(forKey: voiceJobSessionIDsByProfileKey)
         defaults.removeObject(forKey: reviewSummaryCacheKey)
         defaults.removeObject(forKey: knownProfilesKey)
-        defaults.removeObject(forKey: profileHermesNamesKey)
+        profileAppearanceStore.saveHermesNames([:], dashboardID: activeDashboardID)
         profileHermesNames = [:]
-        defaults.removeObject(forKey: profileBotTitlesKey)
+        profileAppearanceStore.saveBotTitles([:], dashboardID: activeDashboardID)
         profileBotTitles = [:]
         refreshSiriProfileShortcuts()
         clearSessionPresentationCache()
@@ -12002,7 +12000,7 @@ final class AppState: ObservableObject {
         }
         guard titles != profileBotTitles else { return }
         profileBotTitles = titles
-        defaults.set(titles, forKey: profileBotTitlesKey)
+        profileAppearanceStore.saveBotTitles(titles, dashboardID: activeDashboardID)
     }
 
     /// Takes the `display_name`s a listing gave. The bot roster and
@@ -12019,7 +12017,7 @@ final class AppState: ObservableObject {
         }
         guard names != profileHermesNames else { return }
         profileHermesNames = names
-        defaults.set(names, forKey: profileHermesNamesKey)
+        profileAppearanceStore.saveHermesNames(names, dashboardID: activeDashboardID)
     }
 
     func profileAvatarURL(for profile: String) -> URL? {
@@ -12338,6 +12336,8 @@ final class AppState: ObservableObject {
         profileAvatarURLs = profileAppearanceStore.loadAvatarURLs(dashboardID: dashboardID)
         profileGlowPicks = profileAppearanceStore.loadGlowColors(dashboardID: dashboardID)
         profileDeviceNames = profileAppearanceStore.loadDeviceNames(dashboardID: dashboardID)
+        profileBotTitles = profileAppearanceStore.loadBotTitles(dashboardID: dashboardID)
+        profileHermesNames = profileAppearanceStore.loadHermesNames(dashboardID: dashboardID)
         modelVisibility = scopedModelVisibility(dashboardID: dashboardID)
         restoreDisplayPreferences()
     }
