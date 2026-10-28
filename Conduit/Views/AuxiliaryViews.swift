@@ -1636,6 +1636,7 @@ private struct ProfileSettingsDetail: View {
         // unless the field is being edited.
         .onAppear(perform: followCurrentName)
         .onChange(of: currentDisplayName) { _, _ in followCurrentName() }
+        .onChange(of: name) { _, _ in if name != seeded { didSave = false } }
     }
 
     private func followCurrentName() {
