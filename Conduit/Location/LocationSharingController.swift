@@ -383,6 +383,9 @@ final class LocationSharingController: ObservableObject {
                 accuracy: location.map(\.horizontalAccuracy),
                 speed: location.flatMap { $0.speed >= 0 ? $0.speed : nil },
                 radius: spot.radius)
+            // Walking past may have been turned off, or the shop dropped,
+            // while the fix came.
+            guard watchesSpots, spots.state.watches.contains(where: { $0.id == spot.watchID }) else { return }
             unsent.keep(spotEntry: entry)
             saveUnsent()
             if let location { spots.moved(location) }

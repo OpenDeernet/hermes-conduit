@@ -994,7 +994,8 @@ struct PulseSettingsPage: View {
 
     /// A change to Where you are or Walking past: once the host has it off,
     /// this iPhone stops watching shops at once instead of on its next send
-    /// (another device stops when the host's next reply lists none).
+    /// (another device stops when the host's next reply lists none); once
+    /// both are on, a send now brings back the shops to watch.
     private func changeWatching(_ changes: [String: Any], optimistic: @escaping (inout PulseState) -> Void) {
         guard !working else { return }
         if var shown = state {
@@ -1003,9 +1004,12 @@ struct PulseSettingsPage: View {
         }
         run { client in
             let next = try await client.update(changes)
-            if next.walkingPast == false || next.whereYouAre == false,
-               location.binding?.dashboardID == client.dashboardID {
-                location.forgetSpots()
+            if location.binding?.dashboardID == client.dashboardID {
+                if next.walkingPast == false || next.whereYouAre == false {
+                    location.forgetSpots()
+                } else if next.walkingPast == true, next.whereYouAre == true, location.watchesSpots {
+                    Task { await location.flush(settingsOnly: true) }
+                }
             }
             return next
         }
