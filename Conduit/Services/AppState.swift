@@ -11973,8 +11973,8 @@ final class AppState: ObservableObject {
     /// Gateway profile IDs remain stable; this is only the label used for
     /// presentation in the chat and profile picker: the profile's bot title,
     /// else its Hermes `display_name`, else its id. The main profile goes by
-    /// its Conduit name, and by those only while it has none (#1257); a
-    /// name given on a gateway without bot looks comes first.
+    /// its Conduit name, and by those only while it has none (#1257). On a
+    /// gateway without bot looks, a name given on the device comes first.
     func profileDisplayName(_ profile: String) -> String {
         var normalized = profile.trimmingCharacters(in: .whitespacesAndNewlines)
         let isMain = normalized.isEmpty || normalized.lowercased() == "default"
@@ -11982,7 +11982,7 @@ final class AppState: ObservableObject {
             guard defaultProfileName == ProfileAppearanceStore.defaultName else { return defaultProfileName }
             normalized = "default"
         }
-        if !isMain, let name = profileDeviceNames[normalized] { return name }
+        if !isMain, botModePhase == .gatewayUnsupported, let name = profileDeviceNames[normalized] { return name }
         if let title = profileBotTitles[normalized] { return title }
         if let name = profileHermesNames[normalized] { return name }
         if isMain { return defaultProfileName }
@@ -12089,6 +12089,11 @@ final class AppState: ObservableObject {
         }
         switch await profilePhotoHome(for: profile) {
         case .device:
+            // Also returned for a profile a bot-capable roster doesn't list:
+            // its name has nowhere to go.
+            guard botModePhase == .gatewayUnsupported else {
+                return AppLocalization.string("The name was not saved.")
+            }
             profileAppearanceStore.saveDeviceName(name, for: profile, dashboardID: activeDashboardID)
             profileDeviceNames = profileAppearanceStore.loadDeviceNames(dashboardID: activeDashboardID)
             return nil
