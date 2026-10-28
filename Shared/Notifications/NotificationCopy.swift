@@ -38,10 +38,8 @@ enum NotificationCopy {
     ///
     /// A push whose decrypted content names a `title_label` gets that
     /// label's title, joined with the chat's title when the host sent one;
-    /// a call composes its line from the call's outcome, and a private
-    /// Pulse push (`private`) says only that Pulse has something. Any other
-    /// title or body is the host's own text (an older plugin, a tool's
-    /// prompt title).
+    /// a call composes its line from the call's outcome. Any other title or
+    /// body is the host's own text (an older plugin, a tool's prompt title).
     static func preview(_ content: [String: Any]) -> (title: String?, body: String?) {
         let hostTitle = nonEmpty(content["title"])
         let hostBody = nonEmpty(content["body"])
@@ -54,18 +52,11 @@ enum NotificationCopy {
             title = sessionTitle.map { "\(heading) · \($0)" } ?? heading
         } else if let phoneTitle = phoneTitle(for: label) {
             title = phoneTitle
-        } else if let pulse = pulseTitle(for: label, count: content["count"] as? Int) {
-            title = pulse
         } else {
             title = hostTitle
         }
         if label == "call.requested", let call = content["call"] as? [String: Any], let line = callLine(call) {
             return (title, line)
-        }
-        if label.hasPrefix("pulse."), content["private"] as? Bool == true {
-            // A private Pulse push (a birthday, a gift, health or money;
-            // notifier 0.104.0): the host sent only this line, in English.
-            return (title, AppLocalization.string("Pulse has something for you."))
         }
         return (title, hostBody)
     }
@@ -77,19 +68,6 @@ enum NotificationCopy {
         case "turn.failed": return AppLocalization.string("Turn failed")
         case "background_task.finished": return AppLocalization.string("Task finished")
         case "call.requested": return AppLocalization.string("Hermes wants to talk")
-        default: return nil
-        }
-    }
-
-    /// What Pulse brings (`pulse.<kind>`), titled by itself: its chat is
-    /// hidden. A report says how many things it noticed (`count`).
-    private static func pulseTitle(for label: String, count: Int?) -> String? {
-        switch label {
-        case "pulse.noticed":
-            guard let count, count > 1 else { return AppLocalization.string("Pulse noticed something") }
-            return AppLocalization.string("Pulse noticed \(count) things")
-        case "pulse.brief": return AppLocalization.string("Your morning brief")
-        case "pulse.followup": return AppLocalization.string("Pulse · Follow-up")
         default: return nil
         }
     }

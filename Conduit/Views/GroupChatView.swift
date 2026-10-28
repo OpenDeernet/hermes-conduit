@@ -20,6 +20,26 @@ struct GroupChatView: View {
     @State private var isFollowingLatest = true
     /// Bumped by the jump-to-latest button; the transcript scrolls on it.
     @State private var latestJumps = 0
+    /// The last row before the newest events, so a member message among
+    /// them can land at its top (GroupRoomFollow.replyStart).
+    @State private var lastSeenEventID: String?
+    /// Bumped to build the transcript's scroll view again when SwiftUI left
+    /// it blank (GroupRoomFollow.isBlank).
+    @State private var transcriptScrollID = 0
+    /// The chat text size and style, and a wide window's steps
+    /// (`readableChatColumn`): the room's messages draw as a chat's do.
+    @AppStorage(ChatTypography.preferenceKey) private var chatTextSizeRaw = ChatTypography.defaultSize.rawValue
+    @AppStorage(ChatTypography.fontStylePreferenceKey) private var chatFontStyleRaw = ChatFontStyle.standard.rawValue
+    @Environment(\.chatWidthTextSteps) private var chatWidthTextSteps
+    @Environment(\.sizeCategory) private var columnSizeCategory
+
+    private var chatTextSize: ChatTextAppearance {
+        ChatTextAppearance(
+            size: ChatTypography.resolve(rawValue: chatTextSizeRaw),
+            style: ChatTypography.resolveStyle(rawValue: chatFontStyleRaw)
+        )
+        .widened(steps: chatWidthTextSteps, category: columnSizeCategory)
+    }
 
     var body: some View {
         Group {
@@ -39,6 +59,12 @@ struct GroupChatView: View {
         .animation(.easeInOut(duration: 0.2), value: appState.minimisedLiveVoice)
         // Each bot's color, for its name, bubble, tags and "To" chip.
         .environment(\.groupMemberTints, appState.groupMemberTints(members))
+        .environment(\.chatTextSize, chatTextSize)
+        // Files dragged onto the room are staged in its composer (#1408);
+        // a plugin that can't store them gets the composer's notice.
+        .attachmentDropTarget(isEnabled: surface.map { !$0.room.isDisbanded } ?? false) { providers in
+            appState.dropIntoRoomComposer(providers)
+        }
         .toolbar { toolbarContent }
         // V2's screen hosts this view and owns the room menu and picker.
         .modifier(GroupRoomPicturePicker(request: $choosingPicture, isEnabled: !isV2))
@@ -121,6 +147,7 @@ struct GroupChatView: View {
                             members: members,
                             continuesRun: previous.map { GroupEventRow.sameSpeaker($0, event) } ?? false
                         )
+                        .reportsGroupRoomRowFrame(id: event.id)
                     }
                     if let pending = appState.pendingRoomMessage {
                         GroupUserBubble(text: pending.text, members: members, timestamp: nil) {
@@ -151,19 +178,31 @@ struct GroupChatView: View {
                             }
                         }
                         .id("pending-row")
+                        .reportsGroupRoomRowFrame(id: "pending-row")
                     }
                     if let responder = respondingMember {
                         GroupRespondingRow(member: responder)
                             .id("responding-row")
+                            .reportsGroupRoomRowFrame(id: "responding-row")
                     }
                     if rendered.isEmpty && appState.pendingRoomMessage == nil && respondingMember == nil {
                         emptyState
                     }
                 }
+                .coordinateSpace(.named(GroupRoomFollow.coordinateSpaceName))
                 .background { GroupRoomScrollLocator(flag: followFlag, isFollowing: $isFollowingLatest) }
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 18)
+            }
+            .id(transcriptScrollID)
+            .onPreferenceChange(GroupRoomRowFramesPreferenceKey.self) { frames in
+                let lostARow = followFlag.rowFrames.keys.contains { frames[$0] == nil }
+                followFlag.rowFrames = frames
+                // A stack that dropped its rows may change no size at all.
+                if frames.isEmpty || lostARow {
+                    followFlag.checkForBlankViewport?()
+                }
             }
             .scrollDismissesKeyboard(.interactively)
             .modifier(V2SoftTopScrollEdge(isOn: isV2))
@@ -176,8 +215,15 @@ struct GroupChatView: View {
             // New events and a member starting its turn move the transcript
             // only while it follows the latest; a reader scrolled up stays.
             .onChange(of: appState.activeRoomReplay.cursor) { _, _ in
+                let previousLastID = lastSeenEventID
+                lastSeenEventID = visibleEvents.last?.id
                 guard followFlag.isFollowing else { return }
-                withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
+                if ChatReplyStartPreference.isOn,
+                   let start = GroupRoomFollow.replyStart(in: visibleEvents, after: previousLastID) {
+                    landAtTop(of: start, proxy)
+                } else {
+                    withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
+                }
             }
             .onChange(of: respondingMember?.identityKey) { _, _ in
                 guard followFlag.isFollowing else { return }
@@ -193,8 +239,19 @@ struct GroupChatView: View {
                 withAnimation(.easeOut(duration: 0.2)) { scrollToBottom(proxy) }
             }
             .onAppear {
+                lastSeenEventID = visibleEvents.last?.id
                 followLatest()
                 scrollToBottom(proxy)
+                followFlag.lastRowID = { [weak appState = appState] in
+                    guard let appState else { return nil }
+                    if appState.activeRoomResponder != nil { return "responding-row" }
+                    if appState.pendingRoomMessage != nil { return "pending-row" }
+                    return appState.activeRoomReplay.events.last(where: GroupRoomTurns.isVisible)?.id
+                }
+                // The binding, not this view: the flag would keep its own
+                // view state alive through it.
+                let scrollID = $transcriptScrollID
+                followFlag.rebuild = { scrollID.wrappedValue &+= 1 }
             }
         }
         .background(Color.clear)
@@ -233,6 +290,27 @@ struct GroupChatView: View {
     private func followLatest() {
         followFlag.isFollowing = true
         isFollowingLatest = true
+    }
+
+    /// A new member message goes to the top of the screen, and the room
+    /// stops following there, as a long chat reply does (#365); one that
+    /// fits clamps at the bottom, where following picks up again.
+    private func landAtTop(of eventID: String, _ proxy: ScrollViewProxy) {
+        followFlag.isFollowing = false
+        followFlag.isLanding = true
+        followFlag.landingGeneration &+= 1
+        let generation = followFlag.landingGeneration
+        isFollowingLatest = false
+        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(eventID, anchor: .top) }
+        // Decide from where it lands once the animation is over (it may not
+        // move the offset at all).
+        Task { @MainActor [followFlag] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard followFlag.landingGeneration == generation else { return }
+            // Over even if the locator has gone (the room closed).
+            followFlag.isLanding = false
+            followFlag.reevaluate?()
+        }
     }
 
     /// The bottom-most row: the responding member, else the pending send,
@@ -434,6 +512,7 @@ struct GroupRoomTitle: View {
 /// One member's pending approval. Rooms answer Run (once) or Reject only:
 /// session and permanent grants aren't offered for a room member's turn.
 struct GroupApprovalCard: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @ObservedObject var appLanguage = AppLanguageStore.shared
     let approval: GroupPendingApproval
     let memberName: String
@@ -481,7 +560,7 @@ struct GroupApprovalCard: View {
             if !approval.command.isEmpty {
                 ApprovalCommandBox(
                     maxHeight: ApprovalCommandBox<EmptyView>.maxLines
-                        * UIFont.preferredFont(forTextStyle: .caption1).lineHeight
+                        * UIFont.preferredFont(forTextStyle: .caption1, in: sizeCategory).lineHeight
                 ) {
                     Text(verbatim: ApprovalDisplayText.revealingHidden(approval.command))
                         .font(.caption.monospaced())
