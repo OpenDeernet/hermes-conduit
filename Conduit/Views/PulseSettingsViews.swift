@@ -529,6 +529,10 @@ struct PulseSettingsPage: View {
                         Text("This iPhone isn't watching shops: in Settings > Location, share in the background at Precise, and allow Conduit's location Always, with Precise Location on.")
                             .font(.caption)
                             .foregroundStyle(.orange)
+                    } else if walking, state.whereReady, location.places.count >= PulseSpotWatcher.conditionLimit {
+                        Text("This iPhone isn't watching shops: your saved places use all the places iOS lets Conduit watch. Remove one in Settings > Location to make room.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
                     }
                 }
             }

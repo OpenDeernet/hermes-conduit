@@ -100,6 +100,10 @@ final class LocationSharingController: ObservableObject {
     var deviceConditions: @MainActor () -> DeviceConditions = { DeviceConditionsMonitor.shared.current }
 
     private var unsent: LocationUnsent
+    /// How many times shop watching was forgotten, and that count when the
+    /// batch now being sent was built.
+    private var spotsForgotten = 0
+    private var spotsSentAt = 0
     private var sendChain: Task<Bool, Never>?
     private var callWatch: Task<Void, Never>?
     private var lastCallFix: CLLocation?
@@ -123,7 +127,9 @@ final class LocationSharingController: ObservableObject {
         }
         self.unsent = unsent ?? LocationSharedStore.readUnsent()
         self.engine.spotsReplied = { [weak self] watches in
-            guard let self else { return }
+            // A reply to a batch sent before Walking past went off lists
+            // watches the host no longer keeps.
+            guard let self, self.spotsSentAt == self.spotsForgotten else { return }
             self.spots.replied(watches, near: self.fixes.lastKnownFix)
         }
     }
@@ -262,11 +268,15 @@ final class LocationSharingController: ObservableObject {
     /// in Settings > Pulse), as a reply listing none would, and drops the
     /// entries waiting to be sent.
     func forgetSpots() {
+        spotsForgotten += 1
         spots.replied([], near: nil)
         guard !unsent.spotEntries.isEmpty else { return }
         unsent.spotEntries = []
         saveUnsent()
     }
+
+    /// Shop entries waiting to be sent.
+    var unsentSpotEntryCount: Int { unsent.spotEntries.count }
 
     func reconfigureMonitors() {
         monitor.configure(settings: settings, places: places, bound: config.binding != nil && !configUnreadable)
@@ -549,6 +559,7 @@ final class LocationSharingController: ObservableObject {
         defer { isSending = false }
         let sentSettings = config.settings
         let sentPlaces = config.places
+        spotsSentAt = spotsForgotten
         let outcome = await engine.send(batch, config: config, request: request)
         guard outcome != .failed else { return false }
         if outcome == .sent { noteSent(batch.fix, at: at) }

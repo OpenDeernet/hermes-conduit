@@ -372547,6 +372547,88 @@
           }
         }
       }
+    },
+    "This iPhone isn't watching shops: your saved places use all the places iOS lets Conduit watch. Remove one in Settings > Location to make room." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses iPhone beobachtet keine Geschäfte: Deine gespeicherten Orte belegen alle Orte, die iOS Conduit beobachten lässt. Entferne einen unter Einstellungen > Standort, um Platz zu schaffen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este iPhone no está vigilando tiendas: tus lugares guardados ocupan todos los lugares que iOS permite vigilar a Conduit. Elimina uno en Ajustes > Ubicación para hacer sitio."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet iPhone ne surveille aucune boutique : vos lieux enregistrés occupent tous les lieux qu'iOS laisse Conduit surveiller. Supprimez-en un dans Réglages > Position pour faire de la place."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone ini tidak memantau toko: tempat tersimpan Anda memakai semua tempat yang diizinkan iOS untuk dipantau Conduit. Hapus satu di Pengaturan > Lokasi untuk memberi ruang."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo iPhone non sta controllando negozi: i tuoi luoghi salvati occupano tutti i luoghi che iOS lascia controllare a Conduit. Rimuovine uno in Impostazioni > Posizione per fare spazio."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このiPhoneはお店を見守っていません：保存した場所が、iOSがConduitに見守りを許可している場所の数をすべて使っています。設定 > 位置情報で1つ削除して空きを作ってください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 iPhone은 가게를 지켜보고 있지 않습니다: 저장된 장소가 iOS가 Conduit에 허용하는 감시 장소를 모두 사용하고 있습니다. 설정 > 위치에서 하나를 삭제해 자리를 만드세요."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ten iPhone nie obserwuje sklepów: Twoje zapisane miejsca zajmują wszystkie miejsca, które iOS pozwala Conduit obserwować. Usuń jedno w Ustawieniach > Lokalizacja, aby zrobić miejsce."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este iPhone não está observando lojas: seus lugares salvos usam todos os lugares que o iOS deixa o Conduit observar. Remova um em Ajustes > Localização para abrir espaço."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этот iPhone не следит за магазинами: ваши сохранённые места занимают все места, за которыми iOS разрешает следить Conduit. Удалите одно в Настройках > Геопозиция, чтобы освободить место."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu iPhone mağazaları izlemiyor: kayıtlı yerleriniz, iOS'un Conduit'e izlemesine izin verdiği tüm yerleri kullanıyor. Yer açmak için Ayarlar > Konum'dan birini kaldırın."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 iPhone 没有在留意商店：你保存的地点已占满 iOS 允许 Conduit 留意的全部地点。请在“设置”>“位置”中移除一个以腾出空间。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這台 iPhone 沒有在留意商店：你儲存的地點已佔滿 iOS 允許 Conduit 留意的全部地點。請在「設定」>「位置」中移除一個以騰出空間。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
