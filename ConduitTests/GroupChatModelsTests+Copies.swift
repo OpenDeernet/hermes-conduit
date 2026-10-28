@@ -244,10 +244,13 @@ extension GroupChatModelsTests {
         XCTAssertEqual(appState.activeRoomCopyApprovals.map(\.id), ["run_a1/req-1"], "only this room's")
         XCTAssertEqual(appState.activeRoomPendingApprovals, [], "no card of the home's")
 
-        // A tick reads them again: one answered elsewhere goes.
-        routes.approvals = [elsewhere]
+        // Answered here, it stays gone though a read still lists it.
+        let answered = await appState.answerLinkedRoomApproval(appState.activeRoomCopyApprovals[0], choice: "once")
+        XCTAssertEqual(answered, .sent)
         await appState.pollActiveRoom()
+        XCTAssertEqual(routes.approvals.count, 2, "the plugin still lists it")
         XCTAssertEqual(appState.activeRoomCopyApprovals, [])
+        XCTAssertEqual(appState.linkedRoomApprovalRows.map(\.id), ["run_b2/req-1"])
     }
 
     @MainActor
@@ -492,6 +495,9 @@ private final class CopiesRoutes {
             return ["ok": true, "invites": invites]
         case (RoomApprovalsClient.path, "GET"):
             return ["ok": true, "approvals": approvals]
+        case ("\(RoomApprovalsClient.path)/answer", "POST"):
+            // Taken, though the list still has it for a read.
+            return ["ok": true, "approval": body ?? [:]]
         default:
             throw URLError(.fileDoesNotExist)
         }

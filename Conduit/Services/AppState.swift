@@ -10694,6 +10694,9 @@ final class AppState: ObservableObject {
     /// What your agents' turns in rooms other people host wait for you to
     /// approve, which Group Chats lists first (RoomApprovals.swift).
     @Published var linkedRoomApprovals: LinkedRoomApprovals?
+    /// The approvals answered here, by id: a read already under way when
+    /// one was answered can't bring its row or card back.
+    var answeredLinkedRoomApprovalIDs: Set<String> = []
     /// Your Hermes' copies of the rooms other people host that your agents
     /// joined, which Group Chats lists after your own (RoomCopies.swift).
     @Published var linkedRoomCopies: LinkedRoomCopies?
@@ -10888,6 +10891,7 @@ final class AppState: ObservableObject {
         linkedRoomInvites = nil
         presentedRoomInvite = nil
         linkedRoomApprovals = nil
+        answeredLinkedRoomApprovalIDs = []
         presentedRoomApproval = nil
         linkedRoomCopies = nil
         desktopGroupChats = []

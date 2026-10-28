@@ -188,7 +188,7 @@ extension AppState {
     var linkedRoomApprovalRows: [RoomApproval] {
         guard groupChatPhase == .available, canAnswerRoomApprovals,
               let approvals = linkedRoomApprovals, approvals.dashboardID == activeDashboardID else { return [] }
-        return approvals.approvals
+        return approvals.approvals.filter { !answeredLinkedRoomApprovalIDs.contains($0.id) }
     }
 
     /// The approvals were read, and that one isn't among them any more: it
@@ -225,6 +225,7 @@ extension AppState {
         let client = roomApprovalsClient
         do {
             try await client.answer(approval, choice: choice)
+            answeredLinkedRoomApprovalIDs.insert(approval.id)
             if activeDashboardID == client.dashboardID, var approvals = linkedRoomApprovals,
                approvals.dashboardID == client.dashboardID {
                 approvals.approvals.removeAll { $0.id == approval.id }
@@ -252,6 +253,7 @@ extension AppState {
               let approvals = await readLinkedRoomApprovals(
                   timeoutMilliseconds: timeoutMilliseconds) else { return nil }
         return approvals.first { approval in
+            !answeredLinkedRoomApprovalIDs.contains(approval.id) &&
             approval.sessionKey.map { wanted.contains($0.trimmingCharacters(in: .whitespacesAndNewlines)) } ?? false
         }
     }

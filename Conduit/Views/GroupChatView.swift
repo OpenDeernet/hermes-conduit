@@ -1208,6 +1208,13 @@ struct GroupMessageQuoteButton: View {
     var authorHandle: String? = nil
 
     var body: some View {
+        // A room someone else hosts has no composer to quote into (C5).
+        if appState.activeRoomSurface?.copy == nil {
+            button
+        }
+    }
+
+    private var button: some View {
         Button {
             appState.replyInRoomComposer(text: text, authorName: authorName, authorHandle: authorHandle)
         } label: {
@@ -1237,6 +1244,15 @@ struct GroupMemberMentionButton<Label: View>: View {
     @ViewBuilder let label: Label
 
     var body: some View {
+        if appState.activeRoomSurface?.copy != nil {
+            // No "To" row in a room someone else hosts (C5).
+            label
+        } else {
+            button
+        }
+    }
+
+    private var button: some View {
         Button {
             Haptics.selection()
             appState.mentionInRoomComposer(handle: handle)
