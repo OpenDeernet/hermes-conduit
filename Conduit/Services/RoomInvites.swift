@@ -413,15 +413,22 @@ extension AppState {
     /// one that a sign-out or another dashboard overtook is dropped, as the
     /// drafts' is.
     func refreshLinkedRoomInvites() async {
-        guard canInviteLinkedPeople, isConnected else { return }
+        _ = await readLinkedRoomInvites()
+    }
+
+    /// Whether the invites were read now and kept.
+    func readLinkedRoomInvites() async -> Bool {
+        guard canInviteLinkedPeople, isConnected else { return false }
         let epoch = groupRoomEpoch
         let client = roomInvitesClient
         do {
             let invites = try await client.invites()
-            guard groupRoomEpoch == epoch, activeDashboardID == client.dashboardID else { return }
+            guard groupRoomEpoch == epoch, activeDashboardID == client.dashboardID else { return false }
             linkedRoomInvites = LinkedRoomInvites(dashboardID: client.dashboardID, invites: invites)
+            return true
         } catch {
             // The rows stay as they were: a stale row is safer than none.
+            return false
         }
     }
 

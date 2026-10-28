@@ -125,7 +125,7 @@ extension GroupChatModelsTests {
     }
 
     @MainActor
-    func testAnInviteWithACopyIsNotListed() async {
+    func testAnInviteWithACopyIsNotListed() async throws {
         let routes = CopiesRoutes(copies: [copiesCopy()])
         routes.invites = [
             ["room_id": "conduit-9", "link": "lk1a2b3c4d5e6f", "name": "Zoo trip", "status": "started", "from": "Furina",
@@ -133,7 +133,7 @@ extension GroupChatModelsTests {
              "gone": [["profile": "writer", "handle": "quill", "display_name": "Quill", "reason": "left"]]],
             ["room_id": "conduit-8", "link": "lk1a2b3c4d5e6f", "name": "Picnic", "status": "waiting", "from": "Furina"],
         ]
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -146,7 +146,7 @@ extension GroupChatModelsTests {
     func testACopyOpensFromItsLogAndPollsAfterTheCursor() async throws {
         let routes = CopiesRoutes(copies: [copiesCopy(lastSeq: 2)])
         routes.events = [copiesEvent(1, kind: "message.user", actor: ["kind": "user", "id": "furina"]), copiesEvent(2)]
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -184,7 +184,7 @@ extension GroupChatModelsTests {
         let routes = CopiesRoutes(copies: [copiesCopy(lastSeq: 300)])
         routes.events = (1...300).map { copiesEvent($0) }
         routes.failingLogReads = 1
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -202,7 +202,7 @@ extension GroupChatModelsTests {
     @MainActor
     func testACopysStateIsTheRoomsDriverStatus() async throws {
         let routes = CopiesRoutes(copies: [copiesCopy(working: true)])
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -227,7 +227,7 @@ extension GroupChatModelsTests {
     @MainActor
     func testAnEndedCopyStopsPolling() async throws {
         let routes = CopiesRoutes(copies: [copiesCopy()])
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -257,7 +257,7 @@ extension GroupChatModelsTests {
         elsewhere["room_id"] = "conduit-1"
         elsewhere["run_id"] = "run_b2"
         routes.approvals = [approval, elsewhere]
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -284,7 +284,7 @@ extension GroupChatModelsTests {
             "room": "Zoo trip", "from": "Furina", "agent": ["profile": "research", "handle": "kuro"],
             "description": "Run a shell command", "command": "ls", "choices": ["once", "deny"], "session_key": NSNull(),
         ]]
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -316,7 +316,7 @@ extension GroupChatModelsTests {
             authorityGatewayID: "gw-a", authorityEpoch: 1, revision: 1, createdAt: 0, updatedAt: 0,
             disbandedAt: nil, latestSeq: 0
         )
-        let appState = copiesAppState(routes, room: room)
+        let appState = try copiesAppState(routes, room: room)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -357,7 +357,7 @@ extension GroupChatModelsTests {
              "joined": [["profile": "research", "display_name": "Kuro"]],
              "gone": [["profile": "default", "handle": "quill", "display_name": "Quill", "reason": "left"]]],
         ]
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -384,7 +384,7 @@ extension GroupChatModelsTests {
             ["room_id": "conduit-9", "link": "lk1a2b3c4d5e6f", "name": "Zoo trip", "status": "left", "from": "Furina",
              "gone": [["profile": "research", "handle": "kuro", "display_name": "Kuro", "reason": "left"]]],
         ]
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -399,7 +399,7 @@ extension GroupChatModelsTests {
     @MainActor
     func testDeletingALeftCopyReadsItsInviteForTheAgentsThatLeft() async throws {
         let routes = CopiesRoutes(copies: [copiesCopy(status: "left", yours: [])])
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -419,9 +419,25 @@ extension GroupChatModelsTests {
     }
 
     @MainActor
+    func testALeftCopyIsntDeletedWhenItsInviteCantBeRead() async throws {
+        let routes = CopiesRoutes(copies: [copiesCopy(status: "left", yours: [])])
+        routes.failsInvites = true
+        let appState = try copiesAppState(routes)
+        copiesConnect(appState)
+        appState.applyNotifierPluginReport(copiesPluginReport)
+        await appState.refreshGroupChatSupport()
+        let copy = try XCTUnwrap(appState.linkedRoomCopyRows.first)
+
+        let result = await appState.deleteLinkedRoomCopy(copy)
+        guard case .refused = result else { return XCTFail("deleted without knowing whose chats to delete") }
+        XCTAssertEqual(routes.deletes, [], "its agents' chats would stay behind")
+        XCTAssertEqual(appState.linkedRoomCopyRows.map(\.id), [copy.id])
+    }
+
+    @MainActor
     func testACopyStillGoingCantBeDeleted() async throws {
         let routes = CopiesRoutes(copies: [copiesCopy()])
-        let appState = copiesAppState(routes)
+        let appState = try copiesAppState(routes)
         copiesConnect(appState)
         appState.applyNotifierPluginReport(copiesPluginReport)
         await appState.refreshGroupChatSupport()
@@ -440,9 +456,9 @@ extension GroupChatModelsTests {
     /// hosts Group Chats with `room`, whose plugin's rooms routes are
     /// `routes`.
     @MainActor
-    private func copiesAppState(_ routes: CopiesRoutes, room: GroupRoom? = nil) -> AppState {
+    private func copiesAppState(_ routes: CopiesRoutes, room: GroupRoom? = nil) throws -> AppState {
         let suite = "GroupChatModelsTests.copies.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
         let operations = GroupChatLifecycleOperations(
             capabilities: { _ in
@@ -516,6 +532,8 @@ private final class CopiesRoutes {
     var people: [String: Any] = ["ok": false]
     /// Deleting an agent's chats is refused.
     var refusesSessionDeletes = false
+    /// The invites read fails.
+    var failsInvites = false
     /// The next this many log reads fail.
     var failingLogReads = 0
     private(set) var copiesReads = 0
@@ -565,6 +583,7 @@ private final class CopiesRoutes {
             let starts: [String: Any] = ["available": true, "reason": NSNull()]
             return ["ok": true, "drafts": [[String: Any]](), "starts": starts]
         case (RoomInvitesClient.path, "GET"):
+            if failsInvites { throw DashboardTicketBridgeError.http(status: 502, detail: "Bad gateway") }
             return ["ok": true, "invites": invites]
         case (RoomApprovalsClient.path, "GET"):
             return ["ok": true, "approvals": approvals]

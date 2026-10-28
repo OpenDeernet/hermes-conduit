@@ -10700,6 +10700,8 @@ final class AppState: ObservableObject {
     /// The open copy's opening tail read failed: its next tick reads the
     /// tail again.
     private(set) var activeRoomCopyNeedsTail = false
+    /// Bumped by a copy's delete, so a copies read it overtook is dropped.
+    var linkedRoomCopiesGeneration = 0
     /// Your Hermes' copies of the rooms other people host that your agents
     /// joined, which Group Chats lists after your own (RoomCopies.swift).
     @Published var linkedRoomCopies: LinkedRoomCopies?

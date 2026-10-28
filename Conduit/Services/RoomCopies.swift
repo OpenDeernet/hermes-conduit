@@ -371,9 +371,11 @@ extension AppState {
     func readLinkedRoomCopies() async -> [RoomCopy]? {
         guard canReadRoomCopies, isConnected else { return nil }
         let epoch = groupRoomEpoch
+        let generation = linkedRoomCopiesGeneration
         let client = roomCopiesClient
-        guard let copies = try? await client.copies(),
-              groupRoomEpoch == epoch, activeDashboardID == client.dashboardID else { return nil }
+        // A read a delete overtook could still list the deleted copy.
+        guard let copies = try? await client.copies(), groupRoomEpoch == epoch,
+              linkedRoomCopiesGeneration == generation, activeDashboardID == client.dashboardID else { return nil }
         let read = LinkedRoomCopies(dashboardID: client.dashboardID, copies: copies)
         // The room screen reads them each quiet tick: unchanged, nothing is published.
         if read != linkedRoomCopies { linkedRoomCopies = read }
@@ -399,8 +401,11 @@ extension AppState {
         guard canDeleteRoomCopies else { return .refused(RoomCopyText.deleteRefusal(for: HermesError.invalidResponse)) }
         let client = roomCopiesClient
         let inviteID = copy.id
-        // Your agents that left are only on its invite.
-        if linkedRoomInvite(inviteID) == nil { await refreshLinkedRoomInvites() }
+        // Your agents that left are only on its invite: without it read,
+        // their chats would stay behind.
+        if linkedRoomInvite(inviteID) == nil, !(await readLinkedRoomInvites()), copy.yours.isEmpty {
+            return .refused(RoomCopyText.deleteRefusal(for: HermesError.invalidResponse))
+        }
         let invite = linkedRoomInvite(inviteID)
         var profiles: [String] = []
         for profile in copy.yours.map(\.profile) + (invite?.joined.map(\.profile) ?? []) + (invite?.gone.map(\.profile) ?? [])
@@ -415,6 +420,7 @@ extension AppState {
         } catch {
             return .refused(RoomCopyText.deleteRefusal(for: error))
         }
+        linkedRoomCopiesGeneration &+= 1
         if var copies = linkedRoomCopies, copies.dashboardID == client.dashboardID {
             copies.copies.removeAll { $0.id == copy.id }
             linkedRoomCopies = copies

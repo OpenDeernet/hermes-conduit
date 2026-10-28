@@ -214,6 +214,11 @@ extension AppState {
         let client = roomApprovalsClient
         guard let approvals = try? await client.approvals(timeoutMilliseconds: timeoutMilliseconds),
               groupRoomEpoch == epoch, activeDashboardID == client.dashboardID else { return nil }
+        // One the plugin no longer lists needn't be remembered as answered.
+        let listed = Set(approvals.map(\.id))
+        if !answeredLinkedRoomApprovalIDs.isSubset(of: listed) {
+            answeredLinkedRoomApprovalIDs.formIntersection(listed)
+        }
         let read = LinkedRoomApprovals(dashboardID: client.dashboardID, approvals: approvals)
         // A copy's room screen reads them each tick: unchanged, nothing is published.
         if read != linkedRoomApprovals { linkedRoomApprovals = read }
