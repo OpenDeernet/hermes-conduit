@@ -5302,7 +5302,10 @@ final class AppState: ObservableObject {
               turnState != .synchronizing,
               !messages.isEmpty,
               let dashboardID = activeDashboardID,
-              let identities = offlineChatIdentities() else { return }
+              let identities = offlineChatIdentities(),
+              // A Bot Chat keeps no copy on the phone, even when a stray row
+              // of it is in the workspace's list (`keepBotChatCopy` keeps it).
+              botStoreProfile(forSessionIDs: Array(identities)) == nil else { return }
         offlineChatCache.record(
             dashboardID: dashboardID,
             profile: activeProfile,
@@ -5633,6 +5636,9 @@ final class AppState: ObservableObject {
         guard let dashboardID = activeDashboardID else { return }
         var ids = Set(session.nestingIDs)
         ids.insert(sessionID)
+        // A Bot Chat's row can turn up in the workspace's list (a stray from
+        // older server data): its copy is the one kept in memory, never a file.
+        guard botStoreProfile(forSessionIDs: Array(ids)) == nil else { return }
         if let picked = offlineChatPresentation?.picked, !picked.sessionIDs.isDisjoint(with: ids) { return }
         let durableID = session.storedSessionId ?? session.id
         guard let saved = offlineChatCache.loadTranscript(durableID, dashboardID: dashboardID, profile: activeProfile) else {
