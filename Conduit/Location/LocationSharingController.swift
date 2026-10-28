@@ -795,5 +795,7 @@ final class LocationSharingController: ObservableObject {
             save { $0.binding = nil }
             LocationKeychain.clearHostPass()
         }
+        // Unbound, the shops' monitor is emptied and spots.json forgotten.
+        reconfigureMonitors()
     }
 }
